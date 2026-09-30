@@ -28,6 +28,7 @@ from .store import (
 
 PID_FILE = HOME / "server.pid"
 LOG_FILE = HOME / "server.log"
+HOST = "127.0.0.1"
 
 
 def _port() -> int:
@@ -35,7 +36,7 @@ def _port() -> int:
 
 
 def _base_url() -> str:
-    return f"http://127.0.0.1:{_port()}"
+    return f"http://{HOST}:{_port()}"
 
 
 def server_up() -> bool:
@@ -98,7 +99,7 @@ def cmd_open(a: argparse.Namespace) -> None:
 def cmd_serve(a: argparse.Namespace) -> None:
     from .server import run
 
-    run()
+    run(HOST, _port())
 
 
 def cmd_stop(a: argparse.Namespace) -> None:

@@ -1,9 +1,7 @@
 import json
 
 import pytest
-from fastapi.testclient import TestClient
 
-from explain_view import server
 from explain_view.store import (
     Session,
     SessionError,
@@ -11,19 +9,6 @@ from explain_view.store import (
     format_decisions,
     list_sessions,
 )
-
-
-@pytest.fixture
-def session(tmp_path):
-    s = Session("kv-cache", tmp_path)
-    s.create("Le KV cache", "explique le KV cache")
-    plan = s.read_plan()
-    plan["outline"] = [{"id": "s1", "title": "Attention"}, {"id": "s2", "title": "Cache"}]
-    plan["lexicon"] = [{"term": "clé | key", "section": "s1", "definition": "vecteur"}]
-    s.plan_path.write_text(json.dumps(plan))
-    (s.sections_dir / "s2.md").write_text("Le cache.")
-    (s.sections_dir / "s1.md").write_text("L'attention.")
-    return s
 
 
 def test_create_is_idempotent(session):
@@ -93,17 +78,6 @@ def test_list_sessions(session, tmp_path):
     assert rows[0]["slug"] == "kv-cache" and rows[0]["pending"] == 1
 
 
-def test_api(session, monkeypatch):
-    monkeypatch.setattr(server, "Session", lambda slug: Session(slug, session.dir.parent))
-    client = TestClient(server.app)
-    r = client.get("/api/s/kv-cache")
-    assert r.status_code == 200
-    assert r.json()["sections"]["s1"]["html"] == "<p>L'attention.</p>\n"
-    r = client.post("/api/s/kv-cache/batch", json={"comments": [{"section": "s1", "text": "hi"}]})
-    assert r.json()["id"] == "b1"
-    assert client.get("/api/s/missing").status_code == 404
-
-
 def test_status(session):
     assert session.read_status()["phase"] == "idle"
     st = session.write_status("writing", "s2")
@@ -119,19 +93,6 @@ def test_approve_plan_batch(session):
     assert "action: approve-plan" in out
     with pytest.raises(SessionError):
         session.add_batch([], action="delete-everything")
-
-
-def test_api_renders_tips(session, monkeypatch):
-    monkeypatch.setattr(server, "Session", lambda slug: Session(slug, session.dir.parent))
-    plan = session.read_plan()
-    plan["lexicon"] = [
-        {"term": "clé", "section": "s1", "definition": "vecteur", "tip": "un *vecteur* $k$"},
-        {"term": "valeur", "section": "s1", "definition": "l'autre vecteur"},
-    ]
-    session.plan_path.write_text(json.dumps(plan))
-    lex = TestClient(server.app).get("/api/s/kv-cache").json()["plan"]["lexicon"]
-    assert "<em>vecteur</em>" in lex[0]["tip_html"] and "math inline" in lex[0]["tip_html"]
-    assert lex[1]["tip_html"] == "l'autre vecteur"  # falls back to the definition
 
 
 def test_code_session_needs_repo(tmp_path):

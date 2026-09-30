@@ -2,6 +2,7 @@
 
 html, body { height: 100%; }
 body { display: flex; flex-direction: column; }
+[hidden] { display: none !important; }
 
 button { font: inherit; color: inherit; cursor: pointer; }
 textarea { font: inherit; color: var(--ink); background: var(--raised); border: 1px solid var(--line); padding: 6px 8px; width: 100%; resize: vertical; }
@@ -16,7 +17,10 @@ textarea:focus { outline: none; border-color: var(--accent); }
          background: var(--neutralbg); color: var(--neutralink); border: 0; }
 .badge.flag { background: var(--flagbg); color: var(--flag); }
 .badge.ok { background: var(--okbg); color: var(--ok); }
+.badge.accent { background: var(--accentbg); color: var(--accent); }
+.badge.alt { background: var(--altbg); color: var(--alt); }
 .num { color: var(--accent); }
+.error { color: var(--danger); }
 
 /* ---- top bar ---- */
 .top { display: flex; align-items: center; gap: 16px; padding: 6px 16px; border-bottom: 1px solid var(--line); flex: none; }
@@ -26,7 +30,17 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .live.on { color: var(--ok); }
 .live.off { color: var(--dim); }
 
-/* ---- three columns ---- */
+/* ---- status + approval ---- */
+.phase { color: var(--muted); font-size: 12px; }
+.phase.active { color: var(--accent); }
+.phase.active::after, .writing-line::after, .badge.writing::after {
+  content: ""; display: inline-block; width: 1.5em; text-align: left; animation: dots 1.2s steps(4) infinite;
+}
+.phase.ask { color: var(--on-flag); background: var(--flag); padding: 0 8px; }
+@keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+.approve { width: 100%; margin-bottom: 10px; padding: 4px; }
+
+/* ---- layout: tabbed workspace + review pane ---- */
 .layout { flex: 1; display: grid; grid-template-columns: 1fr minmax(300px, 26%); min-height: 0; }
 .workspace { display: flex; flex-direction: column; min-height: 0; }
 .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); padding: 0 16px; flex: none; }
@@ -37,27 +51,24 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .tab .badge { text-transform: none; letter-spacing: 0; }
 .view { flex: 1; overflow-y: auto; min-height: 0; }
 .view:not(.active) { display: none; }
-.col { overflow-y: auto; min-height: 0; }
-.plan { padding: 8px 32px 24px; }
-.plan-inner { max-width: 78ch; margin: 0 auto; }
-.plan .outline li { padding: 8px 10px; position: relative; }
-.plan .o-title { font-size: 14px; }
-.o-comment { position: absolute; top: 6px; right: 6px; background: none; border: 0; color: var(--dim); font-size: 11px; visibility: hidden; }
-.outline li:hover .o-comment { visibility: visible; }
-.o-comment:hover { color: var(--accent); }
-.review { border-left: 1px solid var(--line); padding: 0 12px 24px; display: flex; flex-direction: column; gap: 8px; }
 .pane-head { position: sticky; top: 0; background: var(--bg); padding: 10px 0 6px; color: var(--muted);
              text-transform: uppercase; letter-spacing: .08em; font-size: 11px; border-bottom: 1px solid var(--line); margin-bottom: 8px; z-index: 1; }
 
 /* ---- plan ---- */
+.plan { padding: 8px 32px 24px; }
+.plan-inner { max-width: 78ch; margin: 0 auto; }
 .revision { background: var(--raised); padding: 6px 8px; margin-bottom: 8px; color: var(--ink-dim); cursor: pointer; }
 .revision .badge { margin-left: 0; }
 .outline { list-style: none; margin: 0 0 16px; padding: 0; }
-.outline li { padding: 6px 8px; border-left: 2px solid transparent; cursor: pointer; }
+.outline li { position: relative; padding: 8px 10px; border-left: 2px solid transparent; cursor: pointer; }
 .outline li:hover { background: var(--hover); }
 .outline li.pending .o-title { color: var(--muted); }
 .outline li.updated { border-left-color: var(--flag); }
+.o-title { font-size: 14px; }
 .o-earns { font-size: 12px; line-height: 17px; margin-top: 2px; }
+.o-comment { position: absolute; top: 6px; right: 6px; background: none; border: 0; color: var(--dim); font-size: 11px; visibility: hidden; }
+.outline li:hover .o-comment { visibility: visible; }
+.o-comment:hover { color: var(--accent); }
 .lexicon { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 17px; }
 .lexicon td { padding: 4px 4px; vertical-align: top; border-bottom: 1px solid var(--line); }
 .lexicon tr { cursor: pointer; }
@@ -74,9 +85,12 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .sec.updated { background: linear-gradient(to right, var(--flag) 2px, transparent 2px); padding-left: 12px; }
 .sec h2 { font-size: 15px; margin: 16px 0 8px; display: flex; align-items: baseline; gap: 6px; }
 .sec h2 .num { min-width: 1.5em; }
+.sec.unwritten h2 { color: var(--muted); }
 .sec-comment { margin-left: auto; background: none; border: 0; color: var(--dim); font-size: 11px; visibility: hidden; }
 .sec:hover .sec-comment { visibility: visible; }
 .sec-comment:hover { color: var(--accent); }
+.sec.unwritten .sec-comment { display: none; }
+.writing-line { color: var(--accent); }
 .body { font-size: 14px; line-height: 23px; }
 .body h3, .body h4 { font-size: 14px; color: var(--ink-dim); }
 .body code { background: var(--raised); padding: 0 3px; }
@@ -97,7 +111,19 @@ textarea:focus { outline: none; border-color: var(--accent); }
 ::highlight(ev-sent) { background-color: var(--accentbg); }
 ::highlight(ev-focus) { background-color: var(--accent); color: var(--on-accent); }
 
+/* ---- code sessions: citations, questions, decisions ---- */
+a.cite { text-decoration: none; }
+a.cite code { color: var(--info); background: var(--infobg); }
+a.cite:hover code { text-decoration: underline; }
+.q-from { font-size: 11px; font-weight: normal; }
+.decisions { list-style: none; margin: 0 0 16px; padding: 0; }
+.decision { padding: 6px 8px; border-left: 2px solid var(--ok); margin-bottom: 6px; }
+.d-instead, .d-why { font-size: 12px; line-height: 17px; margin-top: 2px; }
+.d-files { font-size: 11px; margin-top: 2px; }
+.d-files a.cite, .d-files code { font-size: 11px; }
+
 /* ---- review pane ---- */
+.review { overflow-y: auto; min-height: 0; border-left: 1px solid var(--line); padding: 0 12px 24px; display: flex; flex-direction: column; gap: 8px; }
 .hint { font-size: 12px; line-height: 17px; margin: 0; }
 .comment { position: relative; border: 1px solid var(--line); padding: 6px 8px; background: var(--bg); }
 .comment.draft { border-color: var(--flag); }
@@ -117,43 +143,21 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .b-head { font-size: 11px; }
 .b-note { color: var(--ink-dim); font-size: 12px; }
 
-/* ---- floating things ---- */
+/* ---- floating things: selection button, composer, tooltip, toast ---- */
 .floating { position: absolute; z-index: 10; font-size: 12px; }
 .composer { position: absolute; z-index: 11; width: 360px; background: var(--bg); border: 1px solid var(--accent); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .composer-quote { font-size: 12px; line-height: 17px; color: var(--ink-dim); font-style: italic; max-height: 6em; overflow: hidden; }
 .composer-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .tip { position: absolute; z-index: 12; max-width: 420px; background: var(--raised); border: 1px solid var(--line-strong);
        padding: 8px 10px; font-size: 12px; line-height: 18px; pointer-events: none; }
-.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--raised);
-         border: 1px solid var(--accent); padding: 6px 14px; z-index: 20; }
-.error { color: var(--danger); }
-[hidden] { display: none !important; }
-
-/* ---- status + approval ---- */
-.phase { color: var(--muted); font-size: 12px; }
-.phase.active { color: var(--accent); }
-.phase.active::after, .writing-line::after, .badge.writing::after {
-  content: ""; display: inline-block; width: 1.5em; text-align: left; animation: dots 1.2s steps(4) infinite;
-}
-.phase.ask { color: var(--on-flag); background: var(--flag); padding: 0 8px; }
-@keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
-.approve { width: 100%; margin-bottom: 10px; padding: 4px; }
-.badge.accent { background: var(--accentbg); color: var(--accent); }
-.writing-line { color: var(--accent); }
-.sec.unwritten h2 { color: var(--muted); }
-.sec.unwritten .sec-comment { display: none; }
 .tip-term { font-weight: bold; color: var(--ink); margin-bottom: 2px; }
 .tip-body { color: var(--ink-dim); }
 .tip-body code { background: var(--bg); padding: 0 3px; }
+.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--raised);
+         border: 1px solid var(--accent); padding: 6px 14px; z-index: 20; }
 
-/* ---- code sessions: citations, questions, decisions ---- */
-a.cite { text-decoration: none; }
-a.cite code { color: var(--info); background: var(--infobg); }
-a.cite:hover code { text-decoration: underline; }
-.badge.alt { background: var(--altbg); color: var(--alt); }
-.q-from { font-size: 11px; font-weight: normal; }
-.decisions { list-style: none; margin: 0 0 16px; padding: 0; }
-.decision { padding: 6px 8px; border-left: 2px solid var(--ok); margin-bottom: 6px; }
-.d-instead, .d-why { font-size: 12px; line-height: 17px; margin-top: 2px; }
-.d-files { font-size: 11px; margin-top: 2px; }
-.d-files a.cite, .d-files code { font-size: 11px; }
+/* ---- home page: the session list ---- */
+.home { max-width: 90ch; margin: 24px auto; padding: 0 16px; width: 100%; }
+.home a { display: flex; gap: 16px; padding: 6px 8px; text-decoration: none; color: var(--ink); border-bottom: 1px solid var(--line); }
+.home a:hover { background: var(--hover); }
+.home .t { flex: 1; }

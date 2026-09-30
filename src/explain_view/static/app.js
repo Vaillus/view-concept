@@ -1,7 +1,8 @@
 /* explain-view — the session page.
 
-   Three columns: the plan (outline + lexicon), the explanation (one block per outline
-   section), and the review pane (draft comments, then sent batches). The page never
+   Two tabs share the main space, the plan (outline, decisions, lexicon) and the
+   explanation (one block per outline section); the review pane (draft comments, then
+   sent batches) stays on the right. The page never
    edits the explanation: Claude Code writes the files, the server streams "changed",
    the page re-fetches. The only thing the page writes is a batch of comments.
 

@@ -4,26 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>explain-view</title>
-<script>
-  (function () {
-    var t = null;
-    try { t = localStorage.getItem("omarchy-theme"); } catch (e) {}
-    if (!t) {
-      t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "tokyo-night" : "catppuccin-latte";
-    }
-    document.documentElement.setAttribute("data-theme", t);
-  })();
-</script>
+<script src="/static/theme.js"></script>
 <link rel="stylesheet" href="/static/themes.css">
 <link rel="stylesheet" href="/static/terminal.css">
 <link rel="stylesheet" href="/static/app.css">
-<style>
-  .home { max-width: 90ch; margin: 24px auto; padding: 0 16px; width: 100%; }
-  .home a { display: flex; gap: 16px; padding: 6px 8px; text-decoration: none; color: var(--ink); border-bottom: 1px solid var(--line); }
-  .home a:hover { background: var(--hover); }
-  .home .t { flex: 1; }
-</style>
 </head>
 <body>
 <header class="top"><span class="brand">explain-view</span><span class="title">sessions</span></header>

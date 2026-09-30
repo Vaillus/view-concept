@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +15,6 @@ from pydantic import BaseModel
 
 from .store import Session, SessionError, list_sessions
 
-HOST = "127.0.0.1"
-PORT = int(os.environ.get("EXPLAIN_VIEW_PORT", "5080"))
 STATIC = Path(__file__).parent / "static"
 
 md = (
@@ -139,7 +136,7 @@ def export(slug: str) -> dict[str, str]:
     return {"path": str(path), "name": path.name}
 
 
-def run() -> None:
+def run(host: str, port: int) -> None:
     import uvicorn
 
-    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="warning")

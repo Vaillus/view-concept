@@ -4,18 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>explain-view</title>
-<script>
-  (function () {
-    var KEY = "omarchy-theme";
-    var t = null;
-    try { t = localStorage.getItem(KEY); } catch (e) {}
-    if (!t) {
-      t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "tokyo-night" : "catppuccin-latte";
-    }
-    document.documentElement.setAttribute("data-theme", t);
-  })();
-</script>
+<script src="/static/theme.js"></script>
 <link rel="stylesheet" href="/static/themes.css">
 <link rel="stylesheet" href="/static/terminal.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css">
@@ -51,7 +40,7 @@
     <article id="doc" class="view doc" data-view="doc"></article>
   </section>
 
-  <aside class="col review">
+  <aside class="review">
     <div class="pane-head">review <span id="draft-count" class="dim"></span></div>
     <p class="hint dim">Select text in the explanation, or use « + comment » on an item of the plan. Comments stay here until you send them together.</p>
     <div id="drafts"></div>

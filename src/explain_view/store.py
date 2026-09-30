@@ -33,7 +33,6 @@ VAULT_DIR = Path(
 )
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
-STATUSES = ("sent", "resolved")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan ».
 PHASES = ("scoping", "planning", "awaiting-approval", "writing", "audit", "revising", "idle")
 ACTIONS = ("", "approve-plan")
