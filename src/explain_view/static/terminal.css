@@ -1,0 +1,110 @@
+/* omarchy-terminal-skin — the semantic layer + the flat-terminal base.
+
+   This is the reusable heart of the skin, and it is portable to any web UI. It has
+   two jobs, and knows nothing about any one app:
+
+     1. Bind a stable set of semantic names (--bg, --ink, --accent, --flag, --ok, …)
+        onto the raw --om-* palette slots that themes.css provides. Your app's rules
+        only ever reference these semantic names, so a change of theme is a change of
+        the [data-theme] attribute and nothing else, and a change of *meaning* — "the
+        flag colour is orange, not yellow" — is one line here and nothing in your app.
+
+     2. Set the tier-1 aesthetic: one monospace family everywhere, hard geometry
+        (radius 0, no shadow), and flat surfaces (--panel == --bg — panels sit flush
+        with the background; depth comes from 1px rules, never elevation).
+
+   Load order in <head>: themes.css FIRST (it defines --om-*), then this file. The
+   resolved theme is stamped on <html> as data-theme by theme-init.js before either
+   stylesheet paints, so a reload never flashes the wrong theme.
+
+   Nothing below hardcodes a colour. Tinted fills have no slot of their own in a
+   terminal palette, so they are derived with color-mix from the hue they belong to. */
+
+:root {
+  /* ---- surfaces ---- */
+  --bg: var(--om-background);
+  --panel: var(--om-background);          /* a terminal has one background; rules separate */
+  --raised: var(--om-dark-background);    /* the one recessed surface: excerpts, previews, code */
+  --hover: var(--om-lighter-background);
+  --backdrop: rgba(0, 0, 0, .5);          /* modal scrim — theme-agnostic on purpose */
+
+  /* ---- text ramp ----
+     The recessive steps fade --om-light-foreground rather than taking --om-muted or
+     --om-dark-foreground: those two are chrome slots whose contrast against the
+     background runs as low as 1.5:1 in some themes (a border, not something to read).
+     Fading the one reliably legible slot keeps the ramp monotone in all 22 themes —
+     worst case ~3.6:1 for --muted; --dim is meant to be barely there. */
+  --ink: var(--om-foreground);
+  --ink-dim: var(--om-light-foreground);
+  --muted: color-mix(in srgb, var(--om-light-foreground) 85%, var(--bg));
+  --dim: color-mix(in srgb, var(--om-light-foreground) 50%, var(--bg));
+
+  /* ---- lines ---- */
+  --line: var(--om-selection);
+  --line-strong: var(--om-muted);         /* a border, which is exactly what --om-muted is for */
+
+  /* ---- accent (primary interactive colour) ---- */
+  --accent: var(--om-accent);
+  --accentbg: color-mix(in srgb, var(--om-accent) 15%, var(--bg));
+  --accentline: color-mix(in srgb, var(--om-accent) 40%, var(--bg));
+  --on-accent: var(--om-background);      /* text sitting on an --accent fill */
+
+  /* ---- status hues ---- */
+  --ok: var(--om-green);
+  --okline: color-mix(in srgb, var(--om-green) 40%, var(--bg));
+  --okbg: color-mix(in srgb, var(--om-green) 12%, var(--bg));
+  --danger: var(--om-red);
+  --dangerline: color-mix(in srgb, var(--om-red) 40%, var(--bg));
+  --dangerbg: color-mix(in srgb, var(--om-red) 14%, var(--bg));
+  --on-danger: var(--om-background);
+  --warn: var(--om-yellow);
+  --warnbg: color-mix(in srgb, var(--om-yellow) 15%, var(--bg));
+  /* a second attention hue distinct from --accent; Anki-style "flag" is orange */
+  --flag: var(--om-orange);
+  --flagbg: color-mix(in srgb, var(--om-orange) 15%, var(--bg));
+  --on-flag: var(--om-background);
+
+  /* ---- extra category hues, if your app sorts things by kind ---- */
+  --alt: var(--om-magenta);
+  --altbg: color-mix(in srgb, var(--om-magenta) 16%, var(--bg));
+  --info: var(--om-cyan);
+  --infobg: color-mix(in srgb, var(--om-cyan) 15%, var(--bg));
+
+  /* ---- neutral chip fill ---- */
+  --neutralbg: var(--om-selection);
+  --neutralink: var(--om-light-foreground);
+
+  /* ---- type ---- */
+  --mono: "CaskaydiaMono Nerd Font", "CaskaydiaCove Nerd Font", "JetBrains Mono",
+          ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ---------- tier-1 base: monospace, hard geometry, flat surfaces ---------- */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+}
+
+img { max-width: 100%; }
+
+a { color: var(--accent); }
+
+/* Hard geometry: nothing is rounded, nothing floats. Separation is a 1px rule.
+   Scope these to your app root (e.g. `#app *`) if the skin must not touch
+   third-party embeds; as written they set the house default for the page. */
+*, *::before, *::after {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Recessive-text and border helpers, so app rules can stay declarative. */
+.muted { color: var(--muted); }
+.dim { color: var(--dim); }

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>explain-view</title>
+<script>
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem("omarchy-theme"); } catch (e) {}
+    if (!t) {
+      t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "tokyo-night" : "catppuccin-latte";
+    }
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<link rel="stylesheet" href="/static/themes.css">
+<link rel="stylesheet" href="/static/terminal.css">
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .home { max-width: 90ch; margin: 24px auto; padding: 0 16px; width: 100%; }
+  .home a { display: flex; gap: 16px; padding: 6px 8px; text-decoration: none; color: var(--ink); border-bottom: 1px solid var(--line); }
+  .home a:hover { background: var(--hover); }
+  .home .t { flex: 1; }
+</style>
+</head>
+<body>
+<header class="top"><span class="brand">explain-view</span><span class="title">sessions</span></header>
+<main class="home" id="list"></main>
+<script>
+  fetch("/api/sessions").then((r) => r.json()).then((rows) => {
+    const list = document.getElementById("list");
+    if (!rows.length) { list.innerHTML = '<p class="dim">No explanations yet.</p>'; return; }
+    for (const r of rows) {
+      const a = document.createElement("a");
+      a.href = `/s/${r.slug}`;
+      const t = document.createElement("span"); t.className = "t"; t.textContent = r.title;
+      const p = document.createElement("span"); p.className = "badge flag"; p.textContent = `${r.pending} open`;
+      const d = document.createElement("span"); d.className = "dim"; d.textContent = new Date(r.updated).toLocaleString();
+      a.append(t);
+      if (r.pending) a.append(p);
+      a.append(d);
+      list.append(a);
+    }
+  });
+</script>
+</body>
+</html>
