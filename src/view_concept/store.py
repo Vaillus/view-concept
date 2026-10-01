@@ -32,10 +32,10 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-HOME = Path(os.environ.get("EXPLAIN_VIEW_HOME", Path.home() / ".explain-view"))
+HOME = Path(os.environ.get("VIEW_CONCEPT_HOME", Path.home() / ".view-concept"))
 SESSIONS = HOME / "sessions"
 VAULT_DIR = Path(
-    os.environ.get("EXPLAIN_VIEW_VAULT", Path.home() / "Documents" / "Vault" / "explanations")
+    os.environ.get("VIEW_CONCEPT_VAULT", Path.home() / "Documents" / "Vault" / "explanations")
 )
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
@@ -353,7 +353,7 @@ class Session:
         title = str(plan["title"]).strip() or self.slug
         base = re.sub(r'[\\/:*?"<>|#^\[\]]', "", title).strip() or self.slug
         path = vault_dir / f"{base}.md"
-        if path.exists() and f"explain-view: {self.slug}\n" not in path.read_text(encoding="utf-8"):
+        if path.exists() and f"view-concept: {self.slug}\n" not in path.read_text(encoding="utf-8"):
             path = vault_dir / f"{base} ({self.slug}).md"
         path.write_text(self.render_markdown(plan), encoding="utf-8")
         return path
@@ -371,7 +371,7 @@ class Session:
             f"updated: {date.today().isoformat()}",
             "tags:",
             "  - explanation",
-            f"explain-view: {self.slug}",
+            f"view-concept: {self.slug}",
             "---",
             "",
             f"# {title}",
@@ -449,7 +449,7 @@ def format_batch(slug: str, batch: dict[str, Any], outline: list[dict[str, Any]]
     """How a batch appears in the Claude Code session (one Monitor event)."""
     number = {s["id"]: i + 1 for i, s in enumerate(outline)}
     n = len(batch["comments"])
-    lines = [f"explain-view · {slug} · batch {batch['id']} · {n} comment{'s' * (n != 1)}"]
+    lines = [f"view-concept · {slug} · batch {batch['id']} · {n} comment{'s' * (n != 1)}"]
     if batch.get("action") == "approve-plan":
         lines.append("action: approve-plan (the user approved the plan from the page)")
     if batch.get("note"):

@@ -25,7 +25,7 @@ md = (
     .use(dollarmath_plugin, double_inline=True)
 )
 
-app = FastAPI(title="explain-view")
+app = FastAPI(title="view-concept")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 

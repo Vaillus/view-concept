@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from explain_view.store import Session
+from view_concept.store import Session
 
 
 @pytest.fixture
