@@ -114,7 +114,9 @@ function render() {
 /* ---------------- tabs ----------------
    The plan and the explanation share one space; one is shown at a time. The tab follows
    the session at the two moments that matter — the plan waiting for approval, the
-   writing starting — and otherwise stays where the user put it. */
+   writing starting — and otherwise stays where the user put it. A model waiting for
+   approval does not move it: the model is read in the explanation, and the approve
+   button sits under the tab bar, in both tabs. */
 
 function setTab(name) {
   tab = name;
@@ -125,9 +127,9 @@ function setTab(name) {
 
 function followSession() {
   const phase = state.status.phase;
-  if (tab === null) setTab(Object.keys(state.sections).length && !APPROVALS[phase] ? "doc" : "plan");
+  if (tab === null) setTab(Object.keys(state.sections).length && phase !== "awaiting-approval" ? "doc" : "plan");
   else if (phase !== lastPhase) {
-    if (APPROVALS[phase]) setTab("plan");
+    if (phase === "awaiting-approval") setTab("plan");
     if (phase === "writing") setTab("doc");
   }
   lastPhase = phase;
