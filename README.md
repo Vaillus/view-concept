@@ -4,8 +4,10 @@ A local page that serves two Claude Code skills. The plan and the explanation st
 
 | Skill | What it does in the page |
 |---|---|
-| `view-concept` (`~/Documents/code/skills/view-concept.md`) | an explanation: it runs `explain-concept` and puts the plan and the prose in the page |
-| `view-pr` (`~/Documents/code/skills/view-pr.md`) | a PR review, concepts first, built on `view-concept` (see **A PR review** below) |
+| `view-concept` (`skills/view-concept.md`) | an explanation: it runs `explain-concept` and puts the plan and the prose in the page |
+| `view-pr` (`skills/view-pr.md`) | a PR review, concepts first, built on `view-concept` (see **A PR review** below) |
+
+`view-concept.md` and `view-pr.md` in `~/Documents/code/skills/` are symlinks to these two files.
 
 Everything goes through Claude Code, so no API key is needed. Side threads are headless `claude -p` runs, billed to the same subscription as the terminal session.
 
@@ -40,7 +42,7 @@ The skill runs these commands. You don't need to run them yourself.
 | `view-concept export <slug>` | writes `~/Documents/Vault/explanations/<title>.md` |
 | `view-concept list` / `stop` / `serve` | lists sessions / stops the background server / runs the server in the foreground |
 
-The file formats (`plan.json`, `sections/<id>.md`, `audit.json`, the comment batch) are described in `~/Documents/code/skills/view-concept.md`; what a PR review adds (`"part": 2`, the item fields, `"kind": "finding"`, the `approve-model` and `review-code` actions, model changes) in `~/Documents/code/skills/view-pr.md`. The docstring of `store.py` documents the session directory.
+The file formats (`plan.json`, `sections/<id>.md`, `audit.json`, the comment batch) are described in `skills/view-concept.md`; what a PR review adds (`"part": 2`, the item fields, `"kind": "finding"`, the `approve-model` and `review-code` actions, model changes) in `skills/view-pr.md`. The docstring of `store.py` documents the session directory.
 
 ## A PR review
 
@@ -58,7 +60,7 @@ The review runs in three steps; each one ends on a page element:
 | model matching | Claude compares the whole model with the code and sends one or more agents to close the gaps; each result goes to the applied changes (`q-applied`) | « Review code » (status `awaiting-review`), at the bottom of the Explanation tab, starts refactoring once the user has looked at the commits |
 | refactoring | Claude writes Part 2: one refactor section per **item** of the diff (a file, or several files with one job), with its verdict against the model in its item fields, plus the findings across items | the Refactor tab, which holds every refactor section |
 
-An item's **item fields**, under `item` in its `plan.json` entry, are its `files`, its `verdict` (`conforms`, `diverges`, `out-of-pr`, `throw`, `split` or `move`), the concepts it `implements`, a one-line `note` and its `relations` to other files (`{to, kind}`). A **finding across items** is a refactor section with `"kind": "finding"` and `"items": [<item ids>]`: a problem between items, such as the same logic in two files. A verdict `diverges` or `move` sends the item back to model matching; code that no concept describes sends the review back to model consolidation. The steps, the verdicts and the agents' rules are defined in `view-pr.md`.
+An item's **item fields**, under `item` in its `plan.json` entry, are its `files`, its `verdict` (`conforms`, `diverges`, `out-of-pr`, `throw`, `split` or `move`), the concepts it `implements`, a one-line `note` and its `relations` to other files (`{to, kind}`). A **finding across items** is a refactor section with `"kind": "finding"` and `"items": [<item ids>]`: a problem between items, such as the same logic in two files. A verdict `diverges` or `move` sends the item back to model matching; code that no concept describes sends the review back to model consolidation. The steps, the verdicts and the agents' rules are defined in `skills/view-pr.md`.
 
 ## The page
 
