@@ -22,8 +22,9 @@ review. A refactor section, marked `part: 2`, belongs to Part 2 of a PR review a
 shown in the refactor tab; every other section is an explanation section, shown in the
 Explanation tab. A refactor section about one item of the diff carries its item fields
 under `item`: {files, verdict (conforms, diverges, out-of-pr, throw, split or move),
-implements, note, relations: [{to, kind}]}. One with `kind: "finding"` and
-`items: [<section ids>]` is a finding across items.
+implements, note, relations: [{to, kind, from?}]}, where the optional `from` names
+which of the item's files a relation starts from (by default the first). One with
+`kind: "finding"` and `items: [<section ids>]` is a finding across items.
 
 A side thread is a separate headless Claude conversation, forked from the session in
 claude.json, that the user opens from the page to discuss a passage without changing

@@ -198,7 +198,9 @@ under `item`:
 - `implements`: the concepts of the model it carries, by their lexicon names.
 - `note`: one line, such as the point it diverges on or an exception.
 - `relations`: its links to other files, each `{"to": "<path>", "kind": ...}`
-  where the kind is `imports`, `imported-by`, `reads` or `writes`.
+  where the kind is `imports`, `imported-by`, `reads` or `writes`. When the
+  item has several files, an optional `"from": "<path>"` names the one the
+  link starts from; without it, the link starts from the item's first file.
 
 The section file holds the item's **description**: what it does, what it
 reads and writes, and, unless it simply conforms, the finding (why it got its
