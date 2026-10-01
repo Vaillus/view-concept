@@ -89,6 +89,7 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .sec-comment { margin-left: auto; background: none; border: 0; color: var(--dim); font-size: 11px; visibility: hidden; }
 .sec:hover .sec-comment { visibility: visible; }
 .sec-comment:hover { color: var(--accent); }
+.sec-comment.ask { margin-left: 0; }
 .sec.unwritten .sec-comment { display: none; }
 .writing-line { color: var(--accent); }
 .body { font-size: 14px; line-height: 23px; }
@@ -109,6 +110,7 @@ textarea:focus { outline: none; border-color: var(--accent); }
 
 ::highlight(ev-draft) { background-color: var(--flagbg); }
 ::highlight(ev-sent) { background-color: var(--accentbg); }
+::highlight(ev-thread) { background-color: var(--altbg); }
 ::highlight(ev-focus) { background-color: var(--accent); color: var(--on-accent); }
 
 /* ---- code sessions: citations, questions, decisions ---- */
@@ -124,6 +126,7 @@ a.cite:hover code { text-decoration: underline; }
 
 /* ---- review pane ---- */
 .review { overflow-y: auto; min-height: 0; border-left: 1px solid var(--line); padding: 0 12px 24px; display: flex; flex-direction: column; gap: 8px; }
+.review > * { flex-shrink: 0; }
 .hint { font-size: 12px; line-height: 17px; margin: 0; }
 .comment { position: relative; border: 1px solid var(--line); padding: 6px 8px; background: var(--bg); }
 .comment.draft { border-color: var(--flag); }
@@ -143,8 +146,30 @@ a.cite:hover code { text-decoration: underline; }
 .b-head { font-size: 11px; }
 .b-note { color: var(--ink-dim); font-size: 12px; }
 
-/* ---- floating things: selection button, composer, tooltip, toast ---- */
+/* ---- side threads ---- */
+.head-btn { float: right; background: none; border: 0; color: var(--dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.head-btn:hover { color: var(--accent); }
+.flag-text { color: var(--flag); }
+#threads { display: flex; flex-direction: column; gap: 6px; }
+.thread { border-color: var(--alt); }
+.t-head { cursor: pointer; }
+.t-title { font-size: 12px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-first { color: var(--ink); }
+.t-msgs { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.t-msg { font-size: 13px; line-height: 20px; }
+.t-msg.user { white-space: pre-wrap; color: var(--ink-dim); border-left: 2px solid var(--line-strong); padding-left: 8px; }
+.t-msg.assistant > :first-child { margin-top: 0; }
+.t-msg.assistant > :last-child { margin-bottom: 0; }
+.t-msg code { background: var(--raised); padding: 0 3px; }
+.t-msg pre { background: var(--raised); padding: 6px 8px; overflow-x: auto; }
+.t-error { font-size: 12px; white-space: pre-wrap; }
+.t-foot { display: flex; flex-direction: column; gap: 4px; }
+.t-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* ---- floating things: selection buttons, composer, tooltip, toast ---- */
 .floating { position: absolute; z-index: 10; font-size: 12px; }
+#sel-actions { display: flex; gap: 4px; }
+#sel-actions .btn { font-size: 12px; }
 .composer { position: absolute; z-index: 11; width: 360px; background: var(--bg); border: 1px solid var(--accent); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .composer-quote { font-size: 12px; line-height: 17px; color: var(--ink-dim); font-style: italic; max-height: 6em; overflow: hidden; }
 .composer-actions { display: flex; justify-content: flex-end; gap: 6px; }
