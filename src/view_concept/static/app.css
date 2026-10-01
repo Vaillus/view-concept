@@ -133,6 +133,64 @@ a.cite:hover code { text-decoration: underline; }
 .d-files { font-size: 11px; margin-top: 2px; }
 .d-files a.cite, .d-files code { font-size: 11px; }
 
+/* ---- the refactor tab: review table (item entries, descriptions) ---- */
+.refactor > .rv-wide { max-width: 120ch; }
+.rv { margin-top: 8px; margin-bottom: 24px; }
+.rv-head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; padding: 10px 0 6px; margin-bottom: 4px;
+           border-bottom: 1px solid var(--line); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
+.rv-counts { text-transform: none; letter-spacing: 0; color: var(--ink-dim); font-size: 12px; }
+.rv-scroll { overflow-x: auto; }
+.rv-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 13px; line-height: 19px; }
+.rv-table th { text-align: left; font-weight: normal; font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+               color: var(--muted); padding: 4px 10px; border-bottom: 1px solid var(--line-strong); }
+.rv-entry td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; cursor: pointer; }
+.rv-entry:hover td, .rv-entry.open td { background: var(--hover); }
+.rv-entry.open td { border-bottom-color: transparent; }
+.rv-chev { display: inline-block; width: 1.2em; color: var(--muted); }
+.rv-title { color: var(--ink); }
+.rv-files { font-size: 11px; line-height: 16px; padding-left: 1.2em; margin-top: 2px; }
+.rv-files code, .rv-files a.cite code { background: none; padding: 0; font-size: 11px; }
+.rv-files code { color: var(--muted); }
+.rv-verdict { white-space: nowrap; }
+.rv-implements, .rv-note { color: var(--ink-dim); font-size: 12px; }
+.badge.verdict { margin-left: 0; text-transform: uppercase; letter-spacing: .05em; font-size: 10.5px; white-space: nowrap; }
+.badge.v-conforms { background: var(--okbg); color: var(--ok); }
+.badge.v-diverges { background: var(--dangerbg); color: var(--danger); }
+.badge.v-move { background: var(--warnbg); color: var(--warn); }
+.badge.v-split { background: var(--altbg); color: var(--alt); }
+.badge.v-throw { background: var(--flagbg); color: var(--flag); }
+.badge.v-out-of-pr { background: var(--infobg); color: var(--info); }
+.rv-desc > td { padding: 0 10px 12px calc(10px + 1.2em); border-bottom: 1px solid var(--line); background: var(--hover); }
+.rv-desc .sec { border-bottom: 0; border-left: 2px solid var(--accent); padding: 0 4px 4px 12px; }
+.sec.bare h2 { margin: 0; padding-top: 4px; min-height: 18px; }
+.sec.bare .body > :first-child { margin-top: 0; }
+
+/* ---- the refactor tab: structure view, findings across items ----
+   Mermaid styles its nodes under the id of its chart, hence !important. */
+.rv-structure .mermaid { background: var(--raised); padding: 8px; overflow-x: auto; }
+.rv-structure .cluster rect { fill: var(--bg) !important; stroke: var(--line-strong) !important; stroke-dasharray: 3 3; }
+.rv-structure .cluster-label :is(span, p, text) { color: var(--muted) !important; fill: var(--muted) !important; }
+.rv-structure .node :is(rect, path, polygon, circle) { fill: var(--raised) !important; stroke: var(--line-strong) !important; stroke-width: 1.5px !important; }
+.rv-structure .node .nodeLabel { color: var(--ink) !important; }
+.rv-structure .edgeLabel, .rv-structure .edgeLabel :is(p, span) { color: var(--muted) !important; background: var(--bg) !important; }
+.rv-structure .node.vc_conforms :is(rect, path, polygon) { stroke: var(--ok) !important; }
+.rv-structure .node.vc_diverges :is(rect, path, polygon) { stroke: var(--danger) !important; }
+.rv-structure .node.vc_move :is(rect, path, polygon) { stroke: var(--warn) !important; }
+.rv-structure .node.vc_split :is(rect, path, polygon) { stroke: var(--alt) !important; }
+.rv-structure .node.vc_throw :is(rect, path, polygon) { stroke: var(--flag) !important; }
+.rv-structure .node.vc_out_of_pr :is(rect, path, polygon) { stroke: var(--info) !important; }
+.rv-structure .node.vc_ghost :is(rect, path, polygon) { stroke: var(--dim) !important; stroke-dasharray: 3 3; fill: none !important; }
+.rv-structure .node.vc_ghost .nodeLabel, .rv-structure .node.vc_ghost text { color: var(--dim) !important; fill: var(--dim) !important; }
+.rv-structure .flowchart-link.edge-pattern-dotted { stroke: var(--warn) !important; }
+.rv-finding { border-left: 2px solid var(--warn); padding-left: 12px; border-bottom: 0; }
+/* Under the table, prose keeps its width but starts at the table's left edge. */
+.refactor > .sec.rv-after { max-width: 120ch; }
+.rv-finding > *, .sec.rv-after > * { max-width: 78ch; }
+.rv-finding h2 { margin-top: 8px; }
+.rv-involves { font-size: 12px; margin: -4px 0 6px; }
+.rv-involves a { color: var(--ink-dim); }
+.rv-involves a:hover { color: var(--accent); }
+
 /* ---- review pane ---- */
 .review { overflow-y: auto; min-height: 0; border-left: 1px solid var(--line); padding: 0 12px 24px; display: flex; flex-direction: column; gap: 8px; }
 .review > * { flex-shrink: 0; }

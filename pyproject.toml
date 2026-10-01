@@ -9,6 +9,7 @@ dependencies = [
     "uvicorn>=0.30",
     "markdown-it-py>=3.0",
     "mdit-py-plugins>=0.4",
+    "pyyaml>=6.0.3",
 ]
 
 [project.scripts]

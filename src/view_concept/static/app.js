@@ -1,8 +1,8 @@
 /* view-concept — the session page.
 
    Tabs share the main space: the plan (outline, model changes, lexicon), the
-   explanation (one block per outline section) and, in a PR review that has reached the
-   code, the code tab (the sections of Part 2); the review pane (draft comments, then
+   explanation (one block per explanation section) and, in a PR review that has reached
+   the refactoring step, the refactor tab (the refactor sections, Part 2); the review pane (draft comments, then
    sent batches) stays on the right. The page never edits the explanation: Claude Code
    writes the files, the server streams "changed", the page re-fetches. The page writes
    batches of comments, and side threads: separate read-only Claude conversations run by
@@ -23,7 +23,7 @@ let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
 let drafts = loadJSON(DRAFTS_KEY, []);
 let pendingSelection = null;
-let tab = null;          // "plan" | "doc" | "code"
+let tab = null;          // "plan" | "doc" | "refactor"
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
 let popThread = null;          // id of the thread shown in the popover
@@ -85,7 +85,8 @@ function connect() {
 
 /* ---------------- render ---------------- */
 
-function outlineItems() {
+/* Every section, in outline order, then any section file the outline does not list. */
+function allSections() {
   const ids = state.plan.outline.map((s) => s.id);
   const extra = Object.keys(state.sections).filter((k) => !ids.includes(k))
     .map((id) => ({ id, title: id, earns: "not in the outline" }));
@@ -97,13 +98,14 @@ const numberOf = (id) => {
 };
 const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).title || id;
 
-/* Part 2 of a PR review (outline items with "part": 2: per-item cards, the table, the
-   changes applied to the code) is read in its own tab, "code"; every other section is
-   in the explanation. Both tabs are rendered by the same code, into their own view. */
+/* Part 2 of a PR review, written in the refactoring step, is made of refactor sections
+   (sections with "part": 2): they are read in their own tab, "refactor"; every other
+   section is an explanation section, in the explanation. Both tabs are rendered into
+   their own view, with the same section blocks. */
 const isPart2 = (id) => (state.plan.outline.find((s) => s.id === id) || {}).part === 2;
-const tabOf = (id) => (isPart2(id) ? "code" : "doc");
-const hasCodeTab = () => state.plan.outline.some((s) => s.part === 2);
-const docViews = () => [$("#doc"), $("#code")];
+const tabOf = (id) => (isPart2(id) ? "refactor" : "doc");
+const hasRefactorTab = () => state.plan.outline.some((s) => s.part === 2);
+const docViews = () => [$("#doc"), $("#refactor")];
 // Rewritten since the user last marked it as read (the server compares with seen.json).
 const isUpdated = (id) => !!(state.sections[id] || {}).updated;
 
@@ -120,20 +122,21 @@ function render() {
 }
 
 /* ---------------- tabs ----------------
-   The plan, the explanation and the code tab share one space; one is shown at a time.
-   The code tab exists only once an outline item is in Part 2. The tab follows the
+   The plan, the explanation and the refactor tab share one space; one is shown at a
+   time. The refactor tab exists only once a section is in Part 2. The tab follows the
    session at the two moments that matter — the plan waiting for approval, the writing
    starting (in the tab of the section being written) — and otherwise stays where the
-   user put it. A model waiting for approval does not move it, nor does a code review
-   waiting to start: the model is read in the explanation, and « Approve model » and
-   « Review code » sit at its end. */
+   user put it. A model waiting for approval does not move it, nor does a refactoring
+   step waiting to start: the model is read in the explanation, and « Approve model »
+   and « Review code » sit at its end. */
 
 function setTab(name) {
-  if (name === "code" && !hasCodeTab()) name = "doc";
+  if (name === "refactor" && !hasRefactorTab()) name = "doc";
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === name));
   $("#sel-actions").hidden = true;
+  renderMermaid($(`.view[data-view="${name}"]`));
   positionPopover();
 }
 
@@ -145,9 +148,9 @@ function followSession() {
     if (phase === "writing") setTab(tabOf(state.status.section));
   }
   lastPhase = phase;
-  $('.tab[data-tab="code"]').hidden = !hasCodeTab();
-  if (tab === "code" && !hasCodeTab()) setTab("doc");
-  for (const [name, label] of [["doc", "explanation"], ["code", "code"]]) {
+  $('.tab[data-tab="refactor"]').hidden = !hasRefactorTab();
+  if (tab === "refactor" && !hasRefactorTab()) setTab("doc");
+  for (const [name, label] of [["doc", "explanation"], ["refactor", "refactor"]]) {
     const n = Object.keys(state.sections).filter((id) => isUpdated(id) && tabOf(id) === name).length;
     const writing = phase === "writing" && tabOf(state.status.section) === name;
     $(`.tab[data-tab="${name}"]`).replaceChildren(...[label,
@@ -161,7 +164,7 @@ document.addEventListener("keydown", (e) => {
   if (e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "1") setTab("plan");
   if (e.key === "2") setTab("doc");
-  if (e.key === "3" && hasCodeTab()) setTab("code");
+  if (e.key === "3" && hasRefactorTab()) setTab("refactor");
 });
 
 /* ---------------- status + approvals ---------------- */
@@ -169,8 +172,9 @@ document.addEventListener("keydown", (e) => {
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
 
 /* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
-   model of a PR review ("awaiting-model", set by the view-pr skill only), and the start
-   of its code review once the implementation is done ("awaiting-review", view-pr too).
+   model of a PR review at the end of model consolidation ("awaiting-model", set by the
+   view-pr skill only), and the start of its refactoring step once model matching is
+   done ("awaiting-review", view-pr too).
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until Claude moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it. The two
@@ -238,7 +242,7 @@ function renderPlan() {
     rev.onclick = () => { planChanged = false; renderPlan(); };
   } else rev.hidden = true;
 
-  $("#outline").replaceChildren(...outlineItems().map((s) => {
+  $("#outline").replaceChildren(...allSections().map((s) => {
     const written = s.id in state.sections;
     return el("li", { class: `${written ? "" : "pending"} ${isUpdated(s.id) ? "updated" : ""}`,
                       onclick: () => scrollToSection(s.id) },
@@ -293,14 +297,14 @@ function renderChanges() {
 
 function renderDoc() {
   const doc = $("#doc");
-  const items = outlineItems();
-  if (!items.length) {
+  const sections = allSections();
+  if (!sections.length) {
     doc.replaceChildren(el("p", { class: "dim empty", text: "Waiting for the plan…" }));
-    $("#code").replaceChildren();
+    $("#refactor").replaceChildren();
     return;
   }
-  doc.replaceChildren(...items.filter((s) => tabOf(s.id) === "doc").map(sectionBlock), docButton);
-  $("#code").replaceChildren(...items.filter((s) => tabOf(s.id) === "code").map(sectionBlock));
+  doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map((s) => sectionBlock(s)), docButton);
+  $("#refactor").replaceChildren(...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")));
   for (const view of docViews()) {
     typesetMath(view);
     linkCitations(view);
@@ -313,15 +317,17 @@ function renderDoc() {
   positionPopover();
 }
 
-function sectionBlock(s) {
+/* A bare block leaves out the number and the title (the description of an item: its
+   item entry shows both) and keeps everything else. */
+function sectionBlock(s, { bare = false } = {}) {
   const body = el("div", { class: "body" });
   const written = s.id in state.sections;
   if (written) body.innerHTML = state.sections[s.id].html;
   else if (writingId() === s.id) body.append(el("p", { class: "writing-line", text: "writing" }));
-  const cls = ["sec", written ? "" : "unwritten", isUpdated(s.id) ? "updated" : ""].join(" ");
+  const cls = ["sec", written ? "" : "unwritten", isUpdated(s.id) ? "updated" : "", bare ? "bare" : ""].join(" ");
   return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
     el("h2", {},
-      el("span", { class: "num", text: numberOf(s.id) }), " ", s.title,
+      ...(bare ? [] : [el("span", { class: "num", text: numberOf(s.id) }), " ", s.title]),
       s.kind === "question" && s.from && s.from.length
         ? el("span", { class: "q-from dim", text: `from ${[].concat(s.from).join(", ")}` }) : null,
       el("span", { class: "t-chips", "data-section": s.id }),
@@ -336,6 +342,189 @@ function sectionBlock(s) {
     body);
 }
 
+/* ---------------- the refactor tab ----------------
+   A refactor section that carries item fields ("item": {files, verdict, implements,
+   note, relations}) is an item: one unit of the diff, a file or files doing one job,
+   judged against the model. The items are drawn as the review table: one item entry per
+   item (its title and files, its verdict, the concepts it implements, a note), the items
+   that need action first. Clicking an entry opens its description underneath, which is
+   the section's own block, so comments, threads, highlights and annotations work there
+   as in the explanation. Below the table, the structure view (see structureView). The
+   other refactor sections, such as the applied changes, follow as plain sections. A
+   review whose refactor sections carry no item fields is drawn as plain sections only. */
+
+// Verdict keys in table order (from verdicts.yaml, sent with the state): those that need
+// action first, « conforms » last.
+const verdictKeys = () => (state.verdicts || []).map((v) => v.key);
+const openItems = new Set(); // ids of the items whose description is open, across re-renders
+
+const isItem = (s) => !!s && !!s.item && typeof s.item === "object";
+const isFinding = (s) => !isItem(s) && s.kind === "finding";
+const verdictOf = (s) => String(s.item.verdict || "no verdict");
+// An unknown verdict sorts after the known ones that need action, before « conforms ».
+const verdictRank = (v) => {
+  const keys = verdictKeys();
+  return keys.includes(v) ? keys.indexOf(v) : keys.length - 1.5;
+};
+const lexiconIndex = (name) =>
+  state.plan.lexicon.findIndex((t) => t.term.toLowerCase() === String(name).toLowerCase());
+
+function refactorTab(sections) {
+  const items = sections.filter(isItem);
+  if (!items.length) return sections.map((s) => sectionBlock(s));
+  const findings = sections.filter(isFinding);
+  const rest = sections.filter((s) => !isItem(s) && !isFinding(s));
+  const after = rest.map((s) => sectionBlock(s));
+  after.forEach((b) => b.classList.add("rv-after")); // aligned on the table, see app.css
+  return [reviewTable(items), structureView(items, findings), ...after].filter(Boolean);
+}
+
+function verdictBadge(v) {
+  return el("span", { class: `badge verdict ${verdictKeys().includes(v) ? `v-${v}` : ""}`, text: v });
+}
+
+function fileRef(f) {
+  const href = vscodeHref(f);
+  return href
+    ? el("a", { class: "cite", href, title: "Open in VS Code", onclick: (e) => e.stopPropagation() }, el("code", { text: f }))
+    : el("code", { text: f });
+}
+
+function reviewTable(items) {
+  const sorted = items.map((s, i) => [s, i])
+    .sort(([a, i], [b, j]) => verdictRank(verdictOf(a)) - verdictRank(verdictOf(b)) || i - j)
+    .map(([s]) => s);
+  const counts = new Map();
+  for (const s of sorted) counts.set(verdictOf(s), (counts.get(verdictOf(s)) || 0) + 1);
+  const summary = [`${items.length} item${items.length > 1 ? "s" : ""}`, ...[...counts].map(([v, n]) => `${n} ${v}`)];
+  return el("div", { class: "rv rv-wide" },
+    el("div", { class: "rv-head" }, "review table", el("span", { class: "rv-counts", text: summary.join(" · ") })),
+    el("div", { class: "rv-scroll" },
+      el("table", { class: "rv-table" },
+        el("thead", {}, el("tr", {}, ...["item", "verdict", "implements", "note"].map((t) => el("th", { text: t })))),
+        el("tbody", {}, ...sorted.flatMap(itemRows)))));
+}
+
+/* An item entry, and its description in the row under it (hidden while closed, but
+   always in the page, so a quote in it is found and a draft on it stays anchored). */
+function itemRows(s) {
+  const it = s.item;
+  const open = openItems.has(s.id);
+  const implementsCell = el("td", { class: "rv-implements" });
+  [].concat(it.implements || []).forEach((name, k) => {
+    if (k) implementsCell.append(", ");
+    const i = lexiconIndex(name);
+    implementsCell.append(i < 0 ? el("span", { text: name }) : el("span", { class: "term", "data-term": i, text: name }));
+  });
+  const entry = el("tr", { class: `rv-entry ${open ? "open" : ""}`, "data-item": s.id,
+                           onclick: () => setItemOpen(s.id, !openItems.has(s.id)) },
+    el("td", { class: "rv-item" },
+      el("div", {},
+        el("span", { class: "rv-chev", text: open ? "▾" : "▸" }),
+        el("span", { class: "num", text: numberOf(s.id) }), " ",
+        el("span", { class: "rv-title", text: s.title }),
+        writingId() === s.id ? el("span", { class: "badge accent writing", text: "writing" }) : null,
+        isUpdated(s.id) ? el("span", { class: "badge new", text: "updated" }) : null),
+      el("div", { class: "rv-files" }, ...[].concat(it.files || []).map((f) => el("div", {}, fileRef(f))))),
+    el("td", { class: "rv-verdict" }, verdictBadge(verdictOf(s))),
+    implementsCell,
+    el("td", { class: "rv-note", text: it.note || "" }));
+  const description = el("tr", { class: "rv-desc", id: `rv-desc-${s.id}`, hidden: !open },
+    el("td", { colspan: "4" }, sectionBlock(s, { bare: true })));
+  return [entry, description];
+}
+
+/* The structure view: a Mermaid flowchart drawn from the item fields. One frame per
+   directory, one node per file outlined in the colour of its item's verdict, a file
+   that is only the target of a relation greyed out (it is not in the diff). An arrow
+   per relation, labelled with its kind, from the relation's `from` file if it names
+   one, else from the first file of its item. A finding across items (a section with
+   "kind": "finding" and "items": [item ids]) adds a dashed line from the first file of
+   its first item to the first file of each other one, labelled with its number, and is
+   listed under the chart as a section block, with the items it involves. Without
+   relations or findings there is nothing to draw, and the view is left out. */
+const filesOf = (s) => [].concat(s.item.files || []);
+const relationsOf = (s) => [].concat(s.item.relations || []).filter((r) => r && r.to);
+
+function structureView(items, findings) {
+  if (!items.some((s) => relationsOf(s).length) && !findings.length) return null;
+  const nodes = new Map(); // file path -> { id, cls }
+  const node = (f, cls) => {
+    if (!nodes.has(f)) nodes.set(f, { id: `f${nodes.size}`, cls });
+    return nodes.get(f).id;
+  };
+  const vclass = (s) => `vc_${verdictKeys().includes(verdictOf(s)) ? verdictOf(s).replace(/-/g, "_") : "other"}`;
+  items.forEach((s) => filesOf(s).forEach((f) => node(f, vclass(s))));
+  const edges = [];
+  for (const s of items) {
+    for (const r of relationsOf(s)) {
+      const from = r.from || filesOf(s)[0];
+      if (!from) continue;
+      edges.push(`${node(from, "vc_ghost")} -->${r.kind ? `|"${mq(r.kind)}"|` : ""} ${node(r.to, "vc_ghost")}`);
+    }
+  }
+  const byId = new Map(items.map((s) => [s.id, s]));
+  for (const f of findings) {
+    const firsts = [].concat(f.items || []).map((id) => byId.get(id)).filter(Boolean)
+      .map((s) => filesOf(s)[0]).filter(Boolean);
+    for (const other of firsts.slice(1)) {
+      if (other !== firsts[0]) edges.push(`${node(firsts[0])} -.-|"§${numberOf(f.id)}"| ${node(other)}`);
+    }
+  }
+  const dirs = new Map(); // directory -> [file]
+  for (const f of nodes.keys()) {
+    const dir = f.includes("/") ? f.slice(0, f.lastIndexOf("/") + 1) : "./";
+    dirs.set(dir, [...(dirs.get(dir) || []), f]);
+  }
+  const lines = ["flowchart LR"];
+  [...dirs].forEach(([dir, files], i) => {
+    lines.push(`  subgraph d${i}["${mq(dir)}"]`);
+    for (const f of files) lines.push(`    ${nodes.get(f).id}["${mq(f.slice(f.lastIndexOf("/") + 1))}"]`);
+    lines.push("  end");
+  });
+  lines.push(...edges.map((e) => `  ${e}`));
+  for (const [, n] of nodes) lines.push(`  class ${n.id} ${n.cls}`);
+
+  const involves = (f) => el("div", { class: "rv-involves dim" }, "involves: ",
+    ...[].concat(f.items || []).flatMap((id, k) => [k ? ", " : null,
+      byId.has(id) ? el("a", { href: `#sec-${id}`, text: titleOf(id),
+                               onclick: (e) => { e.preventDefault(); scrollToSection(id); } })
+                   : el("span", { text: id })]).filter(Boolean));
+  return el("div", { class: "rv rv-wide rv-structure" },
+    el("div", { class: "rv-head" }, "structure",
+      el("span", { class: "rv-counts", text: "files by directory · arrows: relations · dashed: findings across items · greyed: not in the diff" })),
+    el("pre", {}, el("code", { class: "language-mermaid", text: lines.join("\n") })),
+    findings.length ? el("div", { class: "rv-head" }, "findings across items") : null,
+    ...findings.map((f) => {
+      const block = sectionBlock(f);
+      block.classList.add("rv-finding");
+      $("h2", block).after(involves(f));
+      return block;
+    }));
+}
+// Text inside a quoted Mermaid label: a double quote would end it.
+const mq = (t) => String(t).replace(/"/g, "#quot;");
+
+/* Open the item entry of section `id`, if it is an item drawn in the review table, so
+   its description is on screen; returns the entry, else null. */
+function openItemOf(id) {
+  const entry = document.querySelector(`.rv-entry[data-item="${CSS.escape(id)}"]`);
+  if (entry && !openItems.has(id)) setItemOpen(id, true);
+  return entry;
+}
+
+function setItemOpen(id, open) {
+  const entry = document.querySelector(`.rv-entry[data-item="${CSS.escape(id)}"]`);
+  if (!entry) return;
+  if (open) openItems.add(id); else openItems.delete(id);
+  entry.classList.toggle("open", open);
+  $(".rv-chev", entry).textContent = open ? "▾" : "▸";
+  const description = document.getElementById(`rv-desc-${id}`);
+  description.hidden = !open;
+  if (open) renderMermaid(description);
+  positionPopover();
+}
+
 function typesetMath(root) {
   if (!window.katex) return;
   root.querySelectorAll(".math").forEach((m) => {
@@ -347,14 +536,19 @@ function typesetMath(root) {
 }
 
 let mermaidLib = null;
+/* Mermaid lays a chart out from the size of its text, which is zero in a hidden tab or
+   a closed item entry: a chart out of sight stays a code block until it is shown (see
+   setTab and setItemOpen, which call this again). */
 async function renderMermaid(root) {
-  const blocks = root.querySelectorAll("pre > code.language-mermaid");
-  if (!blocks.length) return;
+  const shown = (code) => code.isConnected && code.parentElement.getClientRects().length > 0;
+  if (![...root.querySelectorAll("pre > code.language-mermaid")].some(shown)) return;
   try {
     mermaidLib = mermaidLib || (await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs")).default;
+    const blocks = [...root.querySelectorAll("pre > code.language-mermaid")].filter(shown);
+    if (!blocks.length) return;
     const dark = getComputedStyle(document.documentElement).colorScheme.includes("dark");
     mermaidLib.initialize({ startOnLoad: false, theme: dark ? "dark" : "default" });
-    const nodes = [...blocks].map((code) => {
+    const nodes = blocks.map((code) => {
       const div = el("div", { class: "mermaid", "data-src": code.textContent, text: code.textContent });
       code.parentElement.replaceWith(div);
       return div;
@@ -617,6 +811,7 @@ function revealQuote(c) {
   if (!c.section) return;
   if (c.quote.startsWith("plan · ")) { setTab("plan"); return; }
   setTab(tabOf(c.section));
+  openItemOf(c.section);
   const r = findQuote(c.section, c.quote, c.prefix);
   if (r) {
     r.startContainer.parentElement.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -627,9 +822,11 @@ function revealQuote(c) {
   } else scrollToSection(c.section);
 }
 
+/* A section that is an item is reached through its item entry: the entry opens, and is
+   what scrolls into view, with its description under it. */
 function scrollToSection(id) {
   setTab(tabOf(id));
-  const s = document.getElementById(`sec-${id}`);
+  const s = openItemOf(id) || document.getElementById(`sec-${id}`);
   if (s) s.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
@@ -641,7 +838,7 @@ function currentSelection() {
   const range = sel.getRangeAt(0);
   const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
   const sec = start.closest(".sec");
-  if (!sec || !sec.closest("#doc, #code")) return null;
+  if (!sec || !sec.closest("#doc, #refactor")) return null;
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;
@@ -897,7 +1094,10 @@ function anchorRect(id) {
 function openPopover(id) {
   const t = threadOf(id);
   if (!t) return;
-  if (t.section && !t.quote.startsWith("plan · ") && tab !== tabOf(t.section)) setTab(tabOf(t.section));
+  if (t.section && !t.quote.startsWith("plan · ")) {
+    if (tab !== tabOf(t.section)) setTab(tabOf(t.section));
+    openItemOf(t.section);
+  }
   popThread = id;
   renderPopover();
 }

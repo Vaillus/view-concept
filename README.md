@@ -4,14 +4,16 @@ A local page that serves two Claude Code skills. The plan and the explanation st
 
 | Skill | What it does in the page |
 |---|---|
-| `view-concept` (`~/Documents/code/skills/view-concept.md`) | an explanation: it runs `explain-concept` and puts the plan and the prose in the page |
-| `view-pr` (`~/Documents/code/skills/view-pr.md`) | a PR review, concepts first, built on `view-concept` (see **A PR review** below) |
+| `view-concept` (`skills/view-concept.md`) | an explanation: it runs `explain-concept` and puts the plan and the prose in the page |
+| `view-pr` (`skills/view-pr.md`) | a PR review, concepts first, built on `view-concept` (see **A PR review** below) |
+
+`view-concept.md` and `view-pr.md` in `~/Documents/code/skills/` are symlinks to these two files.
 
 Everything goes through Claude Code, so no API key is needed. Side threads are headless `claude -p` runs, billed to the same subscription as the terminal session.
 
 ```
 terminal (Claude Code)                        browser (view-concept page)
-  view-concept · view-pr ─ writes files ──▶  plan · explanation · code · review
+  view-concept · view-pr ─ writes files ──▶  plan · explanation · refactor · review
         ▲                                             │
         └── Monitor: view-concept watch ◀── inbox ◀───┘ « Send »
 ```
@@ -40,11 +42,13 @@ The skill runs these commands. You don't need to run them yourself.
 | `view-concept export <slug>` | writes `~/Documents/Vault/explanations/<title>.md` |
 | `view-concept list` / `stop` / `serve` | lists sessions / stops the background server / runs the server in the foreground |
 
-The file formats (`plan.json`, `sections/<id>.md`, `audit.json`, the comment batch) are described in `~/Documents/code/skills/view-concept.md`; what a PR review adds (`"part": 2`, the `approve-model` and `review-code` actions, model changes) in `~/Documents/code/skills/view-pr.md`. The docstring of `store.py` documents the session directory.
+The file formats (`plan.json`, `sections/<id>.md`, `audit.json`, the comment batch) are described in `skills/view-concept.md`; what a PR review adds (`"part": 2`, the item fields, `"kind": "finding"`, the `approve-model` and `review-code` actions, model changes) in `skills/view-pr.md`. The docstring of `store.py` documents the session directory.
 
 ## A PR review
 
 `view-pr` runs a code session on the PR branch and reviews the PR through its **model**: the set of concepts the PR introduces or changes (objects, rules, formats, names the code relies on), with their rules and how they fit the existing code. The model lives in the session, in the lexicon of `plan.json` and in Part 1 of the explanation; it is not stored in the repository.
+
+A **section** is one element of the `outline` list in `plan.json`, with its text in `sections/<id>.md`. A **refactor section** is marked `"part": 2` and shows in the Refactor tab; every other section is an **explanation section** and shows in the Explanation tab.
 
 A **model change** is one correction to the model the user accepts during the review, written as an instruction an agent can act on. `view-concept change` records it in `changes.json`, with its reason, what the PR did instead and the files it touches. `view-concept changes` prints the list, which becomes the Decisions section of the PR description.
 
@@ -52,19 +56,19 @@ The review runs in three steps; each one ends on a page element:
 
 | Step | What happens | Page element |
 |---|---|---|
-| 1 · concepts | Claude writes Part 1 (the model) in the Explanation tab; the user challenges it and each accepted correction is a model change | « Approve model » (status `awaiting-model`), at the bottom of the Explanation tab, ends the step and starts step 2 |
-| 2 · agents | Claude compares the whole model with the code and sends one or more agents to close the gaps; each result goes to « Changes applied to the code » (`q-applied`) | « Review code » (status `awaiting-review`), at the bottom of the Explanation tab, starts step 3 once the user has looked at the commits |
-| 3 · code | Claude writes Part 2: one card per item of the diff with a verdict against the model, then a table of every item | the Code tab, which holds every outline item marked `"part": 2` |
+| model consolidation | Claude writes Part 1 (the model) in the Explanation tab; the user challenges it and each accepted correction is a model change | « Approve model » (status `awaiting-model`), at the bottom of the Explanation tab, ends the step and starts model matching |
+| model matching | Claude compares the whole model with the code and sends one or more agents to close the gaps; each result goes to the applied changes (`q-applied`) | « Review code » (status `awaiting-review`), at the bottom of the Explanation tab, starts refactoring once the user has looked at the commits |
+| refactoring | Claude writes Part 2: one refactor section per **item** of the diff (a file, or several files with one job), with its verdict against the model in its item fields, plus the findings across items | the Refactor tab, which holds every refactor section |
 
-A verdict that the code diverges from the model sends the review back to step 2; code that no concept describes sends it back to step 1. The steps, the verdicts and the agents' rules are defined in `view-pr.md`.
+An item's **item fields**, under `item` in its `plan.json` entry, are its `files`, its `verdict` (one of the keys in `src/view_concept/verdicts.yaml`, which gives each one's meaning and where it sends the review, in the review table's order), the concepts it `implements`, a one-line `note` and its `relations` to other files (`{to, kind, from?}`, where the optional `from` names which of the item's files the arrow starts from, by default its first). A **finding across items** is a refactor section with `"kind": "finding"` and `"items": [<item ids>]`: a problem between items, such as the same logic in two files. Code that no concept describes sends the review back to model consolidation. The steps and the agents' rules are defined in `skills/view-pr.md`.
 
 ## The page
 
-- **Plan / Explanation / Code** (left, one at a time): tabs, or the keys `1`, `2` and `3`. The Code tab shows only in a PR review that has reached Part 2. The page switches to the Plan tab when the plan is waiting for approval, and to the tab of the section being written when writing starts. Otherwise the tab stays where you left it.
-  - At the bottom of the Explanation tab, after the last section of Part 1, in a PR review: « Approve model » when the model waits for approval (the model is settled and the implementation starts, step 2), then « Review code » once the implementation is done (Claude starts the code review, step 3). Draft comments go with either. The page does not switch tabs for them, since the model is read in the explanation.
-  - *Plan*: « Approve plan » (when Claude is waiting for it; draft comments go with it), the last revision, the outline with what each section adds (« + comment » on each item), the model changes of a PR review, and the lexicon. Clicking an item opens its section.
-  - *Explanation*: one block per outline section. Lexicon terms are underlined, and hovering one shows its developed definition. Terms flagged by the vocabulary audit get a wavy underline. When Claude rewrites a section, what changed since you last read it stays highlighted: the inserted words get a green background, and every changed paragraph, list item or cell gets a green bar in the margin (a deletion only gets the bar). The section heading and its plan item say « updated », and the tab shows how many sections were updated. « updated · mark read » in the heading clears the highlights. What you have read is kept in `seen.json`, so the highlights survive a reload and show changes made while the page was closed. A section's first text is never highlighted. In a code session, `file:line` citations open VS Code.
-  - *Code*: the sections of Part 2 of a PR review (outline items with `"part": 2`: the per-item cards, the at-a-glance table, the changes applied to the code), rendered like the explanation. Clicking such an item in the plan, or a comment anchored on one, opens this tab.
+- **Plan / Explanation / Refactor** (left, one at a time): tabs, or the keys `1`, `2` and `3`. The Refactor tab shows only in a PR review that has reached Part 2. The page switches to the Plan tab when the plan is waiting for approval, and to the tab of the section being written when writing starts. Otherwise the tab stays where you left it.
+  - At the bottom of the Explanation tab, after the last section of Part 1, in a PR review: « Approve model » when the model waits for approval (the model is settled and model matching starts), then « Review code » once model matching is done (refactoring starts). Draft comments go with either. The page does not switch tabs for them, since the model is read in the explanation.
+  - *Plan*: « Approve plan » (when Claude is waiting for it; draft comments go with it), the last revision, the outline with what each section adds (« + comment » on each), the model changes of a PR review, and the lexicon. Clicking a section in the outline opens it.
+  - *Explanation*: one block per explanation section. Lexicon terms are underlined, and hovering one shows its developed definition. Terms flagged by the vocabulary audit get a wavy underline. When Claude rewrites a section, what changed since you last read it stays highlighted: the inserted words get a green background, and every changed paragraph, list item or cell gets a green bar in the margin (a deletion only gets the bar). The section heading and its line in the outline say « updated », and the tab shows how many sections were updated. « updated · mark read » in the heading clears the highlights. What you have read is kept in `seen.json`, so the highlights survive a reload and show changes made while the page was closed. A section's first text is never highlighted. In a code session, `file:line` citations open VS Code.
+  - *Refactor*: the refactor sections. At the top, the review table: one item entry per item (its files, a verdict badge, the concepts it implements with their definitions on hover, the note), the items that need action first and the verdicts counted in the header. Clicking an entry opens its description, the item's section, where comments and threads work as in the explanation. Under it, the structure view, a Mermaid chart drawn from the item fields: one frame per directory, each file outlined in its verdict's colour, files outside the diff greyed out, an arrow per relation, a dashed line per finding across items; the findings are listed under the chart with the items they involve. The applied changes and any other refactor section follow as plain sections. Clicking a refactor section in the plan, or a comment anchored on one, opens this tab and its item entry.
 - **Review** (right, always visible): select text and click « + comment » to add a draft comment (⌘↵ saves it). Drafts survive a reload. « Send » sends all drafts plus an optional note as one batch. Sent comments show « waiting », then « resolved » with Claude's reply.
 - **Threads**: « ask » next to « + comment » on a selection, « ask » on a section, or « ask » in the top bar for a general question. A thread is a separate conversation: its first turn forks the terminal session (`claude -p --resume <id> --fork-session`), so it knows the discussion so far, and the terminal session never sees it. It opens in a popover on its passage; a click anywhere else closes it, and a click on the highlighted passage opens it again. A thread with no passage (a whole section, a general question, or a passage since rewritten) gets a chip instead, in the section heading or the top bar. Threads are read-only (Read, Grep, Glob, no MCP). « → batch » adds a draft comment anchored to the thread's passage; its text is optional (without one, the thread's conclusion is the comment), and the batch tells the session which thread it comes from. « Delete » removes a thread no sent comment points to. Each turn re-sends the forked history, so a thread on a long session uses a lot of the subscription's limits.
 - **Export to vault** (top): writes one Obsidian note. Exporting again overwrites that note, but never a note you wrote yourself with the same title.

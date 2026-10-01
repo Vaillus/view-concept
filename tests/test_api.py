@@ -1,6 +1,8 @@
 import json
+from pathlib import Path
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 
 from view_concept import server
@@ -54,6 +56,15 @@ def test_api_keeps_the_part_of_an_outline_item(client, session):
     session.plan_path.write_text(json.dumps(plan))
     outline = client.get("/api/s/kv-cache").json()["plan"]["outline"]
     assert outline[-1]["part"] == 2
+
+
+def test_api_sends_the_verdicts_in_the_file_order(client):
+    verdicts = client.get("/api/s/kv-cache").json()["verdicts"]
+    in_file = yaml.safe_load((Path(server.__file__).parent / "verdicts.yaml").read_text())
+    assert [v["key"] for v in verdicts] == [v["key"] for v in in_file]
+    assert verdicts[-1]["key"] == "conforms"
+    assert all(v["meaning"] for v in verdicts)
+    assert {v["key"] for v in verdicts if v.get("sends_to")} == {"diverges", "move"}
 
 
 def test_api_updated_sections(client, session):
