@@ -3,10 +3,11 @@
    Tabs share the main space: the plan (outline, model changes, lexicon), the
    explanation (one block per outline section) and, in a PR review that has reached the
    code, the code tab (the sections of Part 2); the review pane (draft comments, then
-   sent batches, side threads) stays on the right. The page never
-   edits the explanation: Claude Code writes the files, the server streams "changed",
-   the page re-fetches. The page writes batches of comments, and side threads: separate
-   read-only Claude conversations run by the server, streamed through "threads" events.
+   sent batches) stays on the right. The page never edits the explanation: Claude Code
+   writes the files, the server streams "changed", the page re-fetches. The page writes
+   batches of comments, and side threads: separate read-only Claude conversations run by
+   the server, streamed through "threads" events. A thread shows in a popover on its
+   passage (see "side threads" below).
 
    A comment is anchored by (section id, quoted text, a few characters of prefix). The
    quote is searched again after every re-render, so an anchor survives edits elsewhere
@@ -27,7 +28,8 @@ let pendingSelection = null;
 let tab = null;          // "plan" | "doc" | "code"
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
-const openThreads = new Set(); // thread ids shown expanded
+let popThread = null;          // id of the thread shown in the popover
+let threadRanges = [];         // [thread, range] of every thread whose passage is found
 const cards = new Map();       // thread id -> its card's DOM parts, built once
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -57,6 +59,8 @@ function toast(msg, ms = 3000) {
   toast.timer = setTimeout(() => (t.hidden = true), ms);
 }
 const collapse = (s) => s.replace(/\s+/g, " ").trim();
+// A draft is sent when it has text, or when it carries a thread: the thread is the comment.
+const ready = (d) => d.text.trim() || d.thread;
 
 /* ---------------- data ---------------- */
 
@@ -118,6 +122,7 @@ function render() {
   renderPlan();
   renderDoc();
   renderReview();
+  renderPopover(); // a sent batch changes what the open thread offers
 }
 
 /* ---------------- tabs ----------------
@@ -135,6 +140,7 @@ function setTab(name) {
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === name));
   $("#sel-actions").hidden = true;
+  positionPopover();
 }
 
 function followSession() {
@@ -217,7 +223,7 @@ function renderStatus() {
   if (!approval) return;
   const btn = buttonOf(approval);
   btn.hidden = approvalPending();
-  const n = drafts.filter((d) => d.text.trim()).length;
+  const n = drafts.filter(ready).length;
   btn.textContent = n ? `${approval.label} + send ${n} comment${n > 1 ? "s" : ""}` : approval.label;
 }
 
@@ -309,6 +315,8 @@ function renderDoc() {
     annotateLexicon(view);
   }
   applyHighlights();
+  renderThreadChips();
+  positionPopover();
 }
 
 function sectionBlock(s) {
@@ -322,6 +330,7 @@ function sectionBlock(s) {
       el("span", { class: "num", text: numberOf(s.id) }), " ", s.title,
       s.kind === "question" && s.from && s.from.length
         ? el("span", { class: "q-from dim", text: `from ${[].concat(s.from).join(", ")}` }) : null,
+      el("span", { class: "t-chips", "data-section": s.id }),
       updated.has(s.id)
         ? el("button", { class: "badge flag", text: "updated · ok", title: "Mark as read",
                          onclick: (e) => { e.stopPropagation(); updated.delete(s.id); render(); } })
@@ -482,15 +491,16 @@ function findQuote(sectionId, quote, prefix) {
 }
 
 function applyHighlights() {
+  threadRanges = threadsState.threads.filter((t) => t.quote)
+    .map((t) => [t, findQuote(t.section, t.quote, t.prefix)]).filter(([, r]) => r);
   if (!window.CSS || !CSS.highlights) return;
   const draftRanges = drafts.map((d) => findQuote(d.section, d.quote, d.prefix)).filter(Boolean);
   const sentRanges = state.comments.batches.flatMap((b) => b.comments)
     .filter((c) => c.status === "sent")
     .map((c) => findQuote(c.section, c.quote, c.prefix)).filter(Boolean);
-  const threadRanges = threadsState.threads.map((t) => findQuote(t.section, t.quote, t.prefix)).filter(Boolean);
   CSS.highlights.set("ev-draft", new Highlight(...draftRanges));
   CSS.highlights.set("ev-sent", new Highlight(...sentRanges));
-  CSS.highlights.set("ev-thread", new Highlight(...threadRanges));
+  CSS.highlights.set("ev-thread", new Highlight(...threadRanges.map(([, r]) => r)));
 }
 
 function revealQuote(c) {
@@ -533,11 +543,17 @@ function currentSelection() {
 }
 
 document.addEventListener("mouseup", (e) => {
-  if (e.target.closest("#composer, #sel-actions")) return;
+  if (e.target.closest("#composer, #sel-actions, #thread-pop")) return;
   setTimeout(() => {
     const s = currentSelection();
     const btn = $("#sel-actions");
-    if (!s) { btn.hidden = true; pendingSelection = null; return; }
+    if (!s) {
+      btn.hidden = true;
+      pendingSelection = null;
+      const t = threadAt(e.clientX, e.clientY);
+      if (t) openPopover(t.id);
+      return;
+    }
     pendingSelection = s;
     btn.hidden = false;
     btn.style.top = `${window.scrollY + s.rect.bottom + 6}px`;
@@ -566,6 +582,7 @@ function openComposer(target, mode = "comment") {
     : target.section ? `whole section §${numberOf(target.section)} ${titleOf(target.section)}`
     : "general question, no passage";
   $(".add", c).textContent = mode === "ask" ? "Ask" : "Add";
+  $("#no-parent").hidden = mode !== "ask" || threadsState.forkable;
   $("textarea", c).placeholder = mode === "ask"
     ? "Your question for a side thread  (⌘↵ to ask, Esc to cancel)"
     : "Your comment  (⌘↵ to add, Esc to cancel)";
@@ -610,7 +627,11 @@ function quoteLine(c) {
   const where = c.section ? `§${numberOf(c.section)}` : "·";
   const q = c.quote ? `« ${c.quote.length > 90 ? c.quote.slice(0, 90) + "…" : c.quote} »`
           : c.section ? "whole section" : "general";
-  return el("div", { class: "c-quote", onclick: () => revealQuote(c) },
+  const open = () => {
+    revealQuote(c);
+    if (c.thread && threadsState.threads.some((t) => t.id === c.thread)) openPopover(c.thread);
+  };
+  return el("div", { class: "c-quote", onclick: c.thread ? open : () => revealQuote(c) },
     el("span", { class: "num", text: where }), " ", q,
     c.thread ? el("span", { class: "badge alt", text: `↳ ${c.thread}` }) : null);
 }
@@ -618,13 +639,14 @@ function quoteLine(c) {
 function renderReview() {
   $("#draft-count").textContent = drafts.length ? `· ${drafts.length} draft${drafts.length > 1 ? "s" : ""}` : "";
   $("#drafts").replaceChildren(...drafts.map((d) => {
-    const ta = el("textarea", { class: "c-text", rows: "2" });
+    const ta = el("textarea", { class: "c-text", rows: "2",
+                                placeholder: d.thread ? "What should change, after this thread? (optional)" : "" });
     ta.value = d.text;
     ta.addEventListener("input", () => { d.text = ta.value; saveJSON(DRAFTS_KEY, drafts); updateSend(); });
     return el("div", { class: "comment draft" },
       quoteLine(d), ta,
       el("button", { class: "c-del", text: "×", title: "Delete",
-                     onclick: () => { drafts = drafts.filter((x) => x !== d); saveJSON(DRAFTS_KEY, drafts); renderReview(); applyHighlights(); } }));
+                     onclick: () => { drafts = drafts.filter((x) => x !== d); saveJSON(DRAFTS_KEY, drafts); renderReview(); applyHighlights(); renderPopover(); } }));
   }));
   updateSend();
 
@@ -635,7 +657,8 @@ function renderReview() {
       b.note ? el("div", { class: "b-note", text: b.note }) : null,
       ...b.comments.map((c) => el("div", { class: `comment ${c.status}` },
         quoteLine(c),
-        el("div", { class: "c-text", text: c.text }),
+        c.text || !c.thread ? el("div", { class: "c-text", text: c.text })
+          : el("div", { class: "c-text dim", text: "the thread's conclusion" }),
         el("div", { class: "c-status" },
           el("span", { class: c.status === "resolved" ? "badge ok" : "badge", text: c.status === "resolved" ? "✓ resolved" : "waiting" }),
           c.reply ? el("span", { class: "c-reply", text: ` ${c.reply}` }) : null))))
@@ -644,7 +667,7 @@ function renderReview() {
 
 function updateSend() {
   const note = $("#note").value.trim();
-  const n = drafts.filter((d) => d.text.trim()).length;
+  const n = drafts.filter(ready).length;
   const btn = $("#send");
   btn.disabled = !n && !note;
   btn.textContent = n ? `Send ${n} comment${n > 1 ? "s" : ""}` : note ? "Send note" : "Send";
@@ -684,6 +707,13 @@ async function send(action = "") {
 }
 
 /* ---------------- side threads ----------------
+   A thread opens in a popover on its passage. One is shown at a time; a click anywhere
+   else closes it, and a click on the passage (highlighted) opens it again. A thread with
+   no passage to sit on (a whole-section thread, a general one, or one whose passage was
+   rewritten) gets a chip instead: in its section's heading, or in the top bar for a
+   general one. The popover follows its anchor when the view scrolls, and hides while the
+   anchor is out of sight.
+
    A thread's card is built once and then patched in place (head, messages, footer
    state), so a streaming reply never takes the focus or the text of its reply box. */
 
@@ -691,12 +721,13 @@ async function loadThreads() {
   const r = await fetch(`/api/s/${SLUG}/threads`);
   if (!r.ok) return;
   threadsState = await r.json();
-  renderThreads();
-  if (state) applyHighlights();
+  for (const id of cards.keys()) if (!threadsState.threads.some((t) => t.id === id)) cards.delete(id);
+  if (state) { applyHighlights(); renderThreadChips(); }
+  renderPopover();
 }
 
-async function postJSON(url, body) {
-  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+async function postJSON(url, body, method = "POST") {
+  const r = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const data = await r.json();
   if (!r.ok) throw new Error(data.detail);
   return data;
@@ -711,20 +742,105 @@ async function askThread() {
     const t = await postJSON(`/api/s/${SLUG}/threads`, { section, quote, prefix, text });
     closeComposer();
     getSelection().removeAllRanges();
-    openThreads.add(t.id);
+    popThread = t.id;
     await loadThreads();
-    cards.get(t.id)?.root.scrollIntoView({ block: "nearest", behavior: "smooth" });
   } catch (e) { toast(`Could not start the thread: ${e.message}`); }
 }
 
 $("#new-thread").addEventListener("click", (e) =>
   openComposer({ section: "", quote: "", prefix: "", rect: e.target.getBoundingClientRect() }, "ask"));
 
+const threadOf = (id) => threadsState.threads.find((t) => t.id === id);
+const sentThreads = () => new Set((state ? state.comments.batches : []).flatMap((b) => b.comments).map((c) => c.thread).filter(Boolean));
+
+/* The threads without a passage on the page, as chips. */
+function renderThreadChips() {
+  const placed = new Set(threadRanges.map(([t]) => t.id));
+  const chip = (t) => el("button", {
+    class: `t-chip ${t.state === "running" ? "running" : t.state === "error" ? "error" : ""}`,
+    "data-thread": t.id, text: t.id, title: (t.messages[0] || {}).text || "",
+    onclick: (e) => { e.stopPropagation(); popThread === t.id ? closePopover() : openPopover(t.id); },
+  });
+  document.querySelectorAll(".t-chips[data-section]").forEach((box) =>
+    box.replaceChildren(...threadsState.threads
+      .filter((t) => t.section === box.dataset.section && !placed.has(t.id)).map(chip)));
+  $("#general-threads").replaceChildren(...threadsState.threads.filter((t) => !t.section).map(chip));
+}
+
+function threadAt(x, y) {
+  for (const [t, r] of threadRanges) {
+    for (const b of r.getClientRects()) {
+      if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) return t;
+    }
+  }
+  return null;
+}
+
+/* Where the popover sits: under the thread's passage, else under its chip. */
+function anchorRect(id) {
+  const hit = threadRanges.find(([t]) => t.id === id);
+  if (hit) return hit[1].getBoundingClientRect();
+  const chip = document.querySelector(`.t-chip[data-thread="${CSS.escape(id)}"]`);
+  return chip ? chip.getBoundingClientRect() : null;
+}
+
+function openPopover(id) {
+  const t = threadOf(id);
+  if (!t) return;
+  if (t.section && !t.quote.startsWith("plan · ") && tab !== tabOf(t.section)) setTab(tabOf(t.section));
+  popThread = id;
+  renderPopover();
+}
+
+function closePopover() {
+  popThread = null;
+  $("#thread-pop").hidden = true;
+}
+
+function renderPopover() {
+  const pop = $("#thread-pop");
+  const t = popThread && threadOf(popThread);
+  if (!t) { closePopover(); return; }
+  const card = threadCard(t);
+  patchCard(t, card);
+  if (pop.firstChild !== card.root) pop.replaceChildren(card.root); // re-attaching would blur the reply box
+  pop.hidden = false;
+  positionPopover();
+}
+
+function positionPopover() {
+  const pop = $("#thread-pop");
+  if (!popThread || pop.hidden) return;
+  const r = anchorRect(popThread);
+  const visible = r && r.width > 0 && r.bottom > 0 && r.top < innerHeight;
+  pop.style.visibility = visible ? "visible" : "hidden";
+  if (!visible) return;
+  const h = pop.offsetHeight;
+  const w = pop.offsetWidth;
+  const below = r.bottom + 6;
+  const top = below + h <= innerHeight - 8 || r.top - h - 6 < 8 ? below : r.top - h - 6;
+  pop.style.top = `${Math.max(8, Math.min(top, innerHeight - h - 8))}px`;
+  pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
+}
+
+document.querySelectorAll(".view").forEach((v) => v.addEventListener("scroll", positionPopover, { passive: true }));
+addEventListener("resize", positionPopover);
+document.addEventListener("mousedown", (e) => {
+  if (popThread && !e.target.closest("#thread-pop, #composer")) closePopover();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && popThread && !e.target.closest("#composer")) closePopover();
+});
+// The passage of a thread is clickable: say so with the cursor.
+docViews().forEach((v) => v.addEventListener("mousemove", (e) => {
+  v.style.cursor = threadAt(e.clientX, e.clientY) ? "pointer" : "";
+}));
+
 function threadCard(t) {
   if (cards.has(t.id)) return cards.get(t.id);
-  const ta = el("textarea", { class: "c-text", rows: "2", placeholder: "Reply  (⌘↵ to send)" });
+  const ta = el("textarea", { class: "c-text", rows: "2", placeholder: "Reply  (⌘↵ to send, Esc to close)" });
   const card = {
-    root: el("div", { class: "comment thread" }),
+    root: el("div", { class: "thread-card" }),
     head: el("div", { class: "t-head" }),
     msgs: el("div", { class: "t-msgs" }),
     error: el("div", { class: "t-error error" }),
@@ -733,63 +849,52 @@ function threadCard(t) {
     stop: el("button", { class: "btn", text: "Stop", onclick: () => postJSON(`/api/s/${SLUG}/threads/${t.id}/stop`, {}) }),
     batch: el("button", { class: "btn", text: "→ batch", title: "Add a draft comment that points to this thread",
                           onclick: () => threadToBatch(t.id) }),
+    del: el("button", { class: "btn t-delete", text: "Delete", onclick: () => deleteThread(t.id) }),
   };
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); replyThread(t.id); }
   });
-  card.foot = el("div", { class: "t-foot" }, ta, el("div", { class: "t-actions" }, card.batch, card.stop, card.reply));
+  card.foot = el("div", { class: "t-foot" }, ta, el("div", { class: "t-actions" }, card.del, card.batch, card.stop, card.reply));
   card.root.append(card.head, card.msgs, card.error, card.foot);
-  card.head.addEventListener("click", (e) => {
-    if (e.target.closest(".c-quote")) return;
-    openThreads.has(t.id) ? openThreads.delete(t.id) : openThreads.add(t.id);
-    renderThreads();
-  });
   cards.set(t.id, card);
   return card;
 }
 
-function renderThreads() {
-  $("#no-parent").hidden = threadsState.forkable;
-  const list = [...threadsState.threads].reverse();
-  for (const t of list) {
-    const card = threadCard(t);
-    const open = openThreads.has(t.id);
-    const running = t.state === "running";
-    const first = (t.messages[0] || {}).text || "";
-    card.root.classList.toggle("open", open);
-    card.head.replaceChildren(
-      el("div", { class: "t-title" },
-        el("span", { class: "num", text: t.id }), " ",
-        el("span", { class: "t-first", text: open ? "" : first }),
-        running ? el("span", { class: "badge accent writing", text: t.activity || "running" })
-        : t.state === "error" ? el("span", { class: "badge flag", text: "error" }) : null),
-      quoteLine(t));
-    card.msgs.hidden = !open;
-    card.foot.hidden = !open;
-    card.error.hidden = !open || !t.error;
-    card.error.textContent = t.error;
-    if (open) {
-      const sig = JSON.stringify(t.messages.map((m) => [m.text.length, !!m.stopped]));
-      if (card.msgs.dataset.sig !== sig) {
-        card.msgs.dataset.sig = sig;
-        card.msgs.replaceChildren(...t.messages.map((m) => {
-          const body = el("div", { class: `t-msg ${m.role}` });
-          if (m.role === "user") body.textContent = m.text;
-          else body.innerHTML = m.html + (m.stopped ? "<p class=\"dim\">(stopped)</p>" : "");
-          return body;
-        }));
-        typesetMath(card.msgs);
-        linkCitations(card.msgs);
-      }
-    }
-    card.reply.disabled = running;
-    card.stop.hidden = !running;
+function patchCard(t, card) {
+  const running = t.state === "running";
+  card.head.replaceChildren(
+    el("div", { class: "t-title" },
+      el("span", { class: "num", text: t.id }),
+      running ? el("span", { class: "badge accent writing", text: t.activity || "running" })
+      : t.state === "error" ? el("span", { class: "badge flag", text: "error" }) : null),
+    quoteLine(t));
+  card.error.hidden = !t.error;
+  card.error.textContent = t.error;
+  const sig = JSON.stringify(t.messages.map((m) => [m.text.length, !!m.stopped]));
+  if (card.msgs.dataset.sig !== sig) {
+    const m = card.msgs;
+    const atEnd = m.scrollHeight - m.scrollTop - m.clientHeight < 24;
+    m.dataset.sig = sig;
+    m.replaceChildren(...t.messages.map((msg) => {
+      const body = el("div", { class: `t-msg ${msg.role}` });
+      if (msg.role === "user") body.textContent = msg.text;
+      else body.innerHTML = msg.html + (msg.stopped ? "<p class=\"dim\">(stopped)</p>" : "");
+      return body;
+    }));
+    typesetMath(m);
+    linkCitations(m);
+    if (atEnd) m.scrollTop = m.scrollHeight;
   }
-  const roots = list.map((t) => cards.get(t.id).root);
-  const box = $("#threads");
-  // Re-attaching a card would blur its reply box: only reorder when a thread was added.
-  if (roots.length !== box.children.length || roots.some((r, i) => box.children[i] !== r)) box.replaceChildren(...roots);
-  if (!roots.length) box.replaceChildren(el("p", { class: "dim", text: "No thread yet." }));
+  const sent = sentThreads().has(t.id);
+  const drafted = drafts.some((d) => d.thread === t.id);
+  card.reply.disabled = running;
+  card.stop.hidden = !running;
+  card.batch.disabled = sent || drafted;
+  card.batch.textContent = sent ? "sent" : drafted ? "in the batch" : "→ batch";
+  // Only a thread that led to nothing can go: the session reads the ones a sent comment points to.
+  card.del.hidden = sent;
+  card.del.disabled = running;
+  card.del.title = running ? "Stop the thread first" : "Delete this thread";
 }
 
 async function replyThread(tid) {
@@ -804,18 +909,28 @@ async function replyThread(tid) {
   } catch (e) { toast(`Reply failed: ${e.message}`); card.reply.disabled = false; }
 }
 
+async function deleteThread(tid) {
+  if (!confirm(`Delete thread ${tid}? Its conversation is lost.`)) return;
+  try {
+    await postJSON(`/api/s/${SLUG}/threads/${tid}`, {}, "DELETE");
+  } catch (e) { toast(`Could not delete: ${e.message}`); return; }
+  drafts = drafts.filter((d) => d.thread !== tid);
+  saveJSON(DRAFTS_KEY, drafts);
+  closePopover();
+  renderReview();
+  await loadThreads();
+}
+
 /* The conclusion of a thread reaches the main session as an ordinary comment, anchored
-   where the thread was and carrying its id, so the session can read the thread. */
+   where the thread was and carrying its id, so the session can read the thread. Its
+   text is optional: without one, the thread's conclusion is the comment. */
 function threadToBatch(tid) {
-  const t = threadsState.threads.find((x) => x.id === tid);
-  const d = { id: crypto.randomUUID(), section: t.section, quote: t.quote, prefix: t.prefix, text: "", thread: tid };
-  drafts.push(d);
+  const t = threadOf(tid);
+  drafts.push({ id: crypto.randomUUID(), section: t.section, quote: t.quote, prefix: t.prefix, text: "", thread: tid });
   saveJSON(DRAFTS_KEY, drafts);
   renderReview();
   applyHighlights();
-  const tas = document.querySelectorAll("#drafts textarea");
-  tas[tas.length - 1].placeholder = "What should change, after this thread?";
-  tas[tas.length - 1].focus();
+  renderPopover();
 }
 
 /* ---------------- export, tooltips ---------------- */
