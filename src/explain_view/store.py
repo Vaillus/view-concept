@@ -215,7 +215,8 @@ class Session:
         return status
 
     def signature(self) -> tuple:
-        """Changes whenever the explanation, the plan or the review pane changes."""
+        """Changes whenever a file the page renders changes, threads excepted (see
+        `thread_signature`)."""
         paths = [
             self.plan_path,
             self.audit_path,

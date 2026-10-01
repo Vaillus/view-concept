@@ -4,8 +4,8 @@ A thread discusses a passage without changing anything. Its first turn forks the
 Claude Code session (`--resume <parent> --fork-session`), so it starts knowing the
 whole conversation so far while the main session stays untouched; every later turn
 resumes the thread's own session. Each turn is one `claude -p` process, run by the
-server in a background thread, its reply streamed into threads/<id>.json, which the
-page polls like the other files.
+server in a background Python thread; its reply streams into threads/<id>.json, which
+the server's event stream watches like the other session files.
 
 Threads are read-only: the only tools are Read, Grep and Glob, MCP servers are off,
 and anything else is denied rather than asked. A change the discussion leads to goes
@@ -45,7 +45,8 @@ def is_running(s: Session, tid: str) -> bool:
 
 
 def view(s: Session, thread: dict[str, Any]) -> dict[str, Any]:
-    """The thread as the page shows it."""
+    """The thread as the page shows it: one left "running" by a previous server process
+    reads as an "interrupted" error."""
     if thread["state"] == "running" and not is_running(s, thread["id"]):
         return {**thread, "state": "error", "activity": "", "error": "interrupted"}
     return thread
@@ -185,7 +186,8 @@ def _run(s: Session, thread: dict[str, Any], proc: subprocess.Popen, prompt: str
     finally:
         with _lock:
             _running.pop(key, None)
-            if key in _stopping:  # claude exits 143 on SIGTERM, so the code can't tell
+            # claude exits 143 on SIGTERM: the exit code alone can't tell a stop from a crash
+            if key in _stopping:
                 _stopping.discard(key)
                 thread.update(state="idle", error="")
                 reply["stopped"] = True

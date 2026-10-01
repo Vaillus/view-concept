@@ -80,7 +80,8 @@ def stop_server() -> bool:
 
 def bind_parent(s: Session) -> None:
     """Record the Claude Code session running this command: side threads fork from it.
-    Claude Code sets the variable in its shell; outside it, the binding stays as it was."""
+    Claude Code sets CLAUDE_CODE_SESSION_ID in its shell; run elsewhere, the recorded
+    session is left as it was."""
     s.bind_parent(os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
 
 
