@@ -308,8 +308,8 @@ function renderDoc() {
     $("#refactor").replaceChildren();
     return;
   }
-  doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map(sectionBlock), docButton);
-  $("#refactor").replaceChildren(...sections.filter((s) => tabOf(s.id) === "refactor").map(sectionBlock));
+  doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map((s) => sectionBlock(s)), docButton);
+  $("#refactor").replaceChildren(...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")));
   for (const view of docViews()) {
     typesetMath(view);
     linkCitations(view);
@@ -322,15 +322,17 @@ function renderDoc() {
   positionPopover();
 }
 
-function sectionBlock(s) {
+/* A bare block leaves out the number and the title (the description of an item: its
+   item entry shows both) and keeps everything else. */
+function sectionBlock(s, { bare = false } = {}) {
   const body = el("div", { class: "body" });
   const written = s.id in state.sections;
   if (written) body.innerHTML = state.sections[s.id].html;
   else if (writingId() === s.id) body.append(el("p", { class: "writing-line", text: "writing" }));
-  const cls = ["sec", written ? "" : "unwritten", updated.has(s.id) ? "updated" : ""].join(" ");
+  const cls = ["sec", written ? "" : "unwritten", updated.has(s.id) ? "updated" : "", bare ? "bare" : ""].join(" ");
   return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
     el("h2", {},
-      el("span", { class: "num", text: numberOf(s.id) }), " ", s.title,
+      ...(bare ? [] : [el("span", { class: "num", text: numberOf(s.id) }), " ", s.title]),
       s.kind === "question" && s.from && s.from.length
         ? el("span", { class: "q-from dim", text: `from ${[].concat(s.from).join(", ")}` }) : null,
       el("span", { class: "t-chips", "data-section": s.id }),
@@ -343,6 +345,100 @@ function sectionBlock(s) {
       el("button", { class: "sec-comment ask", text: "ask", title: "Open a side thread about this section",
                      onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }, "ask") })),
     body);
+}
+
+/* ---------------- the refactor tab ----------------
+   A refactor section that carries item fields ("item": {files, verdict, implements,
+   note, relations}) is an item: one unit of the diff, a file or files doing one job,
+   judged against the model. The items are drawn as the review table: one item entry per
+   item (its title and files, its verdict, the concepts it implements, a note), the items
+   that need action first. Clicking an entry opens its description underneath, which is
+   the section's own block, so comments, threads, highlights and annotations work there
+   as in the explanation. The other refactor sections, such as the applied changes,
+   follow as plain sections. A review whose refactor sections carry no item fields is
+   drawn as plain sections only. */
+
+// Verdicts in table order: those that need action first, « conforms » last.
+const VERDICTS = ["diverges", "move", "split", "throw", "out-of-pr", "conforms"];
+const openItems = new Set(); // ids of the items whose description is open, across re-renders
+
+const isItem = (s) => !!s && !!s.item && typeof s.item === "object";
+const verdictOf = (s) => String(s.item.verdict || "no verdict");
+// An unknown verdict sorts after the known ones that need action, before « conforms ».
+const verdictRank = (v) => (VERDICTS.includes(v) ? VERDICTS.indexOf(v) : VERDICTS.length - 1.5);
+const lexiconIndex = (name) =>
+  state.plan.lexicon.findIndex((t) => t.term.toLowerCase() === String(name).toLowerCase());
+
+function refactorTab(sections) {
+  const items = sections.filter(isItem);
+  if (!items.length) return sections.map((s) => sectionBlock(s));
+  const rest = sections.filter((s) => !isItem(s));
+  return [reviewTable(items), ...rest.map((s) => sectionBlock(s))];
+}
+
+function verdictBadge(v) {
+  return el("span", { class: `badge verdict ${VERDICTS.includes(v) ? `v-${v}` : ""}`, text: v });
+}
+
+function fileRef(f) {
+  const href = vscodeHref(f);
+  return href
+    ? el("a", { class: "cite", href, title: "Open in VS Code", onclick: (e) => e.stopPropagation() }, el("code", { text: f }))
+    : el("code", { text: f });
+}
+
+function reviewTable(items) {
+  const sorted = items.map((s, i) => [s, i])
+    .sort(([a, i], [b, j]) => verdictRank(verdictOf(a)) - verdictRank(verdictOf(b)) || i - j)
+    .map(([s]) => s);
+  const counts = new Map();
+  for (const s of sorted) counts.set(verdictOf(s), (counts.get(verdictOf(s)) || 0) + 1);
+  const summary = [`${items.length} item${items.length > 1 ? "s" : ""}`, ...[...counts].map(([v, n]) => `${n} ${v}`)];
+  return el("div", { class: "rv rv-wide" },
+    el("div", { class: "rv-head" }, "review table", el("span", { class: "rv-counts", text: summary.join(" · ") })),
+    el("div", { class: "rv-scroll" },
+      el("table", { class: "rv-table" },
+        el("thead", {}, el("tr", {}, ...["item", "verdict", "implements", "note"].map((t) => el("th", { text: t })))),
+        el("tbody", {}, ...sorted.flatMap(itemRows)))));
+}
+
+/* An item entry, and its description in the row under it (hidden while closed, but
+   always in the page, so a quote in it is found and a draft on it stays anchored). */
+function itemRows(s) {
+  const it = s.item;
+  const open = openItems.has(s.id);
+  const implementsCell = el("td", { class: "rv-implements" });
+  [].concat(it.implements || []).forEach((name, k) => {
+    if (k) implementsCell.append(", ");
+    const i = lexiconIndex(name);
+    implementsCell.append(i < 0 ? el("span", { text: name }) : el("span", { class: "term", "data-term": i, text: name }));
+  });
+  const entry = el("tr", { class: `rv-entry ${open ? "open" : ""}`, "data-item": s.id,
+                           onclick: () => setItemOpen(s.id, !openItems.has(s.id)) },
+    el("td", { class: "rv-item" },
+      el("div", {},
+        el("span", { class: "rv-chev", text: open ? "▾" : "▸" }),
+        el("span", { class: "num", text: numberOf(s.id) }), " ",
+        el("span", { class: "rv-title", text: s.title }),
+        writingId() === s.id ? el("span", { class: "badge accent writing", text: "writing" }) : null,
+        updated.has(s.id) ? el("span", { class: "badge flag", text: "updated" }) : null),
+      el("div", { class: "rv-files" }, ...[].concat(it.files || []).map((f) => el("div", {}, fileRef(f))))),
+    el("td", { class: "rv-verdict" }, verdictBadge(verdictOf(s))),
+    implementsCell,
+    el("td", { class: "rv-note", text: it.note || "" }));
+  const description = el("tr", { class: "rv-desc", id: `rv-desc-${s.id}`, hidden: !open },
+    el("td", { colspan: "4" }, sectionBlock(s, { bare: true })));
+  return [entry, description];
+}
+
+function setItemOpen(id, open) {
+  const entry = document.querySelector(`.rv-entry[data-item="${CSS.escape(id)}"]`);
+  if (!entry) return;
+  if (open) openItems.add(id); else openItems.delete(id);
+  entry.classList.toggle("open", open);
+  $(".rv-chev", entry).textContent = open ? "▾" : "▸";
+  document.getElementById(`rv-desc-${id}`).hidden = !open;
+  positionPopover();
 }
 
 function typesetMath(root) {

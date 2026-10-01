@@ -125,6 +125,38 @@ a.cite:hover code { text-decoration: underline; }
 .d-files { font-size: 11px; margin-top: 2px; }
 .d-files a.cite, .d-files code { font-size: 11px; }
 
+/* ---- the refactor tab: review table (item entries, descriptions) ---- */
+.refactor > .rv-wide { max-width: 120ch; }
+.rv { margin-top: 8px; margin-bottom: 24px; }
+.rv-head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; padding: 10px 0 6px; margin-bottom: 4px;
+           border-bottom: 1px solid var(--line); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
+.rv-counts { text-transform: none; letter-spacing: 0; color: var(--ink-dim); font-size: 12px; }
+.rv-scroll { overflow-x: auto; }
+.rv-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 13px; line-height: 19px; }
+.rv-table th { text-align: left; font-weight: normal; font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+               color: var(--muted); padding: 4px 10px; border-bottom: 1px solid var(--line-strong); }
+.rv-entry td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; cursor: pointer; }
+.rv-entry:hover td, .rv-entry.open td { background: var(--hover); }
+.rv-entry.open td { border-bottom-color: transparent; }
+.rv-chev { display: inline-block; width: 1.2em; color: var(--muted); }
+.rv-title { color: var(--ink); }
+.rv-files { font-size: 11px; line-height: 16px; padding-left: 1.2em; margin-top: 2px; }
+.rv-files code, .rv-files a.cite code { background: none; padding: 0; font-size: 11px; }
+.rv-files code { color: var(--muted); }
+.rv-verdict { white-space: nowrap; }
+.rv-implements, .rv-note { color: var(--ink-dim); font-size: 12px; }
+.badge.verdict { margin-left: 0; text-transform: uppercase; letter-spacing: .05em; font-size: 10.5px; white-space: nowrap; }
+.badge.v-conforms { background: var(--okbg); color: var(--ok); }
+.badge.v-diverges { background: var(--dangerbg); color: var(--danger); }
+.badge.v-move { background: var(--warnbg); color: var(--warn); }
+.badge.v-split { background: var(--altbg); color: var(--alt); }
+.badge.v-throw { background: var(--flagbg); color: var(--flag); }
+.badge.v-out-of-pr { background: var(--infobg); color: var(--info); }
+.rv-desc > td { padding: 0 10px 12px calc(10px + 1.2em); border-bottom: 1px solid var(--line); background: var(--hover); }
+.rv-desc .sec { border-bottom: 0; border-left: 2px solid var(--accent); padding: 0 4px 4px 12px; }
+.sec.bare h2 { margin: 0; padding-top: 4px; min-height: 18px; }
+.sec.bare .body > :first-child { margin-top: 0; }
+
 /* ---- review pane ---- */
 .review { overflow-y: auto; min-height: 0; border-left: 1px solid var(--line); padding: 0 12px 24px; display: flex; flex-direction: column; gap: 8px; }
 .review > * { flex-shrink: 0; }
