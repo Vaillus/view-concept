@@ -71,6 +71,8 @@ In the directory printed by `new` (`~/.view-concept/sessions/<slug>/`):
 
 Section ids are stable: when Phase 4 reorders the outline, keep each section's id and change its position. The page anchors the user's comments to ids.
 
+**Naming a section to the user.** Ids are for the files, never for the user. Wherever the user reads it (terminal messages, `resolve` replies, the prose of the sections, the plan), name a section by the number the page shows, in words: « section 6 », « question section 2 ». Never write its id (`s6`, `q-applied`) or a shorthand such as `§6`, even when a batch event uses them.
+
 ## Status
 
 The page shows what you are doing; keep it true with `view-concept status <slug> <phase>`, one call per transition:
@@ -116,7 +118,7 @@ Then:
 - **Amend the section** it clarifies, when the answer fixes or completes what that section says. The lexicon contract applies to the edit.
 - **Add a question section** when the answer is a deeper dive the main line does not need: append `{"id": "q1", "title": "<the question, as the user would ask it>", "kind": "question", "from": ["c4"]}` to the outline (`from` lists the comment ids, empty when the question came from the terminal) and write `sections/q1.md`. Question sections go after the main sections, in the order they were asked.
 
-Say where it went in the terminal answer and in the `resolve` reply (« folded into §3 », « → Q2 »). An answer that only matters to the conversation — a clarification about the process, a yes/no — stays in the terminal. When unsure, ask in one clause.
+Say where it went in the terminal answer and in the `resolve` reply (« folded into section 3 », « added as question section 2 »). An answer that only matters to the conversation — a clarification about the process, a yes/no — stays in the terminal. When unsure, ask in one clause.
 
 `view-concept pending <slug>` lists the open comments, e.g. after a resumed session. After resuming in a new conversation, run `view-concept open <slug>` again: it records the current conversation as the one side threads fork from.
 

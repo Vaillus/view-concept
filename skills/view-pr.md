@@ -32,6 +32,16 @@ segment when its silence ratio exceeds the threshold », « `prepared/` holds on
 folder per dataset ». For each concept, the model says what it is, the rules it
 obeys, and how it relates to the concepts that existed before the PR.
 
+A UI element, a file, a function or a table row is not a concept: it is where
+a concept is implemented. « a row of the review table » is a part of a page;
+the concept behind it is what the row stands for (« an item is one unit of the
+diff that gets a verdict »). Name the concept, and cite the part.
+
+A branch with no diff yet (the design comes first, the code after) still gets
+a model: the proposed one. Say so in the first section of Part 1, and mark
+each concept you propose yourself, as opposed to one the user asked for, so
+the user reads Part 1 as a proposal to approve, not a description to check.
+
 In the page, the model is the lexicon of `plan.json` (one entry per concept,
 `definition` + `tip`) and Part 1 of the explanation. A **model change** is one
 correction the user takes or agrees to during Part 1: a concept renamed,
@@ -91,10 +101,14 @@ The Phase 2 outline is this fixed skeleton:
 
 1. **What the PR does, and what it does not.** One paragraph, and the
    boundary.
-2. **One section per concept** it introduces or changes: what it is, its
+2. **The problem it solves.** The job the PR does for its user, or the
+   questions it lets them answer, in the user's terms and before any concept.
+   Each concept in the next sections serves part of this job; a concept that
+   serves none is a finding.
+3. **One section per concept** it introduces or changes: what it is, its
    rules, where it is implemented (cited). Concepts in the order they depend
-   on each other.
-3. **How the concepts fit the existing code.** What existed before; what each
+   on each other, starting from the one the others are defined by.
+4. **How the concepts fit the existing code.** What existed before; what each
    new concept replaces, extends or duplicates; names that clash with existing
    ones. A Mermaid diagram, before and after.
 
@@ -106,6 +120,12 @@ each section gives the core in a few lines (three to eight), a table or a
 diagram where it replaces prose. Details go to Part 2, or to a question
 section when the user asks for one. A first version of Part 1 written at full
 explanation depth was judged far too long to read at this stage.
+
+**Check the length before showing it.** After writing Part 1, and again after
+each revision, count the lines of prose in every section (tables, code blocks
+and diagrams don't count). Cut any section over eight lines before you tell
+the user it is written or set `awaiting-model`. When the user is confused,
+make the order clearer or add a picture: more prose is not the answer.
 
 Then the discussion: the user challenges the model, in the page or in the
 terminal. Record each model change as above. When no correction is pending,
