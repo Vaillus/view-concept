@@ -65,3 +65,16 @@ def test_api_sends_the_verdicts_in_the_file_order(client):
     assert verdicts[-1]["key"] == "conforms"
     assert all(v["meaning"] for v in verdicts)
     assert {v["key"] for v in verdicts if v.get("sends_to")} == {"diverges", "move"}
+
+
+def test_api_updated_sections(client, session):
+    s1 = client.get("/api/s/kv-cache").json()["sections"]["s1"]
+    assert s1["updated"] is False and "seen_html" not in s1  # a first write is read
+    (session.sections_dir / "s1.md").write_text("L'attention, réécrite.\n")
+    s1 = client.get("/api/s/kv-cache").json()["sections"]["s1"]
+    assert s1["updated"] and s1["seen_html"] == "<p>L'attention.</p>\n"
+    # Marking read records the text the page showed, not a later rewrite.
+    client.post("/api/s/kv-cache/seen", json={"sections": {"s1": "L'attention, réécrite.\n"}})
+    assert client.get("/api/s/kv-cache").json()["sections"]["s1"]["updated"] is False
+    (session.sections_dir / "s3.md").write_text("Nouvelle.\n")
+    assert client.get("/api/s/kv-cache").json()["sections"]["s3"]["updated"] is False

@@ -76,6 +76,7 @@ def state(slug: str) -> dict[str, Any]:
         comments = s.read_comments()
         status = s.read_status()
         changes = s.read_changes()
+        seen = s.read_seen(sections)
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
     # The hover text of a term: its developed `tip` when Claude wrote one, else the
@@ -86,12 +87,34 @@ def state(slug: str) -> dict[str, Any]:
         "slug": slug,
         "plan": plan,
         "status": status,
-        "sections": {k: {"md": v, "html": md.render(v)} for k, v in sections.items()},
+        "sections": {k: section_view(v, seen[k]) for k, v in sections.items()},
         "audit": audit,
         "comments": comments,
         "changes": changes,
         "verdicts": VERDICTS,
     }
+
+
+def section_view(text: str, seen: str) -> dict[str, Any]:
+    """A section as the page renders it. An updated section (rewritten since the user
+    last read it) also carries the HTML of the version read, which the page diffs
+    against to highlight what changed."""
+    view: dict[str, Any] = {"md": text, "html": md.render(text), "updated": text != seen}
+    if view["updated"]:
+        view["seen_html"] = md.render(seen)
+    return view
+
+
+class SeenIn(BaseModel):
+    sections: dict[str, str]
+
+
+@app.post("/api/s/{slug}/seen")
+def mark_seen(slug: str, body: SeenIn) -> dict[str, bool]:
+    """Mark sections as read: the body carries the markdown the page showed, so a
+    rewrite that arrived meanwhile stays unread."""
+    get_session(slug).mark_seen(body.sections)
+    return {"ok": True}
 
 
 @app.get("/api/s/{slug}/events")
