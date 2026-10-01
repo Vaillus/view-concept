@@ -1,12 +1,17 @@
 # view-concept
 
-A local page for the `view-concept` skill, which runs `explain-concept` in a browser page. The plan and the explanation stay in one place in the browser, and the conversation stays in the Claude Code terminal. You select passages in the page, comment on them, and send the comments to the session as one batch.
+A local page that serves two Claude Code skills. The plan and the explanation stay in one place in the browser, and the conversation stays in the Claude Code terminal. You select passages in the page, comment on them, and send the comments to the session as one batch.
+
+| Skill | What it does in the page |
+|---|---|
+| `view-concept` (`~/Documents/code/skills/view-concept.md`) | an explanation: it runs `explain-concept` and puts the plan and the prose in the page |
+| `view-pr` (`~/Documents/code/skills/view-pr.md`) | a PR review, concepts first, built on `view-concept` (see **A PR review** below) |
 
 Everything goes through Claude Code, so no API key is needed. Side threads are headless `claude -p` runs, billed to the same subscription as the terminal session.
 
 ```
 terminal (Claude Code)                        browser (view-concept page)
-  view-concept skill ───── writes files ──▶  plan · explanation · review
+  view-concept · view-pr ─ writes files ──▶  plan · explanation · code · review
         ▲                                             │
         └── Monitor: view-concept watch ◀── inbox ◀───┘ « Send »
 ```
@@ -26,15 +31,32 @@ The skill runs these commands. You don't need to run them yourself.
 | `view-concept new "<title>" --slug <slug>` | creates `~/.view-concept/sessions/<slug>/` |
 | `view-concept open <slug>` | starts the server (port 5080) if needed and opens the page |
 | | `new` and `open` also record the Claude Code session that runs them (`claude.json`), which side threads fork from |
+| `view-concept status <slug> <phase>` | tells the page what Claude is doing; the three `awaiting-*` phases show the button the user answers with |
 | `view-concept watch <slug>` | prints each comment batch as it arrives, meant to run under the `Monitor` tool |
 | `view-concept pending <slug>` | lists comments not yet resolved |
 | `view-concept resolve <slug> c3 b2 --reply "…"` | marks comments or whole batches resolved |
 | `view-concept change <slug> "<model change>" --why … --instead … --files …` | records a model change accepted in a PR review (`changes.json`) |
 | `view-concept changes [<slug>] [--repo …]` | prints model changes as Markdown bullets, for a PR description's Decisions section |
 | `view-concept export <slug>` | writes `~/Documents/Vault/explanations/<title>.md` |
-| `view-concept list` / `stop` | lists sessions / stops the background server |
+| `view-concept list` / `stop` / `serve` | lists sessions / stops the background server / runs the server in the foreground |
 
-The file formats (`plan.json`, `sections/<id>.md`, `audit.json`) are described in the skill, `~/Documents/code/skills/view-concept.md`. The docstring of `store.py` documents the session directory.
+The file formats (`plan.json`, `sections/<id>.md`, `audit.json`, the comment batch) are described in `~/Documents/code/skills/view-concept.md`; what a PR review adds (`"part": 2`, the `approve-model` and `review-code` actions, model changes) in `~/Documents/code/skills/view-pr.md`. The docstring of `store.py` documents the session directory.
+
+## A PR review
+
+`view-pr` runs a code session on the PR branch and reviews the PR through its **model**: the set of concepts the PR introduces or changes (objects, rules, formats, names the code relies on), with their rules and how they fit the existing code. The model lives in the session, in the lexicon of `plan.json` and in Part 1 of the explanation; it is not stored in the repository.
+
+A **model change** is one correction to the model the user accepts during the review, written as an instruction an agent can act on. `view-concept change` records it in `changes.json`, with its reason, what the PR did instead and the files it touches. `view-concept changes` prints the list, which becomes the Decisions section of the PR description.
+
+The review runs in three steps; each one ends on a page element:
+
+| Step | What happens | Page element |
+|---|---|---|
+| 1 · concepts | Claude writes Part 1 (the model) in the Explanation tab; the user challenges it and each accepted correction is a model change | « Approve model » (status `awaiting-model`) ends the step and starts step 2 |
+| 2 · agents | Claude compares the whole model with the code and sends one or more agents to close the gaps; each result goes to « Changes applied to the code » (`q-applied`) | « Review code » (status `awaiting-review`), at the bottom of the Explanation tab, starts step 3 once the user has looked at the commits |
+| 3 · code | Claude writes Part 2: one card per item of the diff with a verdict against the model, then a table of every item | the Code tab, which holds every outline item marked `"part": 2` |
+
+A verdict that the code diverges from the model sends the review back to step 2; code that no concept describes sends it back to step 1. The steps, the verdicts and the agents' rules are defined in `view-pr.md`.
 
 ## The page
 

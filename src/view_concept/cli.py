@@ -1,4 +1,4 @@
-"""Command line: what the view-concept skill calls from Claude Code."""
+"""Command line: what the view-concept and view-pr skills call from Claude Code."""
 
 from __future__ import annotations
 
