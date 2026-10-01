@@ -6,7 +6,7 @@ from view_concept.store import (
     Session,
     SessionError,
     format_batch,
-    format_decisions,
+    format_changes,
     list_sessions,
 )
 
@@ -103,12 +103,12 @@ def test_code_session_needs_repo(tmp_path):
     assert s.read_plan()["repo"] == str(tmp_path.resolve())
 
 
-def test_decisions(session, tmp_path):
-    d = session.add_decision("Keep one inbox", why="Simpler", instead="a socket", files=["a.py"])
-    assert d["id"] == "d1"
-    assert format_decisions(session.read_decisions()) == (
+def test_changes(session, tmp_path):
+    d = session.add_change("Keep one inbox", why="Simpler", instead="a socket", files=["a.py"])
+    assert d["id"] == "m1" and session.changes_path.name == "changes.json"
+    assert format_changes(session.read_changes()) == (
         "- Keep one inbox, rather than a socket. Simpler (`a.py`)"
     )
-    assert "## Decisions" in session.render_markdown()
+    assert "## Model changes" in session.render_markdown()
     with pytest.raises(SessionError):
-        session.add_decision(" ")
+        session.add_change(" ")

@@ -9,7 +9,7 @@ reach the Claude Code session through the inbox.
         sections/<id>.md  the prose of one outline section         (written by Claude)
         audit.json      vocabulary-audit findings                  (written by Claude)
         status.json     what Claude is doing now: phase, section    (written by `status`)
-        decisions.json  decisions taken about the code              (written by `decide`)
+        changes.json    model changes accepted in a PR review       (written by `change`)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
@@ -43,7 +43,7 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 PHASES = ("scoping", "planning", "awaiting-approval", "writing", "audit", "revising", "idle")
 ACTIONS = ("", "approve-plan")
 # "code": the explanation is about a repository — citations link into it, and the
-# decisions it leads to are what outlives it. "explanation": understanding for its own sake.
+# model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 
@@ -109,8 +109,8 @@ class Session:
         return self.dir / "status.json"
 
     @property
-    def decisions_path(self) -> Path:
-        return self.dir / "decisions.json"
+    def changes_path(self) -> Path:
+        return self.dir / "changes.json"
 
     @property
     def inbox_path(self) -> Path:
@@ -182,26 +182,27 @@ class Session:
     def read_comments(self) -> dict[str, Any]:
         return _read_json(self.comments_path, {"batches": []})
 
-    def read_decisions(self) -> list[dict[str, Any]]:
-        return _read_json(self.decisions_path, [])
+    def read_changes(self) -> list[dict[str, Any]]:
+        return _read_json(self.changes_path, [])
 
-    def add_decision(
-        self, decision: str, why: str = "", instead: str = "", files: list[str] | None = None
+    def add_change(
+        self, change: str, why: str = "", instead: str = "", files: list[str] | None = None
     ) -> dict[str, Any]:
-        """Append a decision. `instead` is the alternative that was rejected."""
-        if not decision.strip():
-            raise SessionError("empty decision")
-        decisions = self.read_decisions()
+        """Append a model change: one correction of the model the user accepted, written
+        as an instruction an agent can execute. `instead` is what the PR does now."""
+        if not change.strip():
+            raise SessionError("empty model change")
+        changes = self.read_changes()
         d = {
-            "id": f"d{len(decisions) + 1}",
-            "decision": decision.strip(),
+            "id": f"m{len(changes) + 1}",
+            "change": change.strip(),
             "why": why.strip(),
             "instead": instead.strip(),
             "files": files or [],
             "date": date.today().isoformat(),
         }
-        decisions.append(d)
-        _write_json(self.decisions_path, decisions)
+        changes.append(d)
+        _write_json(self.changes_path, changes)
         return d
 
     def read_status(self) -> dict[str, Any]:
@@ -222,7 +223,7 @@ class Session:
             self.audit_path,
             self.comments_path,
             self.status_path,
-            self.decisions_path,
+            self.changes_path,
         ]
         if self.sections_dir.is_dir():
             paths += sorted(self.sections_dir.glob("*.md"))
@@ -398,9 +399,9 @@ class Session:
                 term, definition = cell(t.get("term", "")), cell(t.get("definition", ""))
                 lines.append(f"| {term} | {cell(where)} | {definition} |")
             lines.append("")
-        decisions = self.read_decisions()
-        if decisions:
-            lines += ["## Decisions", "", format_decisions(decisions), ""]
+        changes = self.read_changes()
+        if changes:
+            lines += ["## Model changes", "", format_changes(changes), ""]
         return "\n".join(lines)
 
 
@@ -465,11 +466,11 @@ def format_batch(slug: str, batch: dict[str, Any], outline: list[dict[str, Any]]
     return "\n".join(lines)
 
 
-def format_decisions(decisions: list[dict[str, Any]]) -> str:
+def format_changes(changes: list[dict[str, Any]]) -> str:
     """Markdown bullets, in the shape of a PR description's Decisions section."""
     out = []
-    for d in decisions:
-        line = f"- {d['decision']}"
+    for d in changes:
+        line = f"- {d['change']}"
         if d.get("instead"):
             line += f", rather than {d['instead']}"
         if d.get("why"):

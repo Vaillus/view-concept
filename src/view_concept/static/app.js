@@ -1,6 +1,6 @@
 /* view-concept — the session page.
 
-   Two tabs share the main space, the plan (outline, decisions, lexicon) and the
+   Two tabs share the main space, the plan (outline, model changes, lexicon) and the
    explanation (one block per outline section); the review pane (draft comments, then
    sent batches, side threads) stays on the right. The page never
    edits the explanation: Claude Code writes the files, the server streams "changed",
@@ -209,7 +209,7 @@ function renderPlan() {
       s.earns ? el("div", { class: "o-earns muted", text: s.earns }) : null);
   }));
 
-  renderDecisions();
+  renderChanges();
 
   const lex = $("#lexicon");
   lex.replaceChildren();
@@ -225,12 +225,12 @@ function renderPlan() {
   }
 }
 
-function renderDecisions() {
-  const list = state.decisions || [];
-  $("#decisions-head").hidden = !list.length;
-  $("#decisions").replaceChildren(...list.map((d) => {
-    const item = el("li", { class: "decision" },
-      el("div", {}, el("span", { class: "num", text: d.id }), " ", d.decision),
+function renderChanges() {
+  const list = state.changes || [];
+  $("#changes-head").hidden = !list.length;
+  $("#changes").replaceChildren(...list.map((d) => {
+    const item = el("li", { class: "change" },
+      el("div", {}, el("span", { class: "num", text: d.id }), " ", d.change),
       d.instead ? el("div", { class: "d-instead dim", text: `rather than ${d.instead}` }) : null,
       d.why ? el("div", { class: "d-why muted", text: d.why }) : null);
     if (d.files && d.files.length) {

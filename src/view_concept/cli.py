@@ -21,7 +21,7 @@ from .store import (
     Session,
     SessionError,
     format_batch,
-    format_decisions,
+    format_changes,
     list_sessions,
     slugify,
 )
@@ -153,24 +153,24 @@ def cmd_status(a: argparse.Namespace) -> None:
     print(f"{st['phase']} {st['section']}".strip())
 
 
-def cmd_decide(a: argparse.Namespace) -> None:
-    d = Session(a.slug).add_decision(a.decision, a.why or "", a.instead or "", a.files)
+def cmd_change(a: argparse.Namespace) -> None:
+    d = Session(a.slug).add_change(a.change, a.why or "", a.instead or "", a.files)
     print(f"{d['id']} recorded")
 
 
-def cmd_decisions(a: argparse.Namespace) -> None:
-    """Decisions of one session, or of every code session on a repository."""
+def cmd_changes(a: argparse.Namespace) -> None:
+    """Model changes of one session, or of every code session on a repository."""
     if a.slug:
         slugs = [a.slug]
     else:
         repo = str(Path(a.repo or ".").expanduser().resolve())
         slugs = [r["slug"] for r in list_sessions() if r["repo"] == repo]
     for slug in slugs:
-        decisions = Session(slug).read_decisions()
-        if decisions:
+        changes = Session(slug).read_changes()
+        if changes:
             if len(slugs) > 1:
                 print(f"<!-- {slug} -->")
-            print(format_decisions(decisions))
+            print(format_changes(changes))
 
 
 def cmd_pending(a: argparse.Namespace) -> None:
@@ -229,18 +229,21 @@ def main() -> None:
     q.add_argument("--message", help="short free text shown next to the phase")
     q.set_defaults(fn=cmd_status)
 
-    q = sub.add_parser("decide", help="record a decision taken about the code")
+    q = sub.add_parser("change", help="record a model change accepted in a PR review")
     q.add_argument("slug")
-    q.add_argument("decision", help="what was decided, one sentence")
+    q.add_argument("change", help="the model change, one sentence")
     q.add_argument("--why", help="the reason, one sentence")
-    q.add_argument("--instead", help="the alternative that was rejected")
-    q.add_argument("--files", nargs="*", default=[], help="files the decision touches")
-    q.set_defaults(fn=cmd_decide)
+    q.add_argument("--instead", help="what the PR does now")
+    q.add_argument("--files", nargs="*", default=[], help="files the model change touches")
+    q.set_defaults(fn=cmd_change)
 
-    q = sub.add_parser("decisions", help="print decisions as Markdown bullets (for a PR)")
+    q = sub.add_parser(
+        "changes",
+        help="print model changes as Markdown bullets (for a PR description's Decisions section)",
+    )
     q.add_argument("slug", nargs="?")
     q.add_argument("--repo", help="all code sessions on this repo (default: current dir)")
-    q.set_defaults(fn=cmd_decisions)
+    q.set_defaults(fn=cmd_changes)
 
     q = sub.add_parser("pending", help="print comments not yet resolved")
     q.add_argument("slug")
