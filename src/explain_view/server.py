@@ -1,4 +1,5 @@
-"""The local web server: serves the page, streams file changes, receives comment batches."""
+"""The local web server: serves the page, streams file changes, receives comment batches,
+runs side threads."""
 
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from markdown_it import MarkdownIt
 from mdit_py_plugins.dollarmath import dollarmath_plugin
 from pydantic import BaseModel
 
+from . import threads
 from .store import Session, SessionError, list_sessions
 
 STATIC = Path(__file__).parent / "static"
@@ -90,15 +92,18 @@ async def events(slug: str, request: Request) -> StreamingResponse:
     s = get_session(slug)
 
     async def stream():
-        last = s.signature()
+        last, last_threads = s.signature(), s.thread_signature()
         yield "event: hello\ndata: {}\n\n"
         ticks = 0
         while not await request.is_disconnected():
             await asyncio.sleep(0.4)
-            sig = s.signature()
+            sig, sig_threads = s.signature(), s.thread_signature()
             if sig != last:
                 last = sig
                 yield "event: changed\ndata: {}\n\n"
+            if sig_threads != last_threads:
+                last_threads = sig_threads
+                yield "event: threads\ndata: {}\n\n"
             ticks += 1
             if ticks % 40 == 0:
                 yield ": ping\n\n"
@@ -113,6 +118,7 @@ class CommentIn(BaseModel):
     quote: str = ""
     prefix: str = ""
     text: str
+    thread: str = ""
 
 
 class BatchIn(BaseModel):
@@ -128,6 +134,59 @@ def send_batch(slug: str, body: BatchIn) -> dict[str, Any]:
         return s.add_batch([c.model_dump() for c in body.comments], body.note, body.action)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
+
+
+class ThreadIn(BaseModel):
+    section: str = ""
+    quote: str = ""
+    prefix: str = ""
+    text: str
+
+
+class MessageIn(BaseModel):
+    text: str
+
+
+def thread_view(s: Session, t: dict[str, Any]) -> dict[str, Any]:
+    t = threads.view(s, t)
+    messages = [{**m, "html": md.render(m["text"])} for m in t["messages"]]
+    return {**t, "messages": messages}
+
+
+@app.get("/api/s/{slug}/threads")
+def list_threads(slug: str) -> dict[str, Any]:
+    s = get_session(slug)
+    try:
+        rows = [thread_view(s, t) for t in s.read_threads()]
+        return {"forkable": bool(s.read_parent()), "threads": rows}
+    except SessionError as e:
+        raise HTTPException(422, str(e)) from e
+
+
+@app.post("/api/s/{slug}/threads")
+def new_thread(slug: str, body: ThreadIn) -> dict[str, Any]:
+    s = get_session(slug)
+    try:
+        return thread_view(s, threads.create(s, body.section, body.quote, body.prefix, body.text))
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/s/{slug}/threads/{tid}")
+def thread_message(slug: str, tid: str, body: MessageIn) -> dict[str, Any]:
+    s = get_session(slug)
+    try:
+        return thread_view(s, threads.send(s, tid, body.text))
+    except threads.ThreadBusy as e:
+        raise HTTPException(409, str(e)) from e
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/s/{slug}/threads/{tid}/stop")
+def thread_stop(slug: str, tid: str) -> dict[str, bool]:
+    threads.stop(get_session(slug), tid)
+    return {"ok": True}
 
 
 @app.post("/api/s/{slug}/export")

@@ -33,3 +33,14 @@ def test_api_renders_tips(client, session):
     lex = client.get("/api/s/kv-cache").json()["plan"]["lexicon"]
     assert "<em>vecteur</em>" in lex[0]["tip_html"] and "math inline" in lex[0]["tip_html"]
     assert lex[1]["tip_html"] == "l'autre vecteur"  # falls back to the definition
+
+
+def test_api_threads(client, session):
+    r = client.get("/api/s/kv-cache/threads")
+    assert r.json() == {"forkable": False, "threads": []}
+    assert client.post("/api/s/kv-cache/threads", json={"text": " "}).status_code == 400
+    session.new_thread("s1", "L'attention")
+    session.bind_parent("main-1")
+    r = client.get("/api/s/kv-cache/threads").json()
+    assert r["forkable"] and r["threads"][0]["id"] == "t1"
+    assert client.post("/api/s/kv-cache/threads/x1", json={"text": "hi"}).status_code == 400

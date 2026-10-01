@@ -78,10 +78,17 @@ def stop_server() -> bool:
     return True
 
 
+def bind_parent(s: Session) -> None:
+    """Record the Claude Code session running this command: side threads fork from it.
+    Claude Code sets the variable in its shell; outside it, the binding stays as it was."""
+    s.bind_parent(os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+
+
 def cmd_new(a: argparse.Namespace) -> None:
     slug = a.slug or slugify(a.title)
     s = Session(slug)
     created = s.create(a.title, a.question or "", a.kind, a.repo or "")
+    bind_parent(s)
     print(json.dumps({"slug": slug, "dir": str(s.dir), "created": created}))
 
 
@@ -89,6 +96,7 @@ def cmd_open(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}; create it with `explain-view new`")
+    bind_parent(s)
     ensure_server()
     url = f"{_base_url()}/s/{a.slug}"
     if not a.no_browser:
