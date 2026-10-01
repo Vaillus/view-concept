@@ -142,6 +142,7 @@ function setTab(name) {
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === name));
   $("#sel-actions").hidden = true;
+  renderMermaid($(`.view[data-view="${name}"]`));
   positionPopover();
 }
 
@@ -354,15 +355,16 @@ function sectionBlock(s, { bare = false } = {}) {
    item (its title and files, its verdict, the concepts it implements, a note), the items
    that need action first. Clicking an entry opens its description underneath, which is
    the section's own block, so comments, threads, highlights and annotations work there
-   as in the explanation. The other refactor sections, such as the applied changes,
-   follow as plain sections. A review whose refactor sections carry no item fields is
-   drawn as plain sections only. */
+   as in the explanation. Below the table, the structure view (see structureView). The
+   other refactor sections, such as the applied changes, follow as plain sections. A
+   review whose refactor sections carry no item fields is drawn as plain sections only. */
 
 // Verdicts in table order: those that need action first, « conforms » last.
 const VERDICTS = ["diverges", "move", "split", "throw", "out-of-pr", "conforms"];
 const openItems = new Set(); // ids of the items whose description is open, across re-renders
 
 const isItem = (s) => !!s && !!s.item && typeof s.item === "object";
+const isFinding = (s) => !isItem(s) && s.kind === "finding";
 const verdictOf = (s) => String(s.item.verdict || "no verdict");
 // An unknown verdict sorts after the known ones that need action, before « conforms ».
 const verdictRank = (v) => (VERDICTS.includes(v) ? VERDICTS.indexOf(v) : VERDICTS.length - 1.5);
@@ -372,8 +374,11 @@ const lexiconIndex = (name) =>
 function refactorTab(sections) {
   const items = sections.filter(isItem);
   if (!items.length) return sections.map((s) => sectionBlock(s));
-  const rest = sections.filter((s) => !isItem(s));
-  return [reviewTable(items), ...rest.map((s) => sectionBlock(s))];
+  const findings = sections.filter(isFinding);
+  const rest = sections.filter((s) => !isItem(s) && !isFinding(s));
+  const after = rest.map((s) => sectionBlock(s));
+  after.forEach((b) => b.classList.add("rv-after")); // aligned on the table, see app.css
+  return [reviewTable(items), structureView(items, findings), ...after].filter(Boolean);
 }
 
 function verdictBadge(v) {
@@ -431,13 +436,86 @@ function itemRows(s) {
   return [entry, description];
 }
 
+/* The structure view: a Mermaid flowchart drawn from the item fields. One frame per
+   directory, one node per file outlined in the colour of its item's verdict, a file
+   that is only the target of a relation greyed out (it is not in the diff). An arrow
+   per relation, labelled with its kind, from the relation's `from` file if it names
+   one, else from the first file of its item. A finding across items (a section with
+   "kind": "finding" and "items": [item ids]) adds a dashed line from the first file of
+   its first item to the first file of each other one, labelled with its number, and is
+   listed under the chart as a section block, with the items it involves. Without
+   relations or findings there is nothing to draw, and the view is left out. */
+const filesOf = (s) => [].concat(s.item.files || []);
+const relationsOf = (s) => [].concat(s.item.relations || []).filter((r) => r && r.to);
+
+function structureView(items, findings) {
+  if (!items.some((s) => relationsOf(s).length) && !findings.length) return null;
+  const nodes = new Map(); // file path -> { id, cls }
+  const node = (f, cls) => {
+    if (!nodes.has(f)) nodes.set(f, { id: `f${nodes.size}`, cls });
+    return nodes.get(f).id;
+  };
+  const vclass = (s) => `vc_${VERDICTS.includes(verdictOf(s)) ? verdictOf(s).replace(/-/g, "_") : "other"}`;
+  items.forEach((s) => filesOf(s).forEach((f) => node(f, vclass(s))));
+  const edges = [];
+  for (const s of items) {
+    for (const r of relationsOf(s)) {
+      const from = r.from || filesOf(s)[0];
+      if (!from) continue;
+      edges.push(`${node(from, "vc_ghost")} -->${r.kind ? `|"${mq(r.kind)}"|` : ""} ${node(r.to, "vc_ghost")}`);
+    }
+  }
+  const byId = new Map(items.map((s) => [s.id, s]));
+  for (const f of findings) {
+    const firsts = [].concat(f.items || []).map((id) => byId.get(id)).filter(Boolean)
+      .map((s) => filesOf(s)[0]).filter(Boolean);
+    for (const other of firsts.slice(1)) {
+      if (other !== firsts[0]) edges.push(`${node(firsts[0])} -.-|"§${numberOf(f.id)}"| ${node(other)}`);
+    }
+  }
+  const dirs = new Map(); // directory -> [file]
+  for (const f of nodes.keys()) {
+    const dir = f.includes("/") ? f.slice(0, f.lastIndexOf("/") + 1) : "./";
+    dirs.set(dir, [...(dirs.get(dir) || []), f]);
+  }
+  const lines = ["flowchart LR"];
+  [...dirs].forEach(([dir, files], i) => {
+    lines.push(`  subgraph d${i}["${mq(dir)}"]`);
+    for (const f of files) lines.push(`    ${nodes.get(f).id}["${mq(f.slice(f.lastIndexOf("/") + 1))}"]`);
+    lines.push("  end");
+  });
+  lines.push(...edges.map((e) => `  ${e}`));
+  for (const [, n] of nodes) lines.push(`  class ${n.id} ${n.cls}`);
+
+  const involves = (f) => el("div", { class: "rv-involves dim" }, "involves: ",
+    ...[].concat(f.items || []).flatMap((id, k) => [k ? ", " : null,
+      byId.has(id) ? el("a", { href: `#sec-${id}`, text: titleOf(id),
+                               onclick: (e) => { e.preventDefault(); scrollToSection(id); } })
+                   : el("span", { text: id })]).filter(Boolean));
+  return el("div", { class: "rv rv-wide rv-structure" },
+    el("div", { class: "rv-head" }, "structure",
+      el("span", { class: "rv-counts", text: "files by directory · arrows: relations · dashed: findings across items · greyed: not in the diff" })),
+    el("pre", {}, el("code", { class: "language-mermaid", text: lines.join("\n") })),
+    findings.length ? el("div", { class: "rv-head" }, "findings across items") : null,
+    ...findings.map((f) => {
+      const block = sectionBlock(f);
+      block.classList.add("rv-finding");
+      $("h2", block).after(involves(f));
+      return block;
+    }));
+}
+// Text inside a quoted Mermaid label: a double quote would end it.
+const mq = (t) => String(t).replace(/"/g, "#quot;");
+
 function setItemOpen(id, open) {
   const entry = document.querySelector(`.rv-entry[data-item="${CSS.escape(id)}"]`);
   if (!entry) return;
   if (open) openItems.add(id); else openItems.delete(id);
   entry.classList.toggle("open", open);
   $(".rv-chev", entry).textContent = open ? "▾" : "▸";
-  document.getElementById(`rv-desc-${id}`).hidden = !open;
+  const description = document.getElementById(`rv-desc-${id}`);
+  description.hidden = !open;
+  if (open) renderMermaid(description);
   positionPopover();
 }
 
@@ -451,14 +529,19 @@ function typesetMath(root) {
 }
 
 let mermaidLib = null;
+/* Mermaid lays a chart out from the size of its text, which is zero in a hidden tab or
+   a closed item entry: a chart out of sight stays a code block until it is shown (see
+   setTab and setItemOpen, which call this again). */
 async function renderMermaid(root) {
-  const blocks = root.querySelectorAll("pre > code.language-mermaid");
-  if (!blocks.length) return;
+  const shown = (code) => code.isConnected && code.parentElement.getClientRects().length > 0;
+  if (![...root.querySelectorAll("pre > code.language-mermaid")].some(shown)) return;
   try {
     mermaidLib = mermaidLib || (await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs")).default;
+    const blocks = [...root.querySelectorAll("pre > code.language-mermaid")].filter(shown);
+    if (!blocks.length) return;
     const dark = getComputedStyle(document.documentElement).colorScheme.includes("dark");
     mermaidLib.initialize({ startOnLoad: false, theme: dark ? "dark" : "default" });
-    const nodes = [...blocks].map((code) => {
+    const nodes = blocks.map((code) => {
       const div = el("div", { class: "mermaid", text: code.textContent });
       code.parentElement.replaceWith(div);
       return div;

@@ -157,6 +157,32 @@ a.cite:hover code { text-decoration: underline; }
 .sec.bare h2 { margin: 0; padding-top: 4px; min-height: 18px; }
 .sec.bare .body > :first-child { margin-top: 0; }
 
+/* ---- the refactor tab: structure view, findings across items ----
+   Mermaid styles its nodes under the id of its chart, hence !important. */
+.rv-structure .mermaid { background: var(--raised); padding: 8px; overflow-x: auto; }
+.rv-structure .cluster rect { fill: var(--bg) !important; stroke: var(--line-strong) !important; stroke-dasharray: 3 3; }
+.rv-structure .cluster-label :is(span, p, text) { color: var(--muted) !important; fill: var(--muted) !important; }
+.rv-structure .node :is(rect, path, polygon, circle) { fill: var(--raised) !important; stroke: var(--line-strong) !important; stroke-width: 1.5px !important; }
+.rv-structure .node .nodeLabel { color: var(--ink) !important; }
+.rv-structure .edgeLabel, .rv-structure .edgeLabel :is(p, span) { color: var(--muted) !important; background: var(--bg) !important; }
+.rv-structure .node.vc_conforms :is(rect, path, polygon) { stroke: var(--ok) !important; }
+.rv-structure .node.vc_diverges :is(rect, path, polygon) { stroke: var(--danger) !important; }
+.rv-structure .node.vc_move :is(rect, path, polygon) { stroke: var(--warn) !important; }
+.rv-structure .node.vc_split :is(rect, path, polygon) { stroke: var(--alt) !important; }
+.rv-structure .node.vc_throw :is(rect, path, polygon) { stroke: var(--flag) !important; }
+.rv-structure .node.vc_out_of_pr :is(rect, path, polygon) { stroke: var(--info) !important; }
+.rv-structure .node.vc_ghost :is(rect, path, polygon) { stroke: var(--dim) !important; stroke-dasharray: 3 3; fill: none !important; }
+.rv-structure .node.vc_ghost .nodeLabel, .rv-structure .node.vc_ghost text { color: var(--dim) !important; fill: var(--dim) !important; }
+.rv-structure .flowchart-link.edge-pattern-dotted { stroke: var(--warn) !important; }
+.rv-finding { border-left: 2px solid var(--warn); padding-left: 12px; border-bottom: 0; }
+/* Under the table, prose keeps its width but starts at the table's left edge. */
+.refactor > .sec.rv-after { max-width: 120ch; }
+.rv-finding > *, .sec.rv-after > * { max-width: 78ch; }
+.rv-finding h2 { margin-top: 8px; }
+.rv-involves { font-size: 12px; margin: -4px 0 6px; }
+.rv-involves a { color: var(--ink-dim); }
+.rv-involves a:hover { color: var(--accent); }
+
 /* ---- review pane ---- */
 .review { overflow-y: auto; min-height: 0; border-left: 1px solid var(--line); padding: 0 12px 24px; display: flex; flex-direction: column; gap: 8px; }
 .review > * { flex-shrink: 0; }
