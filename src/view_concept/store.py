@@ -14,6 +14,7 @@ reach the Claude Code session through the inbox.
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
         claude.json     the Claude Code session driving this one     (written by `new`, `open`)
+        seen.json       the text of each section the user last read  (server)
         threads/<id>.json  a side thread: messages, its own Claude session id  (server)
 
 An outline item in plan.json is {id, title, earns}, plus `kind: "question"` (with `from`,
@@ -25,6 +26,11 @@ explanation.
 A side thread is a separate headless Claude conversation, forked from the session in
 claude.json, that the user opens from the page to discuss a passage without changing
 anything (see threads.py). Only a comment batch reaches the main session.
+
+seen.json maps a section id to the markdown the user last marked as read. A section
+whose file differs from it is "updated": the page highlights what changed since then.
+The first text of a section is recorded as read when the page first loads it, so a
+first write is never an update.
 """
 
 from __future__ import annotations
@@ -143,6 +149,10 @@ class Session:
         return self.dir / "claude.json"
 
     @property
+    def seen_path(self) -> Path:
+        return self.dir / "seen.json"
+
+    @property
     def threads_dir(self) -> Path:
         return self.dir / "threads"
 
@@ -222,6 +232,22 @@ class Session:
         changes.append(d)
         _write_json(self.changes_path, changes)
         return d
+
+    def read_seen(self, sections: dict[str, str]) -> dict[str, str]:
+        """The text the user last read of each section, recording the current text of
+        any section seen for the first time."""
+        seen = _read_json(self.seen_path, {})
+        new = {k: v for k, v in sections.items() if k not in seen}
+        if new:
+            seen.update(new)
+            _write_json(self.seen_path, seen)
+        return seen
+
+    def mark_seen(self, sections: dict[str, str]) -> None:
+        """Record `sections` (id -> the markdown the page showed) as read."""
+        seen = _read_json(self.seen_path, {})
+        seen.update(sections)
+        _write_json(self.seen_path, seen)
 
     def read_status(self) -> dict[str, Any]:
         return _read_json(self.status_path, {"phase": "idle"})
