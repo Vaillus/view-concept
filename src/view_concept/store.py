@@ -39,9 +39,19 @@ VAULT_DIR = Path(
 )
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
-# What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan ».
-PHASES = ("scoping", "planning", "awaiting-approval", "writing", "audit", "revising", "idle")
-ACTIONS = ("", "approve-plan")
+# What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
+# "awaiting-model" (set by the view-pr skill only) « Approve model ».
+PHASES = (
+    "scoping",
+    "planning",
+    "awaiting-approval",
+    "awaiting-model",
+    "writing",
+    "audit",
+    "revising",
+    "idle",
+)
+ACTIONS = ("", "approve-plan", "approve-model")
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
@@ -290,8 +300,9 @@ class Session:
     ) -> dict[str, Any]:
         """Record a batch sent from the page and append it to the inbox.
 
-        `action` is a decision taken with the batch: "approve-plan" means the user
-        approved the plan from the page, with the comments as last corrections."""
+        `action` is what the user does with the batch: "approve-plan" means the user
+        approved the plan from the page, "approve-model" that they approved the model of a
+        PR review (so the implementation starts), with the comments as last corrections."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         note = note.strip()
@@ -453,6 +464,11 @@ def format_batch(slug: str, batch: dict[str, Any], outline: list[dict[str, Any]]
     lines = [f"view-concept · {slug} · batch {batch['id']} · {n} comment{'s' * (n != 1)}"]
     if batch.get("action") == "approve-plan":
         lines.append("action: approve-plan (the user approved the plan from the page)")
+    if batch.get("action") == "approve-model":
+        lines.append(
+            "action: approve-model (the user approved the model from the page: "
+            "start the implementation)"
+        )
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
     for c in batch["comments"]:

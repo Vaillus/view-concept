@@ -95,6 +95,17 @@ def test_approve_plan_batch(session):
         session.add_batch([], action="delete-everything")
 
 
+def test_approve_model_batch(session):
+    session.write_status("awaiting-model")
+    b = session.add_batch([{"text": "rename it"}], action="approve-model")
+    assert b["action"] == "approve-model"
+    out = format_batch("kv-cache", b, session.read_plan()["outline"])
+    assert (
+        "action: approve-model (the user approved the model from the page: "
+        "start the implementation)"
+    ) in out
+
+
 def test_code_session_needs_repo(tmp_path):
     with pytest.raises(SessionError):
         Session("x", tmp_path).create("X", kind="code")

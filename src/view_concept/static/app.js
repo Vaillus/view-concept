@@ -125,9 +125,9 @@ function setTab(name) {
 
 function followSession() {
   const phase = state.status.phase;
-  if (tab === null) setTab(Object.keys(state.sections).length && phase !== "awaiting-approval" ? "doc" : "plan");
+  if (tab === null) setTab(Object.keys(state.sections).length && !APPROVALS[phase] ? "doc" : "plan");
   else if (phase !== lastPhase) {
-    if (phase === "awaiting-approval") setTab("plan");
+    if (APPROVALS[phase]) setTab("plan");
     if (phase === "writing") setTab("doc");
   }
   lastPhase = phase;
@@ -144,41 +144,57 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "2") setTab("doc");
 });
 
-/* ---------------- status + plan approval ---------------- */
+/* ---------------- status + approvals ---------------- */
 
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
 
-/* The plan is approved from the page by a batch carrying action "approve-plan". Until
-   Claude moves the status on, the page says the approval is on its way. */
+/* Two phases wait for the user: the plan of an explanation ("awaiting-approval"), and the
+   model of a PR review ("awaiting-model", set by the view-pr skill only). Either is
+   approved from the page by a batch carrying the phase's action. Until Claude moves the
+   status on, the page says the approval is on its way. */
+const APPROVALS = {
+  "awaiting-approval": { action: "approve-plan", label: "Approve plan", toast: "Plan approved",
+                         ready: "plan ready · waiting for your approval", sent: "plan approved · Claude is starting" },
+  "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved",
+                      ready: "model ready · waiting for your approval", sent: "model approved · Claude is implementing" },
+};
+
 function approvalPending() {
+  const approval = APPROVALS[state.status.phase];
+  if (!approval) return false;
   const since = state.status.since || "";
-  return state.comments.batches.some((b) => b.action === "approve-plan" && b.sent >= since);
+  return state.comments.batches.some((b) => b.action === approval.action && b.sent >= since);
 }
 
 function renderStatus() {
   const { phase, section, message } = state.status;
+  const approval = APPROVALS[phase];
   const labels = {
     scoping: "scoping the question",
     planning: "drafting the plan",
-    "awaiting-approval": approvalPending() ? "plan approved · Claude is starting" : "plan ready · waiting for your approval",
+    ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
     writing: section ? `writing §${numberOf(section)} ${titleOf(section)}` : "writing",
     audit: "vocabulary audit",
     revising: "revising",
   };
   const active = ["scoping", "planning", "writing", "audit", "revising"].includes(phase) ||
-                 (phase === "awaiting-approval" && approvalPending());
+                 (approval && approvalPending());
   const p = $("#phase");
   p.hidden = !labels[phase];
-  p.className = `phase ${active ? "active" : ""} ${phase === "awaiting-approval" && !approvalPending() ? "ask" : ""}`;
+  p.className = `phase ${active ? "active" : ""} ${approval && !approvalPending() ? "ask" : ""}`;
   p.textContent = [labels[phase], message].filter(Boolean).join(" · ");
 
   const btn = $("#approve");
-  btn.hidden = phase !== "awaiting-approval" || approvalPending();
+  btn.hidden = !approval || approvalPending();
+  if (!approval) return;
   const n = drafts.filter((d) => d.text.trim()).length;
-  btn.textContent = n ? `Approve plan + send ${n} comment${n > 1 ? "s" : ""}` : "Approve plan";
+  btn.textContent = n ? `${approval.label} + send ${n} comment${n > 1 ? "s" : ""}` : approval.label;
 }
 
-$("#approve").addEventListener("click", () => send("approve-plan"));
+$("#approve").addEventListener("click", () => {
+  const approval = APPROVALS[state.status.phase];
+  if (approval) send(approval.action);
+});
 
 function renderPlan() {
   const { plan } = state;
@@ -626,7 +642,8 @@ async function send(action = "") {
   saveJSON(DRAFTS_KEY, drafts);
   $("#note").value = "";
   saveJSON(NOTE_KEY, "");
-  toast(action ? "Plan approved" : `Sent ${b.id} to the session`);
+  const approval = Object.values(APPROVALS).find((a) => a.action === action);
+  toast(approval ? approval.toast : `Sent ${b.id} to the session`);
   await load();
 }
 
