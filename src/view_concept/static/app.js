@@ -126,7 +126,8 @@ function render() {
    session at the two moments that matter — the plan waiting for approval, the writing
    starting (in the tab of the section being written) — and otherwise stays where the
    user put it. A model waiting for approval does not move it: the model is read in the
-   explanation, and the approve button sits under the tab bar, in every tab. */
+   explanation, and the approve button sits under the tab bar, in every tab. Nor does a
+   code review waiting to start: « Review code » is at the end of the explanation. */
 
 function setTab(name) {
   if (name === "code" && !hasCodeTab()) name = "doc";
@@ -167,16 +168,25 @@ document.addEventListener("keydown", (e) => {
 
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
 
-/* Two phases wait for the user: the plan of an explanation ("awaiting-approval"), and the
-   model of a PR review ("awaiting-model", set by the view-pr skill only). Either is
-   approved from the page by a batch carrying the phase's action. Until Claude moves the
-   status on, the page says the approval is on its way. */
+/* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
+   model of a PR review ("awaiting-model", set by the view-pr skill only), and the start
+   of its code review once the implementation is done ("awaiting-review", view-pr too).
+   Each is answered from the page by a batch carrying the phase's action, draft comments
+   included. Until Claude moves the status on, the page says the answer is on its way.
+   The first two buttons sit under the tab bar; « Review code » sits at the end of the
+   explanation, after the last section of Part 1, and the page does not switch tabs for
+   it. */
+const reviewButton = el("button", { id: "review-code", class: "btn primary approve review-code", hidden: true });
 const APPROVALS = {
   "awaiting-approval": { action: "approve-plan", label: "Approve plan", toast: "Plan approved",
                          ready: "plan ready · waiting for your approval", sent: "plan approved · Claude is starting" },
   "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved",
                       ready: "model ready · waiting for your approval", sent: "model approved · Claude is implementing" },
+  "awaiting-review": { action: "review-code", label: "Review code", toast: "Code review requested", button: reviewButton,
+                       ready: "implementation done · waiting for you to start the code review",
+                       sent: "code review requested · Claude is starting" },
 };
+const buttonOf = (approval) => approval.button || $("#approve");
 
 function approvalPending() {
   const approval = APPROVALS[state.status.phase];
@@ -203,14 +213,15 @@ function renderStatus() {
   p.className = `phase ${active ? "active" : ""} ${approval && !approvalPending() ? "ask" : ""}`;
   p.textContent = [labels[phase], message].filter(Boolean).join(" · ");
 
-  const btn = $("#approve");
-  btn.hidden = !approval || approvalPending();
+  $("#approve").hidden = reviewButton.hidden = true;
   if (!approval) return;
+  const btn = buttonOf(approval);
+  btn.hidden = approvalPending();
   const n = drafts.filter((d) => d.text.trim()).length;
   btn.textContent = n ? `${approval.label} + send ${n} comment${n > 1 ? "s" : ""}` : approval.label;
 }
 
-$("#approve").addEventListener("click", () => {
+for (const b of [$("#approve"), reviewButton]) b.addEventListener("click", () => {
   const approval = APPROVALS[state.status.phase];
   if (approval) send(approval.action);
 });
@@ -288,7 +299,7 @@ function renderDoc() {
     $("#code").replaceChildren();
     return;
   }
-  doc.replaceChildren(...items.filter((s) => tabOf(s.id) === "doc").map(sectionBlock));
+  doc.replaceChildren(...items.filter((s) => tabOf(s.id) === "doc").map(sectionBlock), reviewButton);
   $("#code").replaceChildren(...items.filter((s) => tabOf(s.id) === "code").map(sectionBlock));
   for (const view of docViews()) {
     typesetMath(view);
@@ -648,7 +659,8 @@ $("#note").addEventListener("keydown", (e) => {
 $("#send").addEventListener("click", () => send());
 
 async function send(action = "") {
-  const btn = action ? $("#approve") : $("#send");
+  const approval = Object.values(APPROVALS).find((a) => a.action === action);
+  const btn = approval ? buttonOf(approval) : $("#send");
   if (btn.disabled) return;
   btn.disabled = true;
   const r = await fetch(`/api/s/${SLUG}/batch`, {
@@ -667,7 +679,6 @@ async function send(action = "") {
   saveJSON(DRAFTS_KEY, drafts);
   $("#note").value = "";
   saveJSON(NOTE_KEY, "");
-  const approval = Object.values(APPROVALS).find((a) => a.action === action);
   toast(approval ? approval.toast : `Sent ${b.id} to the session`);
   await load();
 }

@@ -106,6 +106,14 @@ def test_approve_model_batch(session):
     ) in out
 
 
+def test_review_code_batch(session):
+    session.write_status("awaiting-review")
+    b = session.add_batch([{"text": "check the tests too"}], action="review-code")
+    assert b["action"] == "review-code"
+    out = format_batch("kv-cache", b, session.read_plan()["outline"])
+    assert "action: review-code (the user asked to start the code review from the page)" in out
+
+
 def test_code_session_needs_repo(tmp_path):
     with pytest.raises(SessionError):
         Session("x", tmp_path).create("X", kind="code")

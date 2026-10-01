@@ -39,6 +39,7 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .phase.ask { color: var(--on-flag); background: var(--flag); padding: 0 8px; }
 @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 .approve { flex: none; margin: 8px 16px 0; padding: 4px; }
+.doc > .review-code { display: block; width: 100%; margin-top: 24px; }
 
 /* ---- layout: tabbed workspace + review pane ---- */
 .layout { flex: 1; display: grid; grid-template-columns: 1fr minmax(300px, 26%); min-height: 0; }

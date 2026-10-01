@@ -46,18 +46,20 @@ VAULT_DIR = Path(
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
-# "awaiting-model" (set by the view-pr skill only) « Approve model ».
+# "awaiting-model" (set by the view-pr skill only) « Approve model », and "awaiting-review"
+# (set by the view-pr skill at the end of step 2) « Review code ».
 PHASES = (
     "scoping",
     "planning",
     "awaiting-approval",
     "awaiting-model",
+    "awaiting-review",
     "writing",
     "audit",
     "revising",
     "idle",
 )
-ACTIONS = ("", "approve-plan", "approve-model")
+ACTIONS = ("", "approve-plan", "approve-model", "review-code")
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
@@ -308,7 +310,9 @@ class Session:
 
         `action` is what the user does with the batch: "approve-plan" means the user
         approved the plan from the page, "approve-model" that they approved the model of a
-        PR review (so the implementation starts), with the comments as last corrections."""
+        PR review (so the implementation starts), "review-code" that they asked to start the
+        code review once the implementation is done, with the comments as last
+        corrections."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         note = note.strip()
@@ -475,6 +479,8 @@ def format_batch(slug: str, batch: dict[str, Any], outline: list[dict[str, Any]]
             "action: approve-model (the user approved the model from the page: "
             "start the implementation)"
         )
+    if batch.get("action") == "review-code":
+        lines.append("action: review-code (the user asked to start the code review from the page)")
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
     for c in batch["comments"]:
