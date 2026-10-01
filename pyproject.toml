@@ -1,7 +1,7 @@
 [project]
-name = "explain-view"
+name = "view-concept"
 version = "0.1.0"
-description = "Local workspace for the explain-concept skill: plan and explanation side by side, comments sent back to the Claude Code session."
+description = "Local workspace for the view-concept skill: plan and explanation side by side, comments sent back to the Claude Code session."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -12,14 +12,14 @@ dependencies = [
 ]
 
 [project.scripts]
-explain-view = "explain_view.cli:main"
+view-concept = "view_concept.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/explain_view"]
+packages = ["src/view_concept"]
 
 [dependency-groups]
 dev = ["ruff>=0.6", "ty", "pytest>=8", "httpx>=0.27"]

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from explain_view.store import (
+from view_concept.store import (
     Session,
     SessionError,
     format_batch,
@@ -58,7 +58,7 @@ def test_export_orders_sections_and_overwrites(session, tmp_path):
     p1 = session.export(vault)
     text = p1.read_text()
     assert text.index("## Attention") < text.index("## Cache")
-    assert "explain-view: kv-cache" in text
+    assert "view-concept: kv-cache" in text
     assert "clé \\| key" in text  # pipe escaped in the lexicon table
     assert session.export(vault) == p1
 

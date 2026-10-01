@@ -1,4 +1,4 @@
-"""Command line: what the explain-concept skill calls from Claude Code."""
+"""Command line: what the view-concept skill calls from Claude Code."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ HOST = "127.0.0.1"
 
 
 def _port() -> int:
-    return int(os.environ.get("EXPLAIN_VIEW_PORT", "5080"))
+    return int(os.environ.get("VIEW_CONCEPT_PORT", "5080"))
 
 
 def _base_url() -> str:
@@ -53,7 +53,7 @@ def ensure_server() -> None:
     HOME.mkdir(parents=True, exist_ok=True)
     with LOG_FILE.open("ab") as log:
         proc = subprocess.Popen(
-            [sys.executable, "-m", "explain_view.cli", "serve"],
+            [sys.executable, "-m", "view_concept.cli", "serve"],
             stdout=log,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
@@ -96,7 +96,7 @@ def cmd_new(a: argparse.Namespace) -> None:
 def cmd_open(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
-        raise SessionError(f"no session {a.slug!r}; create it with `explain-view new`")
+        raise SessionError(f"no session {a.slug!r}; create it with `view-concept new`")
     bind_parent(s)
     ensure_server()
     url = f"{_base_url()}/s/{a.slug}"
@@ -199,7 +199,7 @@ def cmd_list(a: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(prog="explain-view")
+    p = argparse.ArgumentParser(prog="view-concept")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     q = sub.add_parser("new", help="create a session (no-op if it exists)")
@@ -262,7 +262,7 @@ def main() -> None:
     try:
         a.fn(a)
     except SessionError as e:
-        print(f"explain-view: {e}", file=sys.stderr)
+        print(f"view-concept: {e}", file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
         pass

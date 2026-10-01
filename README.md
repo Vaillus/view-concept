@@ -1,20 +1,20 @@
-# explain-view
+# view-concept
 
-A local page for the `explain-concept` skill. The plan and the explanation stay in one place in the browser, and the conversation stays in the Claude Code terminal. You select passages in the page, comment on them, and send the comments to the session as one batch.
+A local page for the `view-concept` skill, which runs `explain-concept` in a browser page. The plan and the explanation stay in one place in the browser, and the conversation stays in the Claude Code terminal. You select passages in the page, comment on them, and send the comments to the session as one batch.
 
 Everything goes through Claude Code, so no API key is needed. Side threads are headless `claude -p` runs, billed to the same subscription as the terminal session.
 
 ```
-terminal (Claude Code)                        browser (explain-view)
-  explain-concept skill ── writes files ──▶  plan · explanation · review
+terminal (Claude Code)                        browser (view-concept page)
+  view-concept skill ───── writes files ──▶  plan · explanation · review
         ▲                                             │
-        └── Monitor: explain-view watch ◀── inbox ◀───┘ « Send »
+        └── Monitor: view-concept watch ◀── inbox ◀───┘ « Send »
 ```
 
 ## Install
 
 ```bash
-uv tool install -e ~/Documents/code/explain-view   # puts `explain-view` on the PATH
+uv tool install -e ~/Documents/code/view-concept   # puts `view-concept` on the PATH
 ```
 
 ## How a session works
@@ -23,16 +23,16 @@ The skill runs these commands. You don't need to run them yourself.
 
 | Command | What it does |
 |---|---|
-| `explain-view new "<title>" --slug <slug>` | creates `~/.explain-view/sessions/<slug>/` |
-| `explain-view open <slug>` | starts the server (port 5080) if needed and opens the page |
+| `view-concept new "<title>" --slug <slug>` | creates `~/.view-concept/sessions/<slug>/` |
+| `view-concept open <slug>` | starts the server (port 5080) if needed and opens the page |
 | | `new` and `open` also record the Claude Code session that runs them (`claude.json`), which side threads fork from |
-| `explain-view watch <slug>` | prints each comment batch as it arrives, meant to run under the `Monitor` tool |
-| `explain-view pending <slug>` | lists comments not yet resolved |
-| `explain-view resolve <slug> c3 b2 --reply "…"` | marks comments or whole batches resolved |
-| `explain-view export <slug>` | writes `~/Documents/Vault/explanations/<title>.md` |
-| `explain-view list` / `stop` | lists sessions / stops the background server |
+| `view-concept watch <slug>` | prints each comment batch as it arrives, meant to run under the `Monitor` tool |
+| `view-concept pending <slug>` | lists comments not yet resolved |
+| `view-concept resolve <slug> c3 b2 --reply "…"` | marks comments or whole batches resolved |
+| `view-concept export <slug>` | writes `~/Documents/Vault/explanations/<title>.md` |
+| `view-concept list` / `stop` | lists sessions / stops the background server |
 
-The file formats (`plan.json`, `sections/<id>.md`, `audit.json`) are described in the skill, `explain-concept.md § The workspace`. The docstring of `store.py` documents the session directory.
+The file formats (`plan.json`, `sections/<id>.md`, `audit.json`) are described in the skill, `~/Documents/code/skills/view-concept.md`. The docstring of `store.py` documents the session directory.
 
 ## The page
 
@@ -49,10 +49,10 @@ The page redraws when a file changes (server-sent events, checked every 0.4 s). 
 
 | Variable | Default |
 |---|---|
-| `EXPLAIN_VIEW_HOME` | `~/.explain-view` |
-| `EXPLAIN_VIEW_VAULT` | `~/Documents/Vault/explanations` |
-| `EXPLAIN_VIEW_PORT` | `5080` |
-| `EXPLAIN_VIEW_CLAUDE` | `claude` (the executable side threads run) |
+| `VIEW_CONCEPT_HOME` | `~/.view-concept` |
+| `VIEW_CONCEPT_VAULT` | `~/Documents/Vault/explanations` |
+| `VIEW_CONCEPT_PORT` | `5080` |
+| `VIEW_CONCEPT_CLAUDE` | `claude` (the executable side threads run) |
 
 ## Development
 
@@ -62,4 +62,4 @@ uv run pytest
 uv run ruff check --fix . && uv run ruff format . && uv run ty check .
 ```
 
-After changing the server code, run `explain-view stop`. The next `open` restarts the server.
+After changing the server code, run `view-concept stop`. The next `open` restarts the server.

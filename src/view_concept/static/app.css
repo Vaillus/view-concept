@@ -1,4 +1,4 @@
-/* explain-view — app rules. Only semantic tokens from terminal.css, never a raw colour. */
+/* view-concept — app rules. Only semantic tokens from terminal.css, never a raw colour. */
 
 html, body { height: 100%; }
 body { display: flex; flex-direction: column; }

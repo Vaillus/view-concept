@@ -1,4 +1,4 @@
-/* explain-view — the session page.
+/* view-concept — the session page.
 
    Two tabs share the main space, the plan (outline, decisions, lexicon) and the
    explanation (one block per outline section); the review pane (draft comments, then
@@ -14,8 +14,8 @@
 "use strict";
 
 const SLUG = decodeURIComponent(location.pathname.split("/").pop());
-const DRAFTS_KEY = `explain-view:drafts:${SLUG}`;
-const NOTE_KEY = `explain-view:note:${SLUG}`;
+const DRAFTS_KEY = `view-concept:drafts:${SLUG}`;
+const NOTE_KEY = `view-concept:note:${SLUG}`;
 
 let state = null;        // last payload from /api/s/<slug>
 let lastMd = null;       // section id -> markdown, to detect rewritten sections
@@ -102,7 +102,7 @@ const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).titl
 
 function render() {
   const { plan } = state;
-  document.title = `${plan.title} · explain-view`;
+  document.title = `${plan.title} · view-concept`;
   $("#title").textContent = plan.title;
   renderStatus();
   followSession();

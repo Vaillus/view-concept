@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from explain_view import threads
-from explain_view.store import SessionError, format_batch
+from view_concept import threads
+from view_concept.store import SessionError, format_batch
 
 # Stands in for `claude -p`: records its arguments and prompt, then streams a reply.
 FAKE = """\

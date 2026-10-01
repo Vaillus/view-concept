@@ -25,7 +25,7 @@ from typing import Any
 
 from .store import Session, SessionError, now_iso
 
-CLAUDE = os.environ.get("EXPLAIN_VIEW_CLAUDE", "claude")
+CLAUDE = os.environ.get("VIEW_CONCEPT_CLAUDE", "claude")
 TOOLS = ["Read", "Grep", "Glob"]
 FLUSH_EVERY = 0.25  # seconds between writes of a streaming reply
 
@@ -145,11 +145,11 @@ def _first_prompt(s: Session, thread: dict[str, Any], text: str) -> str:
         )
     return "\n".join(
         [
-            f"[explain-view side thread {thread['id']}]",
-            f"The user opened a side thread from the explain-view page of the session"
+            f"[view-concept side thread {thread['id']}]",
+            f"The user opened a side thread from the view-concept page of the session"
             f" {s.slug!r} ({s.dir}). {origin}",
             "- Answer and discuss. Your tools are read-only: do not try to edit files or"
-            " run explain-view commands, and do not resolve comments.",
+            " run view-concept commands, and do not resolve comments.",
             f"- The explanation may have changed since this conversation started: the"
             f" current text of a section is in {s.sections_dir}/<id>.md.",
             "- When the discussion leads to a change (to the explanation or to the code),"

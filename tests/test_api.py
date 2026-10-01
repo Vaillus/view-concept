@@ -3,8 +3,8 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from explain_view import server
-from explain_view.store import Session
+from view_concept import server
+from view_concept.store import Session
 
 
 @pytest.fixture
