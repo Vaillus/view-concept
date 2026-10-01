@@ -1,7 +1,8 @@
 /* view-concept — the session page.
 
-   Two tabs share the main space, the plan (outline, model changes, lexicon) and the
-   explanation (one block per outline section); the review pane (draft comments, then
+   Tabs share the main space: the plan (outline, model changes, lexicon), the
+   explanation (one block per outline section) and, in a PR review that has reached the
+   code, the code tab (the sections of Part 2); the review pane (draft comments, then
    sent batches, side threads) stays on the right. The page never
    edits the explanation: Claude Code writes the files, the server streams "changed",
    the page re-fetches. The page writes batches of comments, and side threads: separate
@@ -23,7 +24,7 @@ const updated = new Set(); // sections rewritten since the user last acknowledge
 let planChanged = false;
 let drafts = loadJSON(DRAFTS_KEY, []);
 let pendingSelection = null;
-let tab = null;          // "plan" | "doc"
+let tab = null;          // "plan" | "doc" | "code"
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
 const openThreads = new Set(); // thread ids shown expanded
@@ -100,6 +101,14 @@ const numberOf = (id) => {
 };
 const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).title || id;
 
+/* Part 2 of a PR review (outline items with "part": 2: per-item cards, the table, the
+   changes applied to the code) is read in its own tab, "code"; every other section is
+   in the explanation. Both tabs are rendered by the same code, into their own view. */
+const isPart2 = (id) => (state.plan.outline.find((s) => s.id === id) || {}).part === 2;
+const tabOf = (id) => (isPart2(id) ? "code" : "doc");
+const hasCodeTab = () => state.plan.outline.some((s) => s.part === 2);
+const docViews = () => [$("#doc"), $("#code")];
+
 function render() {
   const { plan } = state;
   document.title = `${plan.title} · view-concept`;
@@ -112,13 +121,15 @@ function render() {
 }
 
 /* ---------------- tabs ----------------
-   The plan and the explanation share one space; one is shown at a time. The tab follows
-   the session at the two moments that matter — the plan waiting for approval, the
-   writing starting — and otherwise stays where the user put it. A model waiting for
-   approval does not move it: the model is read in the explanation, and the approve
-   button sits under the tab bar, in both tabs. */
+   The plan, the explanation and the code tab share one space; one is shown at a time.
+   The code tab exists only once an outline item is in Part 2. The tab follows the
+   session at the two moments that matter — the plan waiting for approval, the writing
+   starting (in the tab of the section being written) — and otherwise stays where the
+   user put it. A model waiting for approval does not move it: the model is read in the
+   explanation, and the approve button sits under the tab bar, in every tab. */
 
 function setTab(name) {
+  if (name === "code" && !hasCodeTab()) name = "doc";
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === name));
@@ -130,13 +141,18 @@ function followSession() {
   if (tab === null) setTab(Object.keys(state.sections).length && phase !== "awaiting-approval" ? "doc" : "plan");
   else if (phase !== lastPhase) {
     if (phase === "awaiting-approval") setTab("plan");
-    if (phase === "writing") setTab("doc");
+    if (phase === "writing") setTab(tabOf(state.status.section));
   }
   lastPhase = phase;
-  const docTab = $('.tab[data-tab="doc"]');
-  docTab.replaceChildren(...["explanation",
-    updated.size ? el("span", { class: "badge flag", text: `${updated.size} updated` }) : null,
-    phase === "writing" ? el("span", { class: "badge accent writing", text: "writing" }) : null].filter(Boolean));
+  $('.tab[data-tab="code"]').hidden = !hasCodeTab();
+  if (tab === "code" && !hasCodeTab()) setTab("doc");
+  for (const [name, label] of [["doc", "explanation"], ["code", "code"]]) {
+    const n = [...updated].filter((id) => tabOf(id) === name).length;
+    const writing = phase === "writing" && tabOf(state.status.section) === name;
+    $(`.tab[data-tab="${name}"]`).replaceChildren(...[label,
+      n ? el("span", { class: "badge flag", text: `${n} updated` }) : null,
+      writing ? el("span", { class: "badge accent writing", text: "writing" }) : null].filter(Boolean));
+  }
 }
 
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -144,6 +160,7 @@ document.addEventListener("keydown", (e) => {
   if (e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "1") setTab("plan");
   if (e.key === "2") setTab("doc");
+  if (e.key === "3" && hasCodeTab()) setTab("code");
 });
 
 /* ---------------- status + approvals ---------------- */
@@ -268,35 +285,41 @@ function renderDoc() {
   const items = outlineItems();
   if (!items.length) {
     doc.replaceChildren(el("p", { class: "dim empty", text: "Waiting for the plan…" }));
+    $("#code").replaceChildren();
     return;
   }
-  doc.replaceChildren(...items.map((s) => {
-    const body = el("div", { class: "body" });
-    const written = s.id in state.sections;
-    if (written) body.innerHTML = state.sections[s.id].html;
-    else if (writingId() === s.id) body.append(el("p", { class: "writing-line", text: "writing" }));
-    const cls = ["sec", written ? "" : "unwritten", updated.has(s.id) ? "updated" : ""].join(" ");
-    return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
-      el("h2", {},
-        el("span", { class: "num", text: numberOf(s.id) }), " ", s.title,
-        s.kind === "question" && s.from && s.from.length
-          ? el("span", { class: "q-from dim", text: `from ${[].concat(s.from).join(", ")}` }) : null,
-        updated.has(s.id)
-          ? el("button", { class: "badge flag", text: "updated · ok", title: "Mark as read",
-                           onclick: (e) => { e.stopPropagation(); updated.delete(s.id); render(); } })
-          : null,
-        el("button", { class: "sec-comment", text: "+ comment section", title: "Comment on the whole section",
-                       onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }) }),
-        el("button", { class: "sec-comment ask", text: "ask", title: "Open a side thread about this section",
-                       onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }, "ask") })),
-      body);
-  }));
-  typesetMath(doc);
-  linkCitations(doc);
-  renderMermaid(doc);
-  annotateAudit(doc);
-  annotateLexicon(doc);
+  doc.replaceChildren(...items.filter((s) => tabOf(s.id) === "doc").map(sectionBlock));
+  $("#code").replaceChildren(...items.filter((s) => tabOf(s.id) === "code").map(sectionBlock));
+  for (const view of docViews()) {
+    typesetMath(view);
+    linkCitations(view);
+    renderMermaid(view);
+    annotateAudit(view);
+    annotateLexicon(view);
+  }
   applyHighlights();
+}
+
+function sectionBlock(s) {
+  const body = el("div", { class: "body" });
+  const written = s.id in state.sections;
+  if (written) body.innerHTML = state.sections[s.id].html;
+  else if (writingId() === s.id) body.append(el("p", { class: "writing-line", text: "writing" }));
+  const cls = ["sec", written ? "" : "unwritten", updated.has(s.id) ? "updated" : ""].join(" ");
+  return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
+    el("h2", {},
+      el("span", { class: "num", text: numberOf(s.id) }), " ", s.title,
+      s.kind === "question" && s.from && s.from.length
+        ? el("span", { class: "q-from dim", text: `from ${[].concat(s.from).join(", ")}` }) : null,
+      updated.has(s.id)
+        ? el("button", { class: "badge flag", text: "updated · ok", title: "Mark as read",
+                         onclick: (e) => { e.stopPropagation(); updated.delete(s.id); render(); } })
+        : null,
+      el("button", { class: "sec-comment", text: "+ comment section", title: "Comment on the whole section",
+                     onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }) }),
+      el("button", { class: "sec-comment ask", text: "ask", title: "Open a side thread about this section",
+                     onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }, "ask") })),
+    body);
 }
 
 function typesetMath(root) {
@@ -462,7 +485,7 @@ function applyHighlights() {
 function revealQuote(c) {
   if (!c.section) return;
   if (c.quote.startsWith("plan · ")) { setTab("plan"); return; }
-  setTab("doc");
+  setTab(tabOf(c.section));
   const r = findQuote(c.section, c.quote, c.prefix);
   if (r) {
     r.startContainer.parentElement.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -474,7 +497,7 @@ function revealQuote(c) {
 }
 
 function scrollToSection(id) {
-  setTab("doc");
+  setTab(tabOf(id));
   const s = document.getElementById(`sec-${id}`);
   if (s) s.scrollIntoView({ block: "start", behavior: "smooth" });
 }
@@ -487,7 +510,7 @@ function currentSelection() {
   const range = sel.getRangeAt(0);
   const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
   const sec = start.closest(".sec");
-  if (!sec || !$("#doc").contains(sec)) return null;
+  if (!sec || !sec.closest("#doc, #code")) return null;
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;

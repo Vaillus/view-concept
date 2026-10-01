@@ -16,6 +16,12 @@ reach the Claude Code session through the inbox.
         claude.json     the Claude Code session driving this one     (written by `new`, `open`)
         threads/<id>.json  a side thread: messages, its own Claude session id  (server)
 
+An outline item in plan.json is {id, title, earns}, plus `kind: "question"` (with `from`,
+the comments it answers) for a section added during the review, and `part: 2` for a
+section of Part 2 of a PR review (per-item cards, the at-a-glance table, the changes
+applied to the code): the page shows those in a "code" tab of their own instead of the
+explanation.
+
 A side thread is a separate headless Claude conversation, forked from the session in
 claude.json, that the user opens from the page to discuss a passage without changing
 anything (see threads.py). Only a comment batch reaches the main session.
