@@ -38,7 +38,7 @@ the concept behind it is what the row stands for (« an item is one unit of the
 diff that gets a verdict »). Name the concept, and cite the part.
 
 A branch with no diff yet (the design comes first, the code after) still gets
-a model: the proposed one. Say so in the first section of Part 1, and mark
+a model: the proposed one. Say so in the proposal section of Part 1, and mark
 each concept you propose yourself, as opposed to one the user asked for, so
 the user reads Part 1 as a proposal to approve, not a description to check.
 
@@ -99,18 +99,24 @@ not in the Explanation tab.
 
 The Phase 2 outline is this fixed skeleton:
 
-1. **What the PR does, and what it does not.** One paragraph, and the
-   boundary.
-2. **The problem it solves.** The job the PR does for its user, or the
-   questions it lets them answer, in the user's terms and before any concept.
-   Each concept in the next sections serves part of this job; a concept that
-   serves none is a finding.
-3. **One section per concept** it introduces or changes: what it is, its
+1. **Today.** What the user works with before the PR, shown on a real
+   example: an existing session, a real file, a command and its output. No
+   new concept yet; only the vocabulary the code already has.
+2. **What goes wrong.** The problems the example shows, in the user's terms:
+   what they cannot do, what breaks, what is confusing. Each concept later in
+   Part 1 answers one of them; a concept that answers none is a finding.
+3. **The proposal.** What the PR changes, shown on the same example after the
+   change: a mockup of the page or the output, or a before/after Mermaid
+   diagram. Say what the PR does not do. When the branch has no diff yet,
+   say here that the model is a proposal.
+4. **One section per concept** it introduces or changes: what it is, its
    rules, where it is implemented (cited). Concepts in the order they depend
-   on each other, starting from the one the others are defined by.
-4. **How the concepts fit the existing code.** What existed before; what each
-   new concept replaces, extends or duplicates; names that clash with existing
-   ones. A Mermaid diagram, before and after.
+   on each other, starting from the one the others are defined by. Names
+   that clash with existing ones are said here.
+
+The order is fixed: the user reads the concepts after seeing what they are
+for. A concept-first Part 1, with no picture of the result, was too abstract
+to discuss.
 
 Write only these sections in Phase 5, then run the Phase 6 audit on them: the
 vocabulary of the model is what the agents and the code will inherit.
