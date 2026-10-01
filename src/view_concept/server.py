@@ -69,7 +69,7 @@ def state(slug: str) -> dict[str, Any]:
         audit = s.read_audit()
         comments = s.read_comments()
         status = s.read_status()
-        decisions = s.read_decisions()
+        changes = s.read_changes()
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
     # The hover text of a term: its developed `tip` when Claude wrote one, else the
@@ -83,7 +83,7 @@ def state(slug: str) -> dict[str, Any]:
         "sections": {k: {"md": v, "html": md.render(v)} for k, v in sections.items()},
         "audit": audit,
         "comments": comments,
-        "decisions": decisions,
+        "changes": changes,
     }
 
 

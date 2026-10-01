@@ -6,7 +6,7 @@ from view_concept.store import (
     Session,
     SessionError,
     format_batch,
-    format_decisions,
+    format_changes,
     list_sessions,
 )
 
@@ -95,6 +95,25 @@ def test_approve_plan_batch(session):
         session.add_batch([], action="delete-everything")
 
 
+def test_approve_model_batch(session):
+    session.write_status("awaiting-model")
+    b = session.add_batch([{"text": "rename it"}], action="approve-model")
+    assert b["action"] == "approve-model"
+    out = format_batch("kv-cache", b, session.read_plan()["outline"])
+    assert (
+        "action: approve-model (the user approved the model from the page: "
+        "start the implementation)"
+    ) in out
+
+
+def test_review_code_batch(session):
+    session.write_status("awaiting-review")
+    b = session.add_batch([{"text": "check the tests too"}], action="review-code")
+    assert b["action"] == "review-code"
+    out = format_batch("kv-cache", b, session.read_plan()["outline"])
+    assert "action: review-code (the user asked to start the code review from the page)" in out
+
+
 def test_code_session_needs_repo(tmp_path):
     with pytest.raises(SessionError):
         Session("x", tmp_path).create("X", kind="code")
@@ -103,12 +122,12 @@ def test_code_session_needs_repo(tmp_path):
     assert s.read_plan()["repo"] == str(tmp_path.resolve())
 
 
-def test_decisions(session, tmp_path):
-    d = session.add_decision("Keep one inbox", why="Simpler", instead="a socket", files=["a.py"])
-    assert d["id"] == "d1"
-    assert format_decisions(session.read_decisions()) == (
+def test_changes(session, tmp_path):
+    d = session.add_change("Keep one inbox", why="Simpler", instead="a socket", files=["a.py"])
+    assert d["id"] == "m1" and session.changes_path.name == "changes.json"
+    assert format_changes(session.read_changes()) == (
         "- Keep one inbox, rather than a socket. Simpler (`a.py`)"
     )
-    assert "## Decisions" in session.render_markdown()
+    assert "## Model changes" in session.render_markdown()
     with pytest.raises(SessionError):
-        session.add_decision(" ")
+        session.add_change(" ")

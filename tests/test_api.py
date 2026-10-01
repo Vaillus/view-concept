@@ -44,3 +44,11 @@ def test_api_threads(client, session):
     r = client.get("/api/s/kv-cache/threads").json()
     assert r["forkable"] and r["threads"][0]["id"] == "t1"
     assert client.post("/api/s/kv-cache/threads/x1", json={"text": "hi"}).status_code == 400
+
+
+def test_api_keeps_the_part_of_an_outline_item(client, session):
+    plan = session.read_plan()
+    plan["outline"].append({"id": "s9", "title": "Cards", "part": 2})
+    session.plan_path.write_text(json.dumps(plan))
+    outline = client.get("/api/s/kv-cache").json()["plan"]["outline"]
+    assert outline[-1]["part"] == 2

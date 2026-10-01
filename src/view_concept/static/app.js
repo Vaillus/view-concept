@@ -1,7 +1,8 @@
 /* view-concept — the session page.
 
-   Two tabs share the main space, the plan (outline, decisions, lexicon) and the
-   explanation (one block per outline section); the review pane (draft comments, then
+   Tabs share the main space: the plan (outline, model changes, lexicon), the
+   explanation (one block per outline section) and, in a PR review that has reached the
+   code, the code tab (the sections of Part 2); the review pane (draft comments, then
    sent batches, side threads) stays on the right. The page never
    edits the explanation: Claude Code writes the files, the server streams "changed",
    the page re-fetches. The page writes batches of comments, and side threads: separate
@@ -23,7 +24,7 @@ const updated = new Set(); // sections rewritten since the user last acknowledge
 let planChanged = false;
 let drafts = loadJSON(DRAFTS_KEY, []);
 let pendingSelection = null;
-let tab = null;          // "plan" | "doc"
+let tab = null;          // "plan" | "doc" | "code"
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
 const openThreads = new Set(); // thread ids shown expanded
@@ -100,6 +101,14 @@ const numberOf = (id) => {
 };
 const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).title || id;
 
+/* Part 2 of a PR review (outline items with "part": 2: per-item cards, the table, the
+   changes applied to the code) is read in its own tab, "code"; every other section is
+   in the explanation. Both tabs are rendered by the same code, into their own view. */
+const isPart2 = (id) => (state.plan.outline.find((s) => s.id === id) || {}).part === 2;
+const tabOf = (id) => (isPart2(id) ? "code" : "doc");
+const hasCodeTab = () => state.plan.outline.some((s) => s.part === 2);
+const docViews = () => [$("#doc"), $("#code")];
+
 function render() {
   const { plan } = state;
   document.title = `${plan.title} · view-concept`;
@@ -112,11 +121,16 @@ function render() {
 }
 
 /* ---------------- tabs ----------------
-   The plan and the explanation share one space; one is shown at a time. The tab follows
-   the session at the two moments that matter — the plan waiting for approval, the
-   writing starting — and otherwise stays where the user put it. */
+   The plan, the explanation and the code tab share one space; one is shown at a time.
+   The code tab exists only once an outline item is in Part 2. The tab follows the
+   session at the two moments that matter — the plan waiting for approval, the writing
+   starting (in the tab of the section being written) — and otherwise stays where the
+   user put it. A model waiting for approval does not move it, nor does a code review
+   waiting to start: the model is read in the explanation, and « Approve model » and
+   « Review code » sit at its end. */
 
 function setTab(name) {
+  if (name === "code" && !hasCodeTab()) name = "doc";
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === name));
@@ -128,13 +142,18 @@ function followSession() {
   if (tab === null) setTab(Object.keys(state.sections).length && phase !== "awaiting-approval" ? "doc" : "plan");
   else if (phase !== lastPhase) {
     if (phase === "awaiting-approval") setTab("plan");
-    if (phase === "writing") setTab("doc");
+    if (phase === "writing") setTab(tabOf(state.status.section));
   }
   lastPhase = phase;
-  const docTab = $('.tab[data-tab="doc"]');
-  docTab.replaceChildren(...["explanation",
-    updated.size ? el("span", { class: "badge flag", text: `${updated.size} updated` }) : null,
-    phase === "writing" ? el("span", { class: "badge accent writing", text: "writing" }) : null].filter(Boolean));
+  $('.tab[data-tab="code"]').hidden = !hasCodeTab();
+  if (tab === "code" && !hasCodeTab()) setTab("doc");
+  for (const [name, label] of [["doc", "explanation"], ["code", "code"]]) {
+    const n = [...updated].filter((id) => tabOf(id) === name).length;
+    const writing = phase === "writing" && tabOf(state.status.section) === name;
+    $(`.tab[data-tab="${name}"]`).replaceChildren(...[label,
+      n ? el("span", { class: "badge flag", text: `${n} updated` }) : null,
+      writing ? el("span", { class: "badge accent writing", text: "writing" }) : null].filter(Boolean));
+  }
 }
 
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -142,43 +161,70 @@ document.addEventListener("keydown", (e) => {
   if (e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "1") setTab("plan");
   if (e.key === "2") setTab("doc");
+  if (e.key === "3" && hasCodeTab()) setTab("code");
 });
 
-/* ---------------- status + plan approval ---------------- */
+/* ---------------- status + approvals ---------------- */
 
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
 
-/* The plan is approved from the page by a batch carrying action "approve-plan". Until
-   Claude moves the status on, the page says the approval is on its way. */
+/* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
+   model of a PR review ("awaiting-model", set by the view-pr skill only), and the start
+   of its code review once the implementation is done ("awaiting-review", view-pr too).
+   Each is answered from the page by a batch carrying the phase's action, draft comments
+   included. Until Claude moves the status on, the page says the answer is on its way.
+   « Approve plan » sits at the top of the Plan tab, and the page switches to it. The two
+   PR-review phases share one button at the end of the explanation, after the last
+   section of Part 1, where the model is read; the page does not switch tabs for them. */
+const docButton = el("button", { id: "doc-approve", class: "btn primary approve doc-approve", hidden: true });
+const APPROVALS = {
+  "awaiting-approval": { action: "approve-plan", label: "Approve plan", toast: "Plan approved",
+                         ready: "plan ready · waiting for your approval", sent: "plan approved · Claude is starting" },
+  "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved", button: docButton,
+                      ready: "model ready · waiting for your approval", sent: "model approved · Claude is implementing" },
+  "awaiting-review": { action: "review-code", label: "Review code", toast: "Code review requested", button: docButton,
+                       ready: "implementation done · waiting for you to start the code review",
+                       sent: "code review requested · Claude is starting" },
+};
+const buttonOf = (approval) => approval.button || $("#approve");
+
 function approvalPending() {
+  const approval = APPROVALS[state.status.phase];
+  if (!approval) return false;
   const since = state.status.since || "";
-  return state.comments.batches.some((b) => b.action === "approve-plan" && b.sent >= since);
+  return state.comments.batches.some((b) => b.action === approval.action && b.sent >= since);
 }
 
 function renderStatus() {
   const { phase, section, message } = state.status;
+  const approval = APPROVALS[phase];
   const labels = {
     scoping: "scoping the question",
     planning: "drafting the plan",
-    "awaiting-approval": approvalPending() ? "plan approved · Claude is starting" : "plan ready · waiting for your approval",
+    ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
     writing: section ? `writing §${numberOf(section)} ${titleOf(section)}` : "writing",
     audit: "vocabulary audit",
     revising: "revising",
   };
   const active = ["scoping", "planning", "writing", "audit", "revising"].includes(phase) ||
-                 (phase === "awaiting-approval" && approvalPending());
+                 (approval && approvalPending());
   const p = $("#phase");
   p.hidden = !labels[phase];
-  p.className = `phase ${active ? "active" : ""} ${phase === "awaiting-approval" && !approvalPending() ? "ask" : ""}`;
+  p.className = `phase ${active ? "active" : ""} ${approval && !approvalPending() ? "ask" : ""}`;
   p.textContent = [labels[phase], message].filter(Boolean).join(" · ");
 
-  const btn = $("#approve");
-  btn.hidden = phase !== "awaiting-approval" || approvalPending();
+  $("#approve").hidden = docButton.hidden = true;
+  if (!approval) return;
+  const btn = buttonOf(approval);
+  btn.hidden = approvalPending();
   const n = drafts.filter((d) => d.text.trim()).length;
-  btn.textContent = n ? `Approve plan + send ${n} comment${n > 1 ? "s" : ""}` : "Approve plan";
+  btn.textContent = n ? `${approval.label} + send ${n} comment${n > 1 ? "s" : ""}` : approval.label;
 }
 
-$("#approve").addEventListener("click", () => send("approve-plan"));
+for (const b of [$("#approve"), docButton]) b.addEventListener("click", () => {
+  const approval = APPROVALS[state.status.phase];
+  if (approval) send(approval.action);
+});
 
 function renderPlan() {
   const { plan } = state;
@@ -209,7 +255,7 @@ function renderPlan() {
       s.earns ? el("div", { class: "o-earns muted", text: s.earns }) : null);
   }));
 
-  renderDecisions();
+  renderChanges();
 
   const lex = $("#lexicon");
   lex.replaceChildren();
@@ -225,12 +271,12 @@ function renderPlan() {
   }
 }
 
-function renderDecisions() {
-  const list = state.decisions || [];
-  $("#decisions-head").hidden = !list.length;
-  $("#decisions").replaceChildren(...list.map((d) => {
-    const item = el("li", { class: "decision" },
-      el("div", {}, el("span", { class: "num", text: d.id }), " ", d.decision),
+function renderChanges() {
+  const list = state.changes || [];
+  $("#changes-head").hidden = !list.length;
+  $("#changes").replaceChildren(...list.map((d) => {
+    const item = el("li", { class: "change" },
+      el("div", {}, el("span", { class: "num", text: d.id }), " ", d.change),
       d.instead ? el("div", { class: "d-instead dim", text: `rather than ${d.instead}` }) : null,
       d.why ? el("div", { class: "d-why muted", text: d.why }) : null);
     if (d.files && d.files.length) {
@@ -250,35 +296,41 @@ function renderDoc() {
   const items = outlineItems();
   if (!items.length) {
     doc.replaceChildren(el("p", { class: "dim empty", text: "Waiting for the plan…" }));
+    $("#code").replaceChildren();
     return;
   }
-  doc.replaceChildren(...items.map((s) => {
-    const body = el("div", { class: "body" });
-    const written = s.id in state.sections;
-    if (written) body.innerHTML = state.sections[s.id].html;
-    else if (writingId() === s.id) body.append(el("p", { class: "writing-line", text: "writing" }));
-    const cls = ["sec", written ? "" : "unwritten", updated.has(s.id) ? "updated" : ""].join(" ");
-    return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
-      el("h2", {},
-        el("span", { class: "num", text: numberOf(s.id) }), " ", s.title,
-        s.kind === "question" && s.from && s.from.length
-          ? el("span", { class: "q-from dim", text: `from ${[].concat(s.from).join(", ")}` }) : null,
-        updated.has(s.id)
-          ? el("button", { class: "badge flag", text: "updated · ok", title: "Mark as read",
-                           onclick: (e) => { e.stopPropagation(); updated.delete(s.id); render(); } })
-          : null,
-        el("button", { class: "sec-comment", text: "+ comment section", title: "Comment on the whole section",
-                       onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }) }),
-        el("button", { class: "sec-comment ask", text: "ask", title: "Open a side thread about this section",
-                       onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }, "ask") })),
-      body);
-  }));
-  typesetMath(doc);
-  linkCitations(doc);
-  renderMermaid(doc);
-  annotateAudit(doc);
-  annotateLexicon(doc);
+  doc.replaceChildren(...items.filter((s) => tabOf(s.id) === "doc").map(sectionBlock), docButton);
+  $("#code").replaceChildren(...items.filter((s) => tabOf(s.id) === "code").map(sectionBlock));
+  for (const view of docViews()) {
+    typesetMath(view);
+    linkCitations(view);
+    renderMermaid(view);
+    annotateAudit(view);
+    annotateLexicon(view);
+  }
   applyHighlights();
+}
+
+function sectionBlock(s) {
+  const body = el("div", { class: "body" });
+  const written = s.id in state.sections;
+  if (written) body.innerHTML = state.sections[s.id].html;
+  else if (writingId() === s.id) body.append(el("p", { class: "writing-line", text: "writing" }));
+  const cls = ["sec", written ? "" : "unwritten", updated.has(s.id) ? "updated" : ""].join(" ");
+  return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
+    el("h2", {},
+      el("span", { class: "num", text: numberOf(s.id) }), " ", s.title,
+      s.kind === "question" && s.from && s.from.length
+        ? el("span", { class: "q-from dim", text: `from ${[].concat(s.from).join(", ")}` }) : null,
+      updated.has(s.id)
+        ? el("button", { class: "badge flag", text: "updated · ok", title: "Mark as read",
+                         onclick: (e) => { e.stopPropagation(); updated.delete(s.id); render(); } })
+        : null,
+      el("button", { class: "sec-comment", text: "+ comment section", title: "Comment on the whole section",
+                     onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }) }),
+      el("button", { class: "sec-comment ask", text: "ask", title: "Open a side thread about this section",
+                     onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }, "ask") })),
+    body);
 }
 
 function typesetMath(root) {
@@ -444,7 +496,7 @@ function applyHighlights() {
 function revealQuote(c) {
   if (!c.section) return;
   if (c.quote.startsWith("plan · ")) { setTab("plan"); return; }
-  setTab("doc");
+  setTab(tabOf(c.section));
   const r = findQuote(c.section, c.quote, c.prefix);
   if (r) {
     r.startContainer.parentElement.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -456,7 +508,7 @@ function revealQuote(c) {
 }
 
 function scrollToSection(id) {
-  setTab("doc");
+  setTab(tabOf(id));
   const s = document.getElementById(`sec-${id}`);
   if (s) s.scrollIntoView({ block: "start", behavior: "smooth" });
 }
@@ -469,7 +521,7 @@ function currentSelection() {
   const range = sel.getRangeAt(0);
   const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
   const sec = start.closest(".sec");
-  if (!sec || !$("#doc").contains(sec)) return null;
+  if (!sec || !sec.closest("#doc, #code")) return null;
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;
@@ -607,7 +659,8 @@ $("#note").addEventListener("keydown", (e) => {
 $("#send").addEventListener("click", () => send());
 
 async function send(action = "") {
-  const btn = action ? $("#approve") : $("#send");
+  const approval = Object.values(APPROVALS).find((a) => a.action === action);
+  const btn = approval ? buttonOf(approval) : $("#send");
   if (btn.disabled) return;
   btn.disabled = true;
   const r = await fetch(`/api/s/${SLUG}/batch`, {
@@ -626,7 +679,7 @@ async function send(action = "") {
   saveJSON(DRAFTS_KEY, drafts);
   $("#note").value = "";
   saveJSON(NOTE_KEY, "");
-  toast(action ? "Plan approved" : `Sent ${b.id} to the session`);
+  toast(approval ? approval.toast : `Sent ${b.id} to the session`);
   await load();
 }
 

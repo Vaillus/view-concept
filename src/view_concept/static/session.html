@@ -24,6 +24,7 @@
     <nav class="tabs">
       <button class="tab" data-tab="plan" title="Plan (1)">plan</button>
       <button class="tab" data-tab="doc" title="Explanation (2)">explanation</button>
+      <button class="tab" data-tab="code" title="Code review, Part 2 (3)" hidden>code</button>
     </nav>
     <div id="plan-view" class="view plan" data-view="plan">
       <div class="plan-inner">
@@ -31,13 +32,14 @@
         <div id="revision" class="revision" hidden></div>
         <div class="pane-head">outline</div>
         <ol id="outline" class="outline"></ol>
-        <div id="decisions-head" class="pane-head" hidden>decisions</div>
-        <ol id="decisions" class="decisions"></ol>
+        <div id="changes-head" class="pane-head" hidden>model changes</div>
+        <ol id="changes" class="changes"></ol>
         <div class="pane-head">lexicon</div>
         <table id="lexicon" class="lexicon"></table>
       </div>
     </div>
     <article id="doc" class="view doc" data-view="doc"></article>
+    <article id="code" class="view doc" data-view="code"></article>
   </section>
 
   <aside class="review">

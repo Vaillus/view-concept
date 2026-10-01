@@ -39,6 +39,7 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .phase.ask { color: var(--on-flag); background: var(--flag); padding: 0 8px; }
 @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 .approve { width: 100%; margin-bottom: 10px; padding: 4px; }
+.doc > .doc-approve { display: block; width: 100%; margin-top: 24px; }
 
 /* ---- layout: tabbed workspace + review pane ---- */
 .layout { flex: 1; display: grid; grid-template-columns: 1fr minmax(300px, 26%); min-height: 0; }
@@ -113,13 +114,13 @@ textarea:focus { outline: none; border-color: var(--accent); }
 ::highlight(ev-thread) { background-color: var(--altbg); }
 ::highlight(ev-focus) { background-color: var(--accent); color: var(--on-accent); }
 
-/* ---- code sessions: citations, questions, decisions ---- */
+/* ---- code sessions: citations, questions, model changes ---- */
 a.cite { text-decoration: none; }
 a.cite code { color: var(--info); background: var(--infobg); }
 a.cite:hover code { text-decoration: underline; }
 .q-from { font-size: 11px; font-weight: normal; }
-.decisions { list-style: none; margin: 0 0 16px; padding: 0; }
-.decision { padding: 6px 8px; border-left: 2px solid var(--ok); margin-bottom: 6px; }
+.changes { list-style: none; margin: 0 0 16px; padding: 0; }
+.change { padding: 6px 8px; border-left: 2px solid var(--ok); margin-bottom: 6px; }
 .d-instead, .d-why { font-size: 12px; line-height: 17px; margin-top: 2px; }
 .d-files { font-size: 11px; margin-top: 2px; }
 .d-files a.cite, .d-files code { font-size: 11px; }
