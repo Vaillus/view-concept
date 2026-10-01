@@ -127,9 +127,9 @@ function followSession() {
   }
   lastPhase = phase;
   const docTab = $('.tab[data-tab="doc"]');
-  docTab.replaceChildren("explanation",
+  docTab.replaceChildren(...["explanation",
     updated.size ? el("span", { class: "badge flag", text: `${updated.size} updated` }) : null,
-    phase === "writing" ? el("span", { class: "badge accent writing", text: "writing" }) : null);
+    phase === "writing" ? el("span", { class: "badge accent writing", text: "writing" }) : null].filter(Boolean));
 }
 
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
