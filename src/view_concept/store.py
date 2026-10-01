@@ -16,11 +16,14 @@ reach the Claude Code session through the inbox.
         claude.json     the Claude Code session driving this one     (written by `new`, `open`)
         threads/<id>.json  a side thread: messages, its own Claude session id  (server)
 
-An outline item in plan.json is {id, title, earns}, plus `kind: "question"` (with `from`,
-the comments it answers) for a section added during the review, and `part: 2` for a
-section of Part 2 of a PR review (per-item cards, the at-a-glance table, the changes
-applied to the code): the page shows those in a "code" tab of their own instead of the
-explanation.
+A section is one element of the `outline` list in plan.json: {id, title, earns}, plus
+`kind: "question"` (with `from`, the comments it answers) for a section added during the
+review. A refactor section, marked `part: 2`, belongs to Part 2 of a PR review and is
+shown in the refactor tab; every other section is an explanation section, shown in the
+Explanation tab. A refactor section about one item of the diff carries its item fields
+under `item`: {files, verdict (conforms, diverges, out-of-pr, throw, split or move),
+implements, note, relations: [{to, kind}]}. One with `kind: "finding"` and
+`items: [<section ids>]` is a finding across items.
 
 A side thread is a separate headless Claude conversation, forked from the session in
 claude.json, that the user opens from the page to discuss a passage without changing
@@ -47,7 +50,7 @@ VAULT_DIR = Path(
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
 # "awaiting-model" (set by the view-pr skill only) « Approve model », and "awaiting-review"
-# (set by the view-pr skill at the end of step 2) « Review code ».
+# (set by the view-pr skill at the end of model matching) « Review code ».
 PHASES = (
     "scoping",
     "planning",
