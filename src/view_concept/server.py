@@ -117,7 +117,7 @@ class CommentIn(BaseModel):
     section: str = ""
     quote: str = ""
     prefix: str = ""
-    text: str
+    text: str = ""
     thread: str = ""
 
 
@@ -181,6 +181,18 @@ def thread_message(slug: str, tid: str, body: MessageIn) -> dict[str, Any]:
         raise HTTPException(409, str(e)) from e
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
+
+
+@app.delete("/api/s/{slug}/threads/{tid}")
+def thread_delete(slug: str, tid: str) -> dict[str, bool]:
+    s = get_session(slug)
+    try:
+        threads.delete(s, tid)
+    except threads.ThreadBusy as e:
+        raise HTTPException(409, str(e)) from e
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True}
 
 
 @app.post("/api/s/{slug}/threads/{tid}/stop")

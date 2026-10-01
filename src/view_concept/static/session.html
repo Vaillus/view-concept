@@ -16,6 +16,8 @@
   <span id="title" class="title"></span>
   <span id="phase" class="phase" hidden></span>
   <span id="live" class="live off" title="Live updates from the session">offline</span>
+  <span id="general-threads" class="t-chips"></span>
+  <button id="new-thread" class="btn" title="Open a side thread not tied to a passage">ask</button>
   <button id="export" class="btn">Export to vault</button>
 </header>
 
@@ -48,10 +50,6 @@
     <div id="drafts"></div>
     <textarea id="note" class="note" rows="3" placeholder="General note for the whole batch (optional)"></textarea>
     <button id="send" class="btn primary" disabled>Send</button>
-    <div class="pane-head">threads <button id="new-thread" class="head-btn" title="A side conversation, not tied to a passage">+ new</button></div>
-    <p class="hint dim">« ask » opens a side thread: a separate conversation forked from the session, read-only. It changes nothing; « → batch » turns its conclusion into a comment.</p>
-    <p id="no-parent" class="hint flag-text" hidden>No Claude Code session is recorded for this explanation, so threads start fresh from the files. Running <code>view-concept open</code> from the session records it.</p>
-    <div id="threads"></div>
     <div class="pane-head">sent</div>
     <div id="sent"></div>
   </aside>
@@ -63,12 +61,14 @@
 </div>
 <div id="composer" class="composer" hidden>
   <div class="composer-quote"></div>
+  <p id="no-parent" class="hint flag-text" hidden>No Claude Code session is recorded for this explanation, so the thread starts fresh from the files. Running <code>view-concept open</code> from the session records it.</p>
   <textarea rows="4" placeholder="Your comment  (⌘↵ to add, Esc to cancel)"></textarea>
   <div class="composer-actions">
     <button class="btn cancel">Cancel</button>
     <button class="btn primary add">Add</button>
   </div>
 </div>
+<div id="thread-pop" class="thread-pop" hidden></div>
 <div id="tip" class="tip" hidden></div>
 <div id="toast" class="toast" hidden></div>
 

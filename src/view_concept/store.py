@@ -302,6 +302,17 @@ class Session:
         self.write_thread(thread)
         return thread
 
+    def delete_thread(self, tid: str) -> None:
+        """Delete a thread that led to nothing. One a sent comment points to is kept: the
+        session reads it to act on that comment."""
+        path = self.thread_path(tid)
+        if not path.exists():
+            raise SessionError(f"no thread {tid!r}")
+        sent = (c for b in self.read_comments()["batches"] for c in b["comments"])
+        if any(c.get("thread") == tid for c in sent):
+            raise SessionError(f"{tid} was sent in a batch")
+        path.unlink()
+
     # ---- comments ----
     def add_batch(
         self, comments: list[dict[str, Any]], note: str = "", action: str = ""
@@ -316,7 +327,8 @@ class Session:
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         note = note.strip()
-        comments = [c for c in comments if str(c.get("text", "")).strip()]
+        # A comment from a side thread may have no text: the thread's conclusion is the comment.
+        comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
         if not comments and not note and not action:
             raise SessionError("empty batch")
         data = self.read_comments()
@@ -333,7 +345,7 @@ class Session:
                     "section": str(c.get("section", "")),
                     "quote": str(c.get("quote", "")),
                     "prefix": str(c.get("prefix", "")),
-                    "text": str(c["text"]).strip(),
+                    "text": str(c.get("text", "")).strip(),
                     "thread": str(c.get("thread", "")),
                     "status": "sent",
                 }

@@ -121,3 +121,27 @@ def test_comment_from_a_thread(session):
     b = session.add_batch([{"section": "s1", "text": "rewrite it", "thread": "t3"}])
     out = format_batch("kv-cache", b, session.read_plan()["outline"])
     assert "(from side thread t3: threads/t3.json)" in out
+
+
+def test_comment_from_a_thread_needs_no_text(session):
+    b = session.add_batch([{"section": "s1", "thread": "t3"}, {"section": "s2", "text": " "}])
+    assert [(c["text"], c["thread"]) for c in b["comments"]] == [("", "t3")]
+    out = format_batch("kv-cache", b, session.read_plan()["outline"])
+    assert "(from side thread t3: threads/t3.json)" in out
+
+
+def test_delete_thread(session, fake_claude):
+    session.new_thread()
+    session.new_thread()
+    threads.delete(session, "t1")
+    assert [t["id"] for t in session.read_threads()] == ["t2"]
+    session.add_batch([{"thread": "t2"}])
+    with pytest.raises(SessionError):  # a sent comment points to it
+        threads.delete(session, "t2")
+    with pytest.raises(SessionError):
+        threads.delete(session, "t9")
+    threads.create(session, "", "", "", "SLOW")
+    with pytest.raises(threads.ThreadBusy):
+        threads.delete(session, "t3")
+    threads.stop(session, "t3")
+    wait_idle(session, "t3")

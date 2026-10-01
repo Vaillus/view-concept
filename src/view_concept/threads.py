@@ -106,6 +106,13 @@ def stop(s: Session, tid: str) -> None:
             proc.terminate()
 
 
+def delete(s: Session, tid: str) -> None:
+    with _lock:
+        if is_running(s, tid):
+            raise ThreadBusy(f"{tid} is still answering")
+        s.delete_thread(tid)
+
+
 def _cwd(s: Session) -> Path:
     """The repo of a code session (the thread may read it), else the session dir."""
     repo = Path(s.read_plan().get("repo", "") or s.dir)
