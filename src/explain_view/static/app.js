@@ -2,9 +2,10 @@
 
    Two tabs share the main space, the plan (outline, decisions, lexicon) and the
    explanation (one block per outline section); the review pane (draft comments, then
-   sent batches) stays on the right. The page never
+   sent batches, side threads) stays on the right. The page never
    edits the explanation: Claude Code writes the files, the server streams "changed",
-   the page re-fetches. The only thing the page writes is a batch of comments.
+   the page re-fetches. The page writes batches of comments, and side threads: separate
+   read-only Claude conversations run by the server, streamed through "threads" events.
 
    A comment is anchored by (section id, quoted text, a few characters of prefix). The
    quote is searched again after every re-render, so an anchor survives edits elsewhere
@@ -24,6 +25,9 @@ let drafts = loadJSON(DRAFTS_KEY, []);
 let pendingSelection = null;
 let tab = null;          // "plan" | "doc"
 let lastPhase = null;
+let threadsState = { forkable: true, threads: [] };
+const openThreads = new Set(); // thread ids shown expanded
+const cards = new Map();       // thread id -> its card's DOM parts, built once
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -78,6 +82,7 @@ function connect() {
   const live = $("#live");
   es.addEventListener("hello", () => { live.textContent = "live"; live.className = "live on"; });
   es.addEventListener("changed", () => load());
+  es.addEventListener("threads", () => loadThreads());
   es.onerror = () => { live.textContent = "offline"; live.className = "live off"; };
 }
 
@@ -115,7 +120,7 @@ function setTab(name) {
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === name));
-  $("#comment-btn").hidden = true;
+  $("#sel-actions").hidden = true;
 }
 
 function followSession() {
@@ -127,9 +132,9 @@ function followSession() {
   }
   lastPhase = phase;
   const docTab = $('.tab[data-tab="doc"]');
-  docTab.replaceChildren("explanation",
+  docTab.replaceChildren(...["explanation",
     updated.size ? el("span", { class: "badge flag", text: `${updated.size} updated` }) : null,
-    phase === "writing" ? el("span", { class: "badge accent writing", text: "writing" }) : null);
+    phase === "writing" ? el("span", { class: "badge accent writing", text: "writing" }) : null].filter(Boolean));
 }
 
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -263,7 +268,9 @@ function renderDoc() {
                            onclick: (e) => { e.stopPropagation(); updated.delete(s.id); render(); } })
           : null,
         el("button", { class: "sec-comment", text: "+ comment section", title: "Comment on the whole section",
-                       onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }) })),
+                       onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }) }),
+        el("button", { class: "sec-comment ask", text: "ask", title: "Open a side thread about this section",
+                       onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }, "ask") })),
       body);
   }));
   typesetMath(doc);
@@ -428,11 +435,14 @@ function applyHighlights() {
   const sentRanges = state.comments.batches.flatMap((b) => b.comments)
     .filter((c) => c.status === "sent")
     .map((c) => findQuote(c.section, c.quote, c.prefix)).filter(Boolean);
+  const threadRanges = threadsState.threads.map((t) => findQuote(t.section, t.quote, t.prefix)).filter(Boolean);
   CSS.highlights.set("ev-draft", new Highlight(...draftRanges));
   CSS.highlights.set("ev-sent", new Highlight(...sentRanges));
+  CSS.highlights.set("ev-thread", new Highlight(...threadRanges));
 }
 
 function revealQuote(c) {
+  if (!c.section) return;
   if (c.quote.startsWith("plan · ")) { setTab("plan"); return; }
   setTab("doc");
   const r = findQuote(c.section, c.quote, c.prefix);
@@ -471,10 +481,10 @@ function currentSelection() {
 }
 
 document.addEventListener("mouseup", (e) => {
-  if (e.target.closest("#composer, #comment-btn")) return;
+  if (e.target.closest("#composer, #sel-actions")) return;
   setTimeout(() => {
     const s = currentSelection();
-    const btn = $("#comment-btn");
+    const btn = $("#sel-actions");
     if (!s) { btn.hidden = true; pendingSelection = null; return; }
     pendingSelection = s;
     btn.hidden = false;
@@ -483,19 +493,30 @@ document.addEventListener("mouseup", (e) => {
   }, 0);
 });
 
-$("#comment-btn").addEventListener("mousedown", (e) => e.preventDefault());
-$("#comment-btn").addEventListener("click", () => {
+$("#sel-actions").addEventListener("mousedown", (e) => e.preventDefault());
+$("#sel-actions .comment").addEventListener("click", () => {
   if (pendingSelection) openComposer(pendingSelection);
 });
+$("#sel-actions .ask").addEventListener("click", () => {
+  if (pendingSelection) openComposer(pendingSelection, "ask");
+});
 
-function openComposer(target) {
-  $("#comment-btn").hidden = true;
+/* The composer writes either a draft comment ("comment") or the first message of a
+   new side thread ("ask"). */
+function openComposer(target, mode = "comment") {
+  $("#sel-actions").hidden = true;
   const c = $("#composer");
   c.hidden = false;
   c._target = target;
+  c._mode = mode;
   $(".composer-quote", c).textContent = target.quote
     ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
-    : `whole section §${numberOf(target.section)} ${titleOf(target.section)}`;
+    : target.section ? `whole section §${numberOf(target.section)} ${titleOf(target.section)}`
+    : "general question, no passage";
+  $(".add", c).textContent = mode === "ask" ? "Ask" : "Add";
+  $("textarea", c).placeholder = mode === "ask"
+    ? "Your question for a side thread  (⌘↵ to ask, Esc to cancel)"
+    : "Your comment  (⌘↵ to add, Esc to cancel)";
   const rect = target.rect || document.getElementById(`sec-${target.section}`).getBoundingClientRect();
   c.style.top = `${window.scrollY + Math.min(rect.bottom + 6, innerHeight - 220)}px`;
   c.style.left = `${Math.min(Math.max(8, rect.left), innerWidth - 380)}px`;
@@ -505,6 +526,11 @@ function openComposer(target) {
 }
 
 function closeComposer() { $("#composer").hidden = true; }
+
+function submitComposer() {
+  if ($("#composer")._mode === "ask") askThread();
+  else addDraft();
+}
 
 function addDraft() {
   const c = $("#composer");
@@ -519,20 +545,22 @@ function addDraft() {
   applyHighlights();
 }
 
-$("#composer .add").addEventListener("click", addDraft);
+$("#composer .add").addEventListener("click", submitComposer);
 $("#composer .cancel").addEventListener("click", closeComposer);
 $("#composer textarea").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); addDraft(); }
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitComposer(); }
   if (e.key === "Escape") closeComposer();
 });
 
 /* ---------------- review pane ---------------- */
 
 function quoteLine(c) {
-  const where = `§${numberOf(c.section)}`;
-  const q = c.quote ? `« ${c.quote.length > 90 ? c.quote.slice(0, 90) + "…" : c.quote} »` : "whole section";
+  const where = c.section ? `§${numberOf(c.section)}` : "·";
+  const q = c.quote ? `« ${c.quote.length > 90 ? c.quote.slice(0, 90) + "…" : c.quote} »`
+          : c.section ? "whole section" : "general";
   return el("div", { class: "c-quote", onclick: () => revealQuote(c) },
-    el("span", { class: "num", text: where }), " ", q);
+    el("span", { class: "num", text: where }), " ", q,
+    c.thread ? el("span", { class: "badge alt", text: `↳ ${c.thread}` }) : null);
 }
 
 function renderReview() {
@@ -540,7 +568,7 @@ function renderReview() {
   $("#drafts").replaceChildren(...drafts.map((d) => {
     const ta = el("textarea", { class: "c-text", rows: "2" });
     ta.value = d.text;
-    ta.addEventListener("input", () => { d.text = ta.value; saveJSON(DRAFTS_KEY, drafts); });
+    ta.addEventListener("input", () => { d.text = ta.value; saveJSON(DRAFTS_KEY, drafts); updateSend(); });
     return el("div", { class: "comment draft" },
       quoteLine(d), ta,
       el("button", { class: "c-del", text: "×", title: "Delete",
@@ -588,7 +616,7 @@ async function send(action = "") {
     body: JSON.stringify({
       action,
       note: $("#note").value,
-      comments: drafts.map(({ section, quote, prefix, text }) => ({ section, quote, prefix, text })),
+      comments: drafts.map(({ section, quote, prefix, text, thread }) => ({ section, quote, prefix, text, thread })),
     }),
   });
   btn.disabled = false;
@@ -600,6 +628,141 @@ async function send(action = "") {
   saveJSON(NOTE_KEY, "");
   toast(action ? "Plan approved" : `Sent ${b.id} to the session`);
   await load();
+}
+
+/* ---------------- side threads ----------------
+   A thread's card is built once and then patched in place (head, messages, footer
+   state), so a streaming reply never takes the focus or the text of its reply box. */
+
+async function loadThreads() {
+  const r = await fetch(`/api/s/${SLUG}/threads`);
+  if (!r.ok) return;
+  threadsState = await r.json();
+  renderThreads();
+  if (state) applyHighlights();
+}
+
+async function postJSON(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail);
+  return data;
+}
+
+async function askThread() {
+  const c = $("#composer");
+  const text = $("textarea", c).value.trim();
+  if (!text) return;
+  const { section, quote, prefix } = c._target;
+  try {
+    const t = await postJSON(`/api/s/${SLUG}/threads`, { section, quote, prefix, text });
+    closeComposer();
+    getSelection().removeAllRanges();
+    openThreads.add(t.id);
+    await loadThreads();
+    cards.get(t.id)?.root.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  } catch (e) { toast(`Could not start the thread: ${e.message}`); }
+}
+
+$("#new-thread").addEventListener("click", (e) =>
+  openComposer({ section: "", quote: "", prefix: "", rect: e.target.getBoundingClientRect() }, "ask"));
+
+function threadCard(t) {
+  if (cards.has(t.id)) return cards.get(t.id);
+  const ta = el("textarea", { class: "c-text", rows: "2", placeholder: "Reply  (⌘↵ to send)" });
+  const card = {
+    root: el("div", { class: "comment thread" }),
+    head: el("div", { class: "t-head" }),
+    msgs: el("div", { class: "t-msgs" }),
+    error: el("div", { class: "t-error error" }),
+    ta,
+    reply: el("button", { class: "btn primary", text: "Reply", onclick: () => replyThread(t.id) }),
+    stop: el("button", { class: "btn", text: "Stop", onclick: () => postJSON(`/api/s/${SLUG}/threads/${t.id}/stop`, {}) }),
+    batch: el("button", { class: "btn", text: "→ batch", title: "Add a draft comment that points to this thread",
+                          onclick: () => threadToBatch(t.id) }),
+  };
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); replyThread(t.id); }
+  });
+  card.foot = el("div", { class: "t-foot" }, ta, el("div", { class: "t-actions" }, card.batch, card.stop, card.reply));
+  card.root.append(card.head, card.msgs, card.error, card.foot);
+  card.head.addEventListener("click", (e) => {
+    if (e.target.closest(".c-quote")) return;
+    openThreads.has(t.id) ? openThreads.delete(t.id) : openThreads.add(t.id);
+    renderThreads();
+  });
+  cards.set(t.id, card);
+  return card;
+}
+
+function renderThreads() {
+  $("#no-parent").hidden = threadsState.forkable;
+  const list = [...threadsState.threads].reverse();
+  for (const t of list) {
+    const card = threadCard(t);
+    const open = openThreads.has(t.id);
+    const running = t.state === "running";
+    const first = (t.messages[0] || {}).text || "";
+    card.root.classList.toggle("open", open);
+    card.head.replaceChildren(
+      el("div", { class: "t-title" },
+        el("span", { class: "num", text: t.id }), " ",
+        el("span", { class: "t-first", text: open ? "" : first }),
+        running ? el("span", { class: "badge accent writing", text: t.activity || "running" })
+        : t.state === "error" ? el("span", { class: "badge flag", text: "error" }) : null),
+      quoteLine(t));
+    card.msgs.hidden = !open;
+    card.foot.hidden = !open;
+    card.error.hidden = !open || !t.error;
+    card.error.textContent = t.error;
+    if (open) {
+      const sig = JSON.stringify(t.messages.map((m) => [m.text.length, !!m.stopped]));
+      if (card.msgs.dataset.sig !== sig) {
+        card.msgs.dataset.sig = sig;
+        card.msgs.replaceChildren(...t.messages.map((m) => {
+          const body = el("div", { class: `t-msg ${m.role}` });
+          if (m.role === "user") body.textContent = m.text;
+          else body.innerHTML = m.html + (m.stopped ? "<p class=\"dim\">(stopped)</p>" : "");
+          return body;
+        }));
+        typesetMath(card.msgs);
+        linkCitations(card.msgs);
+      }
+    }
+    card.reply.disabled = running;
+    card.stop.hidden = !running;
+  }
+  const roots = list.map((t) => cards.get(t.id).root);
+  const box = $("#threads");
+  // Re-attaching a card would blur its reply box: only reorder when a thread was added.
+  if (roots.length !== box.children.length || roots.some((r, i) => box.children[i] !== r)) box.replaceChildren(...roots);
+  if (!roots.length) box.replaceChildren(el("p", { class: "dim", text: "No thread yet." }));
+}
+
+async function replyThread(tid) {
+  const card = cards.get(tid);
+  const text = card.ta.value.trim();
+  if (!text || card.reply.disabled) return;
+  card.reply.disabled = true;
+  try {
+    await postJSON(`/api/s/${SLUG}/threads/${tid}`, { text });
+    card.ta.value = "";
+    await loadThreads();
+  } catch (e) { toast(`Reply failed: ${e.message}`); card.reply.disabled = false; }
+}
+
+/* The conclusion of a thread reaches the main session as an ordinary comment, anchored
+   where the thread was and carrying its id, so the session can read the thread. */
+function threadToBatch(tid) {
+  const t = threadsState.threads.find((x) => x.id === tid);
+  const d = { id: crypto.randomUUID(), section: t.section, quote: t.quote, prefix: t.prefix, text: "", thread: tid };
+  drafts.push(d);
+  saveJSON(DRAFTS_KEY, drafts);
+  renderReview();
+  applyHighlights();
+  const tas = document.querySelectorAll("#drafts textarea");
+  tas[tas.length - 1].placeholder = "What should change, after this thread?";
+  tas[tas.length - 1].focus();
 }
 
 /* ---------------- export, tooltips ---------------- */
@@ -629,4 +792,4 @@ document.addEventListener("mouseover", (e) => {
 });
 
 // ?static skips the live stream (headless rendering never finishes while it is open).
-load().then(() => { if (!new URLSearchParams(location.search).has("static")) connect(); });
+load().then(loadThreads).then(() => { if (!new URLSearchParams(location.search).has("static")) connect(); });

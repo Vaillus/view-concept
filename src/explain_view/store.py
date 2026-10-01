@@ -13,6 +13,12 @@ reach the Claude Code session through the inbox.
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
+        claude.json     the Claude Code session driving this one     (written by `new`, `open`)
+        threads/<id>.json  a side thread: messages, its own Claude session id  (server)
+
+A side thread is a separate headless Claude conversation, forked from the session in
+claude.json, that the user opens from the page to discuss a passage without changing
+anything (see threads.py). Only a comment batch reaches the main session.
 """
 
 from __future__ import annotations
@@ -39,6 +45,7 @@ ACTIONS = ("", "approve-plan")
 # "code": the explanation is about a repository — citations link into it, and the
 # decisions it leads to are what outlives it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
+THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 
 
 class SessionError(Exception):
@@ -112,6 +119,19 @@ class Session:
     @property
     def cursor_path(self) -> Path:
         return self.dir / ".watch_cursor"
+
+    @property
+    def claude_path(self) -> Path:
+        return self.dir / "claude.json"
+
+    @property
+    def threads_dir(self) -> Path:
+        return self.dir / "threads"
+
+    def thread_path(self, tid: str) -> Path:
+        if not THREAD_ID_RE.match(tid):
+            raise SessionError(f"invalid thread id {tid!r}")
+        return self.threads_dir / f"{tid}.json"
 
     def exists(self) -> bool:
         return self.plan_path.exists()
@@ -195,7 +215,8 @@ class Session:
         return status
 
     def signature(self) -> tuple:
-        """Changes whenever anything the page displays changes."""
+        """Changes whenever a file the page renders changes, threads excepted (see
+        `thread_signature`)."""
         paths = [
             self.plan_path,
             self.audit_path,
@@ -205,14 +226,62 @@ class Session:
         ]
         if self.sections_dir.is_dir():
             paths += sorted(self.sections_dir.glob("*.md"))
-        sig = []
-        for p in paths:
-            try:
-                st = p.stat()
-                sig.append((p.name, st.st_mtime_ns, st.st_size))
-            except FileNotFoundError:
-                sig.append((p.name, None, None))
-        return tuple(sig)
+        return _stat_signature(paths)
+
+    def thread_signature(self) -> tuple:
+        """Changes whenever a thread changes. Kept apart from `signature` so a streaming
+        reply refreshes the threads without re-rendering the explanation."""
+        if not self.threads_dir.is_dir():
+            return ()
+        return _stat_signature(sorted(self.threads_dir.glob("t*.json")))
+
+    # ---- the main Claude Code session ----
+    def read_parent(self) -> str:
+        """Id of the Claude Code session that drives this one, "" when unknown."""
+        return str(_read_json(self.claude_path, {}).get("parent", ""))
+
+    def bind_parent(self, parent: str) -> bool:
+        """Record the driving session. Returns True when it changed (a resumed session
+        runs in a new Claude Code conversation, so threads fork from the new one)."""
+        if not parent or parent == self.read_parent():
+            return False
+        _write_json(self.claude_path, {"parent": parent, "since": now_iso()})
+        return True
+
+    # ---- side threads ----
+    def read_threads(self) -> list[dict[str, Any]]:
+        if not self.threads_dir.is_dir():
+            return []
+        threads = [_read_json(p, None) for p in self.threads_dir.glob("t*.json")]
+        return sorted((t for t in threads if t), key=lambda t: int(t["id"][1:]))
+
+    def read_thread(self, tid: str) -> dict[str, Any]:
+        t = _read_json(self.thread_path(tid), None)
+        if t is None:
+            raise SessionError(f"no thread {tid!r}")
+        return t
+
+    def write_thread(self, thread: dict[str, Any]) -> None:
+        _write_json(self.thread_path(thread["id"]), thread)
+
+    def new_thread(self, section: str = "", quote: str = "", prefix: str = "") -> dict[str, Any]:
+        """Create an empty thread, anchored to a passage like a comment, or to nothing."""
+        n = max((int(t["id"][1:]) for t in self.read_threads()), default=0) + 1
+        thread = {
+            "id": f"t{n}",
+            "created": now_iso(),
+            "section": section,
+            "quote": quote,
+            "prefix": prefix,
+            "claude_id": "",
+            "forked_from": "",
+            "state": "idle",
+            "activity": "",
+            "error": "",
+            "messages": [],
+        }
+        self.write_thread(thread)
+        return thread
 
     # ---- comments ----
     def add_batch(
@@ -243,6 +312,7 @@ class Session:
                     "quote": str(c.get("quote", "")),
                     "prefix": str(c.get("prefix", "")),
                     "text": str(c["text"]).strip(),
+                    "thread": str(c.get("thread", "")),
                     "status": "sent",
                 }
                 for i, c in enumerate(comments)
@@ -364,6 +434,17 @@ def list_sessions(root: Path | None = None) -> list[dict[str, Any]]:
     return sorted(out, key=lambda r: r["updated"], reverse=True)
 
 
+def _stat_signature(paths: list[Path]) -> tuple:
+    sig = []
+    for p in paths:
+        try:
+            st = p.stat()
+            sig.append((p.name, st.st_mtime_ns, st.st_size))
+        except FileNotFoundError:
+            sig.append((p.name, None, None))
+    return tuple(sig)
+
+
 def format_batch(slug: str, batch: dict[str, Any], outline: list[dict[str, Any]]) -> str:
     """How a batch appears in the Claude Code session (one Monitor event)."""
     number = {s["id"]: i + 1 for i, s in enumerate(outline)}
@@ -379,6 +460,8 @@ def format_batch(slug: str, batch: dict[str, Any], outline: list[dict[str, Any]]
         quote = " ".join(c["quote"].split())
         lines.append(f"[{c['id']}] {where} « {quote} »" if quote else f"[{c['id']}] {where}")
         lines += [f"    {line}" for line in c["text"].splitlines()]
+        if c.get("thread"):
+            lines.append(f"    (from side thread {c['thread']}: threads/{c['thread']}.json)")
     return "\n".join(lines)
 
 

@@ -2,7 +2,7 @@
 
 A local page for the `explain-concept` skill. The plan and the explanation stay in one place in the browser, and the conversation stays in the Claude Code terminal. You select passages in the page, comment on them, and send the comments to the session as one batch.
 
-Everything goes through the Claude Code session, so no API key is needed.
+Everything goes through Claude Code, so no API key is needed. Side threads are headless `claude -p` runs, billed to the same subscription as the terminal session.
 
 ```
 terminal (Claude Code)                        browser (explain-view)
@@ -25,6 +25,7 @@ The skill runs these commands. You don't need to run them yourself.
 |---|---|
 | `explain-view new "<title>" --slug <slug>` | creates `~/.explain-view/sessions/<slug>/` |
 | `explain-view open <slug>` | starts the server (port 5080) if needed and opens the page |
+| | `new` and `open` also record the Claude Code session that runs them (`claude.json`), which side threads fork from |
 | `explain-view watch <slug>` | prints each comment batch as it arrives, meant to run under the `Monitor` tool |
 | `explain-view pending <slug>` | lists comments not yet resolved |
 | `explain-view resolve <slug> c3 b2 --reply "…"` | marks comments or whole batches resolved |
@@ -39,6 +40,7 @@ The file formats (`plan.json`, `sections/<id>.md`, `audit.json`) are described i
   - *Plan*: « Approve plan » (when Claude is waiting for it), the last revision, the outline with what each section adds (« + comment » on each item), the decisions of a code session, and the lexicon. Clicking an item opens its section.
   - *Explanation*: one block per outline section. Lexicon terms are underlined, and hovering one shows its developed definition. Terms flagged by the vocabulary audit get a wavy underline. A rewritten section gets an « updated » marker, and the tab shows how many sections were updated. In a code session, `file:line` citations open VS Code.
 - **Review** (right, always visible): select text and click « + comment » to add a draft comment (⌘↵ saves it). Drafts survive a reload. « Send » sends all drafts plus an optional note as one batch. Sent comments show « waiting », then « resolved » with Claude's reply.
+- **Threads** (in Review): « ask » next to « + comment » on a selection, « ask » on a section, or « + new » for a general question. A thread is a separate conversation: its first turn forks the terminal session (`claude -p --resume <id> --fork-session`), so it knows the discussion so far, and the terminal session never sees it. Threads are read-only (Read, Grep, Glob, no MCP). « → batch » adds a draft comment anchored to the thread's passage; the batch tells the session which thread it comes from. Each turn re-sends the forked history, so a thread on a long session uses a lot of the subscription's limits.
 - **Export to vault** (top): writes one Obsidian note. Exporting again overwrites that note, but never a note you wrote yourself with the same title.
 
 The page redraws when a file changes (server-sent events, checked every 0.4 s). KaTeX and Mermaid load from jsdelivr. When offline, maths shows as TeX source and diagrams as code. `?static` in the URL turns off live updates (for headless rendering).
@@ -50,6 +52,7 @@ The page redraws when a file changes (server-sent events, checked every 0.4 s). 
 | `EXPLAIN_VIEW_HOME` | `~/.explain-view` |
 | `EXPLAIN_VIEW_VAULT` | `~/Documents/Vault/explanations` |
 | `EXPLAIN_VIEW_PORT` | `5080` |
+| `EXPLAIN_VIEW_CLAUDE` | `claude` (the executable side threads run) |
 
 ## Development
 
