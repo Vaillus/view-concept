@@ -125,9 +125,9 @@ function render() {
    The code tab exists only once an outline item is in Part 2. The tab follows the
    session at the two moments that matter — the plan waiting for approval, the writing
    starting (in the tab of the section being written) — and otherwise stays where the
-   user put it. A model waiting for approval does not move it: the model is read in the
-   explanation, and the approve button sits under the tab bar, in every tab. Nor does a
-   code review waiting to start: « Review code » is at the end of the explanation. */
+   user put it. A model waiting for approval does not move it, nor does a code review
+   waiting to start: the model is read in the explanation, and « Approve model » and
+   « Review code » sit at its end. */
 
 function setTab(name) {
   if (name === "code" && !hasCodeTab()) name = "doc";
@@ -173,16 +173,16 @@ const writingId = () => (state.status.phase === "writing" ? state.status.section
    of its code review once the implementation is done ("awaiting-review", view-pr too).
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until Claude moves the status on, the page says the answer is on its way.
-   The first two buttons sit under the tab bar; « Review code » sits at the end of the
-   explanation, after the last section of Part 1, and the page does not switch tabs for
-   it. */
-const reviewButton = el("button", { id: "review-code", class: "btn primary approve review-code", hidden: true });
+   « Approve plan » sits at the top of the Plan tab, and the page switches to it. The two
+   PR-review phases share one button at the end of the explanation, after the last
+   section of Part 1, where the model is read; the page does not switch tabs for them. */
+const docButton = el("button", { id: "doc-approve", class: "btn primary approve doc-approve", hidden: true });
 const APPROVALS = {
   "awaiting-approval": { action: "approve-plan", label: "Approve plan", toast: "Plan approved",
                          ready: "plan ready · waiting for your approval", sent: "plan approved · Claude is starting" },
-  "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved",
+  "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved", button: docButton,
                       ready: "model ready · waiting for your approval", sent: "model approved · Claude is implementing" },
-  "awaiting-review": { action: "review-code", label: "Review code", toast: "Code review requested", button: reviewButton,
+  "awaiting-review": { action: "review-code", label: "Review code", toast: "Code review requested", button: docButton,
                        ready: "implementation done · waiting for you to start the code review",
                        sent: "code review requested · Claude is starting" },
 };
@@ -213,7 +213,7 @@ function renderStatus() {
   p.className = `phase ${active ? "active" : ""} ${approval && !approvalPending() ? "ask" : ""}`;
   p.textContent = [labels[phase], message].filter(Boolean).join(" · ");
 
-  $("#approve").hidden = reviewButton.hidden = true;
+  $("#approve").hidden = docButton.hidden = true;
   if (!approval) return;
   const btn = buttonOf(approval);
   btn.hidden = approvalPending();
@@ -221,7 +221,7 @@ function renderStatus() {
   btn.textContent = n ? `${approval.label} + send ${n} comment${n > 1 ? "s" : ""}` : approval.label;
 }
 
-for (const b of [$("#approve"), reviewButton]) b.addEventListener("click", () => {
+for (const b of [$("#approve"), docButton]) b.addEventListener("click", () => {
   const approval = APPROVALS[state.status.phase];
   if (approval) send(approval.action);
 });
@@ -299,7 +299,7 @@ function renderDoc() {
     $("#code").replaceChildren();
     return;
   }
-  doc.replaceChildren(...items.filter((s) => tabOf(s.id) === "doc").map(sectionBlock), reviewButton);
+  doc.replaceChildren(...items.filter((s) => tabOf(s.id) === "doc").map(sectionBlock), docButton);
   $("#code").replaceChildren(...items.filter((s) => tabOf(s.id) === "code").map(sectionBlock));
   for (const view of docViews()) {
     typesetMath(view);

@@ -52,7 +52,7 @@ The review runs in three steps; each one ends on a page element:
 
 | Step | What happens | Page element |
 |---|---|---|
-| 1 · concepts | Claude writes Part 1 (the model) in the Explanation tab; the user challenges it and each accepted correction is a model change | « Approve model » (status `awaiting-model`) ends the step and starts step 2 |
+| 1 · concepts | Claude writes Part 1 (the model) in the Explanation tab; the user challenges it and each accepted correction is a model change | « Approve model » (status `awaiting-model`), at the bottom of the Explanation tab, ends the step and starts step 2 |
 | 2 · agents | Claude compares the whole model with the code and sends one or more agents to close the gaps; each result goes to « Changes applied to the code » (`q-applied`) | « Review code » (status `awaiting-review`), at the bottom of the Explanation tab, starts step 3 once the user has looked at the commits |
 | 3 · code | Claude writes Part 2: one card per item of the diff with a verdict against the model, then a table of every item | the Code tab, which holds every outline item marked `"part": 2` |
 
@@ -61,9 +61,8 @@ A verdict that the code diverges from the model sends the review back to step 2;
 ## The page
 
 - **Plan / Explanation / Code** (left, one at a time): tabs, or the keys `1`, `2` and `3`. The Code tab shows only in a PR review that has reached Part 2. The page switches to the Plan tab when the plan is waiting for approval, and to the tab of the section being written when writing starts. Otherwise the tab stays where you left it.
-  - Under the tab bar, in every tab: « Approve plan » when Claude is waiting for it, or « Approve model » in a PR review (the model is settled and the implementation starts; draft comments go with it). « Approve model » leaves the tab where it is, since the model is read in the explanation.
-  - At the bottom of the Explanation tab, after the last section of Part 1: « Review code » in a PR review once the implementation is done (Claude starts the code review, step 3; draft comments go with it). The page does not switch tabs for it.
-  - *Plan*: the last revision, the outline with what each section adds (« + comment » on each item), the model changes of a PR review, and the lexicon. Clicking an item opens its section.
+  - At the bottom of the Explanation tab, after the last section of Part 1, in a PR review: « Approve model » when the model waits for approval (the model is settled and the implementation starts, step 2), then « Review code » once the implementation is done (Claude starts the code review, step 3). Draft comments go with either. The page does not switch tabs for them, since the model is read in the explanation.
+  - *Plan*: « Approve plan » (when Claude is waiting for it; draft comments go with it), the last revision, the outline with what each section adds (« + comment » on each item), the model changes of a PR review, and the lexicon. Clicking an item opens its section.
   - *Explanation*: one block per outline section. Lexicon terms are underlined, and hovering one shows its developed definition. Terms flagged by the vocabulary audit get a wavy underline. A rewritten section gets an « updated » marker, and the tab shows how many sections were updated. In a code session, `file:line` citations open VS Code.
   - *Code*: the sections of Part 2 of a PR review (outline items with `"part": 2`: the per-item cards, the at-a-glance table, the changes applied to the code), rendered like the explanation. Clicking such an item in the plan, or a comment anchored on one, opens this tab.
 - **Review** (right, always visible): select text and click « + comment » to add a draft comment (⌘↵ saves it). Drafts survive a reload. « Send » sends all drafts plus an optional note as one batch. Sent comments show « waiting », then « resolved » with Claude's reply.
