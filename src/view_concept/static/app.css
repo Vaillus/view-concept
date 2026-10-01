@@ -17,6 +17,7 @@ textarea:focus { outline: none; border-color: var(--accent); }
          background: var(--neutralbg); color: var(--neutralink); border: 0; }
 .badge.flag { background: var(--flagbg); color: var(--flag); }
 .badge.ok { background: var(--okbg); color: var(--ok); }
+.badge.new { background: var(--okbg); color: var(--ok); }
 .badge.accent { background: var(--accentbg); color: var(--accent); }
 .badge.alt { background: var(--altbg); color: var(--alt); }
 .num { color: var(--accent); }
@@ -64,7 +65,7 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .outline li { position: relative; padding: 8px 10px; border-left: 2px solid transparent; cursor: pointer; }
 .outline li:hover { background: var(--hover); }
 .outline li.pending .o-title { color: var(--muted); }
-.outline li.updated { border-left-color: var(--flag); }
+.outline li.updated { border-left-color: var(--ok); }
 .o-title { font-size: 14px; }
 .o-earns { font-size: 12px; line-height: 17px; margin-top: 2px; }
 .o-comment { position: absolute; top: 6px; right: 6px; background: none; border: 0; color: var(--dim); font-size: 11px; visibility: hidden; }
@@ -83,7 +84,13 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .doc > * { max-width: 78ch; margin-left: auto; margin-right: auto; }
 .empty { margin-top: 20vh; text-align: center; }
 .sec { padding: 8px 0 16px; border-bottom: 1px solid var(--line); }
-.sec.updated { background: linear-gradient(to right, var(--flag) 2px, transparent 2px); padding-left: 12px; }
+/* a block that changed since the last read: a bar in the left margin */
+.sec .body .changed { position: relative; }
+.sec .body .changed::before { content: ""; position: absolute; left: -14px; top: 0; bottom: 0; width: 3px; background: var(--ok); }
+.sec .body li.changed::before { left: -54px; }  /* past the list's 40px indent, in line with the paragraphs */
+.sec .body li li.changed::before { left: -94px; }
+.sec .body :is(td, th).changed { position: static; box-shadow: inset 3px 0 var(--ok); }
+.sec .body :is(td, th).changed::before { content: none; }
 .sec h2 { font-size: 15px; margin: 16px 0 8px; display: flex; align-items: baseline; gap: 6px; }
 .sec h2 .num { min-width: 1.5em; }
 .sec.unwritten h2 { color: var(--muted); }
@@ -112,6 +119,7 @@ textarea:focus { outline: none; border-color: var(--accent); }
 ::highlight(ev-draft) { background-color: var(--flagbg); }
 ::highlight(ev-sent) { background-color: var(--accentbg); }
 ::highlight(ev-thread) { background-color: var(--altbg); }
+::highlight(ev-updated) { background-color: var(--okbg); text-decoration: underline 2px var(--ok); text-underline-offset: 3px; }
 ::highlight(ev-focus) { background-color: var(--accent); color: var(--on-accent); }
 
 /* ---- code sessions: citations, questions, model changes ---- */

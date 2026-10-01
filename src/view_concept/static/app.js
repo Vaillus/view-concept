@@ -20,8 +20,6 @@ const DRAFTS_KEY = `view-concept:drafts:${SLUG}`;
 const NOTE_KEY = `view-concept:note:${SLUG}`;
 
 let state = null;        // last payload from /api/s/<slug>
-let lastMd = null;       // section id -> markdown, to detect rewritten sections
-const updated = new Set(); // sections rewritten since the user last acknowledged them
 let planChanged = false;
 let drafts = loadJSON(DRAFTS_KEY, []);
 let pendingSelection = null;
@@ -71,13 +69,7 @@ async function load() {
     return;
   }
   const next = await r.json();
-  const md = Object.fromEntries(Object.entries(next.sections).map(([k, v]) => [k, v.md]));
-  if (lastMd) {
-    // A first write is not an update: only a section that already had text is marked.
-    for (const [k, v] of Object.entries(md)) if (k in lastMd && lastMd[k] !== v) updated.add(k);
-    if (JSON.stringify(state.plan) !== JSON.stringify(next.plan)) planChanged = true;
-  }
-  lastMd = md;
+  if (state && JSON.stringify(state.plan) !== JSON.stringify(next.plan)) planChanged = true;
   state = next;
   render();
 }
@@ -112,6 +104,8 @@ const isPart2 = (id) => (state.plan.outline.find((s) => s.id === id) || {}).part
 const tabOf = (id) => (isPart2(id) ? "code" : "doc");
 const hasCodeTab = () => state.plan.outline.some((s) => s.part === 2);
 const docViews = () => [$("#doc"), $("#code")];
+// Rewritten since the user last marked it as read (the server compares with seen.json).
+const isUpdated = (id) => !!(state.sections[id] || {}).updated;
 
 function render() {
   const { plan } = state;
@@ -154,10 +148,10 @@ function followSession() {
   $('.tab[data-tab="code"]').hidden = !hasCodeTab();
   if (tab === "code" && !hasCodeTab()) setTab("doc");
   for (const [name, label] of [["doc", "explanation"], ["code", "code"]]) {
-    const n = [...updated].filter((id) => tabOf(id) === name).length;
+    const n = Object.keys(state.sections).filter((id) => isUpdated(id) && tabOf(id) === name).length;
     const writing = phase === "writing" && tabOf(state.status.section) === name;
     $(`.tab[data-tab="${name}"]`).replaceChildren(...[label,
-      n ? el("span", { class: "badge flag", text: `${n} updated` }) : null,
+      n ? el("span", { class: "badge new", text: `${n} updated` }) : null,
       writing ? el("span", { class: "badge accent writing", text: "writing" }) : null].filter(Boolean));
   }
 }
@@ -246,7 +240,7 @@ function renderPlan() {
 
   $("#outline").replaceChildren(...outlineItems().map((s) => {
     const written = s.id in state.sections;
-    return el("li", { class: `${written ? "" : "pending"} ${updated.has(s.id) ? "updated" : ""}`,
+    return el("li", { class: `${written ? "" : "pending"} ${isUpdated(s.id) ? "updated" : ""}`,
                       onclick: () => scrollToSection(s.id) },
       el("button", { class: "o-comment", text: "+ comment", title: "Comment on this item of the plan",
                      onclick: (e) => {
@@ -257,7 +251,7 @@ function renderPlan() {
         el("span", { class: "num", text: numberOf(s.id) }), " ", s.title,
         s.kind === "question" ? el("span", { class: "badge alt", text: "Q" }) : null,
         writingId() === s.id ? el("span", { class: "badge accent writing", text: "writing" }) : null,
-        updated.has(s.id) ? el("span", { class: "badge flag", text: "updated" }) : null),
+        isUpdated(s.id) ? el("span", { class: "badge new", text: "updated" }) : null),
       s.earns ? el("div", { class: "o-earns muted", text: s.earns }) : null);
   }));
 
@@ -324,16 +318,16 @@ function sectionBlock(s) {
   const written = s.id in state.sections;
   if (written) body.innerHTML = state.sections[s.id].html;
   else if (writingId() === s.id) body.append(el("p", { class: "writing-line", text: "writing" }));
-  const cls = ["sec", written ? "" : "unwritten", updated.has(s.id) ? "updated" : ""].join(" ");
+  const cls = ["sec", written ? "" : "unwritten", isUpdated(s.id) ? "updated" : ""].join(" ");
   return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
     el("h2", {},
       el("span", { class: "num", text: numberOf(s.id) }), " ", s.title,
       s.kind === "question" && s.from && s.from.length
         ? el("span", { class: "q-from dim", text: `from ${[].concat(s.from).join(", ")}` }) : null,
       el("span", { class: "t-chips", "data-section": s.id }),
-      updated.has(s.id)
-        ? el("button", { class: "badge flag", text: "updated · ok", title: "Mark as read",
-                         onclick: (e) => { e.stopPropagation(); updated.delete(s.id); render(); } })
+      isUpdated(s.id)
+        ? el("button", { class: "badge new", text: "updated · mark read", title: "Mark this section as read: its highlights go away",
+                         onclick: (e) => { e.stopPropagation(); markSeen([s.id]); } })
         : null,
       el("button", { class: "sec-comment", text: "+ comment section", title: "Comment on the whole section",
                      onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }) }),
@@ -345,6 +339,7 @@ function sectionBlock(s) {
 function typesetMath(root) {
   if (!window.katex) return;
   root.querySelectorAll(".math").forEach((m) => {
+    if (m.dataset.tex === undefined) m.dataset.tex = m.textContent; // compared by the update diff
     try {
       katex.render(m.textContent, m, { displayMode: m.classList.contains("block"), throwOnError: false });
     } catch (e) { /* leave the TeX source visible */ }
@@ -360,11 +355,12 @@ async function renderMermaid(root) {
     const dark = getComputedStyle(document.documentElement).colorScheme.includes("dark");
     mermaidLib.initialize({ startOnLoad: false, theme: dark ? "dark" : "default" });
     const nodes = [...blocks].map((code) => {
-      const div = el("div", { class: "mermaid", text: code.textContent });
+      const div = el("div", { class: "mermaid", "data-src": code.textContent, text: code.textContent });
       code.parentElement.replaceWith(div);
       return div;
     });
     await mermaidLib.run({ nodes });
+    applyHighlights(); // the diagrams replaced their code blocks, and the ranges in them
   } catch (e) { /* offline: the source stays as a code block */ }
 }
 
@@ -501,6 +497,120 @@ function applyHighlights() {
   CSS.highlights.set("ev-draft", new Highlight(...draftRanges));
   CSS.highlights.set("ev-sent", new Highlight(...sentRanges));
   CSS.highlights.set("ev-thread", new Highlight(...threadRanges.map(([, r]) => r)));
+  markUpdates();
+}
+
+/* ---------------- updates since last read ----------------
+   An updated section carries the HTML of the version the user last marked as read.
+   Both versions are cut into words, the words are diffed, and the words the rewrite
+   inserted are highlighted ("ev-updated"); every block (paragraph, list item, cell…)
+   holding an insertion or a deletion gets a bar in the margin. « updated · ok » in the
+   section heading marks the section as read. */
+
+const BLOCKS = "p, li, td, th, pre, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, .math.block, .mermaid";
+
+/* The words of `root`, each with the DOM range it covers. A formula or a diagram is one
+   word (its source), so a re-typeset formula compares equal to its TeX. The same
+   function reads the detached read version and the live, annotated section. */
+function words(root) {
+  const out = [];
+  let cur = null;
+  const end = () => { if (cur) out.push(cur); cur = null; };
+  const blockOf = (n) => (n.nodeType === 1 ? n : n.parentElement).closest(BLOCKS) || root;
+  const walk = (node) => {
+    for (const n of node.childNodes) {
+      if (n.nodeType === 1) {
+        const atom = n.matches(".math") ? n.dataset.tex ?? n.textContent
+                   : n.matches(".mermaid") ? n.dataset.src
+                   : n.matches("pre > code.language-mermaid") ? n.textContent : null;
+        if (atom != null) {
+          end();
+          const range = document.createRange();
+          range.selectNode(n);
+          out.push({ text: `\u0000${collapse(atom)}`, range, block: blockOf(n) });
+        } else walk(n);
+      } else if (n.nodeType === 3) {
+        const block = blockOf(n);
+        if (cur && cur.block !== block) end();
+        for (let i = 0; i < n.data.length; i++) {
+          if (/\s/.test(n.data[i])) { end(); continue; }
+          if (!cur) {
+            cur = { text: "", range: document.createRange(), block };
+            cur.range.setStart(n, i);
+          }
+          cur.text += n.data[i];
+          cur.range.setEnd(n, i + 1);
+        }
+      }
+    }
+  };
+  walk(root);
+  end();
+  return out;
+}
+
+/* Which words of `b` are not in `a` (`inserted`), and which words of `b` follow a run
+   of words of `a` that is gone (`deleted`). Longest common subsequence, after trimming
+   the common head and tail; a middle too large to compare counts as rewritten. */
+function diffWords(a, b) {
+  let lo = 0;
+  while (lo < a.length && lo < b.length && a[lo] === b[lo]) lo++;
+  let ea = a.length, eb = b.length;
+  while (ea > lo && eb > lo && a[ea - 1] === b[eb - 1]) { ea--; eb--; }
+  const n = ea - lo, m = eb - lo;
+  const inserted = new Set(), deleted = new Set();
+  if (n * m > 4e6) {
+    for (let j = lo; j < eb; j++) inserted.add(j);
+    if (n) deleted.add(Math.min(lo, b.length - 1));
+    return { inserted, deleted };
+  }
+  const L = new Int32Array((n + 1) * (m + 1)); // L[i][j]: LCS of a[lo+i..ea) and b[lo+j..eb)
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      L[i * (m + 1) + j] = a[lo + i] === b[lo + j] ? L[(i + 1) * (m + 1) + j + 1] + 1
+        : Math.max(L[(i + 1) * (m + 1) + j], L[i * (m + 1) + j + 1]);
+    }
+  }
+  let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && a[lo + i] === b[lo + j]) { i++; j++; }
+    else if (j < m && (i === n || L[i * (m + 1) + j + 1] >= L[(i + 1) * (m + 1) + j])) inserted.add(lo + j++);
+    else { deleted.add(Math.min(lo + j, b.length - 1)); i++; }
+  }
+  return { inserted, deleted };
+}
+
+function markUpdates() {
+  document.querySelectorAll(".changed").forEach((n) => n.classList.remove("changed"));
+  const ranges = [];
+  for (const [id, sec] of Object.entries(state.sections)) {
+    const body = sec.updated && document.querySelector(`#sec-${CSS.escape(id)} .body`);
+    if (!body) continue;
+    const before = document.createElement("div");
+    before.innerHTML = sec.seen_html || "";
+    const now = words(body);
+    const { inserted, deleted } = diffWords(words(before).map((w) => w.text), now.map((w) => w.text));
+    for (const k of deleted) if (now[k]) now[k].block.classList.add("changed");
+    // One range per run of inserted words in a block, so the spaces between them are highlighted too.
+    let run = null;
+    now.forEach((w, k) => {
+      if (!inserted.has(k)) { run = null; return; }
+      w.block.classList.add("changed");
+      if (run && run.block === w.block) run.range.setEnd(w.range.endContainer, w.range.endOffset);
+      else {
+        run = { block: w.block, range: w.range.cloneRange() };
+        ranges.push(run.range);
+      }
+    });
+  }
+  if (window.CSS && CSS.highlights) CSS.highlights.set("ev-updated", new Highlight(...ranges));
+}
+
+async function markSeen(ids) {
+  try {
+    await postJSON(`/api/s/${SLUG}/seen`, { sections: Object.fromEntries(ids.map((id) => [id, state.sections[id].md])) });
+  } catch (e) { toast(`Could not mark as read: ${e.message}`); return; }
+  await load();
 }
 
 function revealQuote(c) {
