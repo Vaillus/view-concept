@@ -507,6 +507,14 @@ function structureView(items, findings) {
 // Text inside a quoted Mermaid label: a double quote would end it.
 const mq = (t) => String(t).replace(/"/g, "#quot;");
 
+/* Open the item entry of section `id`, if it is an item drawn in the review table, so
+   its description is on screen; returns the entry, else null. */
+function openItemOf(id) {
+  const entry = document.querySelector(`.rv-entry[data-item="${CSS.escape(id)}"]`);
+  if (entry && !openItems.has(id)) setItemOpen(id, true);
+  return entry;
+}
+
 function setItemOpen(id, open) {
   const entry = document.querySelector(`.rv-entry[data-item="${CSS.escape(id)}"]`);
   if (!entry) return;
@@ -689,6 +697,7 @@ function revealQuote(c) {
   if (!c.section) return;
   if (c.quote.startsWith("plan · ")) { setTab("plan"); return; }
   setTab(tabOf(c.section));
+  openItemOf(c.section);
   const r = findQuote(c.section, c.quote, c.prefix);
   if (r) {
     r.startContainer.parentElement.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -699,9 +708,11 @@ function revealQuote(c) {
   } else scrollToSection(c.section);
 }
 
+/* A section that is an item is reached through its item entry: the entry opens, and is
+   what scrolls into view, with its description under it. */
 function scrollToSection(id) {
   setTab(tabOf(id));
-  const s = document.getElementById(`sec-${id}`);
+  const s = openItemOf(id) || document.getElementById(`sec-${id}`);
   if (s) s.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
@@ -969,7 +980,10 @@ function anchorRect(id) {
 function openPopover(id) {
   const t = threadOf(id);
   if (!t) return;
-  if (t.section && !t.quote.startsWith("plan · ") && tab !== tabOf(t.section)) setTab(tabOf(t.section));
+  if (t.section && !t.quote.startsWith("plan · ")) {
+    if (tab !== tabOf(t.section)) setTab(tabOf(t.section));
+    openItemOf(t.section);
+  }
   popThread = id;
   renderPopover();
 }
