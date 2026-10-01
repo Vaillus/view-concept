@@ -1,8 +1,8 @@
 /* view-concept — the session page.
 
    Tabs share the main space: the plan (outline, model changes, lexicon), the
-   explanation (one block per outline section) and, in a PR review that has reached the
-   code, the code tab (the sections of Part 2); the review pane (draft comments, then
+   explanation (one block per explanation section) and, in a PR review that has reached
+   the refactoring step, the refactor tab (the refactor sections, Part 2); the review pane (draft comments, then
    sent batches) stays on the right. The page never edits the explanation: Claude Code
    writes the files, the server streams "changed", the page re-fetches. The page writes
    batches of comments, and side threads: separate read-only Claude conversations run by
@@ -25,7 +25,7 @@ const updated = new Set(); // sections rewritten since the user last acknowledge
 let planChanged = false;
 let drafts = loadJSON(DRAFTS_KEY, []);
 let pendingSelection = null;
-let tab = null;          // "plan" | "doc" | "code"
+let tab = null;          // "plan" | "doc" | "refactor"
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
 let popThread = null;          // id of the thread shown in the popover
@@ -93,7 +93,8 @@ function connect() {
 
 /* ---------------- render ---------------- */
 
-function outlineItems() {
+/* Every section, in outline order, then any section file the outline does not list. */
+function allSections() {
   const ids = state.plan.outline.map((s) => s.id);
   const extra = Object.keys(state.sections).filter((k) => !ids.includes(k))
     .map((id) => ({ id, title: id, earns: "not in the outline" }));
@@ -105,13 +106,14 @@ const numberOf = (id) => {
 };
 const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).title || id;
 
-/* Part 2 of a PR review (outline items with "part": 2: per-item cards, the table, the
-   changes applied to the code) is read in its own tab, "code"; every other section is
-   in the explanation. Both tabs are rendered by the same code, into their own view. */
+/* Part 2 of a PR review, written in the refactoring step, is made of refactor sections
+   (sections with "part": 2): they are read in their own tab, "refactor"; every other
+   section is an explanation section, in the explanation. Both tabs are rendered into
+   their own view, with the same section blocks. */
 const isPart2 = (id) => (state.plan.outline.find((s) => s.id === id) || {}).part === 2;
-const tabOf = (id) => (isPart2(id) ? "code" : "doc");
-const hasCodeTab = () => state.plan.outline.some((s) => s.part === 2);
-const docViews = () => [$("#doc"), $("#code")];
+const tabOf = (id) => (isPart2(id) ? "refactor" : "doc");
+const hasRefactorTab = () => state.plan.outline.some((s) => s.part === 2);
+const docViews = () => [$("#doc"), $("#refactor")];
 
 function render() {
   const { plan } = state;
@@ -126,16 +128,16 @@ function render() {
 }
 
 /* ---------------- tabs ----------------
-   The plan, the explanation and the code tab share one space; one is shown at a time.
-   The code tab exists only once an outline item is in Part 2. The tab follows the
+   The plan, the explanation and the refactor tab share one space; one is shown at a
+   time. The refactor tab exists only once a section is in Part 2. The tab follows the
    session at the two moments that matter — the plan waiting for approval, the writing
    starting (in the tab of the section being written) — and otherwise stays where the
-   user put it. A model waiting for approval does not move it, nor does a code review
-   waiting to start: the model is read in the explanation, and « Approve model » and
-   « Review code » sit at its end. */
+   user put it. A model waiting for approval does not move it, nor does a refactoring
+   step waiting to start: the model is read in the explanation, and « Approve model »
+   and « Review code » sit at its end. */
 
 function setTab(name) {
-  if (name === "code" && !hasCodeTab()) name = "doc";
+  if (name === "refactor" && !hasRefactorTab()) name = "doc";
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === name));
@@ -151,9 +153,9 @@ function followSession() {
     if (phase === "writing") setTab(tabOf(state.status.section));
   }
   lastPhase = phase;
-  $('.tab[data-tab="code"]').hidden = !hasCodeTab();
-  if (tab === "code" && !hasCodeTab()) setTab("doc");
-  for (const [name, label] of [["doc", "explanation"], ["code", "code"]]) {
+  $('.tab[data-tab="refactor"]').hidden = !hasRefactorTab();
+  if (tab === "refactor" && !hasRefactorTab()) setTab("doc");
+  for (const [name, label] of [["doc", "explanation"], ["refactor", "refactor"]]) {
     const n = [...updated].filter((id) => tabOf(id) === name).length;
     const writing = phase === "writing" && tabOf(state.status.section) === name;
     $(`.tab[data-tab="${name}"]`).replaceChildren(...[label,
@@ -167,7 +169,7 @@ document.addEventListener("keydown", (e) => {
   if (e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "1") setTab("plan");
   if (e.key === "2") setTab("doc");
-  if (e.key === "3" && hasCodeTab()) setTab("code");
+  if (e.key === "3" && hasRefactorTab()) setTab("refactor");
 });
 
 /* ---------------- status + approvals ---------------- */
@@ -175,8 +177,9 @@ document.addEventListener("keydown", (e) => {
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
 
 /* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
-   model of a PR review ("awaiting-model", set by the view-pr skill only), and the start
-   of its code review once the implementation is done ("awaiting-review", view-pr too).
+   model of a PR review at the end of model consolidation ("awaiting-model", set by the
+   view-pr skill only), and the start of its refactoring step once model matching is
+   done ("awaiting-review", view-pr too).
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until Claude moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it. The two
@@ -244,7 +247,7 @@ function renderPlan() {
     rev.onclick = () => { planChanged = false; renderPlan(); };
   } else rev.hidden = true;
 
-  $("#outline").replaceChildren(...outlineItems().map((s) => {
+  $("#outline").replaceChildren(...allSections().map((s) => {
     const written = s.id in state.sections;
     return el("li", { class: `${written ? "" : "pending"} ${updated.has(s.id) ? "updated" : ""}`,
                       onclick: () => scrollToSection(s.id) },
@@ -299,14 +302,14 @@ function renderChanges() {
 
 function renderDoc() {
   const doc = $("#doc");
-  const items = outlineItems();
-  if (!items.length) {
+  const sections = allSections();
+  if (!sections.length) {
     doc.replaceChildren(el("p", { class: "dim empty", text: "Waiting for the plan…" }));
-    $("#code").replaceChildren();
+    $("#refactor").replaceChildren();
     return;
   }
-  doc.replaceChildren(...items.filter((s) => tabOf(s.id) === "doc").map(sectionBlock), docButton);
-  $("#code").replaceChildren(...items.filter((s) => tabOf(s.id) === "code").map(sectionBlock));
+  doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map(sectionBlock), docButton);
+  $("#refactor").replaceChildren(...sections.filter((s) => tabOf(s.id) === "refactor").map(sectionBlock));
   for (const view of docViews()) {
     typesetMath(view);
     linkCitations(view);
@@ -531,7 +534,7 @@ function currentSelection() {
   const range = sel.getRangeAt(0);
   const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
   const sec = start.closest(".sec");
-  if (!sec || !sec.closest("#doc, #code")) return null;
+  if (!sec || !sec.closest("#doc, #refactor")) return null;
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;
