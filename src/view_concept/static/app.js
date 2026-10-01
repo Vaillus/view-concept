@@ -359,15 +359,19 @@ function sectionBlock(s, { bare = false } = {}) {
    other refactor sections, such as the applied changes, follow as plain sections. A
    review whose refactor sections carry no item fields is drawn as plain sections only. */
 
-// Verdicts in table order: those that need action first, « conforms » last.
-const VERDICTS = ["diverges", "move", "split", "throw", "out-of-pr", "conforms"];
+// Verdict keys in table order (from verdicts.yaml, sent with the state): those that need
+// action first, « conforms » last.
+const verdictKeys = () => (state.verdicts || []).map((v) => v.key);
 const openItems = new Set(); // ids of the items whose description is open, across re-renders
 
 const isItem = (s) => !!s && !!s.item && typeof s.item === "object";
 const isFinding = (s) => !isItem(s) && s.kind === "finding";
 const verdictOf = (s) => String(s.item.verdict || "no verdict");
 // An unknown verdict sorts after the known ones that need action, before « conforms ».
-const verdictRank = (v) => (VERDICTS.includes(v) ? VERDICTS.indexOf(v) : VERDICTS.length - 1.5);
+const verdictRank = (v) => {
+  const keys = verdictKeys();
+  return keys.includes(v) ? keys.indexOf(v) : keys.length - 1.5;
+};
 const lexiconIndex = (name) =>
   state.plan.lexicon.findIndex((t) => t.term.toLowerCase() === String(name).toLowerCase());
 
@@ -382,7 +386,7 @@ function refactorTab(sections) {
 }
 
 function verdictBadge(v) {
-  return el("span", { class: `badge verdict ${VERDICTS.includes(v) ? `v-${v}` : ""}`, text: v });
+  return el("span", { class: `badge verdict ${verdictKeys().includes(v) ? `v-${v}` : ""}`, text: v });
 }
 
 function fileRef(f) {
@@ -455,7 +459,7 @@ function structureView(items, findings) {
     if (!nodes.has(f)) nodes.set(f, { id: `f${nodes.size}`, cls });
     return nodes.get(f).id;
   };
-  const vclass = (s) => `vc_${VERDICTS.includes(verdictOf(s)) ? verdictOf(s).replace(/-/g, "_") : "other"}`;
+  const vclass = (s) => `vc_${verdictKeys().includes(verdictOf(s)) ? verdictOf(s).replace(/-/g, "_") : "other"}`;
   items.forEach((s) => filesOf(s).forEach((f) => node(f, vclass(s))));
   const edges = [];
   for (const s of items) {

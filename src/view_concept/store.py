@@ -21,7 +21,7 @@ A section is one element of the `outline` list in plan.json: {id, title, earns},
 review. A refactor section, marked `part: 2`, belongs to Part 2 of a PR review and is
 shown in the refactor tab; every other section is an explanation section, shown in the
 Explanation tab. A refactor section about one item of the diff carries its item fields
-under `item`: {files, verdict (conforms, diverges, out-of-pr, throw, split or move),
+under `item`: {files, verdict (one of the keys in verdicts.yaml, next to this module),
 implements, note, relations: [{to, kind, from?}]}, where the optional `from` names
 which of the item's files a relation starts from (by default the first). One with
 `kind: "finding"` and `items: [<section ids>]` is a finding across items.

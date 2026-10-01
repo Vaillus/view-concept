@@ -1,0 +1,15 @@
+# The verdicts of an item in a PR review (view-pr), in the order of the review table.
+- key: diverges
+  meaning: does not match the model; say how in the description.
+  sends_to: model matching
+- key: move
+  meaning: in the wrong place; say where it belongs. In model matching, an agent moves it.
+  sends_to: model matching
+- key: split
+  meaning: does several jobs; list the pieces in the description.
+- key: throw
+  meaning: nothing needs it.
+- key: out-of-pr
+  meaning: belongs in another branch.
+- key: conforms
+  meaning: matches the model.

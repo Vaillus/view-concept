@@ -7,6 +7,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +19,11 @@ from . import threads
 from .store import Session, SessionError, list_sessions
 
 STATIC = Path(__file__).parent / "static"
+# The verdicts an item can get in a PR review, in the review table's order: {key, meaning,
+# sends_to?}. The view-pr skill reads the same file.
+VERDICTS: list[dict[str, str]] = yaml.safe_load(
+    (Path(__file__).parent / "verdicts.yaml").read_text(encoding="utf-8")
+)
 
 md = (
     MarkdownIt("commonmark", {"html": True})
@@ -84,6 +90,7 @@ def state(slug: str) -> dict[str, Any]:
         "audit": audit,
         "comments": comments,
         "changes": changes,
+        "verdicts": VERDICTS,
     }
 
 

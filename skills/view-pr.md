@@ -194,7 +194,7 @@ under `item`:
 ```
 
 - `files`: the paths the item covers.
-- `verdict`: one of the values below.
+- `verdict`: one of the keys below.
 - `implements`: the concepts of the model it carries, by their lexicon names.
 - `note`: one line, such as the point it diverges on or an exception.
 - `relations`: its links to other files, each `{"to": "<path>", "kind": ...}`
@@ -207,16 +207,10 @@ reads and writes, and, unless it simply conforms, the finding (why it got its
 verdict). Do not write the verdict or a « Porte : » line in the prose: they
 are fields now, and the page draws them.
 
-The verdict is one of these keys:
-
-- `conforms`: matches the model.
-- `diverges`: does not match the model; say how in the description. Goes
-  back to model matching.
-- `out-of-pr`: belongs in another branch.
-- `throw`: nothing needs it.
-- `split`: does several jobs; list the pieces in the description.
-- `move`: in the wrong place; say where it belongs. Goes back to model
-  matching, where an agent moves it.
+The verdict is one of the keys in
+`~/Documents/code/view-concept/src/view_concept/verdicts.yaml`. Read that
+file for what each verdict means and which ones send the item back to an
+earlier step; it lists them in the order of the review table.
 
 A **finding across items** is a problem between items: the same logic in two
 files, an import across directories, a module in the wrong place judged from
