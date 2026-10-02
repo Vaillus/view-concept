@@ -19,6 +19,7 @@
 const SLUG = decodeURIComponent(location.pathname.split("/").pop());
 const DRAFTS_KEY = `view-concept:drafts:${SLUG}`;
 const NOTE_KEY = `view-concept:note:${SLUG}`;
+const WIDTH_KEY = "view-concept:review-width"; // per browser, for every session
 
 let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
@@ -1127,6 +1128,42 @@ async function send(action = "") {
   await load();
   sentToast(approval ? approval.toast : `Sent ${b.id} to the session`);
 }
+
+/* ---------------- divider ----------------
+   The border between the workspace and the review pane is a divider: dragging it sets
+   the pane's width, from 300 px to 70 % of the window, remembered in this browser.
+   A double-click goes back to the default width. */
+
+const divider = $("#divider");
+const clampWidth = (px) => Math.round(Math.max(300, Math.min(px, innerWidth * 0.7)));
+
+function setReviewWidth(px) {
+  const layout = $(".layout");
+  if (px == null) layout.style.removeProperty("--review-width");
+  else layout.style.setProperty("--review-width", `${clampWidth(px)}px`);
+  positionPopover();
+}
+
+setReviewWidth(loadJSON(WIDTH_KEY, null));
+divider.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  divider.setPointerCapture(e.pointerId);
+  divider.classList.add("dragging");
+  document.body.classList.add("resizing");
+});
+divider.addEventListener("pointermove", (e) => {
+  if (divider.hasPointerCapture(e.pointerId)) setReviewWidth($(".layout").getBoundingClientRect().right - e.clientX);
+});
+divider.addEventListener("pointerup", (e) => {
+  if (!divider.hasPointerCapture(e.pointerId)) return;
+  divider.releasePointerCapture(e.pointerId);
+  divider.classList.remove("dragging");
+  document.body.classList.remove("resizing");
+  saveJSON(WIDTH_KEY, $(".review").getBoundingClientRect().width);
+});
+divider.addEventListener("dblclick", () => { saveJSON(WIDTH_KEY, null); setReviewWidth(null); });
+// A smaller window keeps the pane within 70 % of it.
+addEventListener("resize", () => setReviewWidth(loadJSON(WIDTH_KEY, null)));
 
 /* ---------------- side threads ----------------
    A thread opens in a popover on its passage. One is shown at a time; a click anywhere
