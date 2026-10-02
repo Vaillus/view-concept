@@ -151,7 +151,7 @@ a.cite:hover code { text-decoration: underline; }
 .rv-files { font-size: 11px; line-height: 16px; padding-left: 1.2em; margin-top: 2px; }
 .rv-files code, .rv-files a.cite code { background: none; padding: 0; font-size: 11px; }
 .rv-files code { color: var(--muted); }
-.rv-verdict { white-space: nowrap; }
+.rv-verdict, .rv-batch { white-space: nowrap; }
 .rv-implements, .rv-note { color: var(--ink-dim); font-size: 12px; }
 .badge.verdict { margin-left: 0; text-transform: uppercase; letter-spacing: .05em; font-size: 10.5px; white-space: nowrap; }
 /* A verdict is coloured by its tone (verdicts.yaml), so a new verdict needs no rule here. */

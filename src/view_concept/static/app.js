@@ -343,11 +343,11 @@ function sectionBlock(s, { bare = false } = {}) {
 }
 
 /* ---------------- the refactor tab ----------------
-   A refactor section that carries item fields ("item": {files, verdict, implements,
-   note, relations}) is an item: one unit of the diff, a file or files doing one job,
-   judged against the model. The items are drawn as the review table: one item entry per
-   item (its title and files, its verdict, the concepts it implements, a note), the items
-   that need action first. Clicking an entry opens its description underneath, which is
+   A refactor section that carries item fields ("item": {files, verdict, batch?,
+   implements, note, relations}) is an item: one unit of the diff, a file or files doing
+   one job, judged against the model. The items are drawn as the review table: one item
+   entry per item (its title and files, its verdict, its batch when any item has one, the
+   concepts it implements, a note), the items that need action first. Clicking an entry opens its description underneath, which is
    the section's own block, so comments, threads, highlights and annotations work there
    as in the explanation. Below the table, the structure view (see structureView). The
    other refactor sections, such as the applied changes, follow as plain sections. A
@@ -367,6 +367,8 @@ const openItems = new Set(); // ids of the items whose description is open, acro
 const isItem = (s) => !!s && !!s.item && typeof s.item === "object";
 const isFinding = (s) => !isItem(s) && s.kind === "finding";
 const verdictOf = (s) => String(s.item.verdict || "no verdict");
+// A batch is a short label or number grouping items, e.g. the PR they go into.
+const hasBatch = (s) => s.item.batch != null && String(s.item.batch).trim() !== "";
 // An unknown verdict sorts after the known ones that need action, before the last one.
 const verdictRank = (v) => {
   const keys = verdictKeys();
@@ -403,17 +405,19 @@ function reviewTable(items) {
   const counts = new Map();
   for (const s of sorted) counts.set(verdictOf(s), (counts.get(verdictOf(s)) || 0) + 1);
   const summary = [`${items.length} item${items.length > 1 ? "s" : ""}`, ...[...counts].map(([v, n]) => `${n} ${v}`)];
+  const batched = items.some(hasBatch);
+  const columns = ["item", "verdict", ...(batched ? ["batch"] : []), "implements", "note"];
   return el("div", { class: "rv rv-wide" },
     el("div", { class: "rv-head" }, "review table", el("span", { class: "rv-counts", text: summary.join(" · ") })),
     el("div", { class: "rv-scroll" },
       el("table", { class: "rv-table" },
-        el("thead", {}, el("tr", {}, ...["item", "verdict", "implements", "note"].map((t) => el("th", { text: t })))),
-        el("tbody", {}, ...sorted.flatMap(itemRows)))));
+        el("thead", {}, el("tr", {}, ...columns.map((t) => el("th", { text: t })))),
+        el("tbody", {}, ...sorted.flatMap((s) => itemRows(s, batched))))));
 }
 
 /* An item entry, and its description in the row under it (hidden while closed, but
    always in the page, so a quote in it is found and a draft on it stays anchored). */
-function itemRows(s) {
+function itemRows(s, batched) {
   const it = s.item;
   const open = openItems.has(s.id);
   const implementsCell = el("td", { class: "rv-implements" });
@@ -433,10 +437,11 @@ function itemRows(s) {
         isUpdated(s.id) ? el("span", { class: "badge new", text: "updated" }) : null),
       el("div", { class: "rv-files" }, ...[].concat(it.files || []).map((f) => el("div", {}, fileRef(f))))),
     el("td", { class: "rv-verdict" }, verdictBadge(verdictOf(s))),
+    batched ? el("td", { class: "rv-batch", text: hasBatch(s) ? String(s.item.batch) : "" }) : null,
     implementsCell,
     el("td", { class: "rv-note", text: it.note || "" }));
   const description = el("tr", { class: "rv-desc", id: `rv-desc-${s.id}`, hidden: !open },
-    el("td", { colspan: "4" }, sectionBlock(s, { bare: true })));
+    el("td", { colspan: batched ? "5" : "4" }, sectionBlock(s, { bare: true })));
   return [entry, description];
 }
 
