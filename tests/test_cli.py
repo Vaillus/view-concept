@@ -4,6 +4,8 @@ import subprocess
 import sys
 import time
 
+from view_concept.store import Session
+
 
 def view_concept(home, *args):
     """Run the command line against a session store in `home`."""
@@ -66,11 +68,14 @@ def test_question_prints_its_id(tmp_path):
     )
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == "q1"
+    assert "no watch is running" in r.stderr
     d = tmp_path / "sessions" / "ask"
     (q,) = json.loads((d / "questions.json").read_text())
     assert q["options"] == ["PR", "merge"] and q["multi"] is False
     assert json.loads((d / "status.json").read_text())["phase"] == "awaiting-answer"
+    Session("ask", root=tmp_path / "sessions").write_heartbeat()
     r = view_concept(tmp_path, "question", "ask", "Which files?", "--multi")
     assert r.stdout.strip() == "q2"
+    assert r.stderr == ""
     assert view_concept(tmp_path, "question", "nope", "Hm?").returncode != 0
     assert not (tmp_path / "sessions" / "nope").exists()

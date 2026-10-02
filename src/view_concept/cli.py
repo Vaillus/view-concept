@@ -167,6 +167,13 @@ def cmd_question(a: argparse.Namespace) -> None:
         raise SessionError(f"no session {a.slug!r}")
     q = s.add_question(a.text, a.option, a.multi)
     print(q["id"])
+    # The answer only reaches Claude through a watch: say so while none runs.
+    if not s.is_listening():
+        print(
+            f"view-concept: no watch is running for {a.slug}; the answer will wait in the "
+            "inbox until one starts. Arm the watch now.",
+            file=sys.stderr,
+        )
 
 
 def cmd_change(a: argparse.Namespace) -> None:
