@@ -80,6 +80,11 @@ function connect() {
   es.addEventListener("hello", () => { live.textContent = "live"; live.className = "live on"; });
   es.addEventListener("changed", () => load());
   es.addEventListener("threads", () => loadThreads());
+  es.addEventListener("listening", (e) => {
+    if (!state) return;
+    state.listening = JSON.parse(e.data).listening;
+    renderListening();
+  });
   es.onerror = () => { live.textContent = "offline"; live.className = "live off"; };
 }
 
@@ -113,6 +118,7 @@ function render() {
   const { plan } = state;
   document.title = `${plan.title} · view-concept`;
   $("#title").textContent = plan.title;
+  renderListening();
   renderStatus();
   followSession();
   renderPlan();
@@ -168,6 +174,18 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ---------------- status + approvals ---------------- */
+
+/* Claude is listening while a watch runs for the session (the server reads the watch's
+   heartbeat). It says whether a batch is read now; the « live » dot only says whether
+   the page is connected to the server. */
+function renderListening() {
+  const l = $("#listening");
+  l.className = `listening ${state.listening ? "on" : "off"}`;
+  l.textContent = state.listening ? "● Claude listening" : "○ Claude not listening";
+}
+// What a successful send says when no watch reads it: the batch waits in the inbox.
+const NOT_LISTENING = "Claude isn't listening: write anything in the terminal and it will read this batch";
+const sentToast = (msg) => toast(state.listening ? msg : NOT_LISTENING, state.listening ? 3000 : 8000);
 
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
 
@@ -1020,8 +1038,8 @@ async function send(action = "") {
   saveJSON(DRAFTS_KEY, drafts);
   $("#note").value = "";
   saveJSON(NOTE_KEY, "");
-  toast(approval ? approval.toast : `Sent ${b.id} to the session`);
   await load();
+  sentToast(approval ? approval.toast : `Sent ${b.id} to the session`);
 }
 
 /* ---------------- side threads ----------------

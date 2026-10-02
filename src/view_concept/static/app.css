@@ -30,6 +30,8 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .live::before { content: "● "; }
 .live.on { color: var(--ok); }
 .live.off { color: var(--dim); }
+.listening.on { color: var(--ok); }
+.listening.off { color: var(--dim); }
 
 /* ---- status + approval ---- */
 .phase { color: var(--muted); font-size: 12px; }

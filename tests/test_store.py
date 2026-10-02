@@ -1,8 +1,10 @@
 import json
+from datetime import datetime, timedelta
 
 import pytest
 
 from view_concept.store import (
+    LISTENING_FOR,
     Session,
     SessionError,
     format_batch,
@@ -151,3 +153,16 @@ def test_workflow_is_validated(tmp_path):
     with pytest.raises(SessionError, match="code session"):
         Session("y", tmp_path).create("Y", workflow="view-refactor")
     assert not Session("x", tmp_path).exists()
+
+
+def test_listening_follows_the_heartbeat(session):
+    assert session.is_listening() is False  # no watch has run
+    before = session.signature()
+    session.write_heartbeat()
+    assert session.is_listening()
+    assert session.signature() == before  # a heartbeat does not re-render the page
+    at = datetime.fromisoformat(json.loads(session.watch_path.read_text())["at"])
+    assert session.is_listening(at + timedelta(seconds=LISTENING_FOR - 1))
+    assert not session.is_listening(at + timedelta(seconds=LISTENING_FOR + 1))
+    session.watch_path.write_text("{}")
+    assert session.is_listening() is False

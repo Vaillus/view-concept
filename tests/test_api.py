@@ -25,6 +25,12 @@ def test_api(client):
     assert client.get("/api/s/missing").status_code == 404
 
 
+def test_api_says_whether_claude_is_listening(client, session):
+    assert client.get("/api/s/kv-cache").json()["listening"] is False
+    session.write_heartbeat()
+    assert client.get("/api/s/kv-cache").json()["listening"] is True
+
+
 def test_api_sends_the_session_workflow(client, session):
     assert client.get("/api/s/kv-cache").json()["workflow"] == "view-concept"
 

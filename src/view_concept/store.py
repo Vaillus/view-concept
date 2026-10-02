@@ -13,6 +13,7 @@ reach the Claude Code session through the inbox.
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
+        watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         claude.json     the Claude Code session driving this one     (written by `new`, `open`)
         seen.json       the text of each section the user last read  (server)
         threads/<id>.json  a side thread: messages, its own Claude session id  (server)
@@ -37,6 +38,10 @@ has no workflow and gets view-branch's list.
 A side thread is a separate headless Claude conversation, forked from the session in
 claude.json, that the user opens from the page to discuss a passage without changing
 anything (see threads.py). Only a comment batch reaches the main session.
+
+Claude is "listening" while a watch runs for the session: the watch rewrites watch.json
+every HEARTBEAT_EVERY seconds, and a heartbeat older than LISTENING_FOR seconds (or none)
+means no watch runs. The margin covers the seconds between a Monitor expiry and the re-arm.
 
 seen.json maps a section id to the markdown the user last marked as read. A section
 whose file differs from it is "updated": the page highlights what changed since then.
@@ -87,6 +92,8 @@ WORKFLOWS = ("view-concept", "view-branch", "view-refactor")
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
+HEARTBEAT_EVERY = 2.5  # seconds between two heartbeats of a running watch
+LISTENING_FOR = 15.0  # seconds a heartbeat proves a watch runs
 
 
 class SessionError(Exception):
@@ -160,6 +167,10 @@ class Session:
     @property
     def cursor_path(self) -> Path:
         return self.dir / ".watch_cursor"
+
+    @property
+    def watch_path(self) -> Path:
+        return self.dir / "watch.json"
 
     @property
     def claude_path(self) -> Path:
@@ -288,9 +299,22 @@ class Session:
         _write_json(self.status_path, status)
         return status
 
+    # ---- the watch's heartbeat ----
+    def write_heartbeat(self) -> None:
+        _write_json(self.watch_path, {"pid": os.getpid(), "at": now_iso()})
+
+    def is_listening(self, now: datetime | None = None) -> bool:
+        """Whether a watch runs for this session now: its heartbeat is recent."""
+        try:
+            at = datetime.fromisoformat(str(_read_json(self.watch_path, {}).get("at", "")))
+        except (SessionError, ValueError):
+            return False
+        return ((now or datetime.now(UTC)) - at).total_seconds() < LISTENING_FOR
+
     def signature(self) -> tuple:
         """Changes whenever a file the page renders changes, threads excepted (see
-        `thread_signature`)."""
+        `thread_signature`). The heartbeat is left out too: the server reads it on its
+        own, so a heartbeat never re-renders the page."""
         paths = [
             self.plan_path,
             self.audit_path,

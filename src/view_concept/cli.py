@@ -15,6 +15,7 @@ import webbrowser
 from pathlib import Path
 
 from .store import (
+    HEARTBEAT_EVERY,
     HOME,
     KINDS,
     PHASES,
@@ -121,7 +122,8 @@ def cmd_watch(a: argparse.Namespace) -> None:
 
     The cursor persists across restarts, so re-arming after a Monitor timeout neither
     loses a batch sent in between nor repeats one already delivered. Starting prints
-    nothing: every line is a Monitor event, and a re-arm is not news."""
+    nothing: every line is a Monitor event, and a re-arm is not news. While it runs,
+    the watch writes its heartbeat (watch.json), which tells the page Claude is listening."""
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
@@ -129,7 +131,11 @@ def cmd_watch(a: argparse.Namespace) -> None:
         cursor = int(s.cursor_path.read_text())
     except (FileNotFoundError, ValueError):
         cursor = 0
+    beat = 0.0
     while True:
+        if time.monotonic() - beat >= HEARTBEAT_EVERY:
+            s.write_heartbeat()
+            beat = time.monotonic()
         try:
             size = s.inbox_path.stat().st_size
         except FileNotFoundError:

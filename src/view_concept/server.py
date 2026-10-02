@@ -4,6 +4,7 @@ runs side threads."""
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +89,7 @@ def state(slug: str) -> dict[str, Any]:
     return {
         "slug": slug,
         "plan": plan,
+        "listening": s.is_listening(),
         "workflow": plan.get("workflow", ""),
         "status": status,
         "sections": {k: section_view(v, seen[k]) for k, v in sections.items()},
@@ -126,6 +128,7 @@ async def events(slug: str, request: Request) -> StreamingResponse:
 
     async def stream():
         last, last_threads = s.signature(), s.thread_signature()
+        listening = s.is_listening()
         yield "event: hello\ndata: {}\n\n"
         ticks = 0
         while not await request.is_disconnected():
@@ -137,6 +140,10 @@ async def events(slug: str, request: Request) -> StreamingResponse:
             if sig_threads != last_threads:
                 last_threads = sig_threads
                 yield "event: threads\ndata: {}\n\n"
+            # A heartbeat goes stale without any file changing: compare with the clock.
+            if s.is_listening() != listening:
+                listening = not listening
+                yield f"event: listening\ndata: {json.dumps({'listening': listening})}\n\n"
             ticks += 1
             if ticks % 40 == 0:
                 yield ": ping\n\n"

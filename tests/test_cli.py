@@ -42,3 +42,18 @@ def test_watch_prints_nothing_when_it_starts(tmp_path):
     proc.terminate()
     out, _ = proc.communicate(timeout=5)
     assert out == ""
+
+
+def test_watch_writes_its_heartbeat(tmp_path):
+    assert view_concept(tmp_path, "new", "Beat").returncode == 0
+    proc = start_watch(tmp_path, "beat")
+    try:
+        heartbeat = tmp_path / "sessions" / "beat" / "watch.json"
+        for _ in range(50):
+            if heartbeat.exists():
+                break
+            time.sleep(0.1)
+        assert json.loads(heartbeat.read_text())["pid"] == proc.pid
+    finally:
+        proc.terminate()
+        proc.communicate(timeout=5)
