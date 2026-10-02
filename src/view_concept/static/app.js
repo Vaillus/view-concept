@@ -279,7 +279,6 @@ function renderPlan() {
                      } }),
       el("div", { class: "o-title" },
         el("span", { class: "num", text: numberOf(s.id) }), " ", s.title,
-        s.kind === "question" ? el("span", { class: "badge alt", text: "Q" }) : null,
         writingId() === s.id ? el("span", { class: "badge accent writing", text: "writing" }) : null,
         isUpdated(s.id) ? el("span", { class: "badge new", text: "updated" }) : null),
       s.earns ? el("div", { class: "o-earns muted", text: s.earns }) : null);
@@ -354,8 +353,6 @@ function sectionBlock(s, { bare = false } = {}) {
   return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
     el("h2", {},
       ...(bare ? [] : [el("span", { class: "num", text: numberOf(s.id) }), " ", s.title]),
-      s.kind === "question" && s.from && s.from.length
-        ? el("span", { class: "q-from dim", text: `from ${[].concat(s.from).join(", ")}` }) : null,
       el("span", { class: "t-chips", "data-section": s.id }),
       isUpdated(s.id)
         ? el("button", { class: "badge new", text: "updated · mark read", title: "Mark this section as read: its highlights go away",

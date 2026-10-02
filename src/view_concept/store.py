@@ -19,15 +19,16 @@ reach the Claude Code session through the inbox.
         seen.json       the text of each section the user last read  (server)
         threads/<id>.json  a side thread: messages, its own Claude session id  (server)
 
-A section is one element of the `outline` list in plan.json: {id, title, earns}, plus
-`kind: "question"` (with `from`, the comments it answers) for a section added during the
-review. A refactor section, marked `part: 2`, belongs to Part 2 of a branch review or a
-refactor and is shown in the refactor tab; every other section is an explanation
-section, shown in the Explanation tab. A refactor section about one item of the diff
-carries its item fields under `item`: {files, verdict (one of the keys of the session
-workflow's list in verdicts.yaml, next to this module), batch? (a short label or
-number), implements, note, relations: [{to, kind, from?}]}, where the optional `from`
-names which of the item's files a relation starts from (by default the first).
+A section is one element of the `outline` list in plan.json: {id, title, earns}. An
+answer to a comment that belongs in the explanation amends a section or adds one at its
+place in the outline; a `kind: "question"` left by an older session is ignored, and the
+section reads as any other. A refactor section, marked `part: 2`, belongs to Part 2 of
+a branch review or a refactor and is shown in the refactor tab; every other section is
+an explanation section, shown in the Explanation tab. A refactor section about one item
+of the diff carries its item fields under `item`: {files, verdict (one of the keys of
+the session workflow's list in verdicts.yaml, next to this module), batch? (a short
+label or number), implements, note, relations: [{to, kind, from?}]}, where the optional
+`from` names which of the item's files a relation starts from (by default the first).
 One with `kind: "finding"` and `items: [<section ids>]` is a finding across items.
 
 The session workflow, `workflow` in plan.json, is the skill that drives the session:

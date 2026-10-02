@@ -124,11 +124,10 @@ textarea:focus { outline: none; border-color: var(--accent); }
 ::highlight(ev-updated) { background-color: var(--okbg); text-decoration: underline 2px var(--ok); text-underline-offset: 3px; }
 ::highlight(ev-focus) { background-color: var(--accent); color: var(--on-accent); }
 
-/* ---- code sessions: citations, questions, model changes ---- */
+/* ---- code sessions: citations, model changes ---- */
 a.cite { text-decoration: none; }
 a.cite code { color: var(--info); background: var(--infobg); }
 a.cite:hover code { text-decoration: underline; }
-.q-from { font-size: 11px; font-weight: normal; }
 .changes { list-style: none; margin: 0 0 16px; padding: 0; }
 .change { padding: 6px 8px; border-left: 2px solid var(--ok); margin-bottom: 6px; }
 .d-instead, .d-why { font-size: 12px; line-height: 17px; margin-top: 2px; }
