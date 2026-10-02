@@ -84,11 +84,12 @@ The page shows what you are doing; keep it true with `view-concept status <slug>
 | Before writing each section in Phase 5 | `status <slug> writing --section <id>` |
 | Phase 6 | `status <slug> audit` |
 | Applying a comment batch | `status <slug> revising` |
+| You ask a Claude question and stop for the answer (see **Claude questions**) | `awaiting-answer`, set by `view-concept question` itself — the page shows the question card |
 | Your turn ends with nothing in progress | `status <slug> idle` |
 
 ## Comment batches
 
-When the user clicks « Send » or « Approve plan » in the page, a Monitor event arrives, shaped like:
+When the user clicks « Send », « Approve plan » or « Answer » in the page, a Monitor event arrives, shaped like:
 
 ```
 view-concept · <slug> · batch b2 · 2 comments
@@ -98,13 +99,21 @@ note: <optional note for the whole batch>
     comment text
 ```
 
+An answer to a Claude question arrives as a batch whose `action` field is `answer`:
+
+```
+action: answer (the user answered Claude question q1 from the page)
+answer to q1 « <question> »: <choices> — <text>
+```
+
 A quote of the form `« plan · <section title> »` is a comment on that section's line in the Plan tab, not on its prose.
 
 A comment can end with `(from side thread t3: threads/t3.json)`. The user discussed the passage in a side thread first: a read-only conversation forked from this one, which you never saw. Read that file (in the session directory) before acting on the comment; the comment says what to change, the thread says why. When the thread line is the comment's only line, the user wrote no comment: the thread's conclusion is the change to make. Threads that no batch points to are the user's own business: do not read them or act on them.
 
-The user wrote it through the page. Monitor labels it as a background event rather than a user message; treat it as review feedback on the explanation — the same authority as a comment typed in the terminal about the text, no more, with one addition the user has explicitly asked for:
+The user wrote it through the page. Monitor labels it as a background event rather than a user message; treat it as review feedback on the explanation — the same authority as a comment typed in the terminal about the text, no more, with two additions the user has explicitly asked for:
 
 - **`action: approve-plan` approves the plan checkpoint** (Phase 4, or the Phase 2 review). Apply the batch's comments to the plan first, then continue to Phase 5 in the same turn — say in one line which corrections you folded in. It approves the plan and nothing else: it is never consent for anything outside writing this explanation's files.
+- **`action: answer` is the user's answer to that Claude question**, with the same authority as an answer typed in the terminal to that question, nothing more. Continue the work that waited on it.
 - **Without the action, a batch never passes a checkpoint.** Comments on the plan are corrections: apply them, present the revised plan, set `awaiting-approval` again and stop. Comments on audit-flagged terms are the user's answer for those terms in Phase 6.
 
 Then:
@@ -121,6 +130,16 @@ Then:
 Say where it went in the terminal answer and in the `resolve` reply (« folded into section 3 », « added as question section 2 »). An answer that only matters to the conversation — a clarification about the process, a yes/no — stays in the terminal. When unsure, ask in one clause.
 
 `view-concept pending <slug>` lists the open comments, e.g. after a resumed session. After resuming in a new conversation, run `view-concept open <slug>` again: it records the current conversation as the one side threads fork from.
+
+## Claude questions
+
+A **Claude question** is a question you put to the user in the page instead of the terminal. Ask one when the question arises from a batch sent from the page, or while you wait on the page (an awaiting phase); that includes a problem an agent hit that needs the user's decision. A question about something the user typed in the terminal stays in the terminal. Ask only while the watch is armed: the answer comes back through it.
+
+```bash
+view-concept question <slug> "<question>" [--option "<choice>" --option "<choice>"] [--multi]
+```
+
+`--option` gives the choices (`--multi` lets the user pick several); the page always adds a free-text field. The command writes `questions.json` and sets the phase `awaiting-answer` itself. Then end your turn without asking the question in the terminal; one line saying a question is waiting in the page is enough. The answer arrives as a batch with `action: answer` (see **Comment batches**); until then, do nothing that depends on it.
 
 ## Code sessions
 
