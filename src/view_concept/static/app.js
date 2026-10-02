@@ -353,15 +353,21 @@ function sectionBlock(s, { bare = false } = {}) {
    other refactor sections, such as the applied changes, follow as plain sections. A
    review whose refactor sections carry no item fields is drawn as plain sections only. */
 
-// Verdict keys in table order (from verdicts.yaml, sent with the state): those that need
-// action first, « conforms » last.
+// Verdict keys in table order (the session workflow's list in verdicts.yaml, sent with the
+// state): those that need action first, the one that needs none (« conforms », « keep ») last.
 const verdictKeys = () => (state.verdicts || []).map((v) => v.key);
+// The tone a verdict is drawn in (ok, danger, warn, alt, flag, info), "" for an unknown verdict.
+const TONES = ["ok", "danger", "warn", "alt", "flag", "info"];
+const toneOf = (v) => {
+  const tone = ((state.verdicts || []).find((d) => d.key === v) || {}).tone;
+  return TONES.includes(tone) ? tone : "";
+};
 const openItems = new Set(); // ids of the items whose description is open, across re-renders
 
 const isItem = (s) => !!s && !!s.item && typeof s.item === "object";
 const isFinding = (s) => !isItem(s) && s.kind === "finding";
 const verdictOf = (s) => String(s.item.verdict || "no verdict");
-// An unknown verdict sorts after the known ones that need action, before « conforms ».
+// An unknown verdict sorts after the known ones that need action, before the last one.
 const verdictRank = (v) => {
   const keys = verdictKeys();
   return keys.includes(v) ? keys.indexOf(v) : keys.length - 1.5;
@@ -380,7 +386,7 @@ function refactorTab(sections) {
 }
 
 function verdictBadge(v) {
-  return el("span", { class: `badge verdict ${verdictKeys().includes(v) ? `v-${v}` : ""}`, text: v });
+  return el("span", { class: `badge verdict ${toneOf(v) ? `tone-${toneOf(v)}` : ""}`, text: v });
 }
 
 function fileRef(f) {
@@ -453,7 +459,7 @@ function structureView(items, findings) {
     if (!nodes.has(f)) nodes.set(f, { id: `f${nodes.size}`, cls });
     return nodes.get(f).id;
   };
-  const vclass = (s) => `vc_${verdictKeys().includes(verdictOf(s)) ? verdictOf(s).replace(/-/g, "_") : "other"}`;
+  const vclass = (s) => `tc_${toneOf(verdictOf(s)) || "none"}`;
   items.forEach((s) => filesOf(s).forEach((f) => node(f, vclass(s))));
   const edges = [];
   for (const s of items) {

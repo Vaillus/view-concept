@@ -1,15 +1,47 @@
-# The verdicts of an item in a branch review (view-branch), in the order of the review table.
-- key: diverges
-  meaning: does not match the model; say how in the description.
-  sends_to: model matching
-- key: move
-  meaning: in the wrong place; say where it belongs. In model matching, an agent moves it.
-  sends_to: model matching
-- key: split
-  meaning: does several jobs; list the pieces in the description.
-- key: throw
-  meaning: nothing needs it.
-- key: out-of-pr
-  meaning: belongs in another branch.
-- key: conforms
-  meaning: matches the model.
+# The verdicts an item can get, one list per session workflow, each in the order of the review
+# table: those that need action first, the one that needs none last. `tone` is the colour the page
+# draws the verdict in, one of ok, danger, warn, alt, flag, info.
+
+# The verdicts of an item in a branch review: the item measured against the model.
+view-branch:
+  - key: diverges
+    meaning: does not match the model; say how in the description.
+    sends_to: model matching
+    tone: danger
+  - key: move
+    meaning: in the wrong place; say where it belongs. In model matching, an agent moves it.
+    sends_to: model matching
+    tone: warn
+  - key: split
+    meaning: does several jobs; list the pieces in the description.
+    tone: alt
+  - key: throw
+    meaning: nothing needs it.
+    tone: flag
+  - key: out-of-pr
+    meaning: belongs in another branch.
+    tone: info
+  - key: conforms
+    meaning: matches the model.
+    tone: ok
+
+# The triage verdicts of an item in a refactor: what happens to existing code.
+view-refactor:
+  - key: move
+    meaning: used, but in the wrong place; say where it belongs.
+    tone: warn
+  - key: split
+    meaning: does several jobs; list the pieces.
+    tone: alt
+  - key: merge
+    meaning: does the same job as another item; name that item.
+    tone: flag
+  - key: throw
+    meaning: to be deleted.
+    tone: danger
+  - key: separate-pr
+    meaning: out of this refactor, it belongs to a different topic; name the topic.
+    tone: info
+  - key: keep
+    meaning: good as it is.
+    tone: ok

@@ -154,12 +154,13 @@ a.cite:hover code { text-decoration: underline; }
 .rv-verdict { white-space: nowrap; }
 .rv-implements, .rv-note { color: var(--ink-dim); font-size: 12px; }
 .badge.verdict { margin-left: 0; text-transform: uppercase; letter-spacing: .05em; font-size: 10.5px; white-space: nowrap; }
-.badge.v-conforms { background: var(--okbg); color: var(--ok); }
-.badge.v-diverges { background: var(--dangerbg); color: var(--danger); }
-.badge.v-move { background: var(--warnbg); color: var(--warn); }
-.badge.v-split { background: var(--altbg); color: var(--alt); }
-.badge.v-throw { background: var(--flagbg); color: var(--flag); }
-.badge.v-out-of-pr { background: var(--infobg); color: var(--info); }
+/* A verdict is coloured by its tone (verdicts.yaml), so a new verdict needs no rule here. */
+.badge.tone-ok { background: var(--okbg); color: var(--ok); }
+.badge.tone-danger { background: var(--dangerbg); color: var(--danger); }
+.badge.tone-warn { background: var(--warnbg); color: var(--warn); }
+.badge.tone-alt { background: var(--altbg); color: var(--alt); }
+.badge.tone-flag { background: var(--flagbg); color: var(--flag); }
+.badge.tone-info { background: var(--infobg); color: var(--info); }
 .rv-desc > td { padding: 0 10px 12px calc(10px + 1.2em); border-bottom: 1px solid var(--line); background: var(--hover); }
 .rv-desc .sec { border-bottom: 0; border-left: 2px solid var(--accent); padding: 0 4px 4px 12px; }
 .sec.bare h2 { margin: 0; padding-top: 4px; min-height: 18px; }
@@ -173,12 +174,12 @@ a.cite:hover code { text-decoration: underline; }
 .rv-structure .node :is(rect, path, polygon, circle) { fill: var(--raised) !important; stroke: var(--line-strong) !important; stroke-width: 1.5px !important; }
 .rv-structure .node .nodeLabel { color: var(--ink) !important; }
 .rv-structure .edgeLabel, .rv-structure .edgeLabel :is(p, span) { color: var(--muted) !important; background: var(--bg) !important; }
-.rv-structure .node.vc_conforms :is(rect, path, polygon) { stroke: var(--ok) !important; }
-.rv-structure .node.vc_diverges :is(rect, path, polygon) { stroke: var(--danger) !important; }
-.rv-structure .node.vc_move :is(rect, path, polygon) { stroke: var(--warn) !important; }
-.rv-structure .node.vc_split :is(rect, path, polygon) { stroke: var(--alt) !important; }
-.rv-structure .node.vc_throw :is(rect, path, polygon) { stroke: var(--flag) !important; }
-.rv-structure .node.vc_out_of_pr :is(rect, path, polygon) { stroke: var(--info) !important; }
+.rv-structure .node.tc_ok :is(rect, path, polygon) { stroke: var(--ok) !important; }
+.rv-structure .node.tc_danger :is(rect, path, polygon) { stroke: var(--danger) !important; }
+.rv-structure .node.tc_warn :is(rect, path, polygon) { stroke: var(--warn) !important; }
+.rv-structure .node.tc_alt :is(rect, path, polygon) { stroke: var(--alt) !important; }
+.rv-structure .node.tc_flag :is(rect, path, polygon) { stroke: var(--flag) !important; }
+.rv-structure .node.tc_info :is(rect, path, polygon) { stroke: var(--info) !important; }
 .rv-structure .node.vc_ghost :is(rect, path, polygon) { stroke: var(--dim) !important; stroke-dasharray: 3 3; fill: none !important; }
 .rv-structure .node.vc_ghost .nodeLabel, .rv-structure .node.vc_ghost text { color: var(--dim) !important; fill: var(--dim) !important; }
 .rv-structure .flowchart-link.edge-pattern-dotted { stroke: var(--warn) !important; }

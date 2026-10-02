@@ -62,13 +62,56 @@ def test_api_keeps_the_part_of_an_outline_item(client, session):
     assert outline[-1]["part"] == 2
 
 
-def test_api_sends_the_verdicts_in_the_file_order(client):
+VERDICT_FILE = yaml.safe_load((Path(server.__file__).parent / "verdicts.yaml").read_text())
+TONES = {"ok", "danger", "warn", "alt", "flag", "info"}
+
+
+def set_workflow(session, workflow):
+    plan = session.read_plan()
+    plan["workflow"] = workflow
+    session.plan_path.write_text(json.dumps(plan))
+
+
+def test_every_verdict_has_a_meaning_and_a_tone():
+    assert set(VERDICT_FILE) == {"view-branch", "view-refactor"}
+    for verdicts in VERDICT_FILE.values():
+        assert all(v["meaning"] and v["tone"] in TONES for v in verdicts)
+        assert len({v["key"] for v in verdicts}) == len(verdicts)
+
+
+@pytest.mark.parametrize("workflow", ["view-branch", "view-refactor"])
+def test_api_sends_the_verdicts_of_the_session_workflow(client, session, workflow):
+    set_workflow(session, workflow)
     verdicts = client.get("/api/s/kv-cache").json()["verdicts"]
-    in_file = yaml.safe_load((Path(server.__file__).parent / "verdicts.yaml").read_text())
-    assert [v["key"] for v in verdicts] == [v["key"] for v in in_file]
-    assert verdicts[-1]["key"] == "conforms"
-    assert all(v["meaning"] for v in verdicts)
+    assert [v["key"] for v in verdicts] == [v["key"] for v in VERDICT_FILE[workflow]]
+    assert verdicts[-1]["key"] == {"view-branch": "conforms", "view-refactor": "keep"}[workflow]
+
+
+def test_api_branch_verdicts_keep_their_tones_and_destinations(client, session):
+    set_workflow(session, "view-branch")
+    verdicts = client.get("/api/s/kv-cache").json()["verdicts"]
+    assert {v["key"]: v["tone"] for v in verdicts} == {
+        "diverges": "danger",
+        "move": "warn",
+        "split": "alt",
+        "throw": "flag",
+        "out-of-pr": "info",
+        "conforms": "ok",
+    }
     assert {v["key"] for v in verdicts if v.get("sends_to")} == {"diverges", "move"}
+
+
+def test_api_falls_back_to_branch_verdicts_without_a_workflow(client, session):
+    plan = session.read_plan()
+    del plan["workflow"]
+    session.plan_path.write_text(json.dumps(plan))
+    state = client.get("/api/s/kv-cache").json()
+    assert state["workflow"] == ""
+    assert state["verdicts"] == VERDICT_FILE["view-branch"]
+
+
+def test_api_sends_no_verdicts_to_an_explanation(client):
+    assert client.get("/api/s/kv-cache").json()["verdicts"] == []
 
 
 def test_api_updated_sections(client, session):
