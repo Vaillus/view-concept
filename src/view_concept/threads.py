@@ -1,32 +1,31 @@
-"""Side threads: headless Claude conversations the user opens from the page.
+"""Side threads: headless agent conversations the user opens from the page.
 
-A thread discusses a passage without changing anything. Its first turn forks the main
-Claude Code session (`--resume <parent> --fork-session`), so it starts knowing the
-whole conversation so far while the main session stays untouched; every later turn
-resumes the thread's own session. Each turn is one `claude -p` process, run by the
-server in a background Python thread; its reply streams into threads/<id>.json, which
-the server's event stream watches like the other session files.
+A thread discusses a passage without changing anything. On an agent that can fork its
+conversation (Claude Code, Codex), its first turn forks the main session, so it starts
+knowing the whole conversation so far while the main session stays untouched; every later
+turn resumes the thread's own session. On any other agent (a program that answers a prompt
+on stdin, such as `jazz run`) every turn restates where the explanation is and what the
+thread has said. Each turn is one process, run by the server in a background Python thread;
+its reply streams into threads/<id>.json, which the server's event stream watches like the
+other session files. `agents.py` holds what differs between agents.
 
-Threads are read-only: the only tools are Read, Grep and Glob, MCP servers are off,
-and anything else is denied rather than asked. A change the discussion leads to goes
-to the main session as a comment of the next batch (the comment carries the thread id).
+Threads are read-only, whatever the agent: its read-only tool set or sandbox, no approvals
+asked. A change the discussion leads to goes to the main session as a comment of the next
+batch (the comment carries the thread id).
 """
 
 from __future__ import annotations
 
 import contextlib
-import json
-import os
 import subprocess
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
+from .agents import Backend, TurnState, resolve
 from .store import Session, SessionError, now_iso
 
-CLAUDE = os.environ.get("VIEW_CONCEPT_CLAUDE", "claude")
-TOOLS = ["Read", "Grep", "Glob"]
 FLUSH_EVERY = 0.25  # seconds between writes of a streaming reply
 
 # (session dir, thread id) -> the running process. A thread whose file says "running"
@@ -69,14 +68,18 @@ def send(s: Session, tid: str, text: str) -> dict[str, Any]:
         if is_running(s, tid):
             raise ThreadBusy(f"{tid} is still answering")
         thread = s.read_thread(tid)
-        first = not thread["claude_id"]
-        args = _args(s, thread)
-        prompt = _first_prompt(s, thread, text) if first else text
+        try:
+            backend = resolve(s)
+        except ValueError as e:
+            raise SessionError(str(e)) from e
+        first = not thread["agent_session"]
+        args = backend.args(s, thread)
+        prompt = backend.prompt(thread, _briefing(s, thread, backend), text)
         thread["messages"] += [
             {"role": "user", "text": text, "at": now_iso()},
             {"role": "assistant", "text": "", "at": now_iso()},
         ]
-        if first:
+        if first and backend.forks:
             thread["forked_from"] = s.read_parent()
         try:
             proc = subprocess.Popen(
@@ -88,13 +91,13 @@ def send(s: Session, tid: str, text: str) -> dict[str, Any]:
                 text=True,
             )
         except OSError as e:
-            thread.update(state="error", activity="", error=f"could not start {CLAUDE}: {e}")
+            thread.update(state="error", activity="", error=f"could not start {args[0]}: {e}")
             s.write_thread(thread)
             return thread
         _running[(str(s.dir), tid)] = proc
         thread.update(state="running", activity="starting", error="")
         s.write_thread(thread)
-    threading.Thread(target=_run, args=(s, thread, proc, prompt), daemon=True).start()
+    threading.Thread(target=_run, args=(s, thread, backend, proc, prompt), daemon=True).start()
     return thread
 
 
@@ -119,18 +122,7 @@ def _cwd(s: Session) -> Path:
     return repo if repo.is_dir() else s.dir
 
 
-def _args(s: Session, thread: dict[str, Any]) -> list[str]:
-    args = [CLAUDE, "-p", "--output-format", "stream-json", "--verbose"]
-    args += ["--include-partial-messages", "--strict-mcp-config", "--permission-mode", "dontAsk"]
-    args += ["--tools", *TOOLS, "--allowedTools", *TOOLS, "--add-dir", str(s.dir)]
-    if thread["claude_id"]:
-        args += ["--resume", thread["claude_id"]]
-    elif s.read_parent():
-        args += ["--resume", s.read_parent(), "--fork-session"]
-    return args
-
-
-def _first_prompt(s: Session, thread: dict[str, Any], text: str) -> str:
+def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
     outline = s.read_plan()["outline"]
     number = {sec["id"]: i + 1 for i, sec in enumerate(outline)}
     titles = {sec["id"]: sec.get("title", sec["id"]) for sec in outline}
@@ -140,7 +132,7 @@ def _first_prompt(s: Session, thread: dict[str, Any], text: str) -> str:
         anchor = f"{where}: « {thread['quote']} »" if thread["quote"] else f"the whole of {where}"
     else:
         anchor = "none (a general question about the explanation)"
-    if s.read_parent():
+    if backend.forks and s.read_parent():
         origin = (
             "It is a separate conversation forked from the main one: you know everything said"
             " so far, but the main session will not see what is said here."
@@ -168,79 +160,47 @@ def _first_prompt(s: Session, thread: dict[str, Any], text: str) -> str:
             "- When the discussion leads to a change (to the explanation or to the code),"
             " say so plainly. The user sends it to the main session from the page.",
             f"Passage: {anchor}",
-            "",
-            text,
         ]
     )
 
 
-def _run(s: Session, thread: dict[str, Any], proc: subprocess.Popen, prompt: str) -> None:
+def _run(
+    s: Session, thread: dict[str, Any], backend: Backend, proc: subprocess.Popen, prompt: str
+) -> None:
     key = (str(s.dir), thread["id"])
     reply = thread["messages"][-1]
-    noise: list[str] = []  # stderr and anything that is not an event
-    result: dict[str, Any] = {}
+    turn = TurnState()
     last_flush = 0.0
     try:
         assert proc.stdin and proc.stdout
-        proc.stdin.write(prompt)
-        proc.stdin.close()
+        try:
+            proc.stdin.write(prompt)
+            proc.stdin.close()
+        except BrokenPipeError:
+            turn.noise.append("the agent closed its input before reading the prompt")
         for line in proc.stdout:
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                noise.append(line.rstrip())
-                continue
-            if event.get("type") == "result":
-                result = event
-            if _apply(thread, reply, event) and time.monotonic() - last_flush > FLUSH_EVERY:
+            changed = backend.feed(line, thread, reply, turn)
+            if changed and time.monotonic() - last_flush > FLUSH_EVERY:
                 s.write_thread(thread)
                 last_flush = time.monotonic()
-        proc.wait()
+        code = proc.wait()
+        backend.close(thread, reply, turn, code)
     finally:
         with _lock:
-            # claude exits 143 on SIGTERM: the exit code alone can't tell a stop from a crash
+            # an agent exits 143 on SIGTERM: the exit code alone can't tell a stop from a crash
             if key in _stopping:
                 _stopping.discard(key)
                 thread.update(state="idle", error="")
                 reply["stopped"] = True
-            elif result.get("is_error") or proc.returncode or not result:
-                detail = str(result.get("result") or "").strip() or "\n".join(noise[-5:])
+            elif turn.failed or not turn.finished:
+                detail = turn.error or "\n".join(turn.noise[-5:])
                 thread.update(state="error", error=detail or f"exit code {proc.returncode}")
             else:
                 thread.update(state="idle", error="")
                 if not reply["text"].strip():
-                    reply["text"] = str(result.get("result", ""))
+                    reply["text"] = turn.final_text
             thread["activity"] = ""
             s.write_thread(thread)
             # Only once the final state is on disk: a reader that sees the thread no longer
             # running must also read its final state, not "running" (shown as interrupted).
             _running.pop(key, None)
-
-
-def _apply(thread: dict[str, Any], reply: dict[str, Any], event: dict[str, Any]) -> bool:
-    """Fold one stream-json event into the thread. Returns True when it changed."""
-    kind = event.get("type")
-    if kind == "system" and event.get("subtype") == "init":
-        thread["claude_id"] = event.get("session_id", thread["claude_id"])
-        thread["activity"] = "thinking"
-        return True
-    if kind != "stream_event":
-        return False
-    ev = event.get("event", {})
-    if ev.get("type") == "message_start" and reply["text"] and not reply["text"].endswith("\n\n"):
-        reply["text"] += "\n\n"  # one reply can span several messages around tool calls
-    elif ev.get("type") == "content_block_start":
-        block = ev.get("content_block", {})
-        if block.get("type") == "tool_use":
-            thread["activity"] = f"using {block.get('name', 'a tool')}"
-            return True
-        if block.get("type") == "thinking":
-            thread["activity"] = "thinking"
-            return True
-    elif ev.get("type") == "content_block_delta":
-        delta = ev.get("delta", {})
-        if delta.get("type") == "text_delta":
-            reply["text"] += delta.get("text", "")
-            thread["activity"] = "writing"
-            return True
-    return False

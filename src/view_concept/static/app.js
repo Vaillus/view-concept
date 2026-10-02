@@ -3,10 +3,10 @@
    Tabs share the main space: the plan (outline, model changes, lexicon), the
    explanation (one block per explanation section) and, in a branch review that has reached
    the refactoring step, the refactor tab (the refactor sections, Part 2); the review pane (a
-   conversation: sent batches and answered Claude questions, the open Claude questions, then
-   the draft comments) stays on the right. The page never edits the explanation: Claude Code
+   conversation: sent batches and answered agent questions, the open agent questions, then
+   the draft comments) stays on the right. The page never edits the explanation: the agent
    writes the files, the server streams "changed", the page re-fetches. The page writes
-   batches of comments, and side threads: separate read-only Claude conversations run by
+   batches of comments, and side threads: separate read-only agent conversations run by
    the server, streamed through "threads" events. A thread shows in a popover on its
    passage (see "side threads" below).
 
@@ -119,7 +119,7 @@ const isUpdated = (id) => !!(state.sections[id] || {}).updated;
 
 function render() {
   const { plan } = state;
-  // A mark in the tab title while a Claude question waits, to be seen from another window.
+  // A mark in the tab title while an agent question waits, to be seen from another window.
   document.title = `${openQuestions().length ? "● " : ""}${plan.title} · view-concept`;
   $("#title").textContent = plan.title;
   renderListening();
@@ -182,30 +182,30 @@ document.addEventListener("keydown", (e) => {
 
 /* ---------------- status + approvals ---------------- */
 
-/* Claude is listening while a watch runs for the session (the server reads the watch's
+/* The agent is listening while a watch runs for the session (the server reads the watch's
    heartbeat). It says whether a batch is read now; the « live » dot only says whether
    the page is connected to the server. */
 function renderListening() {
   const l = $("#listening");
   l.className = `listening ${state.listening ? "on" : "off"}`;
-  l.textContent = state.listening ? "● Claude listening" : "○ Claude not listening";
+  l.textContent = state.listening ? "● Agent listening" : "○ Agent not listening";
 }
 // What a successful send says when no watch reads it: the batch waits in the inbox.
-const NOT_LISTENING = "Claude isn't listening: write anything in the terminal and it will read this batch";
+const NOT_LISTENING = "The agent isn't listening: write anything in the terminal and it will read this batch";
 const sentToast = (msg) => toast(state.listening ? msg : NOT_LISTENING, state.listening ? 3000 : 8000);
 
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
 
-/* "awaiting-answer" waits on the open Claude questions, answered from their cards in the
-   review pane (see "Claude questions" below), so it has no button here. */
-const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "answered · Claude is reading it" };
+/* "awaiting-answer" waits on the open agent questions, answered from their cards in the
+   review pane (see "agent questions" below), so it has no button here. */
+const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "answered · the agent is reading it" };
 
 /* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
    model of a branch review at the end of model consolidation ("awaiting-model", set by the
    view-branch skill only), and the opening of its PR once refactoring is written
    ("awaiting-pr", view-branch too).
    Each is answered from the page by a batch carrying the phase's action, draft comments
-   included. Until Claude moves the status on, the page says the answer is on its way.
+   included. Until the agent moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it.
    « Approve model » sits at the end of the explanation, after the last section of Part 1,
    where the model is read; « Create PR » at the end of the refactor tab. The page does not
@@ -214,12 +214,12 @@ const docButton = el("button", { id: "doc-approve", class: "btn primary approve 
 const prButton = el("button", { id: "pr-create", class: "btn primary approve doc-approve", hidden: true });
 const APPROVALS = {
   "awaiting-approval": { action: "approve-plan", label: "Approve plan", toast: "Plan approved",
-                         ready: "plan ready · waiting for your approval", sent: "plan approved · Claude is starting" },
+                         ready: "plan ready · waiting for your approval", sent: "plan approved · the agent is starting" },
   "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved", button: docButton,
-                      ready: "model ready · waiting for your approval", sent: "model approved · Claude is implementing" },
+                      ready: "model ready · waiting for your approval", sent: "model approved · the agent is implementing" },
   "awaiting-pr": { action: "create-pr", label: "Create PR", toast: "PR requested", button: prButton,
                    ready: "refactoring written · waiting for you to create the PR",
-                   sent: "PR requested · Claude is opening it" },
+                   sent: "PR requested · the agent is opening it" },
 };
 const buttonOf = (approval) => approval.button || $("#approve");
 
@@ -979,13 +979,13 @@ $("#composer textarea").addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeComposer();
 });
 
-/* ---------------- Claude questions ----------------
-   A Claude question is one Claude puts to the user in the page (`view-concept question`,
+/* ---------------- agent questions ----------------
+   An agent question is one the agent puts to the user in the page (`view-concept question`,
    questions.json): its text, optional options (one choice, or several when `multi`),
-   and always a free-text field. Each open one is a card headed « Question from Claude »
+   and always a free-text field. Each open one is a card headed « Question from the agent »
    in the review pane, in the order asked. A card is built once and kept while its
    question is open, so a re-render never takes the user's choice or text. « Answer »
-   sends the answer at once, as a batch whose action is "answer": Claude is blocked on
+   sends the answer at once, as a batch whose action is "answer": The agent is blocked on
    it, so it is never held as a draft. */
 
 const openQuestions = () => (state ? state.questions || [] : []).filter((q) => q.status === "open");
@@ -1016,7 +1016,7 @@ function questionCard(q) {
     sentToast(`Answered ${q.id}`);
   });
   const card = el("div", { class: "question", "data-question": q.id },
-    el("div", { class: "q-head" }, "Question from Claude ", el("span", { class: "dim", text: q.id })),
+    el("div", { class: "q-head" }, "Question from the agent ", el("span", { class: "dim", text: q.id })),
     el("div", { class: "q-text", text: q.text }),
     q.options.length ? options : null,
     ta, button);
@@ -1035,8 +1035,8 @@ function renderQuestions() {
 
 /* ---------------- review pane ----------------
    The pane reads like a conversation, oldest at the top: the sent batches in time order
-   (a batch answering a Claude question shows the question, then the answer), then the
-   open Claude questions, then the drafts, the note and « Send » at the bottom. It stays
+   (a batch answering an agent question shows the question, then the answer), then the
+   open agent questions, then the drafts, the note and « Send » at the bottom. It stays
    scrolled to the bottom as content arrives, unless the user scrolled up. */
 
 let reviewAtEnd = true;
@@ -1091,11 +1091,11 @@ function renderReview() {
   if (reviewAtEnd) pane.scrollTop = pane.scrollHeight;
 }
 
-/* An answered Claude question in the history: its text, the answer, Claude's reply. */
+/* An answered agent question in the history: its text, the answer, the agent's reply. */
 function answeredQuestion(a, b) {
   const q = (state.questions || []).find((x) => x.id === a.question) || { id: a.question, text: "" };
   return el("div", { class: "question answered" },
-    el("div", { class: "q-head" }, "Question from Claude ", el("span", { class: "dim", text: q.id })),
+    el("div", { class: "q-head" }, "Question from the agent ", el("span", { class: "dim", text: q.id })),
     q.text ? el("div", { class: "q-text", text: q.text }) : null,
     el("div", { class: "q-reply", text: [a.choices.join(", "), a.text].filter(Boolean).join(" — ") }),
     b.reply ? el("div", { class: "c-status" }, el("span", { class: "badge ok", text: "✓ resolved" }),

@@ -218,7 +218,7 @@ def test_format_answer_batch(session):
     b2 = session.answer_question("q2", [], "because")
     outline, questions = session.read_plan()["outline"], session.read_questions()
     out = format_batch("kv-cache", b1, outline, questions)
-    assert "action: answer (the user answered Claude question q1 from the page)" in out
+    assert "action: answer (the user answered agent question q1 from the page)" in out
     assert "answer to q1 « Which files? »: a.py, b.py — and the tests" in out
     assert "answer to q2 « Why? »: because" in format_batch("kv-cache", b2, outline, questions)
 

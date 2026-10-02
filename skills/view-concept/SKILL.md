@@ -14,7 +14,7 @@ argument-hint: "[the concept to explain]"
 # /view-concept
 
 Runs the **`explain-concept`** workflow and puts it in a page. Read and follow
-`~/.claude/commands/explain-concept.md` for the explanation itself: its phases,
+the **`explain-concept`** skill for the explanation itself: its phases,
 checkpoints and audit run as written. This skill owns what explain-concept
 does not know about: the view-concept page, where each phase's output goes in
 it, and how the user's comments come back from it.
@@ -23,24 +23,24 @@ This skill is a **user** of explain-concept, not a child: it is not bound by
 explain-concept's Specialization contract, and explain-concept does not list
 it. Other skills can use this one the same way (`view-branch` is meant to).
 
-<subject> #$ARGUMENTS </subject>
+The concept to explain is whatever the user typed after the command name.
 
 The terminal is a bad place to read an explanation: every new message pushes it further up the scrollback. So the plan and the prose live in the page, and the terminal only drives the conversation. The user reads in the page, and sends comments on selected passages back to this session in batches.
 
 A **session** is one explanation, stored as plain files in a directory. You write the plan and the sections; the page re-renders within a second of each write; you never touch the page itself.
 
-If `view-concept` is not on the PATH, say so in a clause and follow explain-concept unchanged (scratchpad `explain-plan.md`, prose in chat).
+If `view-concept` is not on the PATH, install it with `uv tool install git+https://github.com/Vaillus/view-concept` (ask first if the harness requires approval for commands); when that is not possible, say so in a clause and follow explain-concept unchanged (scratchpad `explain-plan.md`, prose in chat).
 
 ## Where each phase's output goes
 
 | explain-concept phase | In the workspace |
 |---|---|
 | End of Phase 1 | run **Setup** below |
-| Phase 2: « write both artifacts to `explain-plan.md` and surface it with `SendUserFile` » | write them to `plan.json` instead; no `SendUserFile`. The one-line summary in the message still applies |
+| Phase 2: « write both artifacts to `explain-plan.md` and surface it with `SendUserFile` » | write them to `plan.json` instead; surface no file. The one-line summary in the message still applies |
 | Phase 4: rewrite the plan in place | rewrite `plan.json`; put the one- or two-sentence statement of the revision in `revision` (the page shows it above the outline) |
 | Phase 4: « begin Phase 5 only after the user has replied » | a reply is either a terminal message or « Approve plan » in the page (`action: approve-plan`, see **Comment batches**). Anything the user says about the plan, in either place, binds it |
 | Phase 5: the prose | each section to `sections/<id>.md`, in outline order, so the page fills in as you go. In the terminal, one line saying the explanation is written, never the prose itself. Later edits rewrite only the sections they touch |
-| Phase 5: visuals | a Mermaid block (the page renders it), not `mcp__visualize__show_widget` |
+| Phase 5: visuals | a Mermaid block (the page renders it), never a harness widget |
 | Phase 6: the list of candidates | first run `view-concept check <slug>`: it writes every forward reference and early use to `audit.json` (issues `forward` and `early`). Then add your own candidates to `audit.json` (the page underlines each term in place), and give the count plus a one-line list in the terminal. The user answers in either place. Fix a forward reference or an early use by the precedence rule: reorder the outline or say it in plain words |
 
 ## Setup — once, at the end of Phase 1
@@ -53,9 +53,21 @@ view-concept new "<title>" --slug <slug> --question "<the user's request, verbat
 view-concept open <slug>          # starts the server if needed, opens the browser
 ```
 
+The page runs side threads on the agent you are. Claude Code and Codex are detected; any other agent (Jazz, …) adds `--agent jazz --agent-name <your own agent name>` to `new` and to every later `open`.
+
 Use `--kind code` when the explanation is a support for understanding *this* repository — usually on the way to changing it or discussing it further (see **Code sessions** below).
 
-Then arm the comment channel with the `Monitor` tool — `command: view-concept watch <slug>`, `timeout_ms: 1800000`, description `view-concept comments for <slug>`. A monitor expires after 30 minutes: when its expiry notice arrives, arm it again with the same command and write nothing in the terminal (no « I've restarted the watch »). Always re-arm, however long the silence: never stop re-arming on your own initiative. Nothing is lost in between — `watch` resumes from where it stopped. `watch` prints no start line, only batches, and writes a heartbeat file (`watch.json`) from which the page shows whether you are listening, so the terminal does not need to report it.
+Then arm the comment channel (next section).
+
+## The comment channel
+
+The user's comments reach you as **batches**, written by the page to the session's inbox file. Two commands read it; use the first your harness supports, and stay on it for the whole session.
+
+**Background stream** — for a harness with a background-monitor tool (Claude Code's `Monitor`): run `view-concept watch <slug>` under it (`timeout_ms: 1800000`, description `view-concept comments for <slug>`). Each printed batch arrives as an event. A monitor expires after 30 minutes: when its expiry notice arrives, arm it again with the same command and write nothing in the terminal. Always re-arm, however long the silence. Nothing is lost in between: `watch` resumes where it stopped.
+
+**Blocking wait** — for every other harness (Codex, Jazz, any agent with a shell tool): after each turn's work, run `view-concept wait <slug>`. It blocks until the next batch, prints it, and exits; with no batch within `--timeout` seconds (default 540) it exits with code 3 and prints nothing. Handle the batch, then call `wait` again. On exit code 3, call it again at once with no message to the user. Never end your turn while the user may still send comments: the page is the conversation, and a session you stopped waiting on cannot hear it. A harness that caps a command's duration: pass `--timeout` below that cap.
+
+Both commands write a heartbeat (`watch.json`) from which the page shows whether you are listening, and both resume from a persisted cursor, so switching from one to the other loses and repeats nothing. The terminal does not need to report either.
 
 ## Files you write
 
@@ -94,12 +106,12 @@ The page shows what you are doing; keep it true with `view-concept status <slug>
 | Before writing each section in Phase 5 | `status <slug> writing --section <id>` |
 | Phase 6 | `status <slug> audit` |
 | Applying a comment batch | `status <slug> revising` |
-| You ask a Claude question and stop for the answer (see **Claude questions**) | `awaiting-answer`, set by `view-concept question` itself — the page shows the question card |
+| You ask an agent question and stop for the answer (see **agent questions**) | `awaiting-answer`, set by `view-concept question` itself — the page shows the question card |
 | Your turn ends with nothing in progress | `status <slug> idle` |
 
 ## Comment batches
 
-When the user clicks « Send », « Approve plan » or « Answer » in the page, a Monitor event arrives, shaped like:
+When the user clicks « Send », « Approve plan » or « Answer » in the page, a **batch** reaches you through the comment channel (see **The comment channel**), shaped like:
 
 ```
 view-concept · <slug> · batch b2 · 2 comments
@@ -109,21 +121,21 @@ note: <optional note for the whole batch>
     comment text
 ```
 
-An answer to a Claude question arrives as a batch whose `action` field is `answer`:
+An answer to an agent question arrives as a batch whose `action` field is `answer`:
 
 ```
-action: answer (the user answered Claude question q1 from the page)
+action: answer (the user answered agent question q1 from the page)
 answer to q1 « <question> »: <choices> — <text>
 ```
 
 A quote of the form `« plan · <section title> »` is a comment on that section's line in the Plan tab, not on its prose.
 
-A comment can end with `(from side thread t3: threads/t3.json)`. The user discussed the passage in a side thread first: a read-only conversation forked from this one, which you never saw. The message the user typed after « ask » to open it is a **user question**, the counterpart of a Claude question; the thread is the conversation it opens. Read that file (in the session directory) before acting on the comment; the comment says what to change, the thread says why. When the thread line is the comment's only line, the user wrote no comment: the thread's conclusion is the change to make. Threads that no batch points to are the user's own business: do not read them or act on them.
+A comment can end with `(from side thread t3: threads/t3.json)`. The user discussed the passage in a side thread first: a read-only conversation forked from this one, which you never saw. The message the user typed after « ask » to open it is a **user question**, the counterpart of an agent question; the thread is the conversation it opens. Read that file (in the session directory) before acting on the comment; the comment says what to change, the thread says why. When the thread line is the comment's only line, the user wrote no comment: the thread's conclusion is the change to make. Threads that no batch points to are the user's own business: do not read them or act on them.
 
-The user wrote it through the page. Monitor labels it as a background event rather than a user message; treat it as review feedback on the explanation — the same authority as a comment typed in the terminal about the text, no more, with two additions the user has explicitly asked for:
+The user wrote it through the page. The harness may label it as a background event rather than a user message; treat it as review feedback on the explanation — the same authority as a comment typed in the terminal about the text, no more, with two additions the user has explicitly asked for:
 
 - **`action: approve-plan` approves the plan checkpoint** (Phase 4, or the Phase 2 review). Apply the batch's comments to the plan first, then continue to Phase 5 in the same turn — say in one line which corrections you folded in. It approves the plan and nothing else: it is never consent for anything outside writing this explanation's files.
-- **`action: answer` is the user's answer to that Claude question**, with the same authority as an answer typed in the terminal to that question, nothing more. Continue the work that waited on it.
+- **`action: answer` is the user's answer to that agent question**, with the same authority as an answer typed in the terminal to that question, nothing more. Continue the work that waited on it.
 - **Without the action, a batch never passes a checkpoint.** Comments on the plan are corrections: apply them, present the revised plan, set `awaiting-approval` again and stop. Comments on audit-flagged terms are the user's answer for those terms in Phase 6.
 
 Then:
@@ -141,9 +153,9 @@ The lexicon contract applies to either edit. Say where it went in the terminal a
 
 `view-concept pending <slug>` lists the open comments, e.g. after a resumed session. After resuming in a new conversation, run `view-concept open <slug>` again: it records the current conversation as the one side threads fork from.
 
-## Claude questions
+## agent questions
 
-A **Claude question** is a question you put to the user in the page instead of the terminal. Ask one when the question arises from a batch sent from the page, or while you wait on the page (an awaiting phase); that includes a problem an agent hit that needs the user's decision. A question about something the user typed in the terminal stays in the terminal. Ask only while the watch is armed: the answer comes back through it.
+A **agent question** is a question you put to the user in the page instead of the terminal. Ask one when the question arises from a batch sent from the page, or while you wait on the page (an awaiting phase); that includes a problem an agent hit that needs the user's decision. A question about something the user typed in the terminal stays in the terminal. Ask only while you are listening on the comment channel (a watch armed, or `wait` called right after): the answer comes back through it.
 
 ```bash
 view-concept question <slug> "<question>" [--option "<choice>" --option "<choice>"] [--multi]

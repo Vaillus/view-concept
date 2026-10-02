@@ -14,14 +14,14 @@ argument-hint: "[the files or folder to review]"
 
 # /view-refactor
 
-Runs **`view-concept`** (`~/.claude/commands/view-concept.md`, which runs
+Runs **`view-concept`** (the `view-concept` skill, which runs
 `explain-concept` in the page) on existing code, and adds what a refactor
 needs around it: a triage of the code, agents or PRs that apply it, and a
 check of the result. Read view-concept and follow it, with what is below. It
-borrows view-branch's mechanics (`~/.claude/commands/view-branch.md`) where
+borrows view-branch's mechanics (the `view-branch` skill) where
 this file says so; read the parts it names.
 
-<subject> #$ARGUMENTS </subject>
+The code to refactor is whatever the user typed after the command name.
 
 ## Bindings
 

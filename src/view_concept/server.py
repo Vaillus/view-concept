@@ -83,7 +83,7 @@ def state(slug: str) -> dict[str, Any]:
         seen = s.read_seen(sections)
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
-    # The hover text of a term: its developed `tip` when Claude wrote one, else the
+    # The hover text of a term: its developed `tip` when the agent wrote one, else the
     # one-line definition. Rendered here so it can carry emphasis, code and maths.
     for t in plan["lexicon"]:
         t["tip_html"] = md.renderInline(str(t.get("tip") or t.get("definition") or ""))
@@ -185,7 +185,7 @@ class AnswerIn(BaseModel):
 
 @app.post("/api/s/{slug}/questions/{qid}/answer")
 def answer_question(slug: str, qid: str, body: AnswerIn) -> dict[str, Any]:
-    """Answer a Claude question: sent to the session at once, as an answer batch."""
+    """Answer an agent question: sent to the session at once, as an answer batch."""
     s = get_session(slug)
     try:
         return s.answer_question(qid, body.choices, body.text)
