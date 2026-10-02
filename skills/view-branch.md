@@ -93,7 +93,8 @@ matching and refactoring come after it.
 A review is a list of **sections**: plan.json lists them under its `outline`
 key, and `sections/<id>.md` holds the text of each. A section with
 `"part": 2` is a **refactor section**: the page shows it in the refactor tab,
-not in the Explanation tab.
+not in the Model tab (the page's name for the Explanation tab in a branch
+review).
 
 ### Model consolidation (Part 1)
 
@@ -168,16 +169,9 @@ Part 2 section, listed in plan.json as
 commit, anything the agent could not do.
 Tell the user in the terminal in one line per agent.
 
-When all agents are done and the applied changes are up to date, run
-`view-concept status <slug> awaiting-review`: the page shows « Review code »
-at the bottom of the Explanation tab, so the user can look at the commits
-first.
-
-Refactoring starts when the user asks for it: a batch with
-`action: review-code`, or saying so in the terminal. Apply the batch's
-comments first: a comment that corrects the model is a model change, so
-record it and go back to model consolidation or model matching for it. Then
-start refactoring in the same turn, without asking again.
+When all agents are done and the applied changes are up to date, start
+refactoring in the same turn, without asking: the user reads the commits
+alongside Part 2.
 
 ### Refactoring — the code (Part 2)
 
@@ -231,13 +225,25 @@ do not write a summary table of items and verdicts.
 Code that does something no concept describes means the model has a gap: go
 back to model consolidation for that concept.
 
+Once Part 2 is written, and again after each revision of it when no
+correction is pending, run `view-concept status <slug> awaiting-pr`: the page
+shows « Create PR » at the bottom of the refactor tab.
+
 ## Closing
 
-When the user is done, first send one agent to update the repo's docs from
-the model: the concepts and their rules as they now stand, without the
-before/after comparison that Part 1 makes. One commit on the branch, under the
-agent rules of model matching.
+Closing starts when the user asks for the PR: a batch with
+`action: create-pr`, or saying so in the terminal. Apply the batch's comments
+first: a comment that corrects the model is a model change, so record it and
+go back to model consolidation or model matching for it. Then close in the
+same turn, without asking again: the click was the go.
+
+First send one agent to update the repo's docs from the model: the concepts
+and their rules as they now stand, without the before/after comparison that
+Part 1 makes. One commit on the branch, under the agent rules of model
+matching.
 
 Then write the PR description with `short-pr-description`, using the model
-changes as its Decisions. Show it, and run `gh pr edit <n> --body-file <file>`
-only once the user approves it. No vault export.
+changes as its Decisions. Push the branch and open the PR with
+`gh pr create --body-file <file>`, or, when the branch already has one,
+update it with `gh pr edit <n> --body-file <file>`. Give the PR link in the
+terminal: the user reviews it in VS Code. No vault export.
