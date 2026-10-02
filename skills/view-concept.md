@@ -71,7 +71,7 @@ In the directory printed by `new` (`~/.view-concept/sessions/<slug>/`):
 
 Section ids are stable: when Phase 4 reorders the outline, keep each section's id and change its position. The page anchors the user's comments to ids.
 
-**Naming a section to the user.** Ids are for the files, never for the user. Wherever the user reads it (terminal messages, `resolve` replies, the prose of the sections, the plan), name a section by the number the page shows, in words: « section 6 », « question section 2 ». Never write its id (`s6`, `q-applied`) or a shorthand such as `§6`, even when a batch event uses them.
+**Naming a section to the user.** Ids are for the files, never for the user. Wherever the user reads it (terminal messages, `resolve` replies, the prose of the sections, the plan), name a section by the number the page shows, in words: « section 6 ». Never write its id (`s6`, `q-applied`) or a shorthand such as `§6`, even when a batch event uses them.
 
 ## Status
 
@@ -122,12 +122,12 @@ Then:
 2. Mark what you addressed: `view-concept resolve <slug> c4 c5 --reply "<one line: what changed>"`. The page shows the reply under each comment. Leave a comment open while its discussion is still going.
 3. Anything the edit does to the plan (a new term, a moved definition) goes into `plan.json` too — the lexicon contract still holds.
 
-**Folding answers back.** The terminal is where the discussion happens; the page is the reference, and it must not fall behind the discussion. Whenever an answer — to a batch comment or to a question typed in the terminal — clarifies the explanation durably (the user would want it next time they read the page), put it in the document, in one of two ways:
+**Folding answers back.** The terminal is where the discussion happens; the page is the reference, and it must not fall behind the discussion. Whenever an answer — to a batch comment or to a question typed in the terminal — clarifies the explanation durably (the user would want it next time they read the page), put it in the document as if the explanation had planned it from the start, in one of two ways:
 
-- **Amend the section** it clarifies, when the answer fixes or completes what that section says. The lexicon contract applies to the edit.
-- **Add a question section** when the answer is a deeper dive the main line does not need: append `{"id": "q1", "title": "<the question, as the user would ask it>", "kind": "question", "from": ["c4"]}` to the outline (`from` lists the comment ids, empty when the question came from the terminal) and write `sections/q1.md`. Question sections go after the main sections, in the order they were asked.
+- **Amend the section** of the concept it belongs to, when the answer is a small addition: it fixes or completes what that section says.
+- **Add a section** when the answer is larger: place it where it belongs in the outline, not at the end, and add its new terms to the lexicon at that point.
 
-Say where it went in the terminal answer and in the `resolve` reply (« folded into section 3 », « added as question section 2 »). An answer that only matters to the conversation — a clarification about the process, a yes/no — stays in the terminal. When unsure, ask in one clause.
+The lexicon contract applies to either edit. Say where it went in the terminal answer and in the `resolve` reply (« folded into section 3 », « added as section 5 »). An answer that only matters to the conversation — a clarification about the process, a yes/no — stays in the terminal. When unsure, ask in one clause.
 
 `view-concept pending <slug>` lists the open comments, e.g. after a resumed session. After resuming in a new conversation, run `view-concept open <slug>` again: it records the current conversation as the one side threads fork from.
 

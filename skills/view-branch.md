@@ -123,8 +123,9 @@ vocabulary of the model is what the agents and the code will inherit.
 
 **Keep Part 1 short.** It is read to discuss the concepts, not to check them:
 each section gives the core in a few lines (three to eight), a table or a
-diagram where it replaces prose. Details go to Part 2, or to a question
-section when the user asks for one. A first version of Part 1 written at full
+diagram where it replaces prose. Details go to Part 2, or to a new section
+placed where it belongs when the user asks for one (a folded answer, as
+view-concept says). A first version of Part 1 written at full
 explanation depth was judged far too long to read at this stage.
 
 **Check the length before showing it.** After writing Part 1, and again after
