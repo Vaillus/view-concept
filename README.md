@@ -57,13 +57,12 @@ claude plugin install view-concept@view-concept
 
 Then type `/view-concept:view-concept explain KKT conditions` (Claude Code prefixes plugin skills with the plugin name), or just ask for an explanation in the page.
 
-**Jazz** — as a plugin; `/view-concept`, `/view-branch` and `/view-refactor` become slash commands:
+**Jazz** — through the community plugin [`lvndry/jazz-plugin-view-concept`](https://github.com/lvndry/jazz-plugin-view-concept), which adds `/view-concept`, `/view-branch` and `/view-refactor`:
 
 ```bash
-jazz plugin add Vaillus/view-concept
-jazz plugin inspect io.github.vaillus.view-concept
-jazz plugin trust io.github.vaillus.view-concept
-jazz plugin enable io.github.vaillus.view-concept
+jazz plugin add lvndry/jazz-plugin-view-concept
+jazz plugin trust io.github.lvndry.view-concept
+jazz plugin enable io.github.lvndry.view-concept
 ```
 
 **Codex** — the skills are plain `SKILL.md` folders, and the command comes from `uv`:

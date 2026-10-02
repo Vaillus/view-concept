@@ -99,9 +99,9 @@ The comment channel is also per agent: `watch` where there is a background monit
 
 ## Plugins
 
-| For | Files | Entry |
+| For | Where | Entry |
 |---|---|---|
-| Claude Code | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `skills/`, `bin/view-concept` | `claude plugin marketplace add Vaillus/view-concept` |
-| Jazz | `jazz-plugin.json`, `integrations/jazz/` (reads `skills/` and runs `bin/view-concept`) | `jazz plugin add Vaillus/view-concept` |
+| Claude Code | this repository: `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `skills/`, `bin/view-concept` | `claude plugin marketplace add Vaillus/view-concept` |
+| Jazz | a separate community plugin, [`lvndry/jazz-plugin-view-concept`](https://github.com/lvndry/jazz-plugin-view-concept), which bundles a copy of `skills/` (refresh it with its `scripts/sync-skills.sh`) and installs this command with `uv` | `jazz plugin add lvndry/jazz-plugin-view-concept` |
 
-`bin/view-concept` runs the command from the checkout with `uv run --project`, keeping its environment in `~/.cache/view-concept`, so a plugin install needs no `uv tool install`. Claude Code puts a plugin's `bin/` on the shell's `PATH`; the Jazz plugin passes the script's path to the agent. Jazz refuses a plugin tree that holds a symlink, so none may be added to this repository. Test the Jazz plugin with `cd integrations/jazz && bun test`.
+`bin/view-concept` runs the command from the checkout with `uv run --project`, keeping its environment in `~/.cache/view-concept`, so the Claude Code plugin needs no `uv tool install`; Claude Code puts a plugin's `bin/` on the shell's `PATH`.
