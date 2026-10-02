@@ -123,8 +123,9 @@ vocabulary of the model is what the agents and the code will inherit.
 
 **Keep Part 1 short.** It is read to discuss the concepts, not to check them:
 each section gives the core in a few lines (three to eight), a table or a
-diagram where it replaces prose. Details go to Part 2, or to a question
-section when the user asks for one. A first version of Part 1 written at full
+diagram where it replaces prose. Details go to Part 2, or to a new section
+placed where it belongs when the user asks for one (a folded answer, as
+view-concept says). A first version of Part 1 written at full
 explanation depth was judged far too long to read at this stage.
 
 **Check the length before showing it.** After writing Part 1, and again after
@@ -161,12 +162,13 @@ repo's tests and lint before committing, do not change anything its gaps do
 not name. Run agents in parallel only when their files do not overlap;
 otherwise one after the other.
 
-When an agent finishes, add its result to a question section `q-applied`
-(« Changes applied to the code »), with `"part": 2` where the section is
-listed in plan.json: the change, the commit, anything the agent could not do.
+When an agent finishes, add its result to the **applied changes**, its own
+Part 2 section, listed in plan.json as
+`{"id": "applied", "title": "Applied changes", "part": 2}`: the change, the
+commit, anything the agent could not do.
 Tell the user in the terminal in one line per agent.
 
-When all agents are done and `q-applied` is up to date, run
+When all agents are done and the applied changes are up to date, run
 `view-concept status <slug> awaiting-review`: the page shows « Review code »
 at the bottom of the Explanation tab, so the user can look at the commits
 first.
@@ -181,7 +183,7 @@ start refactoring in the same turn, without asking again.
 
 Append Part 2 to the outline, after Part 1. Every section of Part 2 is a
 refactor section, so the page shows it in the refactor tab. Part 2 holds one
-section per item, the findings across items, and `q-applied`.
+section per item, the findings across items, and the applied changes.
 
 An **item** is one unit of the diff that gets its own verdict: one file, or
 several files that share one job you can name (« command and storage »).

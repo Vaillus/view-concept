@@ -2,8 +2,9 @@
 
    Tabs share the main space: the plan (outline, model changes, lexicon), the
    explanation (one block per explanation section) and, in a branch review that has reached
-   the refactoring step, the refactor tab (the refactor sections, Part 2); the review pane (draft comments, then
-   sent batches) stays on the right. The page never edits the explanation: Claude Code
+   the refactoring step, the refactor tab (the refactor sections, Part 2); the review pane (a
+   conversation: sent batches and answered Claude questions, the open Claude questions, then
+   the draft comments) stays on the right. The page never edits the explanation: Claude Code
    writes the files, the server streams "changed", the page re-fetches. The page writes
    batches of comments, and side threads: separate read-only Claude conversations run by
    the server, streamed through "threads" events. A thread shows in a popover on its
@@ -18,6 +19,7 @@
 const SLUG = decodeURIComponent(location.pathname.split("/").pop());
 const DRAFTS_KEY = `view-concept:drafts:${SLUG}`;
 const NOTE_KEY = `view-concept:note:${SLUG}`;
+const WIDTH_KEY = "view-concept:review-width"; // per browser, for every session
 
 let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
@@ -80,6 +82,11 @@ function connect() {
   es.addEventListener("hello", () => { live.textContent = "live"; live.className = "live on"; });
   es.addEventListener("changed", () => load());
   es.addEventListener("threads", () => loadThreads());
+  es.addEventListener("listening", (e) => {
+    if (!state) return;
+    state.listening = JSON.parse(e.data).listening;
+    renderListening();
+  });
   es.onerror = () => { live.textContent = "offline"; live.className = "live off"; };
 }
 
@@ -106,13 +113,16 @@ const isPart2 = (id) => (state.plan.outline.find((s) => s.id === id) || {}).part
 const tabOf = (id) => (isPart2(id) ? "refactor" : "doc");
 const hasRefactorTab = () => state.plan.outline.some((s) => s.part === 2);
 const docViews = () => [$("#doc"), $("#refactor")];
-// Rewritten since the user last marked it as read (the server compares with seen.json).
+// Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
+// read » (the server compares with seen.json).
 const isUpdated = (id) => !!(state.sections[id] || {}).updated;
 
 function render() {
   const { plan } = state;
-  document.title = `${plan.title} · view-concept`;
+  // A mark in the tab title while a Claude question waits, to be seen from another window.
+  document.title = `${openQuestions().length ? "● " : ""}${plan.title} · view-concept`;
   $("#title").textContent = plan.title;
+  renderListening();
   renderStatus();
   followSession();
   renderPlan();
@@ -169,7 +179,23 @@ document.addEventListener("keydown", (e) => {
 
 /* ---------------- status + approvals ---------------- */
 
+/* Claude is listening while a watch runs for the session (the server reads the watch's
+   heartbeat). It says whether a batch is read now; the « live » dot only says whether
+   the page is connected to the server. */
+function renderListening() {
+  const l = $("#listening");
+  l.className = `listening ${state.listening ? "on" : "off"}`;
+  l.textContent = state.listening ? "● Claude listening" : "○ Claude not listening";
+}
+// What a successful send says when no watch reads it: the batch waits in the inbox.
+const NOT_LISTENING = "Claude isn't listening: write anything in the terminal and it will read this batch";
+const sentToast = (msg) => toast(state.listening ? msg : NOT_LISTENING, state.listening ? 3000 : 8000);
+
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
+
+/* "awaiting-answer" waits on the open Claude questions, answered from their cards in the
+   review pane (see "Claude questions" below), so it has no button here. */
+const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "answered · Claude is reading it" };
 
 /* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
    model of a branch review at the end of model consolidation ("awaiting-model", set by the
@@ -206,15 +232,17 @@ function renderStatus() {
     scoping: "scoping the question",
     planning: "drafting the plan",
     ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
+    "awaiting-answer": openQuestions().length ? QUESTION_LABELS.ready : QUESTION_LABELS.sent,
     writing: section ? `writing §${numberOf(section)} ${titleOf(section)}` : "writing",
     audit: "vocabulary audit",
     revising: "revising",
   };
+  const asking = phase === "awaiting-answer" && openQuestions().length > 0;
   const active = ["scoping", "planning", "writing", "audit", "revising"].includes(phase) ||
-                 (approval && approvalPending());
+                 (approval && approvalPending()) || (phase === "awaiting-answer" && !asking);
   const p = $("#phase");
   p.hidden = !labels[phase];
-  p.className = `phase ${active ? "active" : ""} ${approval && !approvalPending() ? "ask" : ""}`;
+  p.className = `phase ${active ? "active" : ""} ${(approval && !approvalPending()) || asking ? "ask" : ""}`;
   p.textContent = [labels[phase], message].filter(Boolean).join(" · ");
 
   $("#approve").hidden = docButton.hidden = true;
@@ -253,7 +281,6 @@ function renderPlan() {
                      } }),
       el("div", { class: "o-title" },
         el("span", { class: "num", text: numberOf(s.id) }), " ", s.title,
-        s.kind === "question" ? el("span", { class: "badge alt", text: "Q" }) : null,
         writingId() === s.id ? el("span", { class: "badge accent writing", text: "writing" }) : null,
         isUpdated(s.id) ? el("span", { class: "badge new", text: "updated" }) : null),
       s.earns ? el("div", { class: "o-earns muted", text: s.earns }) : null);
@@ -328,8 +355,6 @@ function sectionBlock(s, { bare = false } = {}) {
   return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
     el("h2", {},
       ...(bare ? [] : [el("span", { class: "num", text: numberOf(s.id) }), " ", s.title]),
-      s.kind === "question" && s.from && s.from.length
-        ? el("span", { class: "q-from dim", text: `from ${[].concat(s.from).join(", ")}` }) : null,
       el("span", { class: "t-chips", "data-section": s.id }),
       isUpdated(s.id)
         ? el("button", { class: "badge new", text: "updated · mark read", title: "Mark this section as read: its highlights go away",
@@ -705,8 +730,9 @@ function applyHighlights() {
   markUpdates();
 }
 
-/* ---------------- updates since last read ----------------
-   An updated section carries the HTML of the version the user last marked as read.
+/* ---------------- updates since the last batch ----------------
+   An updated section carries the HTML of its highlight baseline: its text when the last
+   batch was sent, or when the user last marked it read.
    Both versions are cut into words, the words are diffed, and the words the rewrite
    inserted are highlighted ("ev-updated"); every block (paragraph, list item, cell…)
    holding an insertion or a deletion gets a bar in the margin. « updated · ok » in the
@@ -939,7 +965,71 @@ $("#composer textarea").addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeComposer();
 });
 
-/* ---------------- review pane ---------------- */
+/* ---------------- Claude questions ----------------
+   A Claude question is one Claude puts to the user in the page (`view-concept question`,
+   questions.json): its text, optional options (one choice, or several when `multi`),
+   and always a free-text field. Each open one is a card headed « Question from Claude »
+   in the review pane, in the order asked. A card is built once and kept while its
+   question is open, so a re-render never takes the user's choice or text. « Answer »
+   sends the answer at once, as a batch whose action is "answer": Claude is blocked on
+   it, so it is never held as a draft. */
+
+const openQuestions = () => (state ? state.questions || [] : []).filter((q) => q.status === "open");
+const questionCards = new Map(); // question id -> its card
+
+function questionCard(q) {
+  if (questionCards.has(q.id)) return questionCards.get(q.id);
+  const type = q.multi ? "checkbox" : "radio";
+  const options = el("div", { class: "q-options" }, ...q.options.map((o) =>
+    el("label", {}, el("input", { type, name: `answer-${q.id}`, value: o }), el("span", { text: o }))));
+  const ta = el("textarea", { class: "c-text", rows: "2",
+                              placeholder: q.options.length ? "Something to add, or another answer (optional)" : "Your answer" });
+  const button = el("button", { class: "btn primary q-answer", text: "Answer", disabled: true });
+  const choices = () => [...options.querySelectorAll("input:checked")].map((i) => i.value);
+  const update = () => { button.disabled = !choices().length && !ta.value.trim(); };
+  options.addEventListener("change", update);
+  ta.addEventListener("input", update);
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); button.click(); }
+  });
+  button.addEventListener("click", async () => {
+    if (button.disabled) return;
+    button.disabled = true;
+    try {
+      await postJSON(`/api/s/${SLUG}/questions/${q.id}/answer`, { choices: choices(), text: ta.value });
+    } catch (e) { toast(`Answer failed: ${e.message}`); update(); return; }
+    await load();
+    sentToast(`Answered ${q.id}`);
+  });
+  const card = el("div", { class: "question", "data-question": q.id },
+    el("div", { class: "q-head" }, "Question from Claude ", el("span", { class: "dim", text: q.id })),
+    el("div", { class: "q-text", text: q.text }),
+    q.options.length ? options : null,
+    ta, button);
+  questionCards.set(q.id, card);
+  return card;
+}
+
+function renderQuestions() {
+  const open = openQuestions();
+  for (const id of questionCards.keys()) if (!open.some((q) => q.id === id)) questionCards.delete(id);
+  const box = $("#questions");
+  const cardsNow = open.map(questionCard);
+  // Re-attaching a card would blur its text field: only when the list changed.
+  if (cardsNow.length !== box.children.length || cardsNow.some((c, i) => box.children[i] !== c)) box.replaceChildren(...cardsNow);
+}
+
+/* ---------------- review pane ----------------
+   The pane reads like a conversation, oldest at the top: the sent batches in time order
+   (a batch answering a Claude question shows the question, then the answer), then the
+   open Claude questions, then the drafts, the note and « Send » at the bottom. It stays
+   scrolled to the bottom as content arrives, unless the user scrolled up. */
+
+let reviewAtEnd = true;
+$(".review").addEventListener("scroll", (e) => {
+  const p = e.target;
+  reviewAtEnd = p.scrollHeight - p.scrollTop - p.clientHeight < 24;
+}, { passive: true });
 
 function quoteLine(c) {
   const where = c.section ? `§${numberOf(c.section)}` : "·";
@@ -955,6 +1045,7 @@ function quoteLine(c) {
 }
 
 function renderReview() {
+  renderQuestions();
   $("#draft-count").textContent = drafts.length ? `· ${drafts.length} draft${drafts.length > 1 ? "s" : ""}` : "";
   $("#drafts").replaceChildren(...drafts.map((d) => {
     const ta = el("textarea", { class: "c-text", rows: "2",
@@ -968,11 +1059,12 @@ function renderReview() {
   }));
   updateSend();
 
-  const batches = state ? [...state.comments.batches].reverse() : [];
-  $("#sent").replaceChildren(...(batches.length ? batches.map((b) =>
+  const batches = state ? state.comments.batches : [];
+  $("#history").replaceChildren(...(batches.length ? batches.map((b) =>
     el("div", { class: "batch" },
       el("div", { class: "b-head dim", text: `${b.id} · ${new Date(b.sent).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` }),
       b.note ? el("div", { class: "b-note", text: b.note }) : null,
+      ...(b.answers || []).map((a) => answeredQuestion(a, b)),
       ...b.comments.map((c) => el("div", { class: `comment ${c.status}` },
         quoteLine(c),
         c.text || !c.thread ? el("div", { class: "c-text", text: c.text })
@@ -981,6 +1073,19 @@ function renderReview() {
           el("span", { class: c.status === "resolved" ? "badge ok" : "badge", text: c.status === "resolved" ? "✓ resolved" : "waiting" }),
           c.reply ? el("span", { class: "c-reply", text: ` ${c.reply}` }) : null))))
   ) : [el("p", { class: "dim", text: "Nothing sent yet." })]));
+  const pane = $(".review");
+  if (reviewAtEnd) pane.scrollTop = pane.scrollHeight;
+}
+
+/* An answered Claude question in the history: its text, the answer, Claude's reply. */
+function answeredQuestion(a, b) {
+  const q = (state.questions || []).find((x) => x.id === a.question) || { id: a.question, text: "" };
+  return el("div", { class: "question answered" },
+    el("div", { class: "q-head" }, "Question from Claude ", el("span", { class: "dim", text: q.id })),
+    q.text ? el("div", { class: "q-text", text: q.text }) : null,
+    el("div", { class: "q-reply", text: [a.choices.join(", "), a.text].filter(Boolean).join(" — ") }),
+    b.reply ? el("div", { class: "c-status" }, el("span", { class: "badge ok", text: "✓ resolved" }),
+                 el("span", { class: "c-reply", text: ` ${b.reply}` })) : null);
 }
 
 function updateSend() {
@@ -1020,9 +1125,45 @@ async function send(action = "") {
   saveJSON(DRAFTS_KEY, drafts);
   $("#note").value = "";
   saveJSON(NOTE_KEY, "");
-  toast(approval ? approval.toast : `Sent ${b.id} to the session`);
   await load();
+  sentToast(approval ? approval.toast : `Sent ${b.id} to the session`);
 }
+
+/* ---------------- divider ----------------
+   The border between the workspace and the review pane is a divider: dragging it sets
+   the pane's width, from 300 px to 70 % of the window, remembered in this browser.
+   A double-click goes back to the default width. */
+
+const divider = $("#divider");
+const clampWidth = (px) => Math.round(Math.max(300, Math.min(px, innerWidth * 0.7)));
+
+function setReviewWidth(px) {
+  const layout = $(".layout");
+  if (px == null) layout.style.removeProperty("--review-width");
+  else layout.style.setProperty("--review-width", `${clampWidth(px)}px`);
+  positionPopover();
+}
+
+setReviewWidth(loadJSON(WIDTH_KEY, null));
+divider.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  divider.setPointerCapture(e.pointerId);
+  divider.classList.add("dragging");
+  document.body.classList.add("resizing");
+});
+divider.addEventListener("pointermove", (e) => {
+  if (divider.hasPointerCapture(e.pointerId)) setReviewWidth($(".layout").getBoundingClientRect().right - e.clientX);
+});
+divider.addEventListener("pointerup", (e) => {
+  if (!divider.hasPointerCapture(e.pointerId)) return;
+  divider.releasePointerCapture(e.pointerId);
+  divider.classList.remove("dragging");
+  document.body.classList.remove("resizing");
+  saveJSON(WIDTH_KEY, $(".review").getBoundingClientRect().width);
+});
+divider.addEventListener("dblclick", () => { saveJSON(WIDTH_KEY, null); setReviewWidth(null); });
+// A smaller window keeps the pane within 70 % of it.
+addEventListener("resize", () => setReviewWidth(loadJSON(WIDTH_KEY, null)));
 
 /* ---------------- side threads ----------------
    A thread opens in a popover on its passage. One is shown at a time; a click anywhere

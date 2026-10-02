@@ -10,22 +10,25 @@ reach the Claude Code session through the inbox.
         audit.json      vocabulary-audit findings                  (written by Claude)
         status.json     what Claude is doing now: phase, section    (written by `status`)
         changes.json    model changes accepted in a branch review       (written by `change`)
+        questions.json  Claude questions put to the user, with their answers  (`question`, server)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
+        watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         claude.json     the Claude Code session driving this one     (written by `new`, `open`)
-        seen.json       the text of each section the user last read  (server)
+        seen.json       the highlight baseline: each section's text   (server)
         threads/<id>.json  a side thread: messages, its own Claude session id  (server)
 
-A section is one element of the `outline` list in plan.json: {id, title, earns}, plus
-`kind: "question"` (with `from`, the comments it answers) for a section added during the
-review. A refactor section, marked `part: 2`, belongs to Part 2 of a branch review or a
-refactor and is shown in the refactor tab; every other section is an explanation
-section, shown in the Explanation tab. A refactor section about one item of the diff
-carries its item fields under `item`: {files, verdict (one of the keys of the session
-workflow's list in verdicts.yaml, next to this module), batch? (a short label or
-number), implements, note, relations: [{to, kind, from?}]}, where the optional `from`
-names which of the item's files a relation starts from (by default the first).
+A section is one element of the `outline` list in plan.json: {id, title, earns}. An
+answer to a comment that belongs in the explanation amends a section or adds one at its
+place in the outline; a `kind: "question"` left by an older session is ignored, and the
+section reads as any other. A refactor section, marked `part: 2`, belongs to Part 2 of
+a branch review or a refactor and is shown in the refactor tab; every other section is
+an explanation section, shown in the Explanation tab. A refactor section about one item
+of the diff carries its item fields under `item`: {files, verdict (one of the keys of
+the session workflow's list in verdicts.yaml, next to this module), batch? (a short
+label or number), implements, note, relations: [{to, kind, from?}]}, where the optional
+`from` names which of the item's files a relation starts from (by default the first).
 One with `kind: "finding"` and `items: [<section ids>]` is a finding across items.
 
 The session workflow, `workflow` in plan.json, is the skill that drives the session:
@@ -38,10 +41,24 @@ A side thread is a separate headless Claude conversation, forked from the sessio
 claude.json, that the user opens from the page to discuss a passage without changing
 anything (see threads.py). Only a comment batch reaches the main session.
 
-seen.json maps a section id to the markdown the user last marked as read. A section
-whose file differs from it is "updated": the page highlights what changed since then.
-The first text of a section is recorded as read when the page first loads it, so a
-first write is never an update.
+Claude is "listening" while a watch runs for the session: the watch rewrites watch.json
+every HEARTBEAT_EVERY seconds, and a heartbeat older than LISTENING_FOR seconds (or none)
+means no watch runs. The margin covers the seconds between a Monitor expiry and the re-arm.
+
+A Claude question is a question Claude puts to the user in the page rather than in the
+terminal: {id: q1…, text, options, multi (several options may be picked), status:
+"open" | "answered", asked, answer?: {choices, text, at}}. Asking one sets the phase
+"awaiting-answer"; the page shows each open one as a card in the review pane. The user's
+answer reaches the session as a batch whose action is "answer", carrying
+`answers: [{question, choices, text}]`.
+
+seen.json holds the highlight baseline: it maps a section id to the markdown the section
+had when the user sent the last batch (any batch: comments, an approval, an answer), or
+marked that section read later. A section whose file differs from its baseline is
+"updated": the page highlights what changed since then, so after Claude handles a batch
+the highlights show what it changed for that batch. The first text of a section is its
+first baseline, recorded when the page first loads it, so a first write is never an
+update.
 """
 
 from __future__ import annotations
@@ -65,18 +82,20 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
 # "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-review"
 # (set by the view-branch skill at the end of model matching) « Review code ».
+# "awaiting-answer" (set by `question`) waits on a Claude question shown in the review pane.
 PHASES = (
     "scoping",
     "planning",
     "awaiting-approval",
     "awaiting-model",
     "awaiting-review",
+    "awaiting-answer",
     "writing",
     "audit",
     "revising",
     "idle",
 )
-ACTIONS = ("", "approve-plan", "approve-model", "review-code")
+ACTIONS = ("", "approve-plan", "approve-model", "review-code", "answer")
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
@@ -87,6 +106,8 @@ WORKFLOWS = ("view-concept", "view-branch", "view-refactor")
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
+HEARTBEAT_EVERY = 2.5  # seconds between two heartbeats of a running watch
+LISTENING_FOR = 15.0  # seconds a heartbeat proves a watch runs
 
 
 class SessionError(Exception):
@@ -154,12 +175,20 @@ class Session:
         return self.dir / "changes.json"
 
     @property
+    def questions_path(self) -> Path:
+        return self.dir / "questions.json"
+
+    @property
     def inbox_path(self) -> Path:
         return self.dir / "inbox.jsonl"
 
     @property
     def cursor_path(self) -> Path:
         return self.dir / ".watch_cursor"
+
+    @property
+    def watch_path(self) -> Path:
+        return self.dir / "watch.json"
 
     @property
     def claude_path(self) -> Path:
@@ -262,9 +291,59 @@ class Session:
         _write_json(self.changes_path, changes)
         return d
 
+    def read_questions(self) -> list[dict[str, Any]]:
+        return _read_json(self.questions_path, [])
+
+    def add_question(
+        self, text: str, options: list[str] | None = None, multi: bool = False
+    ) -> dict[str, Any]:
+        """Put a Claude question to the user, and wait for the answer: the phase becomes
+        "awaiting-answer"."""
+        if not text.strip():
+            raise SessionError("empty question")
+        questions = self.read_questions()
+        q = {
+            "id": f"q{len(questions) + 1}",
+            "text": text.strip(),
+            "options": [o.strip() for o in options or [] if o.strip()],
+            "multi": multi,
+            "status": "open",
+            "asked": now_iso(),
+        }
+        questions.append(q)
+        _write_json(self.questions_path, questions)
+        self.write_status("awaiting-answer")
+        return q
+
+    def answer_question(self, qid: str, choices: list[str], text: str = "") -> dict[str, Any]:
+        """Record the user's answer to an open Claude question and send it at once, as a
+        batch whose action is "answer". Returns the batch."""
+        questions = self.read_questions()
+        q = next((q for q in questions if q["id"] == qid), None)
+        if q is None:
+            raise SessionError(f"no question {qid!r}")
+        if q["status"] != "open":
+            raise SessionError(f"{qid} is already answered")
+        choices = [c for c in choices if c]
+        unknown = [c for c in choices if c not in q["options"]]
+        if unknown:
+            raise SessionError(f"not an option of {qid}: {', '.join(unknown)}")
+        if len(choices) > 1 and not q.get("multi"):
+            raise SessionError(f"{qid} takes one choice")
+        text = text.strip()
+        if not choices and not text:
+            raise SessionError("empty answer")
+        batch = self.add_batch(
+            [], action="answer", answers=[{"question": qid, "choices": choices, "text": text}]
+        )
+        q["status"] = "answered"
+        q["answer"] = {"choices": choices, "text": text, "at": batch["sent"]}
+        _write_json(self.questions_path, questions)
+        return batch
+
     def read_seen(self, sections: dict[str, str]) -> dict[str, str]:
-        """The text the user last read of each section, recording the current text of
-        any section seen for the first time."""
+        """The highlight baseline of each section, recording the current text of any
+        section seen for the first time."""
         seen = _read_json(self.seen_path, {})
         new = {k: v for k, v in sections.items() if k not in seen}
         if new:
@@ -273,7 +352,7 @@ class Session:
         return seen
 
     def mark_seen(self, sections: dict[str, str]) -> None:
-        """Record `sections` (id -> the markdown the page showed) as read."""
+        """Set the baseline of `sections` (id -> the markdown the page showed): « mark read »."""
         seen = _read_json(self.seen_path, {})
         seen.update(sections)
         _write_json(self.seen_path, seen)
@@ -288,15 +367,29 @@ class Session:
         _write_json(self.status_path, status)
         return status
 
+    # ---- the watch's heartbeat ----
+    def write_heartbeat(self) -> None:
+        _write_json(self.watch_path, {"pid": os.getpid(), "at": now_iso()})
+
+    def is_listening(self, now: datetime | None = None) -> bool:
+        """Whether a watch runs for this session now: its heartbeat is recent."""
+        try:
+            at = datetime.fromisoformat(str(_read_json(self.watch_path, {}).get("at", "")))
+        except (SessionError, ValueError):
+            return False
+        return ((now or datetime.now(UTC)) - at).total_seconds() < LISTENING_FOR
+
     def signature(self) -> tuple:
         """Changes whenever a file the page renders changes, threads excepted (see
-        `thread_signature`)."""
+        `thread_signature`). The heartbeat is left out too: the server reads it on its
+        own, so a heartbeat never re-renders the page."""
         paths = [
             self.plan_path,
             self.audit_path,
             self.comments_path,
             self.status_path,
             self.changes_path,
+            self.questions_path,
         ]
         if self.sections_dir.is_dir():
             paths += sorted(self.sections_dir.glob("*.md"))
@@ -370,7 +463,11 @@ class Session:
 
     # ---- comments ----
     def add_batch(
-        self, comments: list[dict[str, Any]], note: str = "", action: str = ""
+        self,
+        comments: list[dict[str, Any]],
+        note: str = "",
+        action: str = "",
+        answers: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Record a batch sent from the page and append it to the inbox.
 
@@ -378,9 +475,12 @@ class Session:
         approved the plan from the page, "approve-model" that they approved the model of a
         branch review (so the implementation starts), "review-code" that they asked to start the
         code review once the implementation is done, with the comments as last
-        corrections."""
+        corrections, "answer" that they answered Claude questions (`answers`, see
+        `answer_question`)."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
+        if (action == "answer") != bool(answers):
+            raise SessionError("an answer batch, and only one, carries answers")
         note = note.strip()
         # A comment from a side thread may have no text: the thread's conclusion is the comment.
         comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
@@ -407,10 +507,14 @@ class Session:
                 for i, c in enumerate(comments)
             ],
         }
+        if answers:
+            batch["answers"] = answers
         batches.append(batch)
         _write_json(self.comments_path, data)
         with self.inbox_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(batch, ensure_ascii=False) + "\n")
+        # Highlights show what changed since the last batch: every baseline moves here.
+        self.mark_seen(self.read_sections())
         return batch
 
     def resolve(self, ids: list[str], reply: str = "") -> list[str]:
@@ -534,8 +638,14 @@ def _stat_signature(paths: list[Path]) -> tuple:
     return tuple(sig)
 
 
-def format_batch(slug: str, batch: dict[str, Any], outline: list[dict[str, Any]]) -> str:
-    """How a batch appears in the Claude Code session (one Monitor event)."""
+def format_batch(
+    slug: str,
+    batch: dict[str, Any],
+    outline: list[dict[str, Any]],
+    questions: list[dict[str, Any]] | None = None,
+) -> str:
+    """How a batch appears in the Claude Code session (one Monitor event). `questions`
+    gives the text of the Claude questions an answer batch answers."""
     number = {s["id"]: i + 1 for i, s in enumerate(outline)}
     n = len(batch["comments"])
     lines = [f"view-concept · {slug} · batch {batch['id']} · {n} comment{'s' * (n != 1)}"]
@@ -548,6 +658,15 @@ def format_batch(slug: str, batch: dict[str, Any], outline: list[dict[str, Any]]
         )
     if batch.get("action") == "review-code":
         lines.append("action: review-code (the user asked to start the code review from the page)")
+    if batch.get("action") == "answer":
+        asked = {q["id"]: q["text"] for q in questions or []}
+        ids = ", ".join(a["question"] for a in batch.get("answers", []))
+        lines.append(f"action: answer (the user answered Claude question {ids} from the page)")
+        for a in batch.get("answers", []):
+            text = " ".join(asked.get(a["question"], "").split())
+            head = f"answer to {a['question']}" + (f" « {text} »" if text else "")
+            answer = " — ".join(p for p in [", ".join(a["choices"]), a["text"]] if p)
+            lines.append(f"{head}: {answer}")
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
     for c in batch["comments"]:

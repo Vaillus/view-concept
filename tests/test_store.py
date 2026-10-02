@@ -1,8 +1,10 @@
 import json
+from datetime import datetime, timedelta
 
 import pytest
 
 from view_concept.store import (
+    LISTENING_FOR,
     Session,
     SessionError,
     format_batch,
@@ -151,3 +153,83 @@ def test_workflow_is_validated(tmp_path):
     with pytest.raises(SessionError, match="code session"):
         Session("y", tmp_path).create("Y", workflow="view-refactor")
     assert not Session("x", tmp_path).exists()
+
+
+def test_listening_follows_the_heartbeat(session):
+    assert session.is_listening() is False  # no watch has run
+    before = session.signature()
+    session.write_heartbeat()
+    assert session.is_listening()
+    assert session.signature() == before  # a heartbeat does not re-render the page
+    at = datetime.fromisoformat(json.loads(session.watch_path.read_text())["at"])
+    assert session.is_listening(at + timedelta(seconds=LISTENING_FOR - 1))
+    assert not session.is_listening(at + timedelta(seconds=LISTENING_FOR + 1))
+    session.watch_path.write_text("{}")
+    assert session.is_listening() is False
+
+
+def test_claude_question(session):
+    before = session.signature()
+    q1 = session.add_question(" Which one? ", ["a PR", " ", "a merge"])
+    assert q1["id"] == "q1" and q1["text"] == "Which one?" and q1["status"] == "open"
+    assert q1["options"] == ["a PR", "a merge"] and q1["multi"] is False
+    assert session.read_status()["phase"] == "awaiting-answer"
+    assert session.signature() != before  # the page shows the card
+    q2 = session.add_question("Anything else?", multi=True)
+    assert q2["id"] == "q2" and q2["options"] == []
+    assert [q["id"] for q in session.read_questions()] == ["q1", "q2"]
+    with pytest.raises(SessionError):
+        session.add_question(" ")
+
+
+def test_answer_is_sent_as_a_batch(session):
+    session.add_question("PR or merge?", ["a PR", "a merge"])
+    with pytest.raises(SessionError, match="empty answer"):
+        session.answer_question("q1", [], " ")
+    with pytest.raises(SessionError, match="not an option"):
+        session.answer_question("q1", ["a rebase"])
+    with pytest.raises(SessionError, match="one choice"):
+        session.answer_question("q1", ["a PR", "a merge"])
+    b = session.answer_question("q1", ["a PR"], " squash it ")
+    assert b["action"] == "answer" and b["comments"] == []
+    assert b["answers"] == [{"question": "q1", "choices": ["a PR"], "text": "squash it"}]
+    assert json.loads(session.inbox_path.read_text().splitlines()[-1])["id"] == b["id"]
+    assert session.read_comments()["batches"][-1]["answers"] == b["answers"]
+    (q,) = session.read_questions()
+    assert q["status"] == "answered"
+    assert q["answer"] == {"choices": ["a PR"], "text": "squash it", "at": b["sent"]}
+    with pytest.raises(SessionError, match="already answered"):
+        session.answer_question("q1", [], "again")
+    with pytest.raises(SessionError, match="no question"):
+        session.answer_question("q9", [], "hm")
+
+
+def test_answer_batch_needs_answers(session):
+    with pytest.raises(SessionError):
+        session.add_batch([], action="answer")
+    with pytest.raises(SessionError):
+        session.add_batch([{"text": "a"}], answers=[{"question": "q1", "choices": [], "text": "x"}])
+
+
+def test_format_answer_batch(session):
+    session.add_question("Which  files?", ["a.py", "b.py"], multi=True)
+    session.add_question("Why?")
+    b1 = session.answer_question("q1", ["a.py", "b.py"], "and the tests")
+    b2 = session.answer_question("q2", [], "because")
+    outline, questions = session.read_plan()["outline"], session.read_questions()
+    out = format_batch("kv-cache", b1, outline, questions)
+    assert "action: answer (the user answered Claude question q1 from the page)" in out
+    assert "answer to q1 « Which files? »: a.py, b.py — and the tests" in out
+    assert "answer to q2 « Why? »: because" in format_batch("kv-cache", b2, outline, questions)
+
+
+def test_a_batch_resets_the_highlight_baseline(session):
+    session.read_seen(session.read_sections())  # the page loads the first texts
+    (session.sections_dir / "s1.md").write_text("L'attention, réécrite.")
+    (session.sections_dir / "s2.md").write_text("Le cache, réécrit.")
+    session.mark_seen({"s2": "Le cache, réécrit."})  # « mark read » on one section
+    seen = session.read_seen(session.read_sections())
+    assert seen["s1"] == "L'attention." and seen["s2"] == "Le cache, réécrit."
+    session.add_question("Why?")
+    session.answer_question("q1", [], "because")  # an answer is a batch too
+    assert session.read_seen(session.read_sections()) == session.read_sections()

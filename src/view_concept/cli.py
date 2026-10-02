@@ -15,6 +15,7 @@ import webbrowser
 from pathlib import Path
 
 from .store import (
+    HEARTBEAT_EVERY,
     HOME,
     KINDS,
     PHASES,
@@ -120,7 +121,9 @@ def cmd_watch(a: argparse.Namespace) -> None:
     """Print each new batch of the inbox as it arrives. Meant to run under Monitor.
 
     The cursor persists across restarts, so re-arming after a Monitor timeout neither
-    loses a batch sent in between nor repeats one already delivered."""
+    loses a batch sent in between nor repeats one already delivered. Starting prints
+    nothing: every line is a Monitor event, and a re-arm is not news. While it runs,
+    the watch writes its heartbeat (watch.json), which tells the page Claude is listening."""
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
@@ -128,8 +131,11 @@ def cmd_watch(a: argparse.Namespace) -> None:
         cursor = int(s.cursor_path.read_text())
     except (FileNotFoundError, ValueError):
         cursor = 0
-    print(f"watching {a.slug} (inbox offset {cursor})", flush=True)
+    beat = 0.0
     while True:
+        if time.monotonic() - beat >= HEARTBEAT_EVERY:
+            s.write_heartbeat()
+            beat = time.monotonic()
         try:
             size = s.inbox_path.stat().st_size
         except FileNotFoundError:
@@ -140,10 +146,11 @@ def cmd_watch(a: argparse.Namespace) -> None:
                 chunk = f.read(size - cursor)
             end = chunk.rfind(b"\n") + 1  # only complete lines
             if end:
-                outline = s.read_plan()["outline"]
+                outline, questions = s.read_plan()["outline"], s.read_questions()
                 for line in chunk[:end].decode("utf-8").splitlines():
                     if line.strip():
-                        print(format_batch(a.slug, json.loads(line), outline), flush=True)
+                        batch = json.loads(line)
+                        print(format_batch(a.slug, batch, outline, questions), flush=True)
                 cursor += end
                 s.cursor_path.write_text(str(cursor))
         time.sleep(0.5)
@@ -152,6 +159,21 @@ def cmd_watch(a: argparse.Namespace) -> None:
 def cmd_status(a: argparse.Namespace) -> None:
     st = Session(a.slug).write_status(a.phase, a.section or "", a.message or "")
     print(f"{st['phase']} {st['section']}".strip())
+
+
+def cmd_question(a: argparse.Namespace) -> None:
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    q = s.add_question(a.text, a.option, a.multi)
+    print(q["id"])
+    # The answer only reaches Claude through a watch: say so while none runs.
+    if not s.is_listening():
+        print(
+            f"view-concept: no watch is running for {a.slug}; the answer will wait in the "
+            "inbox until one starts. Arm the watch now.",
+            file=sys.stderr,
+        )
 
 
 def cmd_change(a: argparse.Namespace) -> None:
@@ -235,6 +257,13 @@ def main() -> None:
     q.add_argument("--section", help="outline id being written, for phase 'writing'")
     q.add_argument("--message", help="short free text shown next to the phase")
     q.set_defaults(fn=cmd_status)
+
+    q = sub.add_parser("question", help="put a Claude question to the user in the page")
+    q.add_argument("slug")
+    q.add_argument("text", help="the question")
+    q.add_argument("--option", action="append", default=[], help="one choice (repeatable)")
+    q.add_argument("--multi", action="store_true", help="the user may pick several choices")
+    q.set_defaults(fn=cmd_question)
 
     q = sub.add_parser("change", help="record a model change accepted in a branch review")
     q.add_argument("slug")

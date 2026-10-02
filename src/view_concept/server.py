@@ -4,6 +4,7 @@ runs side threads."""
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +79,7 @@ def state(slug: str) -> dict[str, Any]:
         comments = s.read_comments()
         status = s.read_status()
         changes = s.read_changes()
+        questions = s.read_questions()
         seen = s.read_seen(sections)
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
@@ -88,20 +90,22 @@ def state(slug: str) -> dict[str, Any]:
     return {
         "slug": slug,
         "plan": plan,
+        "listening": s.is_listening(),
         "workflow": plan.get("workflow", ""),
         "status": status,
         "sections": {k: section_view(v, seen[k]) for k, v in sections.items()},
         "audit": audit,
         "comments": comments,
         "changes": changes,
+        "questions": questions,
         "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),
     }
 
 
 def section_view(text: str, seen: str) -> dict[str, Any]:
-    """A section as the page renders it. An updated section (rewritten since the user
-    last read it) also carries the HTML of the version read, which the page diffs
-    against to highlight what changed."""
+    """A section as the page renders it. An updated section (its text differs from its
+    highlight baseline, the text at the last batch or « mark read ») also carries the
+    HTML of the baseline, which the page diffs against to highlight what changed."""
     view: dict[str, Any] = {"md": text, "html": md.render(text), "updated": text != seen}
     if view["updated"]:
         view["seen_html"] = md.render(seen)
@@ -114,8 +118,8 @@ class SeenIn(BaseModel):
 
 @app.post("/api/s/{slug}/seen")
 def mark_seen(slug: str, body: SeenIn) -> dict[str, bool]:
-    """Mark sections as read: the body carries the markdown the page showed, so a
-    rewrite that arrived meanwhile stays unread."""
+    """Mark sections as read (set their highlight baseline): the body carries the
+    markdown the page showed, so a rewrite that arrived meanwhile stays highlighted."""
     get_session(slug).mark_seen(body.sections)
     return {"ok": True}
 
@@ -126,6 +130,7 @@ async def events(slug: str, request: Request) -> StreamingResponse:
 
     async def stream():
         last, last_threads = s.signature(), s.thread_signature()
+        listening = s.is_listening()
         yield "event: hello\ndata: {}\n\n"
         ticks = 0
         while not await request.is_disconnected():
@@ -137,6 +142,10 @@ async def events(slug: str, request: Request) -> StreamingResponse:
             if sig_threads != last_threads:
                 last_threads = sig_threads
                 yield "event: threads\ndata: {}\n\n"
+            # A heartbeat goes stale without any file changing: compare with the clock.
+            if s.is_listening() != listening:
+                listening = not listening
+                yield f"event: listening\ndata: {json.dumps({'listening': listening})}\n\n"
             ticks += 1
             if ticks % 40 == 0:
                 yield ": ping\n\n"
@@ -165,6 +174,21 @@ def send_batch(slug: str, body: BatchIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
         return s.add_batch([c.model_dump() for c in body.comments], body.note, body.action)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+class AnswerIn(BaseModel):
+    choices: list[str] = []
+    text: str = ""
+
+
+@app.post("/api/s/{slug}/questions/{qid}/answer")
+def answer_question(slug: str, qid: str, body: AnswerIn) -> dict[str, Any]:
+    """Answer a Claude question: sent to the session at once, as an answer batch."""
+    s = get_session(slug)
+    try:
+        return s.answer_question(qid, body.choices, body.text)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
 

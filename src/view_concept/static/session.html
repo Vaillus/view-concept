@@ -16,6 +16,7 @@
   <span id="title" class="title"></span>
   <span id="phase" class="phase" hidden></span>
   <span id="live" class="live off" title="Live updates from the session">offline</span>
+  <span id="listening" class="listening off" title="Whether a watch is running for this session: it reads what you send">○ Claude not listening</span>
   <span id="general-threads" class="t-chips"></span>
   <button id="new-thread" class="btn" title="Open a side thread not tied to a passage">ask</button>
   <button id="export" class="btn">Export to vault</button>
@@ -44,14 +45,15 @@
     <article id="refactor" class="view doc refactor" data-view="refactor"></article>
   </section>
 
+  <div id="divider" class="divider" title="Drag to resize the review pane; double-click to reset"></div>
   <aside class="review">
     <div class="pane-head">review <span id="draft-count" class="dim"></span></div>
+    <div id="history"></div>
+    <div id="questions"></div>
     <p class="hint dim">Select text in the explanation, or use « + comment » on an item of the plan. Comments stay here until you send them together.</p>
     <div id="drafts"></div>
     <textarea id="note" class="note" rows="3" placeholder="General note for the whole batch (optional)"></textarea>
     <button id="send" class="btn primary" disabled>Send</button>
-    <div class="pane-head">sent</div>
-    <div id="sent"></div>
   </aside>
 </main>
 

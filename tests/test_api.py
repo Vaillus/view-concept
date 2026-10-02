@@ -25,6 +25,32 @@ def test_api(client):
     assert client.get("/api/s/missing").status_code == 404
 
 
+def test_api_says_whether_claude_is_listening(client, session):
+    assert client.get("/api/s/kv-cache").json()["listening"] is False
+    session.write_heartbeat()
+    assert client.get("/api/s/kv-cache").json()["listening"] is True
+
+
+def test_api_sends_the_claude_questions(client, session):
+    assert client.get("/api/s/kv-cache").json()["questions"] == []
+    session.add_question("PR or merge?", ["PR", "merge"])
+    state = client.get("/api/s/kv-cache").json()
+    assert [q["id"] for q in state["questions"]] == ["q1"]
+    assert state["status"]["phase"] == "awaiting-answer"
+
+
+def test_api_answers_a_claude_question(client, session):
+    session.add_question("PR or merge?", ["PR", "merge"])
+    url = "/api/s/kv-cache/questions/q1/answer"
+    assert client.post(url, json={"choices": [], "text": " "}).status_code == 400
+    r = client.post(url, json={"choices": ["PR"], "text": ""})
+    assert r.status_code == 200 and r.json()["action"] == "answer"
+    state = client.get("/api/s/kv-cache").json()
+    assert state["questions"][0]["status"] == "answered"
+    assert state["comments"]["batches"][-1]["answers"][0]["choices"] == ["PR"]
+    assert client.post(url, json={"text": "again"}).status_code == 400
+
+
 def test_api_sends_the_session_workflow(client, session):
     assert client.get("/api/s/kv-cache").json()["workflow"] == "view-concept"
 
