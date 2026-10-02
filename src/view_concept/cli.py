@@ -146,10 +146,11 @@ def cmd_watch(a: argparse.Namespace) -> None:
                 chunk = f.read(size - cursor)
             end = chunk.rfind(b"\n") + 1  # only complete lines
             if end:
-                outline = s.read_plan()["outline"]
+                outline, questions = s.read_plan()["outline"], s.read_questions()
                 for line in chunk[:end].decode("utf-8").splitlines():
                     if line.strip():
-                        print(format_batch(a.slug, json.loads(line), outline), flush=True)
+                        batch = json.loads(line)
+                        print(format_batch(a.slug, batch, outline, questions), flush=True)
                 cursor += end
                 s.cursor_path.write_text(str(cursor))
         time.sleep(0.5)

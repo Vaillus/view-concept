@@ -180,3 +180,44 @@ def test_claude_question(session):
     assert [q["id"] for q in session.read_questions()] == ["q1", "q2"]
     with pytest.raises(SessionError):
         session.add_question(" ")
+
+
+def test_answer_is_sent_as_a_batch(session):
+    session.add_question("PR or merge?", ["a PR", "a merge"])
+    with pytest.raises(SessionError, match="empty answer"):
+        session.answer_question("q1", [], " ")
+    with pytest.raises(SessionError, match="not an option"):
+        session.answer_question("q1", ["a rebase"])
+    with pytest.raises(SessionError, match="one choice"):
+        session.answer_question("q1", ["a PR", "a merge"])
+    b = session.answer_question("q1", ["a PR"], " squash it ")
+    assert b["action"] == "answer" and b["comments"] == []
+    assert b["answers"] == [{"question": "q1", "choices": ["a PR"], "text": "squash it"}]
+    assert json.loads(session.inbox_path.read_text().splitlines()[-1])["id"] == b["id"]
+    assert session.read_comments()["batches"][-1]["answers"] == b["answers"]
+    (q,) = session.read_questions()
+    assert q["status"] == "answered"
+    assert q["answer"] == {"choices": ["a PR"], "text": "squash it", "at": b["sent"]}
+    with pytest.raises(SessionError, match="already answered"):
+        session.answer_question("q1", [], "again")
+    with pytest.raises(SessionError, match="no question"):
+        session.answer_question("q9", [], "hm")
+
+
+def test_answer_batch_needs_answers(session):
+    with pytest.raises(SessionError):
+        session.add_batch([], action="answer")
+    with pytest.raises(SessionError):
+        session.add_batch([{"text": "a"}], answers=[{"question": "q1", "choices": [], "text": "x"}])
+
+
+def test_format_answer_batch(session):
+    session.add_question("Which  files?", ["a.py", "b.py"], multi=True)
+    session.add_question("Why?")
+    b1 = session.answer_question("q1", ["a.py", "b.py"], "and the tests")
+    b2 = session.answer_question("q2", [], "because")
+    outline, questions = session.read_plan()["outline"], session.read_questions()
+    out = format_batch("kv-cache", b1, outline, questions)
+    assert "action: answer (the user answered Claude question q1 from the page)" in out
+    assert "answer to q1 « Which files? »: a.py, b.py — and the tests" in out
+    assert "answer to q2 « Why? »: because" in format_batch("kv-cache", b2, outline, questions)

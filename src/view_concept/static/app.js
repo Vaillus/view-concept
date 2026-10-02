@@ -969,7 +969,9 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    questions.json): its text, optional options (one choice, or several when `multi`),
    and always a free-text field. Each open one is a card headed « Question from Claude »
    in the review pane, in the order asked. A card is built once and kept while its
-   question is open, so a re-render never takes the user's choice or text. */
+   question is open, so a re-render never takes the user's choice or text. « Answer »
+   sends the answer at once, as a batch whose action is "answer": Claude is blocked on
+   it, so it is never held as a draft. */
 
 const openQuestions = () => (state ? state.questions || [] : []).filter((q) => q.status === "open");
 const questionCards = new Map(); // question id -> its card
@@ -979,12 +981,30 @@ function questionCard(q) {
   const type = q.multi ? "checkbox" : "radio";
   const options = el("div", { class: "q-options" }, ...q.options.map((o) =>
     el("label", {}, el("input", { type, name: `answer-${q.id}`, value: o }), el("span", { text: o }))));
+  const ta = el("textarea", { class: "c-text", rows: "2",
+                              placeholder: q.options.length ? "Something to add, or another answer (optional)" : "Your answer" });
+  const button = el("button", { class: "btn primary q-answer", text: "Answer", disabled: true });
+  const choices = () => [...options.querySelectorAll("input:checked")].map((i) => i.value);
+  const update = () => { button.disabled = !choices().length && !ta.value.trim(); };
+  options.addEventListener("change", update);
+  ta.addEventListener("input", update);
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); button.click(); }
+  });
+  button.addEventListener("click", async () => {
+    if (button.disabled) return;
+    button.disabled = true;
+    try {
+      await postJSON(`/api/s/${SLUG}/questions/${q.id}/answer`, { choices: choices(), text: ta.value });
+    } catch (e) { toast(`Answer failed: ${e.message}`); update(); return; }
+    await load();
+    sentToast(`Answered ${q.id}`);
+  });
   const card = el("div", { class: "question", "data-question": q.id },
     el("div", { class: "q-head" }, "Question from Claude ", el("span", { class: "dim", text: q.id })),
     el("div", { class: "q-text", text: q.text }),
     q.options.length ? options : null,
-    el("textarea", { class: "c-text", rows: "2",
-                     placeholder: q.options.length ? "Something to add, or another answer (optional)" : "Your answer" }));
+    ta, button);
   questionCards.set(q.id, card);
   return card;
 }

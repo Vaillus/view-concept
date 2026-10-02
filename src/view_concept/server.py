@@ -178,6 +178,21 @@ def send_batch(slug: str, body: BatchIn) -> dict[str, Any]:
         raise HTTPException(400, str(e)) from e
 
 
+class AnswerIn(BaseModel):
+    choices: list[str] = []
+    text: str = ""
+
+
+@app.post("/api/s/{slug}/questions/{qid}/answer")
+def answer_question(slug: str, qid: str, body: AnswerIn) -> dict[str, Any]:
+    """Answer a Claude question: sent to the session at once, as an answer batch."""
+    s = get_session(slug)
+    try:
+        return s.answer_question(qid, body.choices, body.text)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 class ThreadIn(BaseModel):
     section: str = ""
     quote: str = ""

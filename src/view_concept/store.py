@@ -47,7 +47,9 @@ means no watch runs. The margin covers the seconds between a Monitor expiry and 
 A Claude question is a question Claude puts to the user in the page rather than in the
 terminal: {id: q1…, text, options, multi (several options may be picked), status:
 "open" | "answered", asked, answer?: {choices, text, at}}. Asking one sets the phase
-"awaiting-answer"; the page shows each open one as a card in the review pane.
+"awaiting-answer"; the page shows each open one as a card in the review pane. The user's
+answer reaches the session as a batch whose action is "answer", carrying
+`answers: [{question, choices, text}]`.
 
 seen.json maps a section id to the markdown the user last marked as read. A section
 whose file differs from it is "updated": the page highlights what changed since then.
@@ -89,7 +91,7 @@ PHASES = (
     "revising",
     "idle",
 )
-ACTIONS = ("", "approve-plan", "approve-model", "review-code")
+ACTIONS = ("", "approve-plan", "approve-model", "review-code", "answer")
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
@@ -309,6 +311,32 @@ class Session:
         self.write_status("awaiting-answer")
         return q
 
+    def answer_question(self, qid: str, choices: list[str], text: str = "") -> dict[str, Any]:
+        """Record the user's answer to an open Claude question and send it at once, as a
+        batch whose action is "answer". Returns the batch."""
+        questions = self.read_questions()
+        q = next((q for q in questions if q["id"] == qid), None)
+        if q is None:
+            raise SessionError(f"no question {qid!r}")
+        if q["status"] != "open":
+            raise SessionError(f"{qid} is already answered")
+        choices = [c for c in choices if c]
+        unknown = [c for c in choices if c not in q["options"]]
+        if unknown:
+            raise SessionError(f"not an option of {qid}: {', '.join(unknown)}")
+        if len(choices) > 1 and not q.get("multi"):
+            raise SessionError(f"{qid} takes one choice")
+        text = text.strip()
+        if not choices and not text:
+            raise SessionError("empty answer")
+        batch = self.add_batch(
+            [], action="answer", answers=[{"question": qid, "choices": choices, "text": text}]
+        )
+        q["status"] = "answered"
+        q["answer"] = {"choices": choices, "text": text, "at": batch["sent"]}
+        _write_json(self.questions_path, questions)
+        return batch
+
     def read_seen(self, sections: dict[str, str]) -> dict[str, str]:
         """The text the user last read of each section, recording the current text of
         any section seen for the first time."""
@@ -431,7 +459,11 @@ class Session:
 
     # ---- comments ----
     def add_batch(
-        self, comments: list[dict[str, Any]], note: str = "", action: str = ""
+        self,
+        comments: list[dict[str, Any]],
+        note: str = "",
+        action: str = "",
+        answers: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Record a batch sent from the page and append it to the inbox.
 
@@ -439,9 +471,12 @@ class Session:
         approved the plan from the page, "approve-model" that they approved the model of a
         branch review (so the implementation starts), "review-code" that they asked to start the
         code review once the implementation is done, with the comments as last
-        corrections."""
+        corrections, "answer" that they answered Claude questions (`answers`, see
+        `answer_question`)."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
+        if (action == "answer") != bool(answers):
+            raise SessionError("an answer batch, and only one, carries answers")
         note = note.strip()
         # A comment from a side thread may have no text: the thread's conclusion is the comment.
         comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
@@ -468,6 +503,8 @@ class Session:
                 for i, c in enumerate(comments)
             ],
         }
+        if answers:
+            batch["answers"] = answers
         batches.append(batch)
         _write_json(self.comments_path, data)
         with self.inbox_path.open("a", encoding="utf-8") as f:
@@ -595,8 +632,14 @@ def _stat_signature(paths: list[Path]) -> tuple:
     return tuple(sig)
 
 
-def format_batch(slug: str, batch: dict[str, Any], outline: list[dict[str, Any]]) -> str:
-    """How a batch appears in the Claude Code session (one Monitor event)."""
+def format_batch(
+    slug: str,
+    batch: dict[str, Any],
+    outline: list[dict[str, Any]],
+    questions: list[dict[str, Any]] | None = None,
+) -> str:
+    """How a batch appears in the Claude Code session (one Monitor event). `questions`
+    gives the text of the Claude questions an answer batch answers."""
     number = {s["id"]: i + 1 for i, s in enumerate(outline)}
     n = len(batch["comments"])
     lines = [f"view-concept · {slug} · batch {batch['id']} · {n} comment{'s' * (n != 1)}"]
@@ -609,6 +652,15 @@ def format_batch(slug: str, batch: dict[str, Any], outline: list[dict[str, Any]]
         )
     if batch.get("action") == "review-code":
         lines.append("action: review-code (the user asked to start the code review from the page)")
+    if batch.get("action") == "answer":
+        asked = {q["id"]: q["text"] for q in questions or []}
+        ids = ", ".join(a["question"] for a in batch.get("answers", []))
+        lines.append(f"action: answer (the user answered Claude question {ids} from the page)")
+        for a in batch.get("answers", []):
+            text = " ".join(asked.get(a["question"], "").split())
+            head = f"answer to {a['question']}" + (f" « {text} »" if text else "")
+            answer = " — ".join(p for p in [", ".join(a["choices"]), a["text"]] if p)
+            lines.append(f"{head}: {answer}")
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
     for c in batch["comments"]:
