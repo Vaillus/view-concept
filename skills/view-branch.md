@@ -58,7 +58,7 @@ always shows the model as it now stands, not as the branch wrote it.
 
 ## Bindings
 
-- **Session**: a code session, `--kind code --repo <repo root>`, opened on the
+- **Session**: a code session, `--kind code --repo <repo root> --workflow view-branch`, opened on the
   branch. Citations are required, as view-concept says.
 - **Level**: the user owns the repository. Skip the level question.
 - **Goal**: decide what the branch should be, and get it there. Skip the goal
@@ -213,10 +213,10 @@ reads and writes, and, unless it simply conforms, the finding (why it got its
 verdict). Do not write the verdict or a « Porte : » line in the prose: they
 are fields now, and the page draws them.
 
-The verdict is one of the keys in
+The verdict is one of the keys of the `view-branch` list in
 `~/Documents/code/view-concept/src/view_concept/verdicts.yaml`. Read that
-file for what each verdict means and which ones send the item back to an
-earlier step; it lists them in the order of the review table.
+list for what each verdict means and which ones send the item back to an
+earlier step; it gives them in the order of the review table.
 
 A **finding across items** is a problem between items: the same logic in two
 files, an import across directories, a module in the wrong place judged from
