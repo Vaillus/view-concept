@@ -166,3 +166,17 @@ def test_listening_follows_the_heartbeat(session):
     assert not session.is_listening(at + timedelta(seconds=LISTENING_FOR + 1))
     session.watch_path.write_text("{}")
     assert session.is_listening() is False
+
+
+def test_claude_question(session):
+    before = session.signature()
+    q1 = session.add_question(" Which one? ", ["a PR", " ", "a merge"])
+    assert q1["id"] == "q1" and q1["text"] == "Which one?" and q1["status"] == "open"
+    assert q1["options"] == ["a PR", "a merge"] and q1["multi"] is False
+    assert session.read_status()["phase"] == "awaiting-answer"
+    assert session.signature() != before  # the page shows the card
+    q2 = session.add_question("Anything else?", multi=True)
+    assert q2["id"] == "q2" and q2["options"] == []
+    assert [q["id"] for q in session.read_questions()] == ["q1", "q2"]
+    with pytest.raises(SessionError):
+        session.add_question(" ")

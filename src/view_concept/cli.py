@@ -160,6 +160,14 @@ def cmd_status(a: argparse.Namespace) -> None:
     print(f"{st['phase']} {st['section']}".strip())
 
 
+def cmd_question(a: argparse.Namespace) -> None:
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    q = s.add_question(a.text, a.option, a.multi)
+    print(q["id"])
+
+
 def cmd_change(a: argparse.Namespace) -> None:
     d = Session(a.slug).add_change(a.change, a.why or "", a.instead or "", a.files)
     print(f"{d['id']} recorded")
@@ -241,6 +249,13 @@ def main() -> None:
     q.add_argument("--section", help="outline id being written, for phase 'writing'")
     q.add_argument("--message", help="short free text shown next to the phase")
     q.set_defaults(fn=cmd_status)
+
+    q = sub.add_parser("question", help="put a Claude question to the user in the page")
+    q.add_argument("slug")
+    q.add_argument("text", help="the question")
+    q.add_argument("--option", action="append", default=[], help="one choice (repeatable)")
+    q.add_argument("--multi", action="store_true", help="the user may pick several choices")
+    q.set_defaults(fn=cmd_question)
 
     q = sub.add_parser("change", help="record a model change accepted in a branch review")
     q.add_argument("slug")

@@ -116,7 +116,8 @@ const isUpdated = (id) => !!(state.sections[id] || {}).updated;
 
 function render() {
   const { plan } = state;
-  document.title = `${plan.title} · view-concept`;
+  // A mark in the tab title while a Claude question waits, to be seen from another window.
+  document.title = `${openQuestions().length ? "● " : ""}${plan.title} · view-concept`;
   $("#title").textContent = plan.title;
   renderListening();
   renderStatus();
@@ -189,6 +190,10 @@ const sentToast = (msg) => toast(state.listening ? msg : NOT_LISTENING, state.li
 
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
 
+/* "awaiting-answer" waits on the open Claude questions, answered from their cards in the
+   review pane (see "Claude questions" below), so it has no button here. */
+const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "answered · Claude is reading it" };
+
 /* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
    model of a branch review at the end of model consolidation ("awaiting-model", set by the
    view-branch skill only), and the start of its refactoring step once model matching is
@@ -224,15 +229,17 @@ function renderStatus() {
     scoping: "scoping the question",
     planning: "drafting the plan",
     ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
+    "awaiting-answer": openQuestions().length ? QUESTION_LABELS.ready : QUESTION_LABELS.sent,
     writing: section ? `writing §${numberOf(section)} ${titleOf(section)}` : "writing",
     audit: "vocabulary audit",
     revising: "revising",
   };
+  const asking = phase === "awaiting-answer" && openQuestions().length > 0;
   const active = ["scoping", "planning", "writing", "audit", "revising"].includes(phase) ||
-                 (approval && approvalPending());
+                 (approval && approvalPending()) || (phase === "awaiting-answer" && !asking);
   const p = $("#phase");
   p.hidden = !labels[phase];
-  p.className = `phase ${active ? "active" : ""} ${approval && !approvalPending() ? "ask" : ""}`;
+  p.className = `phase ${active ? "active" : ""} ${(approval && !approvalPending()) || asking ? "ask" : ""}`;
   p.textContent = [labels[phase], message].filter(Boolean).join(" · ");
 
   $("#approve").hidden = docButton.hidden = true;
@@ -957,6 +964,40 @@ $("#composer textarea").addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeComposer();
 });
 
+/* ---------------- Claude questions ----------------
+   A Claude question is one Claude puts to the user in the page (`view-concept question`,
+   questions.json): its text, optional options (one choice, or several when `multi`),
+   and always a free-text field. Each open one is a card headed « Question from Claude »
+   in the review pane, in the order asked. A card is built once and kept while its
+   question is open, so a re-render never takes the user's choice or text. */
+
+const openQuestions = () => (state ? state.questions || [] : []).filter((q) => q.status === "open");
+const questionCards = new Map(); // question id -> its card
+
+function questionCard(q) {
+  if (questionCards.has(q.id)) return questionCards.get(q.id);
+  const type = q.multi ? "checkbox" : "radio";
+  const options = el("div", { class: "q-options" }, ...q.options.map((o) =>
+    el("label", {}, el("input", { type, name: `answer-${q.id}`, value: o }), el("span", { text: o }))));
+  const card = el("div", { class: "question", "data-question": q.id },
+    el("div", { class: "q-head" }, "Question from Claude ", el("span", { class: "dim", text: q.id })),
+    el("div", { class: "q-text", text: q.text }),
+    q.options.length ? options : null,
+    el("textarea", { class: "c-text", rows: "2",
+                     placeholder: q.options.length ? "Something to add, or another answer (optional)" : "Your answer" }));
+  questionCards.set(q.id, card);
+  return card;
+}
+
+function renderQuestions() {
+  const open = openQuestions();
+  for (const id of questionCards.keys()) if (!open.some((q) => q.id === id)) questionCards.delete(id);
+  const box = $("#questions");
+  const cardsNow = open.map(questionCard);
+  // Re-attaching a card would blur its text field: only when the list changed.
+  if (cardsNow.length !== box.children.length || cardsNow.some((c, i) => box.children[i] !== c)) box.replaceChildren(...cardsNow);
+}
+
 /* ---------------- review pane ---------------- */
 
 function quoteLine(c) {
@@ -973,6 +1014,7 @@ function quoteLine(c) {
 }
 
 function renderReview() {
+  renderQuestions();
   $("#draft-count").textContent = drafts.length ? `· ${drafts.length} draft${drafts.length > 1 ? "s" : ""}` : "";
   $("#drafts").replaceChildren(...drafts.map((d) => {
     const ta = el("textarea", { class: "c-text", rows: "2",

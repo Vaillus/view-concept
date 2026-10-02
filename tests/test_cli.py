@@ -57,3 +57,20 @@ def test_watch_writes_its_heartbeat(tmp_path):
     finally:
         proc.terminate()
         proc.communicate(timeout=5)
+
+
+def test_question_prints_its_id(tmp_path):
+    assert view_concept(tmp_path, "new", "Ask").returncode == 0
+    r = view_concept(
+        tmp_path, "question", "ask", "PR or merge?", "--option", "PR", "--option", "merge"
+    )
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "q1"
+    d = tmp_path / "sessions" / "ask"
+    (q,) = json.loads((d / "questions.json").read_text())
+    assert q["options"] == ["PR", "merge"] and q["multi"] is False
+    assert json.loads((d / "status.json").read_text())["phase"] == "awaiting-answer"
+    r = view_concept(tmp_path, "question", "ask", "Which files?", "--multi")
+    assert r.stdout.strip() == "q2"
+    assert view_concept(tmp_path, "question", "nope", "Hm?").returncode != 0
+    assert not (tmp_path / "sessions" / "nope").exists()

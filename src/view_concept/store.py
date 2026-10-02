@@ -10,6 +10,7 @@ reach the Claude Code session through the inbox.
         audit.json      vocabulary-audit findings                  (written by Claude)
         status.json     what Claude is doing now: phase, section    (written by `status`)
         changes.json    model changes accepted in a branch review       (written by `change`)
+        questions.json  Claude questions put to the user, with their answers  (`question`, server)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
@@ -43,6 +44,11 @@ Claude is "listening" while a watch runs for the session: the watch rewrites wat
 every HEARTBEAT_EVERY seconds, and a heartbeat older than LISTENING_FOR seconds (or none)
 means no watch runs. The margin covers the seconds between a Monitor expiry and the re-arm.
 
+A Claude question is a question Claude puts to the user in the page rather than in the
+terminal: {id: q1…, text, options, multi (several options may be picked), status:
+"open" | "answered", asked, answer?: {choices, text, at}}. Asking one sets the phase
+"awaiting-answer"; the page shows each open one as a card in the review pane.
+
 seen.json maps a section id to the markdown the user last marked as read. A section
 whose file differs from it is "updated": the page highlights what changed since then.
 The first text of a section is recorded as read when the page first loads it, so a
@@ -70,12 +76,14 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
 # "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-review"
 # (set by the view-branch skill at the end of model matching) « Review code ».
+# "awaiting-answer" (set by `question`) waits on a Claude question shown in the review pane.
 PHASES = (
     "scoping",
     "planning",
     "awaiting-approval",
     "awaiting-model",
     "awaiting-review",
+    "awaiting-answer",
     "writing",
     "audit",
     "revising",
@@ -159,6 +167,10 @@ class Session:
     @property
     def changes_path(self) -> Path:
         return self.dir / "changes.json"
+
+    @property
+    def questions_path(self) -> Path:
+        return self.dir / "questions.json"
 
     @property
     def inbox_path(self) -> Path:
@@ -273,6 +285,30 @@ class Session:
         _write_json(self.changes_path, changes)
         return d
 
+    def read_questions(self) -> list[dict[str, Any]]:
+        return _read_json(self.questions_path, [])
+
+    def add_question(
+        self, text: str, options: list[str] | None = None, multi: bool = False
+    ) -> dict[str, Any]:
+        """Put a Claude question to the user, and wait for the answer: the phase becomes
+        "awaiting-answer"."""
+        if not text.strip():
+            raise SessionError("empty question")
+        questions = self.read_questions()
+        q = {
+            "id": f"q{len(questions) + 1}",
+            "text": text.strip(),
+            "options": [o.strip() for o in options or [] if o.strip()],
+            "multi": multi,
+            "status": "open",
+            "asked": now_iso(),
+        }
+        questions.append(q)
+        _write_json(self.questions_path, questions)
+        self.write_status("awaiting-answer")
+        return q
+
     def read_seen(self, sections: dict[str, str]) -> dict[str, str]:
         """The text the user last read of each section, recording the current text of
         any section seen for the first time."""
@@ -321,6 +357,7 @@ class Session:
             self.comments_path,
             self.status_path,
             self.changes_path,
+            self.questions_path,
         ]
         if self.sections_dir.is_dir():
             paths += sorted(self.sections_dir.glob("*.md"))

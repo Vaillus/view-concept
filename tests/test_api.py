@@ -31,6 +31,14 @@ def test_api_says_whether_claude_is_listening(client, session):
     assert client.get("/api/s/kv-cache").json()["listening"] is True
 
 
+def test_api_sends_the_claude_questions(client, session):
+    assert client.get("/api/s/kv-cache").json()["questions"] == []
+    session.add_question("PR or merge?", ["PR", "merge"])
+    state = client.get("/api/s/kv-cache").json()
+    assert [q["id"] for q in state["questions"]] == ["q1"]
+    assert state["status"]["phase"] == "awaiting-answer"
+
+
 def test_api_sends_the_session_workflow(client, session):
     assert client.get("/api/s/kv-cache").json()["workflow"] == "view-concept"
 
