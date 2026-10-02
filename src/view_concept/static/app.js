@@ -657,13 +657,22 @@ function wrapTerm(root, term, make, { first = false } = {}) {
   }
 }
 
+/* Entries on the same term in the same section (a term with several forward
+   references) share one underline, whose tip lists every entry: a wrapped term is
+   skipped by later wraps, so one wrap per term and section is all that renders. */
 function annotateAudit(doc) {
+  const groups = new Map();
   for (const a of state.audit || []) {
-    const sec = doc.querySelector(`#sec-${CSS.escape(a.section || "")} .body`);
+    const key = `${a.section || ""}\u0000${(a.term || "").toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(a);
+  }
+  for (const entries of groups.values()) {
+    const { section, term } = entries[0];
+    const sec = doc.querySelector(`#sec-${CSS.escape(section || "")} .body`);
     if (!sec) continue;
-    wrapTerm(sec, a.term || "", () => el("span", {
-      class: "audit", "data-tip": `audit · ${a.issue || "flagged"}${a.note ? " — " + a.note : ""}`,
-    }));
+    const tip = entries.map((a) => `audit · ${a.issue || "flagged"}${a.note ? " — " + a.note : ""}`).join(" ; ");
+    wrapTerm(sec, term || "", () => el("span", { class: "audit", "data-tip": tip }));
   }
 }
 
