@@ -9,7 +9,7 @@ reach the Claude Code session through the inbox.
         sections/<id>.md  the prose of one outline section         (written by Claude)
         audit.json      vocabulary-audit findings                  (written by Claude)
         status.json     what Claude is doing now: phase, section    (written by `status`)
-        changes.json    model changes accepted in a PR review       (written by `change`)
+        changes.json    model changes accepted in a branch review       (written by `change`)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
@@ -19,7 +19,7 @@ reach the Claude Code session through the inbox.
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}, plus
 `kind: "question"` (with `from`, the comments it answers) for a section added during the
-review. A refactor section, marked `part: 2`, belongs to Part 2 of a PR review and is
+review. A refactor section, marked `part: 2`, belongs to Part 2 of a branch review and is
 shown in the refactor tab; every other section is an explanation section, shown in the
 Explanation tab. A refactor section about one item of the diff carries its item fields
 under `item`: {files, verdict (one of the keys in verdicts.yaml, next to this module),
@@ -56,8 +56,8 @@ VAULT_DIR = Path(
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
-# "awaiting-model" (set by the view-pr skill only) « Approve model », and "awaiting-review"
-# (set by the view-pr skill at the end of model matching) « Review code ».
+# "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-review"
+# (set by the view-branch skill at the end of model matching) « Review code ».
 PHASES = (
     "scoping",
     "planning",
@@ -351,7 +351,7 @@ class Session:
 
         `action` is what the user does with the batch: "approve-plan" means the user
         approved the plan from the page, "approve-model" that they approved the model of a
-        PR review (so the implementation starts), "review-code" that they asked to start the
+        branch review (so the implementation starts), "review-code" that they asked to start the
         code review once the implementation is done, with the comments as last
         corrections."""
         if action not in ACTIONS:

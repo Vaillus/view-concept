@@ -1,36 +1,36 @@
 ---
-name: view-pr
+name: view-branch
 description: >-
-  Review a pull request in the view-concept page, concepts first: build the
-  model of what the PR introduces and how it fits the existing code, challenge
+  Work on a branch in the view-concept page, concepts first: build the model
+  of what the branch introduces and how it fits the existing code, challenge
   and revise it with the user, send agents to bring the code in line with the
   revised model, then check the code item by item against it. Uses
-  view-concept. Use when the user wants to review, understand or rework a PR
-  or a branch — "review PR #49", "explain this PR so I can decide what stays",
-  "let's work on this branch", invokes /view-pr.
-argument-hint: "[the PR number or branch]"
+  view-concept. Use when the user wants to work on, understand or rework a
+  branch they are building — "let's work on this branch", "review my branch",
+  "explain this branch so I can decide what stays", invokes /view-branch.
+argument-hint: "[the branch or PR number]"
 ---
 
-# /view-pr
+# /view-branch
 
 Runs **`view-concept`** (`~/.claude/commands/view-concept.md`, which runs
-`explain-concept` in the page) on a pull request, and adds what a review needs
-around it: a model of the PR, agents that change the code, and a check of the
+`explain-concept` in the page) on a branch, and adds what a review needs
+around it: a model of the branch, agents that change the code, and a check of the
 code against the model. Read view-concept and follow it, with what is below.
 
-The tool is self-contained: the model is built for this PR and lives in the
+The tool is self-contained: the model is built for this branch and lives in the
 session; it reaches the repository only through the docs update at closing.
 
 <subject> #$ARGUMENTS </subject>
 
 ## The model
 
-The **model** of a PR is the set of concepts it introduces or changes. A
+The **model** of a branch is the set of concepts it introduces or changes. A
 **concept** is an object, a rule, a format or a name the code relies on: « a
 cohort is the group of speakers a recording comes from », « a gate drops a
 segment when its silence ratio exceeds the threshold », « `prepared/` holds one
 folder per dataset ». For each concept, the model says what it is, the rules it
-obeys, and how it relates to the concepts that existed before the PR.
+obeys, and how it relates to the concepts that existed before the branch.
 
 A UI element, a file, a function or a table row is not a concept: it is where
 a concept is implemented. « a row of the review table » is a part of a page;
@@ -49,19 +49,19 @@ merged, split, added, removed, or one of its rules changed. Record each one at
 once, in one sentence that an agent could act on:
 
 ```bash
-view-concept change <slug> "<the change>" --why "<reason>" --instead "<what the PR does now>" --files <paths it touches>
+view-concept change <slug> "<the change>" --why "<reason>" --instead "<what the branch does now>" --files <paths it touches>
 ```
 
 Record only changes the user took or agreed to, never your own suggestion.
 Then rewrite the sections and lexicon entries the change makes false: the page
-always shows the model as it now stands, not as the PR wrote it.
+always shows the model as it now stands, not as the branch wrote it.
 
 ## Bindings
 
 - **Session**: a code session, `--kind code --repo <repo root>`, opened on the
-  PR branch. Citations are required, as view-concept says.
+  branch. Citations are required, as view-concept says.
 - **Level**: the user owns the repository. Skip the level question.
-- **Goal**: decide what the PR should be, and get it there. Skip the goal
+- **Goal**: decide what the branch should be, and get it there. Skip the goal
   question.
 - **Phase 3 (calibrate)**: skip.
 
@@ -71,11 +71,11 @@ Read, in this order:
 
 1. the repo's docs: README files, a `docs/` folder, module docstrings that
    describe concepts. The model starts from the concepts they already define;
-   Part 1 then covers only what the PR adds or changes;
+   Part 1 then covers only what the branch adds or changes;
 2. the PR description (`gh pr view <n>`), and the commits (`git log <base>..HEAD`);
 3. the diff (`git diff <base>...HEAD`);
-4. the existing code the PR touches or calls: the modules it extends, their
-   callers, their tests. Part 1 is about how the PR fits *this*, so you must
+4. the existing code the branch touches or calls: the modules it extends, their
+   callers, their tests. Part 1 is about how the branch fits *this*, so you must
    know it before outlining.
 
 Note what the diff does that the description does not mention, and the
@@ -99,15 +99,15 @@ not in the Explanation tab.
 
 The Phase 2 outline is this fixed skeleton:
 
-1. **Today.** What the user works with before the PR, shown on a real
+1. **Today.** What the user works with before the branch, shown on a real
    example: an existing session, a real file, a command and its output. No
    new concept yet; only the vocabulary the code already has.
 2. **What goes wrong.** The problems the example shows, in the user's terms:
    what they cannot do, what breaks, what is confusing. Each concept later in
    Part 1 answers one of them; a concept that answers none is a finding.
-3. **The proposal.** What the PR changes, shown on the same example after the
+3. **The proposal.** What the branch changes, shown on the same example after the
    change: a mockup of the page or the output, or a before/after Mermaid
-   diagram. Say what the PR does not do. When the branch has no diff yet,
+   diagram. Say what the branch does not do. When the branch has no diff yet,
    say here that the model is a proposal.
 4. **One section per concept** it introduces or changes: what it is, its
    rules, where it is implemented (cited). Concepts in the order they depend
@@ -147,7 +147,7 @@ again.
 ### Model matching — the agents
 
 Compare the whole model with the code, not only the recorded changes: a
-concept the PR announces but half implements, or a rule the code contradicts,
+concept the branch announces but half implements, or a rule the code contradicts,
 is a gap even if nobody corrected it. List the gaps in the terminal, one line
 each.
 
@@ -155,8 +155,8 @@ Then close them, split as you judge best: one agent or several. Say in one
 line how you split the work; do not wait for a go, the model approval was it.
 
 Each agent gets the whole model (the lexicon and Part 1 as they now stand),
-the list of model changes (what moved since the PR as written), its gaps, the
-files, and these rules: work on the PR branch, one commit per change, run the
+the list of model changes (what moved since the branch as written), its gaps, the
+files, and these rules: work on the branch, one commit per change, run the
 repo's tests and lint before committing, do not change anything its gaps do
 not name. Run agents in parallel only when their files do not overlap;
 otherwise one after the other.
@@ -233,7 +233,7 @@ back to model consolidation for that concept.
 
 When the user is done, first send one agent to update the repo's docs from
 the model: the concepts and their rules as they now stand, without the
-before/after comparison that Part 1 makes. One commit in the PR, under the
+before/after comparison that Part 1 makes. One commit on the branch, under the
 agent rules of model matching.
 
 Then write the PR description with `short-pr-description`, using the model

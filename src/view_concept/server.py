@@ -19,8 +19,8 @@ from . import threads
 from .store import Session, SessionError, list_sessions
 
 STATIC = Path(__file__).parent / "static"
-# The verdicts an item can get in a PR review, in the review table's order: {key, meaning,
-# sends_to?}. The view-pr skill reads the same file.
+# The verdicts an item can get in a branch review, in the review table's order: {key, meaning,
+# sends_to?}. The view-branch skill reads the same file.
 VERDICTS: list[dict[str, str]] = yaml.safe_load(
     (Path(__file__).parent / "verdicts.yaml").read_text(encoding="utf-8")
 )

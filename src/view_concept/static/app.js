@@ -1,7 +1,7 @@
 /* view-concept — the session page.
 
    Tabs share the main space: the plan (outline, model changes, lexicon), the
-   explanation (one block per explanation section) and, in a PR review that has reached
+   explanation (one block per explanation section) and, in a branch review that has reached
    the refactoring step, the refactor tab (the refactor sections, Part 2); the review pane (draft comments, then
    sent batches) stays on the right. The page never edits the explanation: Claude Code
    writes the files, the server streams "changed", the page re-fetches. The page writes
@@ -98,7 +98,7 @@ const numberOf = (id) => {
 };
 const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).title || id;
 
-/* Part 2 of a PR review, written in the refactoring step, is made of refactor sections
+/* Part 2 of a branch review, written in the refactoring step, is made of refactor sections
    (sections with "part": 2): they are read in their own tab, "refactor"; every other
    section is an explanation section, in the explanation. Both tabs are rendered into
    their own view, with the same section blocks. */
@@ -172,9 +172,9 @@ document.addEventListener("keydown", (e) => {
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
 
 /* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
-   model of a PR review at the end of model consolidation ("awaiting-model", set by the
-   view-pr skill only), and the start of its refactoring step once model matching is
-   done ("awaiting-review", view-pr too).
+   model of a branch review at the end of model consolidation ("awaiting-model", set by the
+   view-branch skill only), and the start of its refactoring step once model matching is
+   done ("awaiting-review", view-branch too).
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until Claude moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it. The two

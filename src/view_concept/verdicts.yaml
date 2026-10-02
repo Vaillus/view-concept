@@ -1,4 +1,4 @@
-# The verdicts of an item in a PR review (view-pr), in the order of the review table.
+# The verdicts of an item in a branch review (view-branch), in the order of the review table.
 - key: diverges
   meaning: does not match the model; say how in the description.
   sends_to: model matching

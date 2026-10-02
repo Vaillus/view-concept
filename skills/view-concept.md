@@ -21,7 +21,7 @@ it, and how the user's comments come back from it.
 
 This skill is a **user** of explain-concept, not a child: it is not bound by
 explain-concept's Specialization contract, and explain-concept does not list
-it. Other skills can use this one the same way (`view-pr` is meant to).
+it. Other skills can use this one the same way (`view-branch` is meant to).
 
 <subject> #$ARGUMENTS </subject>
 
@@ -131,7 +131,7 @@ A code session explains part of the repository at `--repo`, and it is read to ac
 - **Citations are required.** Every claim about the code cites where it is true, as inline code: `` `src/pkg/store.py:118` `` (path relative to the repo root, `:line` or `:start-end`). The page turns each citation into a link that opens the file at that line in VS Code. A claim you cannot cite is a claim you have not checked: check it or cut it.
 - **No vault export by default.** The code will change and the explanation will go stale, so do not offer the export.
 
-A review of a pull request is a code session with more around it: use `view-pr`, which records the model changes (`view-concept change`).
+A review of a branch is a code session with more around it: use `view-branch`, which records the model changes (`view-concept change`).
 
 ## Keeping it
 

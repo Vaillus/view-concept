@@ -1,4 +1,4 @@
-"""Command line: what the view-concept and view-pr skills call from Claude Code."""
+"""Command line: what the view-concept and view-branch skills call from Claude Code."""
 
 from __future__ import annotations
 
@@ -229,7 +229,7 @@ def main() -> None:
     q.add_argument("--message", help="short free text shown next to the phase")
     q.set_defaults(fn=cmd_status)
 
-    q = sub.add_parser("change", help="record a model change accepted in a PR review")
+    q = sub.add_parser("change", help="record a model change accepted in a branch review")
     q.add_argument("slug")
     q.add_argument("change", help="the model change, one sentence")
     q.add_argument("--why", help="the reason, one sentence")
