@@ -8,7 +8,7 @@ A local page that serves three Claude Code skills. The plan and the explanation 
 | `view-branch` (`skills/view-branch.md`) | a branch review, concepts first, built on `view-concept` (see **A branch review** below) |
 | `view-refactor` (`skills/view-refactor.md`) | a triage of existing code: each item gets a triage verdict, then the code is restructured on the current branch or over several PRs (see **A refactor** below) |
 
-`view-concept.md`, `view-branch.md` and `view-refactor.md` in `~/Documents/code/skills/` are symlinks to these three files.
+All three run on top of `explain-concept` (`skills/explain-concept.md`), the workflow for writing the explanation itself. It is a copy: the original lives in the author's own skills collection and is synced here by hand.
 
 Everything goes through Claude Code, so no API key is needed. Side threads are headless `claude -p` runs, billed to the same subscription as the terminal session.
 
@@ -21,9 +21,25 @@ terminal (Claude Code)                                        browser (view-conc
 
 ## Install
 
+You need [Claude Code](https://claude.com/claude-code) and [uv](https://docs.astral.sh/uv/). The commands below assume you clone this repository into `~/Documents/code/`; adjust the paths if you put it elsewhere.
+
+**1. The `view-concept` command.** Clone this repository and install the command:
+
 ```bash
+git clone https://github.com/Vaillus/view-concept.git ~/Documents/code/view-concept
 uv tool install -e ~/Documents/code/view-concept   # puts `view-concept` on the PATH
 ```
+
+**2. The skills.** Claude Code loads a skill from a `.md` file in `~/.claude/commands/`. Link the four files of `skills/` there, so that a `git pull` in this repository also updates the skills:
+
+```bash
+mkdir -p ~/.claude/commands
+ln -s ~/Documents/code/view-concept/skills/*.md ~/.claude/commands/
+```
+
+`view-concept` reads `explain-concept` at `~/.claude/commands/explain-concept.md`, so that file must be at exactly that path. If you already have an `explain-concept.md` there, `ln` refuses to overwrite it; remove yours first if you want this copy.
+
+**3. Check.** Start a new Claude Code session and type `/view-concept`: it should show in the list of skills. If `view-concept` is not on the PATH, the skill says so and falls back to explaining in the terminal.
 
 ## How a session works
 
