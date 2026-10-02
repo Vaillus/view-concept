@@ -198,7 +198,6 @@ def _run(s: Session, thread: dict[str, Any], proc: subprocess.Popen, prompt: str
         proc.wait()
     finally:
         with _lock:
-            _running.pop(key, None)
             # claude exits 143 on SIGTERM: the exit code alone can't tell a stop from a crash
             if key in _stopping:
                 _stopping.discard(key)
@@ -213,6 +212,9 @@ def _run(s: Session, thread: dict[str, Any], proc: subprocess.Popen, prompt: str
                     reply["text"] = str(result.get("result", ""))
             thread["activity"] = ""
             s.write_thread(thread)
+            # Only once the final state is on disk: a reader that sees the thread no longer
+            # running must also read its final state, not "running" (shown as interrupted).
+            _running.pop(key, None)
 
 
 def _apply(thread: dict[str, Any], reply: dict[str, Any], event: dict[str, Any]) -> bool:
