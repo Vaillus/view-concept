@@ -233,3 +233,69 @@ def test_a_batch_resets_the_highlight_baseline(session):
     session.add_question("Why?")
     session.answer_question("q1", [], "because")  # an answer is a batch too
     assert session.read_seen(session.read_sections()) == session.read_sections()
+
+
+@pytest.fixture
+def ordered(tmp_path):
+    """A session whose lexicon breaks the precedence rule in every way the check finds."""
+    s = Session("kkt", tmp_path)
+    s.create("KKT")
+    plan = s.read_plan()
+    plan["outline"] = [{"id": "a", "title": "Rules"}, {"id": "b", "title": "KKT"},
+                       {"id": "c", "title": "Convexity"}]  # fmt: skip
+    plan["lexicon"] = [
+        {"term": "rule", "section": "a", "definition": "a constraint on a convex problem"},
+        {"term": "KKT conditions", "section": "b", "definition": "optimality test",
+         "tip": "Holds at the optimum of a Convex Problem."},
+        {"term": "convex problem", "section": "c", "definition": "bowl-shaped"},
+        {"term": "ghost", "section": "zz", "definition": "uses convex problem"},
+    ]  # fmt: skip
+    s.plan_path.write_text(json.dumps(plan))
+    (s.sections_dir / "a.md").write_text(
+        "Rules and a ruler. The kkt conditions come later. `convex problem` in code.\n"
+    )
+    (s.sections_dir / "b.md").write_text("A rule; the KKT conditions.")
+    (s.sections_dir / "c.md").write_text("A convex problem.")
+    return s
+
+
+def test_check_finds_forward_references_and_early_uses(ordered):
+    problems = ordered.check_precedence(write=False)
+    found = {(p["issue"], p["term"], p["section"], p["field"], p["other"]) for p in problems}
+    assert found == {
+        ("forward", "rule", "a", "definition", "convex problem"),
+        ("forward", "KKT conditions", "b", "tip", "convex problem"),
+        ("early", "KKT conditions", "a", "", ""),
+    }
+    assert not ordered.audit_path.exists()
+
+
+def test_check_matches_whole_words_only(ordered):
+    # With « rule » introduced in section 3, section 2's « A rule; » is an early use,
+    # section 1's « Rules » and « ruler » are not, nor is a term inside inline code.
+    plan = ordered.read_plan()
+    plan["lexicon"][0]["section"] = "c"
+    ordered.plan_path.write_text(json.dumps(plan))
+    early = {(p["term"], p["section"]) for p in ordered.check_precedence(write=False)
+             if p["issue"] == "early"}  # fmt: skip
+    assert early == {("rule", "b"), ("KKT conditions", "a")}
+
+
+def test_check_skips_entries_outside_the_outline(ordered):
+    assert all(p["term"] != "ghost" for p in ordered.check_precedence(write=False))
+
+
+def test_check_writes_audit_and_reruns_idempotently(ordered):
+    mine = {"term": "bowl-shaped", "section": "c", "issue": "metaphor", "note": "n"}
+    stale = {"term": "old", "section": "a", "issue": "early", "note": "introduced in section 9"}
+    ordered.audit_path.write_text(json.dumps([mine, stale]))
+    ordered.check_precedence()
+    first = ordered.read_audit()
+    ordered.check_precedence()
+    assert ordered.read_audit() == first
+    assert first[0] == mine and stale not in first
+    assert {"term": "KKT conditions", "section": "b", "issue": "forward",
+            "note": "tip uses «convex problem» (section 3)"} in first  # fmt: skip
+    assert {"term": "KKT conditions", "section": "a", "issue": "early",
+            "note": "introduced in section 2"} in first  # fmt: skip
+    assert len(first) == 4

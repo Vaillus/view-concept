@@ -41,7 +41,7 @@ If `view-concept` is not on the PATH, say so in a clause and follow explain-conc
 | Phase 4: « begin Phase 5 only after the user has replied » | a reply is either a terminal message or « Approve plan » in the page (`action: approve-plan`, see **Comment batches**). Anything the user says about the plan, in either place, binds it |
 | Phase 5: the prose | each section to `sections/<id>.md`, in outline order, so the page fills in as you go. In the terminal, one line saying the explanation is written, never the prose itself. Later edits rewrite only the sections they touch |
 | Phase 5: visuals | a Mermaid block (the page renders it), not `mcp__visualize__show_widget` |
-| Phase 6: the list of candidates | write them to `audit.json` (the page underlines each term in place), and give the count plus a one-line list in the terminal. The user answers in either place |
+| Phase 6: the list of candidates | first run `view-concept check <slug>`: it writes every forward reference and early use to `audit.json` (issues `forward` and `early`). Then add your own candidates to `audit.json` (the page underlines each term in place), and give the count plus a one-line list in the terminal. The user answers in either place. Fix a forward reference or an early use by the precedence rule: reorder the outline or say it in plain words |
 
 ## Setup — once, at the end of Phase 1
 
@@ -65,9 +65,19 @@ In the directory printed by `new` (`~/.view-concept/sessions/<slug>/`):
 |---|---|---|
 | `plan.json` | `{"title", "question", "created", "revision", "outline": [{"id": "s1", "title", "earns"}], "lexicon": [{"term", "section": "s1", "definition", "tip"}]}` — keep the fields `new` wrote | Phase 2, rewritten in Phase 4; `tip` in Phase 5 |
 | `sections/<id>.md` | the prose of one outline section, Markdown, no heading of its own (the page renders the title). `$…$` / `$$…$$` for maths, ```` ```mermaid ```` for diagrams | Phase 5, and every later edit |
-| `audit.json` | `[{"term", "section", "issue": "undefined\|metaphor\|ambiguous\|assumes-context", "note"}]` | Phase 6 |
+| `audit.json` | `[{"term", "section", "issue": "undefined\|metaphor\|ambiguous\|assumes-context\|forward\|early", "note"}]` | Phase 6 |
 
-**The hover text (`tip`).** The page shows a term's `tip` when the reader hovers any use of it — so it is read mid-sentence, far from the section that introduced the term. `definition` stays the one-line commitment the plan makes; `tip` develops it for that reader: two to four sentences, the mechanism rather than a paraphrase, a concrete example when one helps, Markdown and `$…$` allowed. It must agree with `definition` and with what the introducing section says — an elaboration, never a second definition. Write each term's `tip` in Phase 5, when you write the section that introduces the term, and use only terms introduced up to that section. Without a `tip`, the page falls back to `definition`.
+**The lexicon texts.** The page shows a term's `tip` when the reader hovers any use of it, so it is read mid-sentence, far from the section that introduced the term. Without a `tip`, the page falls back to `definition`, the one-line meaning the plan commits to before the prose. Write both for the **first-use reader**: someone who has read the sections in order up to the term's home section (the section the entry names in `section`) and nothing after. A text that works for this reader works for anyone who has read further; the reverse fails.
+
+**The precedence rule.** Every text about a term (its introducing prose, its `definition`, its `tip`) uses only terms whose home section is at or before that term's home section. When it needs a later term, reorder the outline or say the idea in plain words; never point ahead (« see section 7 »). A term spelled like a common word counts as used wherever the word appears. Two breaches have names: a **forward reference** (a `definition` or `tip` uses a term whose home section comes later) and an **early use** (a term appears in the prose of a section placed before its home section).
+
+**The hover text (`tip`).** Three hard constraints, which bind `definition` too:
+
+1. It obeys the precedence rule.
+2. No location details: nothing that says where the thing lives or came from (a file, a key, a script, a section number, a former name) instead of what it is. Those go in the home section's prose, as citations in a code session.
+3. It does not repeat what other lexicon entries define. A term that groups other terms with the same home section names the group and what it is for, not each member.
+
+Beyond these, say plainly and briefly what the thing is, as a reader meeting it for the first time needs it; choose the form that serves the term. Markdown and `$…$` are allowed. The `tip` must agree with `definition` and with what the home section says. Write each term's `tip` in Phase 5, when you write the section that introduces the term.
 
 Section ids are stable: when Phase 4 reorders the outline, keep each section's id and change its position. The page anchors the user's comments to ids.
 
