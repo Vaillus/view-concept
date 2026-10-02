@@ -55,7 +55,7 @@ view-concept open <slug>          # starts the server if needed, opens the brows
 
 Use `--kind code` when the explanation is a support for understanding *this* repository — usually on the way to changing it or discussing it further (see **Code sessions** below).
 
-Then arm the comment channel with the `Monitor` tool — `command: view-concept watch <slug>`, `timeout_ms: 1800000`, description `view-concept comments for <slug>`. A monitor expires after 30 minutes: when its expiry notice arrives, arm it again with the same command. Nothing is lost in between — `watch` resumes from where it stopped.
+Then arm the comment channel with the `Monitor` tool — `command: view-concept watch <slug>`, `timeout_ms: 1800000`, description `view-concept comments for <slug>`. A monitor expires after 30 minutes: when its expiry notice arrives, arm it again with the same command and write nothing in the terminal (no « I've restarted the watch »). Always re-arm, however long the silence: never stop re-arming on your own initiative. Nothing is lost in between — `watch` resumes from where it stopped. `watch` prints no start line, only batches, and writes a heartbeat file (`watch.json`) from which the page shows whether you are listening, so the terminal does not need to report it.
 
 ## Files you write
 
