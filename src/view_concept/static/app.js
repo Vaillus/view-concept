@@ -112,7 +112,8 @@ const isPart2 = (id) => (state.plan.outline.find((s) => s.id === id) || {}).part
 const tabOf = (id) => (isPart2(id) ? "refactor" : "doc");
 const hasRefactorTab = () => state.plan.outline.some((s) => s.part === 2);
 const docViews = () => [$("#doc"), $("#refactor")];
-// Rewritten since the user last marked it as read (the server compares with seen.json).
+// Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
+// read » (the server compares with seen.json).
 const isUpdated = (id) => !!(state.sections[id] || {}).updated;
 
 function render() {
@@ -728,8 +729,9 @@ function applyHighlights() {
   markUpdates();
 }
 
-/* ---------------- updates since last read ----------------
-   An updated section carries the HTML of the version the user last marked as read.
+/* ---------------- updates since the last batch ----------------
+   An updated section carries the HTML of its highlight baseline: its text when the last
+   batch was sent, or when the user last marked it read.
    Both versions are cut into words, the words are diffed, and the words the rewrite
    inserted are highlighted ("ev-updated"); every block (paragraph, list item, cell…)
    holding an insertion or a deletion gets a bar in the margin. « updated · ok » in the

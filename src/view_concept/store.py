@@ -16,7 +16,7 @@ reach the Claude Code session through the inbox.
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         claude.json     the Claude Code session driving this one     (written by `new`, `open`)
-        seen.json       the text of each section the user last read  (server)
+        seen.json       the highlight baseline: each section's text   (server)
         threads/<id>.json  a side thread: messages, its own Claude session id  (server)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}. An
@@ -52,10 +52,13 @@ terminal: {id: q1…, text, options, multi (several options may be picked), stat
 answer reaches the session as a batch whose action is "answer", carrying
 `answers: [{question, choices, text}]`.
 
-seen.json maps a section id to the markdown the user last marked as read. A section
-whose file differs from it is "updated": the page highlights what changed since then.
-The first text of a section is recorded as read when the page first loads it, so a
-first write is never an update.
+seen.json holds the highlight baseline: it maps a section id to the markdown the section
+had when the user sent the last batch (any batch: comments, an approval, an answer), or
+marked that section read later. A section whose file differs from its baseline is
+"updated": the page highlights what changed since then, so after Claude handles a batch
+the highlights show what it changed for that batch. The first text of a section is its
+first baseline, recorded when the page first loads it, so a first write is never an
+update.
 """
 
 from __future__ import annotations
@@ -339,8 +342,8 @@ class Session:
         return batch
 
     def read_seen(self, sections: dict[str, str]) -> dict[str, str]:
-        """The text the user last read of each section, recording the current text of
-        any section seen for the first time."""
+        """The highlight baseline of each section, recording the current text of any
+        section seen for the first time."""
         seen = _read_json(self.seen_path, {})
         new = {k: v for k, v in sections.items() if k not in seen}
         if new:
@@ -349,7 +352,7 @@ class Session:
         return seen
 
     def mark_seen(self, sections: dict[str, str]) -> None:
-        """Record `sections` (id -> the markdown the page showed) as read."""
+        """Set the baseline of `sections` (id -> the markdown the page showed): « mark read »."""
         seen = _read_json(self.seen_path, {})
         seen.update(sections)
         _write_json(self.seen_path, seen)
@@ -510,6 +513,8 @@ class Session:
         _write_json(self.comments_path, data)
         with self.inbox_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(batch, ensure_ascii=False) + "\n")
+        # Highlights show what changed since the last batch: every baseline moves here.
+        self.mark_seen(self.read_sections())
         return batch
 
     def resolve(self, ids: list[str], reply: str = "") -> list[str]:

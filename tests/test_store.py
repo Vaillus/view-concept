@@ -221,3 +221,15 @@ def test_format_answer_batch(session):
     assert "action: answer (the user answered Claude question q1 from the page)" in out
     assert "answer to q1 « Which files? »: a.py, b.py — and the tests" in out
     assert "answer to q2 « Why? »: because" in format_batch("kv-cache", b2, outline, questions)
+
+
+def test_a_batch_resets_the_highlight_baseline(session):
+    session.read_seen(session.read_sections())  # the page loads the first texts
+    (session.sections_dir / "s1.md").write_text("L'attention, réécrite.")
+    (session.sections_dir / "s2.md").write_text("Le cache, réécrit.")
+    session.mark_seen({"s2": "Le cache, réécrit."})  # « mark read » on one section
+    seen = session.read_seen(session.read_sections())
+    assert seen["s1"] == "L'attention." and seen["s2"] == "Le cache, réécrit."
+    session.add_question("Why?")
+    session.answer_question("q1", [], "because")  # an answer is a batch too
+    assert session.read_seen(session.read_sections()) == session.read_sections()

@@ -103,9 +103,9 @@ def state(slug: str) -> dict[str, Any]:
 
 
 def section_view(text: str, seen: str) -> dict[str, Any]:
-    """A section as the page renders it. An updated section (rewritten since the user
-    last read it) also carries the HTML of the version read, which the page diffs
-    against to highlight what changed."""
+    """A section as the page renders it. An updated section (its text differs from its
+    highlight baseline, the text at the last batch or « mark read ») also carries the
+    HTML of the baseline, which the page diffs against to highlight what changed."""
     view: dict[str, Any] = {"md": text, "html": md.render(text), "updated": text != seen}
     if view["updated"]:
         view["seen_html"] = md.render(seen)
@@ -118,8 +118,8 @@ class SeenIn(BaseModel):
 
 @app.post("/api/s/{slug}/seen")
 def mark_seen(slug: str, body: SeenIn) -> dict[str, bool]:
-    """Mark sections as read: the body carries the markdown the page showed, so a
-    rewrite that arrived meanwhile stays unread."""
+    """Mark sections as read (set their highlight baseline): the body carries the
+    markdown the page showed, so a rewrite that arrived meanwhile stays highlighted."""
     get_session(slug).mark_seen(body.sections)
     return {"ok": True}
 
