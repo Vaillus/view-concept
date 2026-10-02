@@ -71,7 +71,7 @@ In the directory printed by `new` (`~/.view-concept/sessions/<slug>/`):
 
 Section ids are stable: when Phase 4 reorders the outline, keep each section's id and change its position. The page anchors the user's comments to ids.
 
-**Naming a section to the user.** Ids are for the files, never for the user. Wherever the user reads it (terminal messages, `resolve` replies, the prose of the sections, the plan), name a section by the number the page shows, in words: « section 6 ». Never write its id (`s6`, `q-applied`) or a shorthand such as `§6`, even when a batch event uses them.
+**Naming a section to the user.** Ids are for the files, never for the user. Wherever the user reads it (terminal messages, `resolve` replies, the prose of the sections, the plan), name a section by the number the page shows, in words: « section 6 ». Never write its id (`s6`, `applied`) or a shorthand such as `§6`, even when a batch event uses them.
 
 ## Status
 
