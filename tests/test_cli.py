@@ -79,3 +79,26 @@ def test_question_prints_its_id(tmp_path):
     assert r.stderr == ""
     assert view_concept(tmp_path, "question", "nope", "Hm?").returncode != 0
     assert not (tmp_path / "sessions" / "nope").exists()
+
+
+def test_check_prints_and_writes_problems(tmp_path):
+    assert view_concept(tmp_path, "new", "KKT").returncode == 0
+    d = tmp_path / "sessions" / "kkt"
+    plan = json.loads((d / "plan.json").read_text())
+    plan["outline"] = [{"id": "s1", "title": "Intro"}, {"id": "s2", "title": "Convexity"}]
+    plan["lexicon"] = [
+        {"term": "KKT conditions", "section": "s1", "definition": "d",
+         "tip": "Holds for a convex problem."},
+        {"term": "convex problem", "section": "s2", "definition": "d"},
+    ]  # fmt: skip
+    (d / "plan.json").write_text(json.dumps(plan))
+    (d / "sections" / "s1.md").write_text("Take a convex problem.")
+    r = view_concept(tmp_path, "check", "kkt")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.splitlines() == [
+        "forward  KKT conditions (1)  tip uses «convex problem» (2)",
+        "early    convex problem (2)  used in section 1",
+        "2 problems written to audit.json",
+    ]
+    assert [a["issue"] for a in json.loads((d / "audit.json").read_text())] == ["forward", "early"]
+    assert view_concept(tmp_path, "check", "nope").returncode != 0

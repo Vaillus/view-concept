@@ -7,7 +7,7 @@ reach the Claude Code session through the inbox.
     <home>/sessions/<slug>/
         plan.json       title, question, kind, workflow, outline, lexicon  (written by Claude)
         sections/<id>.md  the prose of one outline section         (written by Claude)
-        audit.json      vocabulary-audit findings                  (written by Claude)
+        audit.json      vocabulary-audit findings       (written by Claude and `check`)
         status.json     what Claude is doing now: phase, section    (written by `status`)
         changes.json    model changes accepted in a branch review       (written by `change`)
         questions.json  Claude questions put to the user, with their answers  (`question`, server)
@@ -142,6 +142,41 @@ def _write_json(path: Path, data: Any) -> None:
     os.replace(tmp, path)
 
 
+# Text the page never marks terms in: fenced code (and Mermaid), inline code, maths.
+UNMARKED_RE = re.compile(r"```.*?```|`[^`\n]*`|\$\$.*?\$\$|\$[^$\n]+\$", re.S)
+
+
+def _strip_unmarked(markdown: str) -> str:
+    return UNMARKED_RE.sub(" ", markdown)
+
+
+def _uses(text: str, term: str) -> bool:
+    """Whole-word, case-insensitive match, as the page's wrapTerm: the term is neither
+    preceded nor followed by a letter or a digit (`[^\\W_]`, the Python spelling of
+    `[\\p{L}\\p{N}]`)."""
+    pattern = rf"(?<![^\W_]){re.escape(term.strip())}(?![^\W_])"
+    return re.search(pattern, text, re.IGNORECASE) is not None
+
+
+def precedence_audit_entry(p: dict[str, Any]) -> dict[str, Any]:
+    """The audit.json entry of one precedence-check problem; sections by number."""
+    if p["issue"] == "forward":
+        verb = "use" if " and " in p["field"] else "uses"
+        note = f"{p['field']} {verb} «{p['other']}» (section {p['at']})"
+    else:
+        note = f"introduced in section {p['home']}"
+    return {"term": p["term"], "section": p["section"], "issue": p["issue"], "note": note}
+
+
+def format_precedence(p: dict[str, Any]) -> str:
+    """One terminal line for a precedence-check problem."""
+    head = f"{p['issue']:8} {p['term']} ({p['home']})"
+    if p["issue"] == "forward":
+        verb = "use" if " and " in p["field"] else "uses"
+        return f"{head}  {p['field']} {verb} «{p['other']}» ({p['at']})"
+    return f"{head}  used in section {p['at']}"
+
+
 class Session:
     def __init__(self, slug: str, root: Path | None = None) -> None:
         if not SLUG_RE.match(slug):
@@ -264,6 +299,50 @@ class Session:
 
     def read_audit(self) -> list[dict[str, Any]]:
         return _read_json(self.audit_path, [])
+
+    def check_precedence(self, write: bool = True) -> list[dict[str, Any]]:
+        """The precedence check: every forward reference and early use of the lexicon.
+
+        A term's home section is the outline section its lexicon entry names; an entry
+        whose section is not in the outline is skipped. A forward reference is an
+        entry's definition or tip using another term whose home section comes later;
+        an early use is a term found in the prose of a section before its home
+        section. Returns one problem per finding: {issue, term, section (the id the
+        audit entry points at), home (1-based position of the term's home section),
+        at (position of the later home section, or of the early section), field,
+        other}. With `write`, replaces the forward and early entries of audit.json
+        and keeps every other entry, so a rerun is idempotent."""
+        plan = self.read_plan()
+        pos = {sec["id"]: i + 1 for i, sec in enumerate(plan["outline"])}
+        order = [sec["id"] for sec in plan["outline"]]
+        entries = [
+            e for e in plan["lexicon"] if e.get("term", "").strip() and e.get("section") in pos
+        ]
+        prose = {sid: _strip_unmarked(text) for sid, text in self.read_sections().items()}
+        problems: list[dict[str, Any]] = []
+        for e in entries:
+            home = pos[e["section"]]
+            for f in entries:
+                later = pos[f["section"]]
+                if later <= home or f["term"].lower() == e["term"].lower():
+                    continue
+                fields = [k for k in ("definition", "tip") if _uses(e.get(k) or "", f["term"])]
+                if fields:
+                    problems.append({
+                        "issue": "forward", "term": e["term"], "section": e["section"],
+                        "home": home, "at": later, "field": " and ".join(fields),
+                        "other": f["term"],
+                    })  # fmt: skip
+            for sid in order[: home - 1]:
+                if _uses(prose.get(sid, ""), e["term"]):
+                    problems.append({
+                        "issue": "early", "term": e["term"], "section": sid,
+                        "home": home, "at": pos[sid], "field": "", "other": "",
+                    })  # fmt: skip
+        if write:
+            kept = [a for a in self.read_audit() if a.get("issue") not in ("forward", "early")]
+            _write_json(self.audit_path, kept + [precedence_audit_entry(p) for p in problems])
+        return problems
 
     def read_comments(self) -> dict[str, Any]:
         return _read_json(self.comments_path, {"batches": []})

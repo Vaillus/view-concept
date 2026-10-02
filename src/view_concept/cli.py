@@ -24,6 +24,7 @@ from .store import (
     SessionError,
     format_batch,
     format_changes,
+    format_precedence,
     list_sessions,
     slugify,
 )
@@ -196,6 +197,18 @@ def cmd_changes(a: argparse.Namespace) -> None:
             print(format_changes(changes))
 
 
+def cmd_check(a: argparse.Namespace) -> None:
+    """The precedence check: list forward references and early uses, write them to
+    audit.json (replacing the previous ones, keeping Claude's own entries)."""
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    problems = s.check_precedence()
+    for p in problems:
+        print(format_precedence(p))
+    print(f"{len(problems)} problem{'' if len(problems) == 1 else 's'} written to audit.json")
+
+
 def cmd_pending(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     outline = s.read_plan()["outline"]
@@ -280,6 +293,13 @@ def main() -> None:
     q.add_argument("slug", nargs="?")
     q.add_argument("--repo", help="all code sessions on this repo (default: current dir)")
     q.set_defaults(fn=cmd_changes)
+
+    q = sub.add_parser(
+        "check",
+        help="list forward references and early uses of the lexicon, write them to audit.json",
+    )
+    q.add_argument("slug")
+    q.set_defaults(fn=cmd_check)
 
     q = sub.add_parser("pending", help="print comments not yet resolved")
     q.add_argument("slug")
