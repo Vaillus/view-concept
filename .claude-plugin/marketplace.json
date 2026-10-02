@@ -1,0 +1,15 @@
+{
+  "name": "view-concept",
+  "owner": { "name": "Vaillus" },
+  "metadata": { "description": "view-concept: explanations and code reviews in a local web page." },
+  "plugins": [
+    {
+      "name": "view-concept",
+      "source": "./",
+      "description": "Explanations and code reviews in a local web page: comment on any passage and the agent revises it. Skills /view-concept, /view-branch and /view-refactor; the view-concept command is bundled (needs uv).",
+      "version": "0.1.0",
+      "category": "productivity",
+      "keywords": ["explanation", "code-review", "refactor"]
+    }
+  ]
+}
