@@ -157,6 +157,12 @@ def _first_prompt(s: Session, thread: dict[str, Any], text: str) -> str:
             f" {s.slug!r} ({s.dir}). {origin}",
             "- Answer and discuss. Your tools are read-only: do not try to edit files or"
             " run view-concept commands, and do not resolve comments.",
+            "- This is a conversation, not the explanation: the formats of the skills loaded"
+            " above (sections, lexicon, tables) do not apply here. Answer in a few sentences"
+            " of plain prose, without tables, headings or bullet lists unless the user asks"
+            " for them.",
+            "- Answer the question asked, and only that one. When it opens a larger point,"
+            " name it in one sentence and let the user decide whether to go there.",
             f"- The explanation may have changed since this conversation started: the"
             f" current text of a section is in {s.sections_dir}/<id>.md.",
             "- When the discussion leads to a change (to the explanation or to the code),"
@@ -192,7 +198,6 @@ def _run(s: Session, thread: dict[str, Any], proc: subprocess.Popen, prompt: str
         proc.wait()
     finally:
         with _lock:
-            _running.pop(key, None)
             # claude exits 143 on SIGTERM: the exit code alone can't tell a stop from a crash
             if key in _stopping:
                 _stopping.discard(key)
@@ -207,6 +212,9 @@ def _run(s: Session, thread: dict[str, Any], proc: subprocess.Popen, prompt: str
                     reply["text"] = str(result.get("result", ""))
             thread["activity"] = ""
             s.write_thread(thread)
+            # Only once the final state is on disk: a reader that sees the thread no longer
+            # running must also read its final state, not "running" (shown as interrupted).
+            _running.pop(key, None)
 
 
 def _apply(thread: dict[str, Any], reply: dict[str, Any], event: dict[str, Any]) -> bool:

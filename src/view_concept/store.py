@@ -5,11 +5,11 @@ the plan and the sections; the page reads them; the page writes review comments,
 reach the Claude Code session through the inbox.
 
     <home>/sessions/<slug>/
-        plan.json       title, question, outline, lexicon          (written by Claude)
+        plan.json       title, question, kind, workflow, outline, lexicon  (written by Claude)
         sections/<id>.md  the prose of one outline section         (written by Claude)
         audit.json      vocabulary-audit findings                  (written by Claude)
         status.json     what Claude is doing now: phase, section    (written by `status`)
-        changes.json    model changes accepted in a PR review       (written by `change`)
+        changes.json    model changes accepted in a branch review       (written by `change`)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
@@ -19,13 +19,20 @@ reach the Claude Code session through the inbox.
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}, plus
 `kind: "question"` (with `from`, the comments it answers) for a section added during the
-review. A refactor section, marked `part: 2`, belongs to Part 2 of a PR review and is
-shown in the refactor tab; every other section is an explanation section, shown in the
-Explanation tab. A refactor section about one item of the diff carries its item fields
-under `item`: {files, verdict (one of the keys in verdicts.yaml, next to this module),
-implements, note, relations: [{to, kind, from?}]}, where the optional `from` names
-which of the item's files a relation starts from (by default the first). One with
-`kind: "finding"` and `items: [<section ids>]` is a finding across items.
+review. A refactor section, marked `part: 2`, belongs to Part 2 of a branch review or a
+refactor and is shown in the refactor tab; every other section is an explanation
+section, shown in the Explanation tab. A refactor section about one item of the diff
+carries its item fields under `item`: {files, verdict (one of the keys of the session
+workflow's list in verdicts.yaml, next to this module), batch? (a short label or
+number), implements, note, relations: [{to, kind, from?}]}, where the optional `from`
+names which of the item's files a relation starts from (by default the first).
+One with `kind: "finding"` and `items: [<section ids>]` is a finding across items.
+
+The session workflow, `workflow` in plan.json, is the skill that drives the session:
+view-concept, view-branch or view-refactor (a triage of existing code). It picks the
+verdict set the page shows: verdicts.yaml holds one list per workflow, and each verdict
+carries the `tone` the page colours it with. A session created before workflows existed
+has no workflow and gets view-branch's list.
 
 A side thread is a separate headless Claude conversation, forked from the session in
 claude.json, that the user opens from the page to discuss a passage without changing
@@ -56,8 +63,8 @@ VAULT_DIR = Path(
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
-# "awaiting-model" (set by the view-pr skill only) « Approve model », and "awaiting-review"
-# (set by the view-pr skill at the end of model matching) « Review code ».
+# "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-review"
+# (set by the view-branch skill at the end of model matching) « Review code ».
 PHASES = (
     "scoping",
     "planning",
@@ -73,6 +80,12 @@ ACTIONS = ("", "approve-plan", "approve-model", "review-code")
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
+# The session workflow: which skill drives the session. It picks the verdict set the page
+# shows (see verdicts.yaml). view-branch and view-refactor review code, so their sessions
+# are code sessions. A session created before workflows existed has none.
+WORKFLOWS = ("view-concept", "view-branch", "view-refactor")
+# The workflow of a session created without --workflow, by kind.
+DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 
 
@@ -170,13 +183,24 @@ class Session:
 
     # ---- creation ----
     def create(
-        self, title: str, question: str = "", kind: str = "explanation", repo: str = ""
+        self,
+        title: str,
+        question: str = "",
+        kind: str = "explanation",
+        repo: str = "",
+        workflow: str = "",
     ) -> bool:
-        """Create the session. Returns False when it already existed (left untouched)."""
+        """Create the session. Returns False when it already existed (left untouched).
+        `workflow` defaults by kind (DEFAULT_WORKFLOW)."""
         if kind not in KINDS:
             raise SessionError(f"unknown kind {kind!r}; one of {', '.join(KINDS)}")
         if kind == "code" and not repo:
             raise SessionError("a code session needs --repo")
+        workflow = workflow or DEFAULT_WORKFLOW[kind]
+        if workflow not in WORKFLOWS:
+            raise SessionError(f"unknown workflow {workflow!r}; one of {', '.join(WORKFLOWS)}")
+        if workflow != "view-concept" and kind != "code":
+            raise SessionError(f"a {workflow} session is a code session: pass --kind code")
         if self.exists():
             return False
         self.sections_dir.mkdir(parents=True, exist_ok=True)
@@ -184,6 +208,7 @@ class Session:
             "title": title,
             "question": question,
             "kind": kind,
+            "workflow": workflow,
             "created": date.today().isoformat(),
             "outline": [],
             "lexicon": [],
@@ -351,7 +376,7 @@ class Session:
 
         `action` is what the user does with the batch: "approve-plan" means the user
         approved the plan from the page, "approve-model" that they approved the model of a
-        PR review (so the implementation starts), "review-code" that they asked to start the
+        branch review (so the implementation starts), "review-code" that they asked to start the
         code review once the implementation is done, with the comments as last
         corrections."""
         if action not in ACTIONS:

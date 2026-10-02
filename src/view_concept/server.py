@@ -19,11 +19,13 @@ from . import threads
 from .store import Session, SessionError, list_sessions
 
 STATIC = Path(__file__).parent / "static"
-# The verdicts an item can get in a PR review, in the review table's order: {key, meaning,
-# sends_to?}. The view-pr skill reads the same file.
-VERDICTS: list[dict[str, str]] = yaml.safe_load(
+# The verdicts an item can get, by session workflow, each list in the review table's order:
+# {key, meaning, tone, sends_to?}. The view-branch and view-refactor skills read the same file.
+VERDICTS: dict[str, list[dict[str, str]]] = yaml.safe_load(
     (Path(__file__).parent / "verdicts.yaml").read_text(encoding="utf-8")
 )
+# A session created before workflows existed was a branch review or had no items.
+LEGACY_WORKFLOW = "view-branch"
 
 md = (
     MarkdownIt("commonmark", {"html": True})
@@ -86,12 +88,13 @@ def state(slug: str) -> dict[str, Any]:
     return {
         "slug": slug,
         "plan": plan,
+        "workflow": plan.get("workflow", ""),
         "status": status,
         "sections": {k: section_view(v, seen[k]) for k, v in sections.items()},
         "audit": audit,
         "comments": comments,
         "changes": changes,
-        "verdicts": VERDICTS,
+        "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),
     }
 
 

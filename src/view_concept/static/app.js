@@ -1,7 +1,7 @@
 /* view-concept — the session page.
 
    Tabs share the main space: the plan (outline, model changes, lexicon), the
-   explanation (one block per explanation section) and, in a PR review that has reached
+   explanation (one block per explanation section) and, in a branch review that has reached
    the refactoring step, the refactor tab (the refactor sections, Part 2); the review pane (draft comments, then
    sent batches) stays on the right. The page never edits the explanation: Claude Code
    writes the files, the server streams "changed", the page re-fetches. The page writes
@@ -98,7 +98,7 @@ const numberOf = (id) => {
 };
 const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).title || id;
 
-/* Part 2 of a PR review, written in the refactoring step, is made of refactor sections
+/* Part 2 of a branch review, written in the refactoring step, is made of refactor sections
    (sections with "part": 2): they are read in their own tab, "refactor"; every other
    section is an explanation section, in the explanation. Both tabs are rendered into
    their own view, with the same section blocks. */
@@ -172,9 +172,9 @@ document.addEventListener("keydown", (e) => {
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
 
 /* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
-   model of a PR review at the end of model consolidation ("awaiting-model", set by the
-   view-pr skill only), and the start of its refactoring step once model matching is
-   done ("awaiting-review", view-pr too).
+   model of a branch review at the end of model consolidation ("awaiting-model", set by the
+   view-branch skill only), and the start of its refactoring step once model matching is
+   done ("awaiting-review", view-branch too).
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until Claude moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it. The two
@@ -343,25 +343,33 @@ function sectionBlock(s, { bare = false } = {}) {
 }
 
 /* ---------------- the refactor tab ----------------
-   A refactor section that carries item fields ("item": {files, verdict, implements,
-   note, relations}) is an item: one unit of the diff, a file or files doing one job,
-   judged against the model. The items are drawn as the review table: one item entry per
-   item (its title and files, its verdict, the concepts it implements, a note), the items
-   that need action first. Clicking an entry opens its description underneath, which is
+   A refactor section that carries item fields ("item": {files, verdict, batch?,
+   implements, note, relations}) is an item: one unit of the diff, a file or files doing
+   one job, judged against the model. The items are drawn as the review table: one item
+   entry per item (its title and files, its verdict, its batch when any item has one, the
+   concepts it implements, a note), the items that need action first. Clicking an entry opens its description underneath, which is
    the section's own block, so comments, threads, highlights and annotations work there
    as in the explanation. Below the table, the structure view (see structureView). The
    other refactor sections, such as the applied changes, follow as plain sections. A
    review whose refactor sections carry no item fields is drawn as plain sections only. */
 
-// Verdict keys in table order (from verdicts.yaml, sent with the state): those that need
-// action first, « conforms » last.
+// Verdict keys in table order (the session workflow's list in verdicts.yaml, sent with the
+// state): those that need action first, the one that needs none (« conforms », « keep ») last.
 const verdictKeys = () => (state.verdicts || []).map((v) => v.key);
+// The tone a verdict is drawn in (ok, danger, warn, alt, flag, info), "" for an unknown verdict.
+const TONES = ["ok", "danger", "warn", "alt", "flag", "info"];
+const toneOf = (v) => {
+  const tone = ((state.verdicts || []).find((d) => d.key === v) || {}).tone;
+  return TONES.includes(tone) ? tone : "";
+};
 const openItems = new Set(); // ids of the items whose description is open, across re-renders
 
 const isItem = (s) => !!s && !!s.item && typeof s.item === "object";
 const isFinding = (s) => !isItem(s) && s.kind === "finding";
 const verdictOf = (s) => String(s.item.verdict || "no verdict");
-// An unknown verdict sorts after the known ones that need action, before « conforms ».
+// A batch is a short label or number grouping items, e.g. the PR they go into.
+const hasBatch = (s) => s.item.batch != null && String(s.item.batch).trim() !== "";
+// An unknown verdict sorts after the known ones that need action, before the last one.
 const verdictRank = (v) => {
   const keys = verdictKeys();
   return keys.includes(v) ? keys.indexOf(v) : keys.length - 1.5;
@@ -380,7 +388,7 @@ function refactorTab(sections) {
 }
 
 function verdictBadge(v) {
-  return el("span", { class: `badge verdict ${verdictKeys().includes(v) ? `v-${v}` : ""}`, text: v });
+  return el("span", { class: `badge verdict ${toneOf(v) ? `tone-${toneOf(v)}` : ""}`, text: v });
 }
 
 function fileRef(f) {
@@ -397,17 +405,19 @@ function reviewTable(items) {
   const counts = new Map();
   for (const s of sorted) counts.set(verdictOf(s), (counts.get(verdictOf(s)) || 0) + 1);
   const summary = [`${items.length} item${items.length > 1 ? "s" : ""}`, ...[...counts].map(([v, n]) => `${n} ${v}`)];
+  const batched = items.some(hasBatch);
+  const columns = ["item", "verdict", ...(batched ? ["batch"] : []), "implements", "note"];
   return el("div", { class: "rv rv-wide" },
     el("div", { class: "rv-head" }, "review table", el("span", { class: "rv-counts", text: summary.join(" · ") })),
     el("div", { class: "rv-scroll" },
       el("table", { class: "rv-table" },
-        el("thead", {}, el("tr", {}, ...["item", "verdict", "implements", "note"].map((t) => el("th", { text: t })))),
-        el("tbody", {}, ...sorted.flatMap(itemRows)))));
+        el("thead", {}, el("tr", {}, ...columns.map((t) => el("th", { text: t })))),
+        el("tbody", {}, ...sorted.flatMap((s) => itemRows(s, batched))))));
 }
 
 /* An item entry, and its description in the row under it (hidden while closed, but
    always in the page, so a quote in it is found and a draft on it stays anchored). */
-function itemRows(s) {
+function itemRows(s, batched) {
   const it = s.item;
   const open = openItems.has(s.id);
   const implementsCell = el("td", { class: "rv-implements" });
@@ -427,10 +437,11 @@ function itemRows(s) {
         isUpdated(s.id) ? el("span", { class: "badge new", text: "updated" }) : null),
       el("div", { class: "rv-files" }, ...[].concat(it.files || []).map((f) => el("div", {}, fileRef(f))))),
     el("td", { class: "rv-verdict" }, verdictBadge(verdictOf(s))),
+    batched ? el("td", { class: "rv-batch", text: hasBatch(s) ? String(s.item.batch) : "" }) : null,
     implementsCell,
     el("td", { class: "rv-note", text: it.note || "" }));
   const description = el("tr", { class: "rv-desc", id: `rv-desc-${s.id}`, hidden: !open },
-    el("td", { colspan: "4" }, sectionBlock(s, { bare: true })));
+    el("td", { colspan: batched ? "5" : "4" }, sectionBlock(s, { bare: true })));
   return [entry, description];
 }
 
@@ -453,7 +464,7 @@ function structureView(items, findings) {
     if (!nodes.has(f)) nodes.set(f, { id: `f${nodes.size}`, cls });
     return nodes.get(f).id;
   };
-  const vclass = (s) => `vc_${verdictKeys().includes(verdictOf(s)) ? verdictOf(s).replace(/-/g, "_") : "other"}`;
+  const vclass = (s) => `tc_${toneOf(verdictOf(s)) || "none"}`;
   items.forEach((s) => filesOf(s).forEach((f) => node(f, vclass(s))));
   const edges = [];
   for (const s of items) {

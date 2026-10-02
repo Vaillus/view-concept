@@ -131,3 +131,23 @@ def test_changes(session, tmp_path):
     assert "## Model changes" in session.render_markdown()
     with pytest.raises(SessionError):
         session.add_change(" ")
+
+
+def test_workflow_is_stored_and_defaults_by_kind(tmp_path):
+    s = Session("x", tmp_path)
+    s.create("X")
+    assert s.read_plan()["workflow"] == "view-concept"
+    s = Session("y", tmp_path)
+    s.create("Y", kind="code", repo=str(tmp_path))
+    assert s.read_plan()["workflow"] == "view-branch"
+    s = Session("z", tmp_path)
+    s.create("Z", kind="code", repo=str(tmp_path), workflow="view-refactor")
+    assert s.read_plan()["workflow"] == "view-refactor"
+
+
+def test_workflow_is_validated(tmp_path):
+    with pytest.raises(SessionError, match="unknown workflow"):
+        Session("x", tmp_path).create("X", kind="code", repo=str(tmp_path), workflow="view-pr")
+    with pytest.raises(SessionError, match="code session"):
+        Session("y", tmp_path).create("Y", workflow="view-refactor")
+    assert not Session("x", tmp_path).exists()

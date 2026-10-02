@@ -1,4 +1,4 @@
-"""Command line: what the view-concept and view-pr skills call from Claude Code."""
+"""Command line: what the view-concept and view-branch skills call from Claude Code."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from .store import (
     HOME,
     KINDS,
     PHASES,
+    WORKFLOWS,
     Session,
     SessionError,
     format_batch,
@@ -88,7 +89,7 @@ def bind_parent(s: Session) -> None:
 def cmd_new(a: argparse.Namespace) -> None:
     slug = a.slug or slugify(a.title)
     s = Session(slug)
-    created = s.create(a.title, a.question or "", a.kind, a.repo or "")
+    created = s.create(a.title, a.question or "", a.kind, a.repo or "", a.workflow or "")
     bind_parent(s)
     print(json.dumps({"slug": slug, "dir": str(s.dir), "created": created}))
 
@@ -208,6 +209,12 @@ def main() -> None:
     q.add_argument("--question")
     q.add_argument("--kind", choices=KINDS, default="explanation")
     q.add_argument("--repo", help="repository a code session is about (citations link into it)")
+    q.add_argument(
+        "--workflow",
+        choices=WORKFLOWS,
+        help="the skill driving the session; picks its verdict set "
+        "(default: view-concept, or view-branch for a code session)",
+    )
     q.set_defaults(fn=cmd_new)
 
     q = sub.add_parser("open", help="start the server if needed and open the page")
@@ -229,7 +236,7 @@ def main() -> None:
     q.add_argument("--message", help="short free text shown next to the phase")
     q.set_defaults(fn=cmd_status)
 
-    q = sub.add_parser("change", help="record a model change accepted in a PR review")
+    q = sub.add_parser("change", help="record a model change accepted in a branch review")
     q.add_argument("slug")
     q.add_argument("change", help="the model change, one sentence")
     q.add_argument("--why", help="the reason, one sentence")
