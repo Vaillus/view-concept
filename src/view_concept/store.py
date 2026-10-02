@@ -80,22 +80,22 @@ VAULT_DIR = Path(
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
-# "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-review"
-# (set by the view-branch skill at the end of model matching) « Review code ».
+# "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-pr"
+# (set by the view-branch skill once refactoring is written) « Create PR ».
 # "awaiting-answer" (set by `question`) waits on a Claude question shown in the review pane.
 PHASES = (
     "scoping",
     "planning",
     "awaiting-approval",
     "awaiting-model",
-    "awaiting-review",
+    "awaiting-pr",
     "awaiting-answer",
     "writing",
     "audit",
     "revising",
     "idle",
 )
-ACTIONS = ("", "approve-plan", "approve-model", "review-code", "answer")
+ACTIONS = ("", "approve-plan", "approve-model", "create-pr", "answer")
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
@@ -552,8 +552,8 @@ class Session:
 
         `action` is what the user does with the batch: "approve-plan" means the user
         approved the plan from the page, "approve-model" that they approved the model of a
-        branch review (so the implementation starts), "review-code" that they asked to start the
-        code review once the implementation is done, with the comments as last
+        branch review (so the implementation starts), "create-pr" that they asked Claude to
+        open the branch's PR once the refactoring is written, with the comments as last
         corrections, "answer" that they answered Claude questions (`answers`, see
         `answer_question`)."""
         if action not in ACTIONS:
@@ -735,8 +735,8 @@ def format_batch(
             "action: approve-model (the user approved the model from the page: "
             "start the implementation)"
         )
-    if batch.get("action") == "review-code":
-        lines.append("action: review-code (the user asked to start the code review from the page)")
+    if batch.get("action") == "create-pr":
+        lines.append("action: create-pr (the user asked to open the PR from the page)")
     if batch.get("action") == "answer":
         asked = {q["id"]: q["text"] for q in questions or []}
         ids = ", ".join(a["question"] for a in batch.get("answers", []))

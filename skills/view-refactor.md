@@ -121,9 +121,8 @@ view-branch's agent rules: work on the branch, one commit per change, run the
 repo's tests and lint before each commit, change nothing the verdicts do not
 name. Each agent gets the lexicon, Part 1, its items and their descriptions.
 Report each result in the applied changes (the Part 2 section `applied`), as
-view-branch does, then run `view-concept status <slug> awaiting-review`.
-
-When the user asks for the check, go through the items in the refactor tab:
+view-branch does. When all agents are done, start the check in the same
+turn, without asking: go through the items in the refactor tab:
 in each item's description, say whether its verdict was applied as its
 destination says, with the commit. A gap is a finding.
 

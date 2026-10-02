@@ -136,9 +136,9 @@ function render() {
    time. The refactor tab exists only once a section is in Part 2. The tab follows the
    session at the two moments that matter — the plan waiting for approval, the writing
    starting (in the tab of the section being written) — and otherwise stays where the
-   user put it. A model waiting for approval does not move it, nor does a refactoring
-   step waiting to start: the model is read in the explanation, and « Approve model »
-   and « Review code » sit at its end. */
+   user put it. A model waiting for approval does not move it, nor does a PR waiting to
+   be created: « Approve model » sits at the end of the explanation, where the model is
+   read, and « Create PR » at the end of the refactor tab. */
 
 function setTab(name) {
   if (name === "refactor" && !hasRefactorTab()) name = "doc";
@@ -160,7 +160,10 @@ function followSession() {
   lastPhase = phase;
   $('.tab[data-tab="refactor"]').hidden = !hasRefactorTab();
   if (tab === "refactor" && !hasRefactorTab()) setTab("doc");
-  for (const [name, label] of [["doc", "explanation"], ["refactor", "refactor"]]) {
+  // In a branch review, Part 1 is the model of the branch, so its tab is named after it.
+  const docLabel = state.workflow === "view-branch" ? "model" : "explanation";
+  $('.tab[data-tab="doc"]').title = `${docLabel[0].toUpperCase()}${docLabel.slice(1)} (2)`;
+  for (const [name, label] of [["doc", docLabel], ["refactor", "refactor"]]) {
     const n = Object.keys(state.sections).filter((id) => isUpdated(id) && tabOf(id) === name).length;
     const writing = phase === "writing" && tabOf(state.status.section) === name;
     $(`.tab[data-tab="${name}"]`).replaceChildren(...[label,
@@ -199,22 +202,24 @@ const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "a
 
 /* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
    model of a branch review at the end of model consolidation ("awaiting-model", set by the
-   view-branch skill only), and the start of its refactoring step once model matching is
-   done ("awaiting-review", view-branch too).
+   view-branch skill only), and the opening of its PR once refactoring is written
+   ("awaiting-pr", view-branch too).
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until Claude moves the status on, the page says the answer is on its way.
-   « Approve plan » sits at the top of the Plan tab, and the page switches to it. The two
-   PR-review phases share one button at the end of the explanation, after the last
-   section of Part 1, where the model is read; the page does not switch tabs for them. */
+   « Approve plan » sits at the top of the Plan tab, and the page switches to it.
+   « Approve model » sits at the end of the explanation, after the last section of Part 1,
+   where the model is read; « Create PR » at the end of the refactor tab. The page does not
+   switch tabs for them. */
 const docButton = el("button", { id: "doc-approve", class: "btn primary approve doc-approve", hidden: true });
+const prButton = el("button", { id: "pr-create", class: "btn primary approve doc-approve", hidden: true });
 const APPROVALS = {
   "awaiting-approval": { action: "approve-plan", label: "Approve plan", toast: "Plan approved",
                          ready: "plan ready · waiting for your approval", sent: "plan approved · Claude is starting" },
   "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved", button: docButton,
                       ready: "model ready · waiting for your approval", sent: "model approved · Claude is implementing" },
-  "awaiting-review": { action: "review-code", label: "Review code", toast: "Code review requested", button: docButton,
-                       ready: "implementation done · waiting for you to start the code review",
-                       sent: "code review requested · Claude is starting" },
+  "awaiting-pr": { action: "create-pr", label: "Create PR", toast: "PR requested", button: prButton,
+                   ready: "refactoring written · waiting for you to create the PR",
+                   sent: "PR requested · Claude is opening it" },
 };
 const buttonOf = (approval) => approval.button || $("#approve");
 
@@ -245,7 +250,7 @@ function renderStatus() {
   p.className = `phase ${active ? "active" : ""} ${(approval && !approvalPending()) || asking ? "ask" : ""}`;
   p.textContent = [labels[phase], message].filter(Boolean).join(" · ");
 
-  $("#approve").hidden = docButton.hidden = true;
+  $("#approve").hidden = docButton.hidden = prButton.hidden = true;
   if (!approval) return;
   const btn = buttonOf(approval);
   btn.hidden = approvalPending();
@@ -253,7 +258,7 @@ function renderStatus() {
   btn.textContent = n ? `${approval.label} + send ${n} comment${n > 1 ? "s" : ""}` : approval.label;
 }
 
-for (const b of [$("#approve"), docButton]) b.addEventListener("click", () => {
+for (const b of [$("#approve"), docButton, prButton]) b.addEventListener("click", () => {
   const approval = APPROVALS[state.status.phase];
   if (approval) send(approval.action);
 });
@@ -331,7 +336,7 @@ function renderDoc() {
     return;
   }
   doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map((s) => sectionBlock(s)), docButton);
-  $("#refactor").replaceChildren(...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")));
+  $("#refactor").replaceChildren(...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), prButton);
   for (const view of docViews()) {
     typesetMath(view);
     linkCitations(view);
