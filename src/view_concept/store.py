@@ -5,7 +5,7 @@ the plan and the sections; the page reads them; the page writes review comments,
 reach the Claude Code session through the inbox.
 
     <home>/sessions/<slug>/
-        plan.json       title, question, outline, lexicon          (written by Claude)
+        plan.json       title, question, kind, workflow, outline, lexicon  (written by Claude)
         sections/<id>.md  the prose of one outline section         (written by Claude)
         audit.json      vocabulary-audit findings                  (written by Claude)
         status.json     what Claude is doing now: phase, section    (written by `status`)
@@ -19,13 +19,20 @@ reach the Claude Code session through the inbox.
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}, plus
 `kind: "question"` (with `from`, the comments it answers) for a section added during the
-review. A refactor section, marked `part: 2`, belongs to Part 2 of a branch review and is
-shown in the refactor tab; every other section is an explanation section, shown in the
-Explanation tab. A refactor section about one item of the diff carries its item fields
-under `item`: {files, verdict (one of the keys in verdicts.yaml, next to this module),
-implements, note, relations: [{to, kind, from?}]}, where the optional `from` names
-which of the item's files a relation starts from (by default the first). One with
-`kind: "finding"` and `items: [<section ids>]` is a finding across items.
+review. A refactor section, marked `part: 2`, belongs to Part 2 of a branch review or a
+refactor and is shown in the refactor tab; every other section is an explanation
+section, shown in the Explanation tab. A refactor section about one item of the diff
+carries its item fields under `item`: {files, verdict (one of the keys of the session
+workflow's list in verdicts.yaml, next to this module), batch? (a short label or
+number), implements, note, relations: [{to, kind, from?}]}, where the optional `from`
+names which of the item's files a relation starts from (by default the first).
+One with `kind: "finding"` and `items: [<section ids>]` is a finding across items.
+
+The session workflow, `workflow` in plan.json, is the skill that drives the session:
+view-concept, view-branch or view-refactor (a triage of existing code). It picks the
+verdict set the page shows: verdicts.yaml holds one list per workflow, and each verdict
+carries the `tone` the page colours it with. A session created before workflows existed
+has no workflow and gets view-branch's list.
 
 A side thread is a separate headless Claude conversation, forked from the session in
 claude.json, that the user opens from the page to discuss a passage without changing
