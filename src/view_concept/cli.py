@@ -120,7 +120,8 @@ def cmd_watch(a: argparse.Namespace) -> None:
     """Print each new batch of the inbox as it arrives. Meant to run under Monitor.
 
     The cursor persists across restarts, so re-arming after a Monitor timeout neither
-    loses a batch sent in between nor repeats one already delivered."""
+    loses a batch sent in between nor repeats one already delivered. Starting prints
+    nothing: every line is a Monitor event, and a re-arm is not news."""
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
@@ -128,7 +129,6 @@ def cmd_watch(a: argparse.Namespace) -> None:
         cursor = int(s.cursor_path.read_text())
     except (FileNotFoundError, ValueError):
         cursor = 0
-    print(f"watching {a.slug} (inbox offset {cursor})", flush=True)
     while True:
         try:
             size = s.inbox_path.stat().st_size
