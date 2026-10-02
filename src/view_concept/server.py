@@ -86,6 +86,7 @@ def state(slug: str) -> dict[str, Any]:
     return {
         "slug": slug,
         "plan": plan,
+        "workflow": plan.get("workflow", ""),
         "status": status,
         "sections": {k: section_view(v, seen[k]) for k, v in sections.items()},
         "audit": audit,

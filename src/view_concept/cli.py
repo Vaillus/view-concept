@@ -18,6 +18,7 @@ from .store import (
     HOME,
     KINDS,
     PHASES,
+    WORKFLOWS,
     Session,
     SessionError,
     format_batch,
@@ -88,7 +89,7 @@ def bind_parent(s: Session) -> None:
 def cmd_new(a: argparse.Namespace) -> None:
     slug = a.slug or slugify(a.title)
     s = Session(slug)
-    created = s.create(a.title, a.question or "", a.kind, a.repo or "")
+    created = s.create(a.title, a.question or "", a.kind, a.repo or "", a.workflow or "")
     bind_parent(s)
     print(json.dumps({"slug": slug, "dir": str(s.dir), "created": created}))
 
@@ -208,6 +209,12 @@ def main() -> None:
     q.add_argument("--question")
     q.add_argument("--kind", choices=KINDS, default="explanation")
     q.add_argument("--repo", help="repository a code session is about (citations link into it)")
+    q.add_argument(
+        "--workflow",
+        choices=WORKFLOWS,
+        help="the skill driving the session; picks its verdict set "
+        "(default: view-concept, or view-branch for a code session)",
+    )
     q.set_defaults(fn=cmd_new)
 
     q = sub.add_parser("open", help="start the server if needed and open the page")

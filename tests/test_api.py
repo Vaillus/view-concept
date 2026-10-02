@@ -25,6 +25,10 @@ def test_api(client):
     assert client.get("/api/s/missing").status_code == 404
 
 
+def test_api_sends_the_session_workflow(client, session):
+    assert client.get("/api/s/kv-cache").json()["workflow"] == "view-concept"
+
+
 def test_api_renders_tips(client, session):
     plan = session.read_plan()
     plan["lexicon"] = [

@@ -73,6 +73,12 @@ ACTIONS = ("", "approve-plan", "approve-model", "review-code")
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
+# The session workflow: which skill drives the session. It picks the verdict set the page
+# shows (see verdicts.yaml). view-branch and view-refactor review code, so their sessions
+# are code sessions. A session created before workflows existed has none.
+WORKFLOWS = ("view-concept", "view-branch", "view-refactor")
+# The workflow of a session created without --workflow, by kind.
+DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 
 
@@ -170,13 +176,24 @@ class Session:
 
     # ---- creation ----
     def create(
-        self, title: str, question: str = "", kind: str = "explanation", repo: str = ""
+        self,
+        title: str,
+        question: str = "",
+        kind: str = "explanation",
+        repo: str = "",
+        workflow: str = "",
     ) -> bool:
-        """Create the session. Returns False when it already existed (left untouched)."""
+        """Create the session. Returns False when it already existed (left untouched).
+        `workflow` defaults by kind (DEFAULT_WORKFLOW)."""
         if kind not in KINDS:
             raise SessionError(f"unknown kind {kind!r}; one of {', '.join(KINDS)}")
         if kind == "code" and not repo:
             raise SessionError("a code session needs --repo")
+        workflow = workflow or DEFAULT_WORKFLOW[kind]
+        if workflow not in WORKFLOWS:
+            raise SessionError(f"unknown workflow {workflow!r}; one of {', '.join(WORKFLOWS)}")
+        if workflow != "view-concept" and kind != "code":
+            raise SessionError(f"a {workflow} session is a code session: pass --kind code")
         if self.exists():
             return False
         self.sections_dir.mkdir(parents=True, exist_ok=True)
@@ -184,6 +201,7 @@ class Session:
             "title": title,
             "question": question,
             "kind": kind,
+            "workflow": workflow,
             "created": date.today().isoformat(),
             "outline": [],
             "lexicon": [],
