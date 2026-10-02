@@ -223,6 +223,11 @@ a.cite:hover code { text-decoration: underline; }
 .q-options { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .q-options label { display: flex; gap: 6px; align-items: baseline; cursor: pointer; }
 .question .q-answer { align-self: flex-end; }
+#questions { display: flex; flex-direction: column; gap: 8px; }
+#questions:empty { display: none; }
+.question.answered { border-color: var(--line); }
+.question.answered .q-head { color: var(--muted); }
+.q-reply { font-size: 13px; white-space: pre-wrap; border-left: 2px solid var(--line-strong); padding-left: 8px; }
 
 /* ---- side threads: a popover on the passage, chips where there is no passage ---- */
 .flag-text { color: var(--flag); }

@@ -2,8 +2,9 @@
 
    Tabs share the main space: the plan (outline, model changes, lexicon), the
    explanation (one block per explanation section) and, in a branch review that has reached
-   the refactoring step, the refactor tab (the refactor sections, Part 2); the review pane (draft comments, then
-   sent batches) stays on the right. The page never edits the explanation: Claude Code
+   the refactoring step, the refactor tab (the refactor sections, Part 2); the review pane (a
+   conversation: sent batches and answered Claude questions, the open Claude questions, then
+   the draft comments) stays on the right. The page never edits the explanation: Claude Code
    writes the files, the server streams "changed", the page re-fetches. The page writes
    batches of comments, and side threads: separate read-only Claude conversations run by
    the server, streamed through "threads" events. A thread shows in a popover on its
@@ -1018,7 +1019,17 @@ function renderQuestions() {
   if (cardsNow.length !== box.children.length || cardsNow.some((c, i) => box.children[i] !== c)) box.replaceChildren(...cardsNow);
 }
 
-/* ---------------- review pane ---------------- */
+/* ---------------- review pane ----------------
+   The pane reads like a conversation, oldest at the top: the sent batches in time order
+   (a batch answering a Claude question shows the question, then the answer), then the
+   open Claude questions, then the drafts, the note and « Send » at the bottom. It stays
+   scrolled to the bottom as content arrives, unless the user scrolled up. */
+
+let reviewAtEnd = true;
+$(".review").addEventListener("scroll", (e) => {
+  const p = e.target;
+  reviewAtEnd = p.scrollHeight - p.scrollTop - p.clientHeight < 24;
+}, { passive: true });
 
 function quoteLine(c) {
   const where = c.section ? `§${numberOf(c.section)}` : "·";
@@ -1048,11 +1059,12 @@ function renderReview() {
   }));
   updateSend();
 
-  const batches = state ? [...state.comments.batches].reverse() : [];
-  $("#sent").replaceChildren(...(batches.length ? batches.map((b) =>
+  const batches = state ? state.comments.batches : [];
+  $("#history").replaceChildren(...(batches.length ? batches.map((b) =>
     el("div", { class: "batch" },
       el("div", { class: "b-head dim", text: `${b.id} · ${new Date(b.sent).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` }),
       b.note ? el("div", { class: "b-note", text: b.note }) : null,
+      ...(b.answers || []).map((a) => answeredQuestion(a, b)),
       ...b.comments.map((c) => el("div", { class: `comment ${c.status}` },
         quoteLine(c),
         c.text || !c.thread ? el("div", { class: "c-text", text: c.text })
@@ -1061,6 +1073,19 @@ function renderReview() {
           el("span", { class: c.status === "resolved" ? "badge ok" : "badge", text: c.status === "resolved" ? "✓ resolved" : "waiting" }),
           c.reply ? el("span", { class: "c-reply", text: ` ${c.reply}` }) : null))))
   ) : [el("p", { class: "dim", text: "Nothing sent yet." })]));
+  const pane = $(".review");
+  if (reviewAtEnd) pane.scrollTop = pane.scrollHeight;
+}
+
+/* An answered Claude question in the history: its text, the answer, Claude's reply. */
+function answeredQuestion(a, b) {
+  const q = (state.questions || []).find((x) => x.id === a.question) || { id: a.question, text: "" };
+  return el("div", { class: "question answered" },
+    el("div", { class: "q-head" }, "Question from Claude ", el("span", { class: "dim", text: q.id })),
+    q.text ? el("div", { class: "q-text", text: q.text }) : null,
+    el("div", { class: "q-reply", text: [a.choices.join(", "), a.text].filter(Boolean).join(" — ") }),
+    b.reply ? el("div", { class: "c-status" }, el("span", { class: "badge ok", text: "✓ resolved" }),
+                 el("span", { class: "c-reply", text: ` ${b.reply}` })) : null);
 }
 
 function updateSend() {
