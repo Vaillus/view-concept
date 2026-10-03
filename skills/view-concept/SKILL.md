@@ -221,7 +221,7 @@ Work the topic as a **design tree**: the decisions it leaves open, each with the
 1. Ask every decision of the frontier (those whose prerequisites are settled) as an agent question with `--recommended`.
 2. Find facts yourself. A question the code, the session files or a command can answer is not a question for the user: look it up, and put only decisions to the user.
 3. Each answer settles a decision. Fold it back into the plan (see **Folding answers back**), and ask the decisions it unblocks. A skipped decision takes your recommended answer.
-4. The grill ends when no decision is left (say so in one terminal line) or when `action: stop-grill` arrives.
+4. The grill ends when no decision is left or when `action: stop-grill` arrives. When no decision is left, say so in one terminal line and resolve the grill batch: `view-concept resolve <slug> <batch id> --reply "<one line>"`, which turns « Stop grill » back into « Grill me ».
 
 This is the method of the `grilling` skill, when it is installed; this section is all you need to run it.
 
