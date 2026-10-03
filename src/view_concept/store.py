@@ -230,6 +230,11 @@ class Session:
         return self.dir / "agent.json"
 
     @property
+    def legacy_claude_path(self) -> Path:
+        """What agent.json was called before sessions could run on other agents."""
+        return self.dir / "claude.json"
+
+    @property
     def seen_path(self) -> Path:
         return self.dir / "seen.json"
 
@@ -484,7 +489,11 @@ class Session:
     # ---- the main agent session ----
     def read_agent(self) -> dict[str, str]:
         """What agent.json records: `agent` (claude, codex, jazz), `parent` (its conversation
-        id, "" when it has none to fork) and `name` (the agent's own name, for Jazz)."""
+        id, "" when it has none to fork) and `name` (the agent's own name, for Jazz). A
+        session created before agent.json has claude.json instead, which only held `parent`."""
+        if not self.agent_path.exists() and self.legacy_claude_path.exists():
+            parent = str(_read_json(self.legacy_claude_path, {}).get("parent", ""))
+            return {"agent": "claude", "parent": parent} if parent else {}
         return {key: str(value) for key, value in _read_json(self.agent_path, {}).items()}
 
     def read_parent(self) -> str:
@@ -508,13 +517,13 @@ class Session:
         if not self.threads_dir.is_dir():
             return []
         threads = [_read_json(p, None) for p in self.threads_dir.glob("t*.json")]
-        return sorted((t for t in threads if t), key=lambda t: int(t["id"][1:]))
+        return sorted((_upgrade_thread(t) for t in threads if t), key=lambda t: int(t["id"][1:]))
 
     def read_thread(self, tid: str) -> dict[str, Any]:
         t = _read_json(self.thread_path(tid), None)
         if t is None:
             raise SessionError(f"no thread {tid!r}")
-        return t
+        return _upgrade_thread(t)
 
     def write_thread(self, thread: dict[str, Any]) -> None:
         _write_json(self.thread_path(thread["id"]), thread)
@@ -724,6 +733,14 @@ def _stat_signature(paths: list[Path]) -> tuple:
         except FileNotFoundError:
             sig.append((p.name, None, None))
     return tuple(sig)
+
+
+def _upgrade_thread(thread: dict[str, Any]) -> dict[str, Any]:
+    """A thread written before sessions could run on other agents keeps its conversation id
+    under `claude_id`: read it as `agent_session`, so the thread still resumes."""
+    if "agent_session" not in thread:
+        thread["agent_session"] = str(thread.pop("claude_id", "") or "")
+    return thread
 
 
 def format_batch(

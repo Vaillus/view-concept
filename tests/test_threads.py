@@ -117,6 +117,23 @@ def test_bind_agent_and_thread_ids(session):
         session.read_thread("../plan")
 
 
+def test_a_thread_from_before_agents_still_resumes(session, fake_claude):
+    t = session.new_thread()
+    del t["agent_session"]
+    session.write_thread({**t, "claude_id": "old"})  # written before agent_session existed
+    assert session.read_thread("t1")["agent_session"] == "old"
+    threads.send(session, "t1", "again")
+    wait_idle(session, "t1")
+    args = calls(fake_claude)[-1]["args"]
+    assert args[args.index("--resume") + 1] == "old" and "--fork-session" not in args
+
+
+def test_a_session_from_before_agents_keeps_its_parent(session):
+    session.legacy_claude_path.write_text(json.dumps({"parent": "p", "since": "x"}))
+    assert session.read_agent() == {"agent": "claude", "parent": "p"}
+    assert session.bind_agent("codex", "q") and session.read_parent() == "q"
+
+
 def test_comment_from_a_thread(session):
     b = session.add_batch([{"section": "s1", "text": "rewrite it", "thread": "t3"}])
     out = format_batch("kv-cache", b, session.read_plan()["outline"])
