@@ -125,11 +125,15 @@ def test_plan_batch_skips_the_open_questions(session):
     q1, q2 = session.read_questions()
     assert q1["status"] == "answered" and "skipped" not in q1
     assert q2["status"] == "skipped" and q2["skipped"] == b["sent"]
-    out = format_batch("kv-cache", b, session.read_plan()["outline"])
     assert (
         "action: plan (the user ended scoping from the page: treat open questions as "
         "skipped and write the plan, or the model in a branch review)"
-    ) in out
+    ) in format_batch("kv-cache", b, [])
+    # Once a plan exists, « Plan » asks for a replan.
+    assert (
+        "action: plan (the user asked for a replan from the page: treat open questions "
+        "as skipped and revise the plan with the answers, or the model in a branch review)"
+    ) in format_batch("kv-cache", b, [{"id": "s1", "title": "Intro", "earns": ""}])
 
 
 def test_grill_batches(session):

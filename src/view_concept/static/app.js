@@ -240,7 +240,7 @@ function renderStatus() {
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Plan » ends it.
     scoping: asking ? "scoping · questions waiting for you"
-           : planPending() ? `scoping ended · the agent is writing the ${scopingProduct()}`
+           : planPending() ? `scoping ended · the agent is ${replanning() ? "revising" : "writing"} the ${scopingProduct()}`
            : "scoping the question",
     planning: "drafting the plan",
     ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
@@ -1001,8 +1001,9 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    `{question, skipped: true}`), or the box stays open: no question blocks the agent.
    The header holds « Grill me » (a batch whose action is "grill"; « Stop grill » sends
    "stop-grill" while a grill runs) and, while scoping runs or a question is open,
-   « Plan » (action "plan": scoping ends, the open questions count as skipped). These
-   three take the draft comments with them, like the approvals. */
+   « Plan » (action "plan": scoping ends, the open questions count as skipped; once a
+   plan exists it reads « Replan », and the agent revises the plan with the answers).
+   These three take the draft comments with them, like the approvals. */
 
 const openQuestions = () => (state ? state.questions || [] : []).filter((q) => q.status === "open");
 const questionCards = new Map(); // question id -> its box
@@ -1062,6 +1063,9 @@ function scopingProduct() {
   return ["view-branch", "view-refactor"].includes(state.workflow) ? "model" : "plan";
 }
 
+// Once a plan exists, the answers given since may change it: « Plan » becomes « Replan ».
+const replanning = () => (state.plan.outline || []).length > 0;
+
 function renderScope() {
   const questions = state.questions || [];
   const open = openQuestions();
@@ -1087,7 +1091,10 @@ function renderScope() {
   grill.title = state.grilling ? "Stop the interview" : "The agent asks about every open decision, each with its suggestion, until none is left";
   const plan = $("#scope-plan");
   plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending();
-  plan.title = `Enough questions: the open ones count as skipped, and the agent writes the ${scopingProduct()}`;
+  plan.textContent = replanning() ? "Replan" : "Plan";
+  plan.title = replanning()
+    ? `Enough questions: the open ones count as skipped, and the agent revises the ${scopingProduct()} with your answers`
+    : `Enough questions: the open ones count as skipped, and the agent writes the ${scopingProduct()}`;
 }
 
 $("#grill").addEventListener("click", (e) => send(state.grilling ? "stop-grill" : "grill", e.currentTarget));

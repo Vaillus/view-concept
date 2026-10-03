@@ -857,7 +857,13 @@ def format_batch(
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")
-    if batch.get("action") == "plan":
+    if batch.get("action") == "plan" and outline:
+        # A plan already exists: the answers given since may change it.
+        lines.append(
+            "action: plan (the user asked for a replan from the page: treat open questions "
+            "as skipped and revise the plan with the answers, or the model in a branch review)"
+        )
+    elif batch.get("action") == "plan":
         lines.append(
             "action: plan (the user ended scoping from the page: treat open questions as "
             "skipped and write the plan, or the model in a branch review)"
