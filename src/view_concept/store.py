@@ -63,8 +63,10 @@ Scoping ends when the user clicks « Plan »: a batch whose action is "plan", af
 every question still open is marked skipped (the agent treats them as skipped and writes
 the plan, or the model in a branch review). « Grill me » sends a batch whose action is
 "grill" (the agent asks every open design decision as a question with a recommended
-answer, until none is left) and « Stop grill » one whose action is "stop-grill": a grill
-runs while the latest of these two batches is a "grill" one (`is_grilling`).
+answer, until none is left) and « Stop grill » one whose action is "stop-grill". A grill
+runs while the latest "grill" batch is not resolved (the agent resolves it with a reply
+when no decision is left) and no "stop-grill" or "approve-model" batch follows it
+(`is_grilling`).
 
 seen.json holds the highlight baseline: it maps a section id to the markdown the section
 had when the user sent the last batch (any batch: comments, an approval, an answer), or
@@ -689,10 +691,22 @@ class Session:
             _write_json(self.questions_path, questions)
 
     def is_grilling(self) -> bool:
-        """Whether a grill runs: the latest batch that starts or stops one starts it."""
-        actions = [b.get("action") for b in self.read_comments()["batches"]]
-        toggles = [a for a in actions if a in ("grill", "stop-grill")]
-        return bool(toggles) and toggles[-1] == "grill"
+        """Whether a grill runs: the latest "grill" batch is not resolved (the agent resolves
+        it when no decision is left) and no "stop-grill" or "approve-model" batch follows it.
+        A batch without comments is resolved once it has a reply, one with comments once
+        all of them are."""
+        batches = self.read_comments()["batches"]
+        starts = [i for i, b in enumerate(batches) if b.get("action") == "grill"]
+        if not starts:
+            return False
+        grill = batches[starts[-1]]
+        comments = grill["comments"]
+        if comments and all(c["status"] == "resolved" for c in comments):
+            return False
+        if not comments and grill.get("reply"):
+            return False
+        later = batches[starts[-1] + 1 :]
+        return not any(b.get("action") in ("stop-grill", "approve-model") for b in later)
 
     def resolve(self, ids: list[str], reply: str = "") -> list[str]:
         """Mark comments (c…) or whole batches (b…) resolved. Returns the comment ids touched."""

@@ -148,6 +148,22 @@ def test_grill_batches(session):
     assert "action: stop-grill (the user stopped the grill)" in format_batch("kv-cache", b, outline)
 
 
+def test_grill_ends(session):
+    b = session.add_batch([], action="grill")
+    session.resolve([b["id"]], reply="no decision left")
+    assert session.is_grilling() is False
+    session.add_batch([], action="grill")
+    assert session.is_grilling() is True
+    session.add_batch([], action="approve-model")
+    assert session.is_grilling() is False
+    session.add_batch([], action="grill")
+    assert session.is_grilling() is True
+    session.add_batch([], action="stop-grill")
+    assert session.is_grilling() is False
+    session.add_batch([], action="grill")
+    assert session.is_grilling() is True
+
+
 def test_code_session_needs_repo(tmp_path):
     with pytest.raises(SessionError):
         Session("x", tmp_path).create("X", kind="code")
