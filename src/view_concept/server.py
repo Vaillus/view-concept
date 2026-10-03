@@ -12,11 +12,10 @@ import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from markdown_it import MarkdownIt
-from mdit_py_plugins.dollarmath import dollarmath_plugin
 from pydantic import BaseModel
 
 from . import threads
+from .render import md
 from .store import Session, SessionError, list_sessions
 
 STATIC = Path(__file__).parent / "static"
@@ -27,12 +26,6 @@ VERDICTS: dict[str, list[dict[str, str]]] = yaml.safe_load(
 )
 # A session created before workflows existed was a branch review or had no items.
 LEGACY_WORKFLOW = "view-branch"
-
-md = (
-    MarkdownIt("commonmark", {"html": True})
-    .enable(["table", "strikethrough"])
-    .use(dollarmath_plugin, double_inline=True)
-)
 
 app = FastAPI(title="view-concept")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
