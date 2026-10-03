@@ -48,20 +48,23 @@ means no watch runs. The margin covers the seconds between a Monitor expiry and 
 An agent question is a question the agent puts to the user in the page rather than in the
 terminal: {id: q1…, text, options, multi (several options may be picked), recommended?
 (the answer the agent suggests: an option, which the page preselects, or a text it
-pre-fills), status: "open" | "answered" | "skipped", asked, answer?: {choices, text, at},
-skipped? (when)}. Asking one sets the phase "awaiting-answer", except during scoping:
-in the phase "scoping" the agent keeps asking without waiting, so the phase stays. The
-page shows each open one as a card in the review pane. The user's answer reaches the
-session as a batch whose action is "answer", carrying `answers: [{question, choices,
-text}]`. A skipped question (the user leaves it to the agent's default) is sent the same
-way, its entry `{question, skipped: true}`.
+pre-fills), status: "open" | "answered" | "skipped", asked, answer?: {choices, text, at,
+from?}, skipped? (when)}. Asking one sets the phase "awaiting-answer", except during
+scoping: in the phase "scoping" the agent keeps asking without waiting, so the phase
+stays. The page shows each open one in the scope block at the top of the Plan tab. The
+user's answer reaches the session as a batch whose action is "answer", carrying
+`answers: [{question, choices, text}]`. A skipped question (the user leaves it to the
+agent's default) is sent the same way, its entry `{question, skipped: true}`. When the
+user answers in the terminal instead, the agent runs `answered`: the question is marked
+answered with `from: "terminal"`, empty choices and the user's words as text, and no
+batch is sent, since the agent already has the answer; the phase is left to the agent.
 
 Scoping ends when the user clicks « Plan »: a batch whose action is "plan", after which
 every question still open is marked skipped (the agent treats them as skipped and writes
 the plan, or the model in a branch review). « Grill me » sends a batch whose action is
 "grill" (the agent asks every open design decision as a question with a recommended
-answer, until none is left) and « Stop » one whose action is "stop-grill": a grill runs
-while the latest of these two batches is a "grill" one (`is_grilling`).
+answer, until none is left) and « Stop grill » one whose action is "stop-grill": a grill
+runs while the latest of these two batches is a "grill" one (`is_grilling`).
 
 seen.json holds the highlight baseline: it maps a section id to the markdown the section
 had when the user sent the last batch (any batch: comments, an approval, an answer), or
@@ -94,7 +97,7 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-pr"
 # (set by the view-branch skill once refactoring is written) « Create PR ».
 # "awaiting-answer" (set by `question`, outside scoping) waits on an agent question shown in
-# the review pane.
+# the scope block at the top of the Plan tab.
 PHASES = (
     "scoping",
     "planning",
