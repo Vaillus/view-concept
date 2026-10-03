@@ -204,6 +204,13 @@ def test_answer_is_sent_as_a_batch(session):
         session.answer_question("q9", [], "hm")
 
 
+def test_a_question_keeps_the_scoping_phase(session):
+    session.write_status("scoping")
+    session.add_question("How familiar are you with KKT?")
+    session.add_question("What is it for?")
+    assert session.read_status()["phase"] == "scoping"
+
+
 def test_question_with_a_recommended_answer(session):
     assert "recommended" not in session.add_question("PR or merge?", ["a PR", "a merge"])
     q = session.add_question("Which?", ["a PR", "a merge"], recommended=" a PR ")

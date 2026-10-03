@@ -49,11 +49,12 @@ An agent question is a question the agent puts to the user in the page rather th
 terminal: {id: q1…, text, options, multi (several options may be picked), recommended?
 (the answer the agent suggests: an option, which the page preselects, or a text it
 pre-fills), status: "open" | "answered" | "skipped", asked, answer?: {choices, text, at},
-skipped? (when)}. Asking one sets the phase "awaiting-answer"; the page shows each open
-one as a card in the review pane. The user's answer reaches the session as a batch whose
-action is "answer", carrying `answers: [{question, choices, text}]`. A skipped question
-(the user leaves it to the agent's default) is sent the same way, its entry
-`{question, skipped: true}`.
+skipped? (when)}. Asking one sets the phase "awaiting-answer", except during scoping:
+in the phase "scoping" the agent keeps asking without waiting, so the phase stays. The
+page shows each open one as a card in the review pane. The user's answer reaches the
+session as a batch whose action is "answer", carrying `answers: [{question, choices,
+text}]`. A skipped question (the user leaves it to the agent's default) is sent the same
+way, its entry `{question, skipped: true}`.
 
 seen.json holds the highlight baseline: it maps a section id to the markdown the section
 had when the user sent the last batch (any batch: comments, an approval, an answer), or
@@ -85,7 +86,8 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
 # "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-pr"
 # (set by the view-branch skill once refactoring is written) « Create PR ».
-# "awaiting-answer" (set by `question`) waits on an agent question shown in the review pane.
+# "awaiting-answer" (set by `question`, outside scoping) waits on an agent question shown in
+# the review pane.
 PHASES = (
     "scoping",
     "planning",
@@ -389,7 +391,8 @@ class Session:
         recommended: str = "",
     ) -> dict[str, Any]:
         """Put an agent question to the user, and wait for the answer: the phase becomes
-        "awaiting-answer". `recommended` is the answer the agent suggests."""
+        "awaiting-answer". During scoping nothing waits: the phase stays "scoping".
+        `recommended` is the answer the agent suggests."""
         if not text.strip():
             raise SessionError("empty question")
         questions = self.read_questions()
@@ -405,7 +408,8 @@ class Session:
             q["recommended"] = recommended.strip()
         questions.append(q)
         _write_json(self.questions_path, questions)
-        self.write_status("awaiting-answer")
+        if self.read_status().get("phase") != "scoping":
+            self.write_status("awaiting-answer")
         return q
 
     def _open_question(self, questions: list[dict[str, Any]], qid: str) -> dict[str, Any]:
