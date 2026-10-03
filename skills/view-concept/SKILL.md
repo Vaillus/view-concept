@@ -194,7 +194,7 @@ The **question flow** is how questions and answers move between you and the user
 - **Add questions as answers arrive.** An answer can open new questions; ask them when it does.
 - **Never wait on a question** to continue the work that does not depend on it. The user will leave many questions unanswered, and that is expected: an open box is not a debt.
 - **A skipped question** (`q3 skipped « … » (no answer: use your default)`) means: use your default. Say in the plan which default you took (in `revision`, the line the page shows above the outline).
-- An answer typed in the terminal counts the same as one sent from the page.
+- An answer typed in the terminal counts the same as one sent from the page. Close its box at once with `view-concept answered <slug> <qid> --text "<the answer as the user gave it>"`: the box moves to « answered » marked « (in the terminal) », and no batch comes back, since you already have the answer. The phase is not changed: set the next one yourself.
 
 ### Scoping in the page
 
