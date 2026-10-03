@@ -219,7 +219,7 @@ a.cite:hover code { text-decoration: underline; }
 .b-head { font-size: 11px; }
 .b-note { color: var(--ink-dim); font-size: 12px; }
 
-/* ---- Claude questions: a card per open question, in the review pane ---- */
+/* ---- agent questions: a card per open question, in the review pane ---- */
 .question { border: 1px solid var(--flag); padding: 6px 8px; background: var(--bg); display: flex; flex-direction: column; gap: 6px; }
 .q-head { font-size: 11px; color: var(--flag); text-transform: uppercase; letter-spacing: .08em; }
 .q-text { font-size: 13px; white-space: pre-wrap; }

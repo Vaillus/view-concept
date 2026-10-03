@@ -36,7 +36,7 @@ def fake_claude(tmp_path, monkeypatch):
     script = tmp_path / "claude"
     script.write_text(f"#!{sys.executable}\n{FAKE}")
     script.chmod(0o755)
-    monkeypatch.setattr(threads, "CLAUDE", str(script))
+    monkeypatch.setenv("VIEW_CONCEPT_CLAUDE", str(script))
     return script
 
 
@@ -53,11 +53,11 @@ def wait_idle(session, tid):
 
 
 def test_first_turn_forks_the_main_session(session, fake_claude):
-    session.bind_parent("main-1")
+    session.bind_agent("claude", "main-1")
     t = threads.create(session, "s2", "Le cache", "", "why a cache?")
     assert t["id"] == "t1" and t["state"] == "running"
     t = wait_idle(session, "t1")
-    assert t["state"] == "idle" and t["claude_id"] == "child-1"
+    assert t["state"] == "idle" and t["agent_session"] == "child-1"
     assert t["forked_from"] == "main-1"
     assert [m["role"] for m in t["messages"]] == ["user", "assistant"]
     assert t["messages"][1]["text"] == "Short \n\nanswer."
@@ -70,7 +70,7 @@ def test_first_turn_forks_the_main_session(session, fake_claude):
 
 
 def test_later_turns_resume_the_thread(session, fake_claude):
-    session.bind_parent("main-1")
+    session.bind_agent("claude", "main-1")
     threads.create(session, "", "", "", "first")
     wait_idle(session, "t1")
     threads.send(session, "t1", "-- second")
@@ -108,13 +108,30 @@ def test_interrupted_thread(session):
     assert threads.view(session, session.read_thread("t1"))["error"] == "interrupted"
 
 
-def test_bind_parent_and_thread_ids(session):
+def test_bind_agent_and_thread_ids(session):
     assert session.read_parent() == ""
-    assert session.bind_parent("a") and not session.bind_parent("a")
-    assert session.bind_parent("b") and session.read_parent() == "b"
+    assert session.bind_agent("claude", "a") and not session.bind_agent("claude", "a")
+    assert session.bind_agent("claude", "b") and session.read_parent() == "b"
     assert [session.new_thread()["id"] for _ in range(2)] == ["t1", "t2"]
     with pytest.raises(SessionError):
         session.read_thread("../plan")
+
+
+def test_a_thread_from_before_agents_still_resumes(session, fake_claude):
+    t = session.new_thread()
+    del t["agent_session"]
+    session.write_thread({**t, "claude_id": "old"})  # written before agent_session existed
+    assert session.read_thread("t1")["agent_session"] == "old"
+    threads.send(session, "t1", "again")
+    wait_idle(session, "t1")
+    args = calls(fake_claude)[-1]["args"]
+    assert args[args.index("--resume") + 1] == "old" and "--fork-session" not in args
+
+
+def test_a_session_from_before_agents_keeps_its_parent(session):
+    session.legacy_claude_path.write_text(json.dumps({"parent": "p", "since": "x"}))
+    assert session.read_agent() == {"agent": "claude", "parent": "p"}
+    assert session.bind_agent("codex", "q") and session.read_parent() == "q"
 
 
 def test_comment_from_a_thread(session):
@@ -145,3 +162,123 @@ def test_delete_thread(session, fake_claude):
         threads.delete(session, "t3")
     threads.stop(session, "t3")
     wait_idle(session, "t3")
+
+
+CODEX_FAKE = """\
+import json, sys
+prompt = sys.stdin.read()
+with open(sys.argv[0] + ".calls", "a") as f:
+    f.write(json.dumps({"args": sys.argv[1:], "prompt": prompt}) + "\\n")
+def emit(event): print(json.dumps(event), flush=True)
+emit({"type": "thread.started", "thread_id": "codex-child"})
+emit({"type": "turn.started"})
+emit({"type": "item.started", "item": {"type": "command_execution", "command": "ls"}})
+emit({"type": "item.completed", "item": {"type": "agent_message", "text": "Codex answer."}})
+emit({"type": "turn.completed", "usage": {}})
+"""
+
+
+@pytest.fixture
+def fake_codex(tmp_path, monkeypatch):
+    script = tmp_path / "codex"
+    script.write_text(f"#!{sys.executable}\n{CODEX_FAKE}")
+    script.chmod(0o755)
+    monkeypatch.setenv("VIEW_CONCEPT_CODEX", str(script))
+    return script
+
+
+def codex_calls(script):
+    return [json.loads(line) for line in (script.parent / "codex.calls").read_text().splitlines()]
+
+
+def test_codex_first_turn_forks_then_resumes(session, fake_codex):
+    session.bind_agent("codex", "codex-main")
+    threads.create(session, "s2", "Le cache", "", "why a cache?")
+    t = wait_idle(session, "t1")
+    assert t["state"] == "idle" and t["agent_session"] == "codex-child"
+    assert t["messages"][1]["text"] == "Codex answer."
+    assert t["forked_from"] == "codex-main"
+    threads.send(session, "t1", "and then?")
+    wait_idle(session, "t1")
+    first, second = codex_calls(fake_codex)
+    assert first["args"][:3] == ["exec", "fork", "codex-main"]
+    assert 'sandbox_mode="read-only"' in first["args"] and first["args"][-1] == "-"
+    assert second["args"][:3] == ["exec", "resume", "codex-child"]
+    assert second["prompt"] == "and then?"
+
+
+COMMAND_FAKE = """\
+import sys
+prompt = sys.stdin.read()
+with open(sys.argv[0] + ".calls", "a") as f:
+    f.write(prompt + "\\n=====\\n")
+print("line one")
+print("line two")
+"""
+
+
+@pytest.fixture
+def fake_command(tmp_path, monkeypatch):
+    script = tmp_path / "answer"
+    script.write_text(f"#!{sys.executable}\n{COMMAND_FAKE}")
+    script.chmod(0o755)
+    monkeypatch.setenv("VIEW_CONCEPT_AGENT_COMMAND", str(script))
+    return script
+
+
+def test_command_backend_replays_the_thread_each_turn(session, fake_command):
+    threads.create(session, "s2", "Le cache", "", "why a cache?")
+    t = wait_idle(session, "t1")
+    assert t["state"] == "idle" and t["messages"][1]["text"] == "line one\nline two"
+    assert t["forked_from"] == ""
+    threads.send(session, "t1", "and then?")
+    wait_idle(session, "t1")
+    first, second = (fake_command.parent / "answer.calls").read_text().split("=====\n")[:2]
+    assert "§2 Cache (s2): « Le cache »" in first and first.strip().endswith("why a cache?")
+    assert "read plan.json and sections/" in second
+    assert "User: why a cache?" in second and "You: line one" in second
+    assert second.strip().endswith("User: and then?")
+
+
+def test_a_failing_command_reports_its_output(session, tmp_path, monkeypatch):
+    script = tmp_path / "broken"
+    script.write_text(f"#!{sys.executable}\nimport sys\nprint('no such agent')\nsys.exit(2)\n")
+    script.chmod(0o755)
+    monkeypatch.setenv("VIEW_CONCEPT_AGENT_COMMAND", str(script))
+    threads.create(session, "", "", "", "hello")
+    t = wait_idle(session, "t1")
+    assert t["state"] == "error" and "no such agent" in t["error"]
+
+
+def test_jazz_needs_an_agent_name(session, monkeypatch):
+    monkeypatch.delenv("VIEW_CONCEPT_JAZZ_AGENT", raising=False)
+    session.bind_agent("jazz")
+    with pytest.raises(SessionError, match="agent's name"):
+        threads.create(session, "", "", "", "hello")
+
+
+def test_jazz_runs_read_only_under_the_recorded_agent(session, monkeypatch):
+    from view_concept.agents import resolve
+
+    monkeypatch.delenv("VIEW_CONCEPT_AGENT_COMMAND", raising=False)
+    monkeypatch.setenv("VIEW_CONCEPT_JAZZ", "/bin/jazz")
+    session.bind_agent("jazz", name="writer")
+    argv = resolve(session).args(session, {"agent_session": ""})
+    assert argv == [
+        "/bin/jazz",
+        "--no-tui",
+        "run",
+        "--agent",
+        "writer",
+        "--approval-policy",
+        "read-only",
+    ]
+
+
+def test_detect_names_the_running_agent():
+    from view_concept.agents import detect
+
+    assert detect({"CLAUDE_CODE_SESSION_ID": "c1"}) == ("claude", "c1")
+    assert detect({"CODEX_THREAD_ID": "x1"}) == ("codex", "x1")
+    assert detect({"JAZZ_AGENT_PROCESS": "1"}) == ("jazz", "")
+    assert detect({}) == ("", "")

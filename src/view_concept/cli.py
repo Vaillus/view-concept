@@ -1,4 +1,4 @@
-"""Command line: what the view-concept and view-branch skills call from Claude Code."""
+"""Command line: what the view-concept, view-branch and view-refactor skills call from the agent."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+from .agents import AGENTS, detect
 from .store import (
     HEARTBEAT_EVERY,
     HOME,
@@ -32,6 +33,8 @@ from .store import (
 PID_FILE = HOME / "server.pid"
 LOG_FILE = HOME / "server.log"
 HOST = "127.0.0.1"
+WAIT_TIMEOUT_CODE = 3
+DEFAULT_WAIT_SECONDS = 540
 
 
 def _port() -> int:
@@ -81,18 +84,24 @@ def stop_server() -> bool:
     return True
 
 
-def bind_parent(s: Session) -> None:
-    """Record the Claude Code session running this command: side threads fork from it.
-    Claude Code sets CLAUDE_CODE_SESSION_ID in its shell; run elsewhere, the recorded
-    session is left as it was."""
-    s.bind_parent(os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+def bind_agent(s: Session, a: argparse.Namespace) -> None:
+    """Record the agent running this command: side threads run on it and, when it can
+    fork its conversation, fork from it. Claude Code and Codex announce themselves in the
+    environment; any other agent passes `--agent`. Run from a plain shell, the recorded
+    agent is left as it was."""
+    detected, parent = detect()
+    s.bind_agent(
+        a.agent or detected,
+        parent if not a.agent or a.agent == detected else "",
+        a.agent_name or "",
+    )
 
 
 def cmd_new(a: argparse.Namespace) -> None:
     slug = a.slug or slugify(a.title)
     s = Session(slug)
     created = s.create(a.title, a.question or "", a.kind, a.repo or "", a.workflow or "")
-    bind_parent(s)
+    bind_agent(s, a)
     print(json.dumps({"slug": slug, "dir": str(s.dir), "created": created}))
 
 
@@ -100,7 +109,7 @@ def cmd_open(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}; create it with `view-concept new`")
-    bind_parent(s)
+    bind_agent(s, a)
     ensure_server()
     url = f"{_base_url()}/s/{a.slug}"
     if not a.no_browser:
@@ -118,16 +127,13 @@ def cmd_stop(a: argparse.Namespace) -> None:
     print("stopped" if stop_server() else "no server pid on record")
 
 
-def cmd_watch(a: argparse.Namespace) -> None:
-    """Print each new batch of the inbox as it arrives. Meant to run under Monitor.
+def _batches(s: Session, slug: str):
+    """Yield each new batch of the inbox as `(text, cursor after it)`, and None while the
+    inbox is quiet; writes the heartbeat meanwhile.
 
-    The cursor persists across restarts, so re-arming after a Monitor timeout neither
-    loses a batch sent in between nor repeats one already delivered. Starting prints
-    nothing: every line is a Monitor event, and a re-arm is not news. While it runs,
-    the watch writes its heartbeat (watch.json), which tells the page Claude is listening."""
-    s = Session(a.slug)
-    if not s.exists():
-        raise SessionError(f"no session {a.slug!r}")
+    The cursor persists across runs, so a later run neither loses a batch sent in between
+    nor repeats one already delivered. The caller stores the cursor once it has delivered
+    the text."""
     try:
         cursor = int(s.cursor_path.read_text())
     except (FileNotFoundError, ValueError):
@@ -145,16 +151,50 @@ def cmd_watch(a: argparse.Namespace) -> None:
             with s.inbox_path.open("rb") as f:
                 f.seek(cursor)
                 chunk = f.read(size - cursor)
-            end = chunk.rfind(b"\n") + 1  # only complete lines
-            if end:
+            complete = chunk[: chunk.rfind(b"\n") + 1]  # only complete lines
+            if complete:
                 outline, questions = s.read_plan()["outline"], s.read_questions()
-                for line in chunk[:end].decode("utf-8").splitlines():
-                    if line.strip():
-                        batch = json.loads(line)
-                        print(format_batch(a.slug, batch, outline, questions), flush=True)
-                cursor += end
-                s.cursor_path.write_text(str(cursor))
+                for raw in complete.splitlines(keepends=True):
+                    cursor += len(raw)
+                    if raw.strip():
+                        yield format_batch(slug, json.loads(raw), outline, questions), cursor
+                    else:
+                        s.cursor_path.write_text(str(cursor))
+                continue
+        yield None
         time.sleep(0.5)
+
+
+def cmd_watch(a: argparse.Namespace) -> None:
+    """Print each new batch of the inbox as it arrives; for an agent with a background
+    monitor tool (Claude Code's `Monitor`). Starting prints nothing: every line is an event,
+    and a re-arm is not news. While it runs, the watch writes its heartbeat (watch.json),
+    which tells the page the agent is listening."""
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    for delivery in _batches(s, a.slug):
+        if delivery is not None:
+            text, cursor = delivery
+            print(text, flush=True)
+            s.cursor_path.write_text(str(cursor))
+
+
+def cmd_wait(a: argparse.Namespace) -> None:
+    """Block until the next batch, print it and exit; for an agent without a background
+    monitor. Exit code 3 and no output when none arrives within `--timeout` seconds."""
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    deadline = time.monotonic() + a.timeout
+    for delivery in _batches(s, a.slug):
+        if delivery is not None:
+            text, cursor = delivery
+            print(text, flush=True)
+            s.cursor_path.write_text(str(cursor))
+            return
+        if time.monotonic() >= deadline:
+            sys.exit(WAIT_TIMEOUT_CODE)
 
 
 def cmd_status(a: argparse.Namespace) -> None:
@@ -168,11 +208,11 @@ def cmd_question(a: argparse.Namespace) -> None:
         raise SessionError(f"no session {a.slug!r}")
     q = s.add_question(a.text, a.option, a.multi)
     print(q["id"])
-    # The answer only reaches Claude through a watch: say so while none runs.
+    # The answer only reaches the agent through a watch or a wait: say so while none runs.
     if not s.is_listening():
         print(
-            f"view-concept: no watch is running for {a.slug}; the answer will wait in the "
-            "inbox until one starts. Arm the watch now.",
+            f"view-concept: no watch or wait is running for {a.slug}; the answer will wait in the "
+            "inbox until one starts. Start listening now.",
             file=sys.stderr,
         )
 
@@ -199,7 +239,7 @@ def cmd_changes(a: argparse.Namespace) -> None:
 
 def cmd_check(a: argparse.Namespace) -> None:
     """The precedence check: list forward references and early uses, write them to
-    audit.json (replacing the previous ones, keeping Claude's own entries)."""
+    audit.json (replacing the previous ones, keeping the agent's own entries)."""
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
@@ -234,6 +274,16 @@ def cmd_list(a: argparse.Namespace) -> None:
         print(f"{r['slug']:40} {r['updated']}  {r['title']}{pending}")
 
 
+def _add_agent_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--agent",
+        choices=AGENTS,
+        help="the agent running this command, for side threads; Claude Code and Codex are "
+        "detected, any other agent passes it",
+    )
+    parser.add_argument("--agent-name", help="the agent's own name (Jazz: its agent id)")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="view-concept")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -250,28 +300,42 @@ def main() -> None:
         help="the skill driving the session; picks its verdict set "
         "(default: view-concept, or view-branch for a code session)",
     )
+    _add_agent_flags(q)
     q.set_defaults(fn=cmd_new)
 
     q = sub.add_parser("open", help="start the server if needed and open the page")
     q.add_argument("slug")
     q.add_argument("--no-browser", action="store_true")
+    _add_agent_flags(q)
     q.set_defaults(fn=cmd_open)
 
     sub.add_parser("serve", help="run the server in the foreground").set_defaults(fn=cmd_serve)
     sub.add_parser("stop", help="stop the background server").set_defaults(fn=cmd_stop)
 
-    q = sub.add_parser("watch", help="stream comment batches (run under Monitor)")
+    q = sub.add_parser("watch", help="stream comment batches (run under a background monitor)")
     q.add_argument("slug")
     q.set_defaults(fn=cmd_watch)
 
-    q = sub.add_parser("status", help="tell the page what Claude is doing now")
+    q = sub.add_parser(
+        "wait", help="block until the next comment batch, print it and exit (3 on timeout)"
+    )
+    q.add_argument("slug")
+    q.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_WAIT_SECONDS,
+        help="seconds to wait for a batch (default: %(default)s)",
+    )
+    q.set_defaults(fn=cmd_wait)
+
+    q = sub.add_parser("status", help="tell the page what the agent is doing now")
     q.add_argument("slug")
     q.add_argument("phase", choices=PHASES)
     q.add_argument("--section", help="outline id being written, for phase 'writing'")
     q.add_argument("--message", help="short free text shown next to the phase")
     q.set_defaults(fn=cmd_status)
 
-    q = sub.add_parser("question", help="put a Claude question to the user in the page")
+    q = sub.add_parser("question", help="put an agent question to the user in the page")
     q.add_argument("slug")
     q.add_argument("text", help="the question")
     q.add_argument("--option", action="append", default=[], help="one choice (repeatable)")

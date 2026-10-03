@@ -72,7 +72,7 @@ def test_api_threads(client, session):
     assert r.json() == {"forkable": False, "threads": []}
     assert client.post("/api/s/kv-cache/threads", json={"text": " "}).status_code == 400
     session.new_thread("s1", "L'attention")
-    session.bind_parent("main-1")
+    session.bind_agent("claude", "main-1")
     r = client.get("/api/s/kv-cache/threads").json()
     assert r["forkable"] and r["threads"][0]["id"] == "t1"
     assert client.post("/api/s/kv-cache/threads/x1", json={"text": "hi"}).status_code == 400

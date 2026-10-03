@@ -41,7 +41,7 @@ The level answer gates the other two dimensions:
 
 **Goal.** What the explanation is *for*. A conceptual understanding, a debugging session, a design decision, and a formatting task all want the same concept explained with different emphases and different depths. This one is usually still worth asking even at a low level, provided the options are in plain language.
 
-Use `AskUserQuestion`, one or two questions covering whichever dimensions are actually open — if the user already specified their goal, don't ask for it. Write one short line of framing before the tool call, then stop. Your turn is over.
+Ask one or two questions (with your structured-question tool if the harness has one, else as a plain message) covering whichever dimensions are actually open — if the user already specified their goal, don't ask for it. Write one short line of framing before the tool call, then stop. Your turn is over.
 
 **Treat confusion or deferral as data.** If the user answers any scoping question with "I don't understand the options", "I don't know", or "you decide", that is a strong signal for the lowest level and the narrowest scope — not an invitation to choose freely. Do not fill the gap with outside context about who the user is or what they work on; the signal they just gave you outranks it. State the reading you have taken in a clause ("taking this from scratch") so they can correct it.
 
@@ -64,7 +64,7 @@ The table is a contract, and it runs in both directions: every term in it is int
 
 If the table surfaces a term whose natural definition point is *later* than its first use, the outline is wrong. Reorder the outline; do not patch it in prose.
 
-Write both artifacts to a single file — `explain-plan.md` in the session scratchpad directory, holding the outline and the lexicon table — and surface it with `SendUserFile`. Do not also paste the full plan into the message; a one-line summary of what the plan covers is enough, since the document is right there. Then continue to Phase 3 in the same turn — do not stop for approval unless the user has explicitly asked to review the plan before you write, in which case end the turn here and wait.
+Write both artifacts to a single file — `explain-plan.md` in the session scratchpad directory, holding the outline and the lexicon table — and, when the harness can attach or show a file, surface it. Do not also paste the full plan into the message; a one-line summary of what the plan covers is enough, since the document is right there. Then continue to Phase 3 in the same turn — do not stop for approval unless the user has explicitly asked to review the plan before you write, in which case end the turn here and wait.
 
 The file is a working document, not a deliverable. It lives in the scratchpad for the duration of the conversation and is overwritten in place by Phase 4, so there is exactly one plan at any moment and the user is never comparing two versions to work out which is live. Never write it into the user's project.
 
@@ -111,7 +111,7 @@ The instructions below are not a checklist to satisfy in full every time. **Each
 - Name the edge cases and the adjacent-but-different concepts briefly at the end, so the user can tell what the concept is *not*. At a beginner level, keep this to the one or two distinctions that prevent an actual misunderstanding, and drop the precision caveats that only matter to someone already using the concept.
 - Close with a one-sentence compression of the whole thing. If you cannot write that sentence, the explanation has not converged and something above it is still muddled.
 
-**Visuals.** Reach for `mcp__visualize__show_widget` (or a Mermaid block, when that suffices) when the concept has structure that text serialises badly — a sequence with distinguished regions, a containment hierarchy, an intensity gradient. One diagram placed where it is needed, with prose on both sides. Skip it when the content is genuinely propositional; a diagram that re-renders a list adds nothing.
+**Visuals.** Reach for a diagram (a Mermaid block, or a rendered widget when the harness has one) when the concept has structure that text serialises badly — a sequence with distinguished regions, a containment hierarchy, an intensity gradient. One diagram placed where it is needed, with prose on both sides. Skip it when the content is genuinely propositional; a diagram that re-renders a list adds nothing.
 
 **Language.** Match the language the user is writing in, and keep technical terms in whatever language they conventionally appear in that field rather than translating them into something unrecognisable.
 

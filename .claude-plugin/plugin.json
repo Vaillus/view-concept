@@ -1,0 +1,9 @@
+{
+  "name": "view-concept",
+  "description": "Explanations and code reviews in a local web page: comment on any passage and the agent revises it.",
+  "version": "0.1.0",
+  "author": { "name": "Vaillus" },
+  "homepage": "https://github.com/Vaillus/view-concept",
+  "repository": "https://github.com/Vaillus/view-concept",
+  "keywords": ["explanation", "code-review", "refactor", "web-page"]
+}

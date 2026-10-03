@@ -1,23 +1,23 @@
 """Session storage.
 
-A session is one explanation, stored as a directory of plain files. Claude Code writes
+A session is one explanation, stored as a directory of plain files. The agent writes
 the plan and the sections; the page reads them; the page writes review comments, which
-reach the Claude Code session through the inbox.
+reach the agent session through the inbox.
 
     <home>/sessions/<slug>/
-        plan.json       title, question, kind, workflow, outline, lexicon  (written by Claude)
-        sections/<id>.md  the prose of one outline section         (written by Claude)
-        audit.json      vocabulary-audit findings       (written by Claude and `check`)
-        status.json     what Claude is doing now: phase, section    (written by `status`)
+        plan.json       title, question, kind, workflow, outline, lexicon  (written by the agent)
+        sections/<id>.md  the prose of one outline section         (written by the agent)
+        audit.json      vocabulary-audit findings       (written by the agent and `check`)
+        status.json     what the agent is doing now: phase, section    (written by `status`)
         changes.json    model changes accepted in a branch review       (written by `change`)
-        questions.json  Claude questions put to the user, with their answers  (`question`, server)
+        questions.json  agent questions put to the user, with their answers  (`question`, server)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
-        claude.json     the Claude Code session driving this one     (written by `new`, `open`)
+        agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text   (server)
-        threads/<id>.json  a side thread: messages, its own Claude session id  (server)
+        threads/<id>.json  a side thread: messages, its own agent session id  (server)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}. An
 answer to a comment that belongs in the explanation amends a section or adds one at its
@@ -37,15 +37,15 @@ verdict set the page shows: verdicts.yaml holds one list per workflow, and each 
 carries the `tone` the page colours it with. A session created before workflows existed
 has no workflow and gets view-branch's list.
 
-A side thread is a separate headless Claude conversation, forked from the session in
-claude.json, that the user opens from the page to discuss a passage without changing
+A side thread is a separate headless agent conversation, forked from the session in
+agent.json, that the user opens from the page to discuss a passage without changing
 anything (see threads.py). Only a comment batch reaches the main session.
 
-Claude is "listening" while a watch runs for the session: the watch rewrites watch.json
+The agent is "listening" while a watch runs for the session: the watch rewrites watch.json
 every HEARTBEAT_EVERY seconds, and a heartbeat older than LISTENING_FOR seconds (or none)
 means no watch runs. The margin covers the seconds between a Monitor expiry and the re-arm.
 
-A Claude question is a question Claude puts to the user in the page rather than in the
+An agent question is a question the agent puts to the user in the page rather than in the
 terminal: {id: q1…, text, options, multi (several options may be picked), status:
 "open" | "answered", asked, answer?: {choices, text, at}}. Asking one sets the phase
 "awaiting-answer"; the page shows each open one as a card in the review pane. The user's
@@ -55,7 +55,7 @@ answer reaches the session as a batch whose action is "answer", carrying
 seen.json holds the highlight baseline: it maps a section id to the markdown the section
 had when the user sent the last batch (any batch: comments, an approval, an answer), or
 marked that section read later. A section whose file differs from its baseline is
-"updated": the page highlights what changed since then, so after Claude handles a batch
+"updated": the page highlights what changed since then, so after the agent handles a batch
 the highlights show what it changed for that batch. The first text of a section is its
 first baseline, recorded when the page first loads it, so a first write is never an
 update.
@@ -82,7 +82,7 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
 # "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-pr"
 # (set by the view-branch skill once refactoring is written) « Create PR ».
-# "awaiting-answer" (set by `question`) waits on a Claude question shown in the review pane.
+# "awaiting-answer" (set by `question`) waits on an agent question shown in the review pane.
 PHASES = (
     "scoping",
     "planning",
@@ -226,7 +226,12 @@ class Session:
         return self.dir / "watch.json"
 
     @property
-    def claude_path(self) -> Path:
+    def agent_path(self) -> Path:
+        return self.dir / "agent.json"
+
+    @property
+    def legacy_claude_path(self) -> Path:
+        """What agent.json was called before sessions could run on other agents."""
         return self.dir / "claude.json"
 
     @property
@@ -376,7 +381,7 @@ class Session:
     def add_question(
         self, text: str, options: list[str] | None = None, multi: bool = False
     ) -> dict[str, Any]:
-        """Put a Claude question to the user, and wait for the answer: the phase becomes
+        """Put an agent question to the user, and wait for the answer: the phase becomes
         "awaiting-answer"."""
         if not text.strip():
             raise SessionError("empty question")
@@ -395,7 +400,7 @@ class Session:
         return q
 
     def answer_question(self, qid: str, choices: list[str], text: str = "") -> dict[str, Any]:
-        """Record the user's answer to an open Claude question and send it at once, as a
+        """Record the user's answer to an open agent question and send it at once, as a
         batch whose action is "answer". Returns the batch."""
         questions = self.read_questions()
         q = next((q for q in questions if q["id"] == qid), None)
@@ -481,17 +486,30 @@ class Session:
             return ()
         return _stat_signature(sorted(self.threads_dir.glob("t*.json")))
 
-    # ---- the main Claude Code session ----
-    def read_parent(self) -> str:
-        """Id of the Claude Code session that drives this one, "" when unknown."""
-        return str(_read_json(self.claude_path, {}).get("parent", ""))
+    # ---- the main agent session ----
+    def read_agent(self) -> dict[str, str]:
+        """What agent.json records: `agent` (claude, codex, jazz), `parent` (its conversation
+        id, "" when it has none to fork) and `name` (the agent's own name, for Jazz). A
+        session created before agent.json has claude.json instead, which only held `parent`."""
+        if not self.agent_path.exists() and self.legacy_claude_path.exists():
+            parent = str(_read_json(self.legacy_claude_path, {}).get("parent", ""))
+            return {"agent": "claude", "parent": parent} if parent else {}
+        return {key: str(value) for key, value in _read_json(self.agent_path, {}).items()}
 
-    def bind_parent(self, parent: str) -> bool:
-        """Record the driving session. Returns True when it changed (a resumed session
-        runs in a new Claude Code conversation, so threads fork from the new one)."""
-        if not parent or parent == self.read_parent():
+    def read_parent(self) -> str:
+        """Id of the agent conversation that drives this one, "" when unknown."""
+        return self.read_agent().get("parent", "")
+
+    def bind_agent(self, agent: str, parent: str = "", name: str = "") -> bool:
+        """Record the agent driving the session. Returns True when it changed (a resumed
+        session runs in a new agent conversation, so threads fork from the new one)."""
+        if not agent:
             return False
-        _write_json(self.claude_path, {"parent": parent, "since": now_iso()})
+        current = self.read_agent()
+        record = {"agent": agent, "parent": parent, "name": name or current.get("name", "")}
+        if all(current.get(key) == value for key, value in record.items()):
+            return False
+        _write_json(self.agent_path, {**record, "since": now_iso()})
         return True
 
     # ---- side threads ----
@@ -499,13 +517,13 @@ class Session:
         if not self.threads_dir.is_dir():
             return []
         threads = [_read_json(p, None) for p in self.threads_dir.glob("t*.json")]
-        return sorted((t for t in threads if t), key=lambda t: int(t["id"][1:]))
+        return sorted((_upgrade_thread(t) for t in threads if t), key=lambda t: int(t["id"][1:]))
 
     def read_thread(self, tid: str) -> dict[str, Any]:
         t = _read_json(self.thread_path(tid), None)
         if t is None:
             raise SessionError(f"no thread {tid!r}")
-        return t
+        return _upgrade_thread(t)
 
     def write_thread(self, thread: dict[str, Any]) -> None:
         _write_json(self.thread_path(thread["id"]), thread)
@@ -519,7 +537,7 @@ class Session:
             "section": section,
             "quote": quote,
             "prefix": prefix,
-            "claude_id": "",
+            "agent_session": "",
             "forked_from": "",
             "state": "idle",
             "activity": "",
@@ -552,9 +570,9 @@ class Session:
 
         `action` is what the user does with the batch: "approve-plan" means the user
         approved the plan from the page, "approve-model" that they approved the model of a
-        branch review (so the implementation starts), "create-pr" that they asked Claude to
+        branch review (so the implementation starts), "create-pr" that they asked the agent to
         open the branch's PR once the refactoring is written, with the comments as last
-        corrections, "answer" that they answered Claude questions (`answers`, see
+        corrections, "answer" that they answered agent questions (`answers`, see
         `answer_question`)."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
@@ -717,14 +735,22 @@ def _stat_signature(paths: list[Path]) -> tuple:
     return tuple(sig)
 
 
+def _upgrade_thread(thread: dict[str, Any]) -> dict[str, Any]:
+    """A thread written before sessions could run on other agents keeps its conversation id
+    under `claude_id`: read it as `agent_session`, so the thread still resumes."""
+    if "agent_session" not in thread:
+        thread["agent_session"] = str(thread.pop("claude_id", "") or "")
+    return thread
+
+
 def format_batch(
     slug: str,
     batch: dict[str, Any],
     outline: list[dict[str, Any]],
     questions: list[dict[str, Any]] | None = None,
 ) -> str:
-    """How a batch appears in the Claude Code session (one Monitor event). `questions`
-    gives the text of the Claude questions an answer batch answers."""
+    """How a batch appears in the agent session (one event of the comment channel). `questions`
+    gives the text of the agent questions an answer batch answers."""
     number = {s["id"]: i + 1 for i, s in enumerate(outline)}
     n = len(batch["comments"])
     lines = [f"view-concept · {slug} · batch {batch['id']} · {n} comment{'s' * (n != 1)}"]
@@ -740,7 +766,7 @@ def format_batch(
     if batch.get("action") == "answer":
         asked = {q["id"]: q["text"] for q in questions or []}
         ids = ", ".join(a["question"] for a in batch.get("answers", []))
-        lines.append(f"action: answer (the user answered Claude question {ids} from the page)")
+        lines.append(f"action: answer (the user answered agent question {ids} from the page)")
         for a in batch.get("answers", []):
             text = " ".join(asked.get(a["question"], "").split())
             head = f"answer to {a['question']}" + (f" « {text} »" if text else "")

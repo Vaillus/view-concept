@@ -10,7 +10,13 @@ from view_concept.store import Session
 def view_concept(home, *args):
     """Run the command line against a session store in `home`."""
     env = {**os.environ, "VIEW_CONCEPT_HOME": str(home)}
-    env.pop("CLAUDE_CODE_SESSION_ID", None)
+    for name in (
+        "CLAUDE_CODE_SESSION_ID",
+        "CODEX_THREAD_ID",
+        "JAZZ_AGENT_PROCESS",
+        "VIEW_CONCEPT_AGENT",
+    ):
+        env.pop(name, None)
     cmd = [sys.executable, "-m", "view_concept.cli", *args]
     return subprocess.run(cmd, env=env, capture_output=True, text=True)
 
@@ -68,7 +74,7 @@ def test_question_prints_its_id(tmp_path):
     )
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == "q1"
-    assert "no watch is running" in r.stderr
+    assert "no watch or wait is running" in r.stderr
     d = tmp_path / "sessions" / "ask"
     (q,) = json.loads((d / "questions.json").read_text())
     assert q["options"] == ["PR", "merge"] and q["multi"] is False
@@ -102,3 +108,64 @@ def test_check_prints_and_writes_problems(tmp_path):
     ]
     assert [a["issue"] for a in json.loads((d / "audit.json").read_text())] == ["forward", "early"]
     assert view_concept(tmp_path, "check", "nope").returncode != 0
+
+
+def start_wait(home, slug, *flags):
+    env = {**os.environ, "VIEW_CONCEPT_HOME": str(home)}
+    cmd = [sys.executable, "-m", "view_concept.cli", "wait", slug, *flags]
+    return subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+
+def test_wait_times_out_with_code_3_and_no_output(tmp_path):
+    assert view_concept(tmp_path, "new", "Idle").returncode == 0
+    r = view_concept(tmp_path, "wait", "idle", "--timeout", "1")
+    assert r.returncode == 3 and r.stdout == ""
+
+
+def test_wait_delivers_one_batch_per_call(tmp_path):
+    assert view_concept(tmp_path, "new", "Pair").returncode == 0
+    inbox = tmp_path / "sessions" / "pair" / "inbox.jsonl"
+    for number, text in enumerate(["first", "second"], start=1):
+        batch = {
+            "id": f"b{number}",
+            "at": "now",
+            "comments": [{"id": f"c{number}", "section": "s1", "quote": "", "text": text}],
+        }
+        with inbox.open("a") as handle:
+            handle.write(json.dumps(batch) + "\n")
+    first = view_concept(tmp_path, "wait", "pair", "--timeout", "5")
+    assert first.returncode == 0 and "first" in first.stdout and "second" not in first.stdout
+    second = view_concept(tmp_path, "wait", "pair", "--timeout", "5")
+    assert second.returncode == 0 and "second" in second.stdout and "first" not in second.stdout
+    assert view_concept(tmp_path, "wait", "pair", "--timeout", "1").returncode == 3
+
+
+def test_wait_writes_its_heartbeat(tmp_path):
+    assert view_concept(tmp_path, "new", "Beat wait").returncode == 0
+    proc = start_wait(tmp_path, "beat-wait", "--timeout", "3")
+    try:
+        heartbeat = tmp_path / "sessions" / "beat-wait" / "watch.json"
+        for _ in range(50):
+            if heartbeat.exists():
+                break
+            time.sleep(0.1)
+        assert json.loads(heartbeat.read_text())["pid"] == proc.pid
+    finally:
+        proc.terminate()
+        proc.communicate(timeout=5)
+
+
+def test_new_records_the_agent_passed_by_flag(tmp_path):
+    r = view_concept(tmp_path, "new", "Flagged", "--agent", "jazz", "--agent-name", "writer")
+    assert r.returncode == 0, r.stderr
+    record = json.loads((tmp_path / "sessions" / "flagged" / "agent.json").read_text())
+    assert (record["agent"], record["name"], record["parent"]) == ("jazz", "writer", "")
+
+
+def test_new_detects_codex_and_its_thread(tmp_path):
+    env = {**os.environ, "VIEW_CONCEPT_HOME": str(tmp_path), "CODEX_THREAD_ID": "thr-1"}
+    env.pop("CLAUDE_CODE_SESSION_ID", None)
+    cmd = [sys.executable, "-m", "view_concept.cli", "new", "Detected"]
+    assert subprocess.run(cmd, env=env, capture_output=True, text=True).returncode == 0
+    record = json.loads((tmp_path / "sessions" / "detected" / "agent.json").read_text())
+    assert (record["agent"], record["parent"]) == ("codex", "thr-1")

@@ -13,7 +13,7 @@ argument-hint: "[the branch or PR number]"
 
 # /view-branch
 
-Runs **`view-concept`** (`~/.claude/commands/view-concept.md`, which runs
+Runs **`view-concept`** (the `view-concept` skill, which runs
 `explain-concept` in the page) on a branch, and adds what a review needs
 around it: a model of the branch, agents that change the code, and a check of the
 code against the model. Read view-concept and follow it, with what is below.
@@ -21,7 +21,7 @@ code against the model. Read view-concept and follow it, with what is below.
 The tool is self-contained: the model is built for this branch and lives in the
 session; it reaches the repository only through the docs update at closing.
 
-<subject> #$ARGUMENTS </subject>
+The branch to review is whatever the user typed after the command name (the current branch when nothing).
 
 ## The model
 
