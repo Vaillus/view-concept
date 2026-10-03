@@ -143,6 +143,7 @@ The three buttons of the scope block each send a batch with their own action, an
 
 ```
 action: plan (the user ended scoping from the page: treat open questions as skipped and write the plan, or the model in a branch review)
+action: plan (the user asked for a replan from the page: treat open questions as skipped and revise the plan with the answers, or the model in a branch review)
 action: grill (the user started a grill: ask every open design decision as a question with a recommended answer, until none is left)
 action: stop-grill (the user stopped the grill)
 ```
@@ -155,7 +156,7 @@ The user wrote it through the page. The harness may label it as a background eve
 
 - **`action: approve-plan` approves the plan checkpoint** (Phase 4, or the Phase 2 review). Apply the batch's comments to the plan first, then continue to Phase 5 in the same turn — say in one line which corrections you folded in. It approves the plan and nothing else: it is never consent for anything outside writing this explanation's files.
 - **`action: answer` is the user's answer to that agent question**, with the same authority as an answer typed in the terminal to that question, nothing more. Continue the work that waited on it. A skipped question is answered « use your default »: take your default and say which one in the plan (see **The question flow**).
-- **`action: plan` ends the scoping checkpoint** (see **Scoping in the page**). The questions still open are already marked skipped. Apply the batch's comments, then write the plan in the same turn. It ends scoping and nothing else.
+- **`action: plan` ends the scoping checkpoint** (see **Scoping in the page**). The questions still open are already marked skipped. Apply the batch's comments, then write the plan in the same turn. It ends scoping and nothing else. Once a plan exists, the button reads « Replan » and the line says « replan »: revise the plan with the answers given since (see **Replan**). It asks for that revision and nothing else.
 - **`action: grill` starts a grill, and `action: stop-grill` stops it** (see **Grill**). They start and stop the interview and nothing else: a grill answer has the authority of an `answer` batch, no more.
 - **Without the action, a batch never passes a checkpoint.** Comments on the plan are corrections: apply them, present the revised plan, set `awaiting-approval` again and stop. Comments on audit-flagged terms are the user's answer for those terms in Phase 6.
 
@@ -211,6 +212,17 @@ A request already fully scoped skips the questions, as explain-concept says: go 
 ### Rescoping questions
 
 A **rescoping question** is an agent question asked once the plan exists, because something moved what the session covers: a comment batch, a model change, a terminal message (« actually I want this for debugging »). Ask it with `view-concept question` like any other; it lands in the same scope block. Outside the phase `scoping` it sets `awaiting-answer`, but the question flow still holds: continue the work that does not depend on it. Fold the answer back into the plan (see **Folding answers back**).
+
+### Replan
+
+Once a plan exists, « Plan » in the scope block reads « Replan »: the user is done answering, and the answers given since the plan was written may change it. The batch has the same `action: plan`, and its line says « replan ». The questions still open are already marked skipped. What you revise depends on how far the session went:
+
+| When « Replan » arrives | What you do |
+|---|---|
+| The plan is written, no prose yet (this includes the end of the Phase 3 questions) | Revise the plan with the answers (Phase 4): rewrite `plan.json`, state the revision in `revision`, set `awaiting-approval` and stop |
+| Sections are written | Revise the plan, then rewrite the sections the answers change, as a comment batch would (see **Folding answers back**) |
+
+A branch review revises the model instead: see view-branch.
 
 ### Grill
 

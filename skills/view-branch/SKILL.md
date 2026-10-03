@@ -155,7 +155,16 @@ The user can also start a grill (view-concept's **Grill**) during model
 consolidation; its topic is the model. An answer that settles a decision is
 a model change the user took: record it and rewrite what it makes false. A
 skipped decision records no change: the model keeps what it says. Approving
-the model ends a grill still running. When no correction is pending,
+the model ends a grill still running.
+
+A **replan** (« Replan » in the scope block, view-concept's **Replan**)
+revises the model with the answers given since it was written: each answer
+that changes the model is a model change the user took; record it and
+rewrite what it makes false. Before « Approve model », set
+`awaiting-model` again. After it, the model has moved under the code: list
+the new gaps and close them as model matching says, then update Part 2.
+
+When no correction is pending,
 run `view-concept status <slug> awaiting-model`: the page shows « Approve
 model ».
 
