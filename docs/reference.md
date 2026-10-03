@@ -1,6 +1,6 @@
 # Reference
 
-The commands, session files and page controls of view-concept. The [README](../README.md) says what the tool is and how to install it.
+The commands, session files, page controls and publishing of view-concept. The [README](../README.md) says what the tool is and how to install it.
 
 `skills/explain-concept/SKILL.md` is a copy: the original lives in the author's own skills collection and is synced here by hand.
 
@@ -24,6 +24,8 @@ The skill runs these commands. You don't need to run them yourself.
 | `view-concept changes [<slug>] [--repo …]` | prints model changes as Markdown bullets, for a PR description's Decisions section |
 | `view-concept check <slug>` | the precedence check: lists every forward reference and early use and writes them to `audit.json` as issues `forward` and `early`, keeping its other entries |
 | `view-concept export <slug>` | writes `~/Documents/Vault/explanations/<title>.md` |
+| `view-concept publish <slug>` | publishes the explanation as a published page in the pages repo and prints its link; publishing again replaces the page at the same link. Refuses a code session |
+| `view-concept unpublish <slug>` | deletes the published page from the pages repo, pushes the deletion and deletes the publish record |
 | `view-concept list` / `stop` / `serve` | lists sessions / stops the background server / runs the server in the foreground |
 
 A session's **workflow** is the skill that drives it: `view-concept`, `view-branch` or `view-refactor`. `new --workflow` records it in `plan.json`, next to the session's `kind`; it defaults to `view-concept` for an explanation and to `view-branch` for a code session, and `view-branch` and `view-refactor` need a code session. The workflow picks the **verdict set** the page shows: `src/view_concept/verdicts.yaml` holds one list of verdicts per workflow, keyed by its name. A session created before workflows existed has none and gets view-branch's set; an explanation gets none.
@@ -56,6 +58,16 @@ A verdict's **tone** is the colour the page draws it in, one of `ok`, `danger`, 
 
 `view-refactor` reviews existing code that was written quickly. It cuts the files it is pointed at into items and gives each one a **triage verdict**, from view-refactor's own list in `verdicts.yaml`: `move`, `split`, `merge`, `throw`, `separate-pr` (the item belongs to a different topic, outside this refactor) and `keep`. Once the user approves the triage, the verdicts are applied on the current branch, or the items are grouped into batches, each one a PR reviewed with `view-branch`; an item's `batch` field names its batch. The steps are defined in `skills/view-refactor/SKILL.md`.
 
+## Publishing
+
+A **published page** is a read-only copy of a session's explanation that anyone can open from a link: one file, `<slug>/index.html`, with its CSS and JavaScript written in (only KaTeX and Mermaid load from the web, as in the page). It shows the title, the date of the last publish and the written explanation sections in outline order, numbered by their position in the outline, with every lexicon term underlined and its hover text shown on hover; light or dark follows the reader's system. It leaves out the plan, comments, side threads, the review pane, the « updated » highlights and the audit underlines. An image a section takes from this machine is copied into `<slug>/assets/` and its link rewritten. The page is a copy of the session at the moment of the publish: it changes only when you publish again.
+
+The **pages repo** is a public GitHub repository whose GitHub Pages site serves its `main` branch as it is (a `.nojekyll` at its root turns off Jekyll), together with its clone on this machine (`VIEW_CONCEPT_PAGES`). It holds one folder per published session, named by its slug, and nothing else is served: there is no index at the root, so a page is reached only from its link. The link is the site's address followed by `<slug>/`; the address is `VIEW_CONCEPT_PAGES_URL` when set, else derived from the clone's `origin` remote (`https://<owner>.github.io/<repo>/`). Being public, the repository shows anyone its list of folders and, in its history, every page taken down. With no clone, the first publish sets it up with `gh`: it creates the repository (named by `VIEW_CONCEPT_PAGES_REPO`) if it does not exist, clones it, commits `.nojekyll` on `main` when it is empty, and turns on GitHub Pages from `main`.
+
+To **publish** is to build the published page into `<slug>/` of the clone, commit it (`publish <slug>`), push it and write the session's publish record; to **unpublish** is to delete the folder, commit (`unpublish <slug>`), push the deletion and delete the record, after which the link answers 404 once GitHub Pages redeploys. A code session is never published: it cites your repositories, and the pages repo is public. There is no pull before a push: publishing from a second machine fails at the push until you run `git pull` in its clone.
+
+The **publish record**, `published.json` in the session directory, is what a session remembers of its last publish: `url` (the link), `at` (when) and `fingerprint`, a hash of what a published page shows (the title, the published sections and the lexicon). A published session is **out of date** when its fingerprint now differs from the recorded one; comments, threads and highlights do not count, since a published page does not show them. The page reads the record to choose its publish buttons.
+
 ## The page
 
 - **Plan / Explanation / Refactor** (left, one at a time): tabs, or the keys `1`, `2` and `3`. In a branch review the Explanation tab is named « model », since Part 1 is the model of the branch. The Refactor tab shows only in a branch review or a refactor that has reached Part 2. The page switches to the Plan tab when scoping starts or the plan is waiting for approval, and to the tab of the section being written when writing starts. Otherwise the tab stays where you left it.
@@ -68,6 +80,7 @@ A verdict's **tone** is the colour the page draws it in, one of `ok`, `danger`, 
 - **Threads**: « ask » next to « + comment » on a selection, « ask » on a section, or « ask » in the top bar for a general question. The message you type after « ask » is a **user question**, the counterpart of an agent question: you ask, and a side thread, the conversation it opens, answers. A thread is a separate conversation: its first turn forks the terminal session (`claude -p --resume <id> --fork-session`), so it knows the discussion so far, and the terminal session never sees it. It opens in a popover on its passage; a click anywhere else closes it, and a click on the highlighted passage opens it again. A thread with no passage (a whole section, a general question, or a passage since rewritten) gets a chip instead, in the section heading or the top bar. Threads are read-only (Read, Grep, Glob, no MCP). « → batch » adds a draft comment anchored to the thread's passage; its text is optional (without one, the thread's conclusion is the comment), and the batch tells the session which thread it comes from. « Delete » removes a thread no sent comment points to. Each turn re-sends the forked history, so a thread on a long session uses a lot of the subscription's limits.
 - **Listening** (top): « ● Agent listening » while a watch runs for the session, « ○ Agent not listening » when its heartbeat is older than 15 s or missing (between a Monitor expiry and the re-arm, or when the agent stopped watching). The « live » dot next to it only says whether the page is connected to the server. A batch sent while nobody listens waits in the inbox, and the page says so: « The agent isn't listening: write anything in the terminal and it will read this batch ».
 - **Export to vault** (top): writes one Obsidian note. Exporting again overwrites that note, but never a note you wrote yourself with the same title.
+- **Publish** (top, next to « Export to vault »; hidden in a code session): follows the publish record. « Publish » when the session was never published: it publishes, then copies the link and shows it. « Published <date> » when the published page is up to date: a click copies the link. « Republish · changed since <date> » when it is out of date: a click publishes again at the same link. « Unpublish » shows next to it once published, asks to confirm, then takes the page down.
 
 The page redraws when a file changes (server-sent events, checked every 0.4 s). KaTeX and Mermaid load from jsdelivr. When offline, maths shows as TeX source and diagrams as code. `?static` in the URL turns off live updates (for headless rendering).
 
@@ -82,6 +95,9 @@ The page redraws when a file changes (server-sent events, checked every 0.4 s). 
 | `VIEW_CONCEPT_AGENT_COMMAND` | unset; a program that reads a prompt on stdin and prints its answer, run for every side-thread turn on any agent |
 | `VIEW_CONCEPT_CLAUDE` / `VIEW_CONCEPT_CODEX` / `VIEW_CONCEPT_JAZZ` | `claude` / `codex` / `jazz` (the executables side threads run) |
 | `VIEW_CONCEPT_JAZZ_AGENT` | the `--agent-name` recorded in `agent.json` (the Jazz agent side threads run as) |
+| `VIEW_CONCEPT_PAGES` | `~/.view-concept/pages` (the clone of the pages repo) |
+| `VIEW_CONCEPT_PAGES_URL` | unset; the address of the pages repo's site, else derived from the clone's `origin` remote |
+| `VIEW_CONCEPT_PAGES_REPO` | `explanations` (the name of the GitHub repository the first publish creates or clones) |
 
 ## Agents
 
