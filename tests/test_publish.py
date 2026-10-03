@@ -3,6 +3,7 @@ import re
 import subprocess
 
 import pytest
+from test_cli import view_concept
 
 from view_concept import publish as pub
 from view_concept.store import Session, SessionError
@@ -199,3 +200,19 @@ def test_setup_creates_the_pages_repo(session, tmp_path, monkeypatch):
     log, files = pushed(bare)
     assert log == ["publish kv-cache", "serve files as they are"]
     assert ".nojekyll" in files and "kv-cache/index.html" in files
+
+
+def test_cli_publish_and_unpublish(tmp_path, pages):
+    home = tmp_path / "home"
+    s = Session("kv", home / "sessions")
+    s.create("KV")
+    s.plan_path.write_text(json.dumps({**s.read_plan(), "outline": [{"id": "s1", "title": "A"}]}))
+    (s.sections_dir / "s1.md").write_text("Text.")
+    r = view_concept(home, "publish", "kv")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "https://vaillus.github.io/explanations/kv/"
+    r = view_concept(home, "unpublish", "kv")
+    assert r.returncode == 0, r.stderr
+    assert pushed(pages)[0][0] == "unpublish kv"
+    r = view_concept(home, "unpublish", "kv")
+    assert r.returncode == 1 and "not published" in r.stderr
