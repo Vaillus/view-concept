@@ -83,6 +83,9 @@ def test_question_prints_its_id(tmp_path):
     r = view_concept(tmp_path, "question", "ask", "Which files?", "--multi")
     assert r.stdout.strip() == "q2"
     assert r.stderr == ""
+    r = view_concept(tmp_path, "question", "ask", "Squash?", "--recommended", "yes")
+    assert r.stdout.strip() == "q3"
+    assert json.loads((d / "questions.json").read_text())[2]["recommended"] == "yes"
     assert view_concept(tmp_path, "question", "nope", "Hm?").returncode != 0
     assert not (tmp_path / "sessions" / "nope").exists()
 

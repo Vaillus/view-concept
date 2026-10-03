@@ -193,6 +193,16 @@ def answer_question(slug: str, qid: str, body: AnswerIn) -> dict[str, Any]:
         raise HTTPException(400, str(e)) from e
 
 
+@app.post("/api/s/{slug}/questions/{qid}/skip")
+def skip_question(slug: str, qid: str) -> dict[str, Any]:
+    """Skip an agent question: sent to the session at once, as an answer batch."""
+    s = get_session(slug)
+    try:
+        return s.skip_question(qid)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 class ThreadIn(BaseModel):
     section: str = ""
     quote: str = ""

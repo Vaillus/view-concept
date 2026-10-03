@@ -46,11 +46,14 @@ every HEARTBEAT_EVERY seconds, and a heartbeat older than LISTENING_FOR seconds 
 means no watch runs. The margin covers the seconds between a Monitor expiry and the re-arm.
 
 An agent question is a question the agent puts to the user in the page rather than in the
-terminal: {id: q1…, text, options, multi (several options may be picked), status:
-"open" | "answered", asked, answer?: {choices, text, at}}. Asking one sets the phase
-"awaiting-answer"; the page shows each open one as a card in the review pane. The user's
-answer reaches the session as a batch whose action is "answer", carrying
-`answers: [{question, choices, text}]`.
+terminal: {id: q1…, text, options, multi (several options may be picked), recommended?
+(the answer the agent suggests: an option, which the page preselects, or a text it
+pre-fills), status: "open" | "answered" | "skipped", asked, answer?: {choices, text, at},
+skipped? (when)}. Asking one sets the phase "awaiting-answer"; the page shows each open
+one as a card in the review pane. The user's answer reaches the session as a batch whose
+action is "answer", carrying `answers: [{question, choices, text}]`. A skipped question
+(the user leaves it to the agent's default) is sent the same way, its entry
+`{question, skipped: true}`.
 
 seen.json holds the highlight baseline: it maps a section id to the markdown the section
 had when the user sent the last batch (any batch: comments, an approval, an answer), or
@@ -379,10 +382,14 @@ class Session:
         return _read_json(self.questions_path, [])
 
     def add_question(
-        self, text: str, options: list[str] | None = None, multi: bool = False
+        self,
+        text: str,
+        options: list[str] | None = None,
+        multi: bool = False,
+        recommended: str = "",
     ) -> dict[str, Any]:
         """Put an agent question to the user, and wait for the answer: the phase becomes
-        "awaiting-answer"."""
+        "awaiting-answer". `recommended` is the answer the agent suggests."""
         if not text.strip():
             raise SessionError("empty question")
         questions = self.read_questions()
@@ -394,20 +401,27 @@ class Session:
             "status": "open",
             "asked": now_iso(),
         }
+        if recommended.strip():
+            q["recommended"] = recommended.strip()
         questions.append(q)
         _write_json(self.questions_path, questions)
         self.write_status("awaiting-answer")
+        return q
+
+    def _open_question(self, questions: list[dict[str, Any]], qid: str) -> dict[str, Any]:
+        """The open agent question `qid` of `questions`."""
+        q = next((q for q in questions if q["id"] == qid), None)
+        if q is None:
+            raise SessionError(f"no question {qid!r}")
+        if q["status"] != "open":
+            raise SessionError(f"{qid} is already {q['status']}")
         return q
 
     def answer_question(self, qid: str, choices: list[str], text: str = "") -> dict[str, Any]:
         """Record the user's answer to an open agent question and send it at once, as a
         batch whose action is "answer". Returns the batch."""
         questions = self.read_questions()
-        q = next((q for q in questions if q["id"] == qid), None)
-        if q is None:
-            raise SessionError(f"no question {qid!r}")
-        if q["status"] != "open":
-            raise SessionError(f"{qid} is already answered")
+        q = self._open_question(questions, qid)
         choices = [c for c in choices if c]
         unknown = [c for c in choices if c not in q["options"]]
         if unknown:
@@ -422,6 +436,18 @@ class Session:
         )
         q["status"] = "answered"
         q["answer"] = {"choices": choices, "text": text, "at": batch["sent"]}
+        _write_json(self.questions_path, questions)
+        return batch
+
+    def skip_question(self, qid: str) -> dict[str, Any]:
+        """Skip an open agent question: the user leaves it to the agent's default. Sent at
+        once, as an answer batch whose entry is `{question, skipped: true}`. Returns the
+        batch."""
+        questions = self.read_questions()
+        q = self._open_question(questions, qid)
+        batch = self.add_batch([], action="answer", answers=[{"question": qid, "skipped": True}])
+        q["status"] = "skipped"
+        q["skipped"] = batch["sent"]
         _write_json(self.questions_path, questions)
         return batch
 
@@ -572,8 +598,8 @@ class Session:
         approved the plan from the page, "approve-model" that they approved the model of a
         branch review (so the implementation starts), "create-pr" that they asked the agent to
         open the branch's PR once the refactoring is written, with the comments as last
-        corrections, "answer" that they answered agent questions (`answers`, see
-        `answer_question`)."""
+        corrections, "answer" that they answered or skipped agent questions (`answers`, see
+        `answer_question` and `skip_question`)."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         if (action == "answer") != bool(answers):
@@ -765,13 +791,19 @@ def format_batch(
         lines.append("action: create-pr (the user asked to open the PR from the page)")
     if batch.get("action") == "answer":
         asked = {q["id"]: q["text"] for q in questions or []}
-        ids = ", ".join(a["question"] for a in batch.get("answers", []))
-        lines.append(f"action: answer (the user answered agent question {ids} from the page)")
-        for a in batch.get("answers", []):
+        answers = batch.get("answers", [])
+        ids = ", ".join(a["question"] for a in answers)
+        verb = "skipped" if all(a.get("skipped") for a in answers) else "answered"
+        lines.append(f"action: answer (the user {verb} agent question {ids} from the page)")
+        for a in answers:
             text = " ".join(asked.get(a["question"], "").split())
-            head = f"answer to {a['question']}" + (f" « {text} »" if text else "")
-            answer = " — ".join(p for p in [", ".join(a["choices"]), a["text"]] if p)
-            lines.append(f"{head}: {answer}")
+            quoted = f" « {text} »" if text else ""
+            if a.get("skipped"):
+                lines.append(f"{a['question']} skipped{quoted} (no answer: use your default)")
+                continue
+            parts = [", ".join(a.get("choices", [])), a.get("text", "")]
+            answer = " — ".join(p for p in parts if p)
+            lines.append(f"answer to {a['question']}{quoted}: {answer}")
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
     for c in batch["comments"]:

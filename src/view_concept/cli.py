@@ -206,7 +206,7 @@ def cmd_question(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
-    q = s.add_question(a.text, a.option, a.multi)
+    q = s.add_question(a.text, a.option, a.multi, a.recommended or "")
     print(q["id"])
     # The answer only reaches the agent through a watch or a wait: say so while none runs.
     if not s.is_listening():
@@ -340,6 +340,7 @@ def main() -> None:
     q.add_argument("text", help="the question")
     q.add_argument("--option", action="append", default=[], help="one choice (repeatable)")
     q.add_argument("--multi", action="store_true", help="the user may pick several choices")
+    q.add_argument("--recommended", help="the answer you suggest: an option, or a text")
     q.set_defaults(fn=cmd_question)
 
     q = sub.add_parser("change", help="record a model change accepted in a branch review")
