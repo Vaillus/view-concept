@@ -17,7 +17,7 @@ The page is built around **explain-concept**, a skill that holds an explanation 
 
 ## What a session looks like
 
-You type `/view-concept explain KKT conditions`. The agent asks one or two questions in the terminal about your level and goal, then opens the page.
+You type `/view-concept explain KKT conditions`. The agent opens the page and asks its questions about your level and goal there, at the top of the Plan tab; you answer those you want, then click « Plan ».
 
 1. **Plan.** The agent writes the outline and the lexicon in the Plan tab. You correct it or click « Approve plan ».
 2. **Prose.** The agent writes the sections one by one; the page re-renders as each one lands.
