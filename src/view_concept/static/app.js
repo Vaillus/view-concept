@@ -4,11 +4,12 @@
    model changes, lexicon), the explanation (one block per explanation section) and, in a
    branch review that has reached the refactoring step, the refactor tab (the refactor
    sections, Part 2); the review pane (a conversation: sent batches and answered agent
-   questions, a line counting the open ones, then the draft comments) stays on the right. The page never edits the explanation: the agent
-   writes the files, the server streams "changed", the page re-fetches. The page writes
-   batches of comments, and side threads: separate read-only agent conversations run by
-   the server, streamed through "threads" events. A thread shows in a popover on its
-   passage (see "side threads" below).
+   questions, a line counting the open ones, then the draft comments) stays on the
+   right. The page never edits the explanation: the agent writes the files, the server
+   streams "changed", the page re-fetches. The page writes batches of comments, and side
+   threads: separate read-only agent conversations run by the server, streamed through
+   "threads" events. A thread shows in a popover on its passage (see "side threads"
+   below).
 
    A comment is anchored by (section id, quoted text, a few characters of prefix). The
    quote is searched again after every re-render, so an anchor survives edits elsewhere
@@ -136,9 +137,10 @@ function render() {
    time. The refactor tab exists only once a section is in Part 2. The tab follows the
    session at the moments that matter — scoping starting (its questions are in the scope
    block, on the Plan tab), the plan waiting for approval, the writing starting (in the
-   tab of the section being written) — and otherwise stays where the user put it. A model waiting for approval does not move it, nor does a PR waiting to
-   be created: « Approve model » sits at the end of the explanation, where the model is
-   read, and « Create PR » at the end of the refactor tab. */
+   tab of the section being written) — and otherwise stays where the user put it. A
+   model waiting for approval does not move it, nor does a PR waiting to be created:
+   « Approve model » sits at the end of the explanation, where the model is read, and
+   « Create PR » at the end of the refactor tab. */
 
 function setTab(name) {
   if (name === "refactor" && !hasRefactorTab()) name = "doc";
@@ -238,7 +240,7 @@ function renderStatus() {
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Plan » ends it.
     scoping: asking ? "scoping · questions waiting for you"
-           : planPending() ? `scoping ended · the agent is writing the ${state.workflow === "view-branch" ? "model" : "plan"}`
+           : planPending() ? `scoping ended · the agent is writing the ${scopingProduct()}`
            : "scoping the question",
     planning: "drafting the plan",
     ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
@@ -1054,6 +1056,12 @@ function planPending() {
   return !openQuestions().length && state.comments.batches.some((b) => b.action === "plan" && b.sent >= since);
 }
 
+// What the agent writes once scoping ends: the model in a branch review or a refactor,
+// the plan otherwise.
+function scopingProduct() {
+  return ["view-branch", "view-refactor"].includes(state.workflow) ? "model" : "plan";
+}
+
 function renderScope() {
   const questions = state.questions || [];
   const open = openQuestions();
@@ -1079,7 +1087,7 @@ function renderScope() {
   grill.title = state.grilling ? "Stop the interview" : "The agent asks about every open decision, each with its suggestion, until none is left";
   const plan = $("#scope-plan");
   plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending();
-  plan.title = "Enough questions: the open ones count as skipped, and the agent writes the plan";
+  plan.title = `Enough questions: the open ones count as skipped, and the agent writes the ${scopingProduct()}`;
 }
 
 $("#grill").addEventListener("click", (e) => send(state.grilling ? "stop-grill" : "grill", e.currentTarget));
