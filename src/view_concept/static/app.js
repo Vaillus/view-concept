@@ -1091,13 +1091,16 @@ function renderReview() {
   if (reviewAtEnd) pane.scrollTop = pane.scrollHeight;
 }
 
-/* An answered agent question in the history: its text, the answer, the agent's reply. */
+/* An answered agent question in the history: its text, the answer (« skipped » for a
+   skipped one), the agent's reply. */
+const answerText = (a) => (a.skipped ? "skipped" : [(a.choices || []).join(", "), a.text].filter(Boolean).join(" — "));
+
 function answeredQuestion(a, b) {
   const q = (state.questions || []).find((x) => x.id === a.question) || { id: a.question, text: "" };
   return el("div", { class: "question answered" },
     el("div", { class: "q-head" }, "Question from the agent ", el("span", { class: "dim", text: q.id })),
     q.text ? el("div", { class: "q-text", text: q.text }) : null,
-    el("div", { class: "q-reply", text: [a.choices.join(", "), a.text].filter(Boolean).join(" — ") }),
+    el("div", { class: `q-reply ${a.skipped ? "dim" : ""}`, text: answerText(a) }),
     b.reply ? el("div", { class: "c-status" }, el("span", { class: "badge ok", text: "✓ resolved" }),
                  el("span", { class: "c-reply", text: ` ${b.reply}` })) : null);
 }
