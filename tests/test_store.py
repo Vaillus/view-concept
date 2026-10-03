@@ -116,6 +116,38 @@ def test_create_pr_batch(session):
     assert "action: create-pr (the user asked to open the PR from the page)" in out
 
 
+def test_plan_batch_skips_the_open_questions(session):
+    session.write_status("scoping")
+    session.add_question("Level?")
+    session.add_question("Goal?")
+    session.answer_question("q1", [], "heard the words")
+    b = session.add_batch([{"text": "keep it short"}], action="plan")
+    q1, q2 = session.read_questions()
+    assert q1["status"] == "answered" and "skipped" not in q1
+    assert q2["status"] == "skipped" and q2["skipped"] == b["sent"]
+    out = format_batch("kv-cache", b, session.read_plan()["outline"])
+    assert (
+        "action: plan (the user ended scoping from the page: treat open questions as "
+        "skipped and write the plan, or the model in a branch review)"
+    ) in out
+
+
+def test_grill_batches(session):
+    assert session.is_grilling() is False
+    outline = session.read_plan()["outline"]
+    b = session.add_batch([], action="grill")
+    assert session.is_grilling() is True
+    assert (
+        "action: grill (the user started a grill: ask every open design decision as a "
+        "question with a recommended answer, until none is left)"
+    ) in format_batch("kv-cache", b, outline)
+    session.add_batch([{"text": "unrelated"}])
+    assert session.is_grilling() is True
+    b = session.add_batch([], action="stop-grill")
+    assert session.is_grilling() is False
+    assert "action: stop-grill (the user stopped the grill)" in format_batch("kv-cache", b, outline)
+
+
 def test_code_session_needs_repo(tmp_path):
     with pytest.raises(SessionError):
         Session("x", tmp_path).create("X", kind="code")

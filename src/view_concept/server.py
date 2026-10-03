@@ -80,6 +80,7 @@ def state(slug: str) -> dict[str, Any]:
         status = s.read_status()
         changes = s.read_changes()
         questions = s.read_questions()
+        grilling = s.is_grilling()
         seen = s.read_seen(sections)
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
@@ -98,6 +99,7 @@ def state(slug: str) -> dict[str, Any]:
         "comments": comments,
         "changes": changes,
         "questions": questions,
+        "grilling": grilling,
         "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),
     }
 

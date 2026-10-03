@@ -63,6 +63,20 @@ def test_api_skips_a_claude_question(client, session):
     assert client.post("/api/s/kv-cache/questions/q9/skip").status_code == 400
 
 
+def test_api_says_whether_a_grill_runs(client, session):
+    assert client.get("/api/s/kv-cache").json()["grilling"] is False
+    assert client.post("/api/s/kv-cache/batch", json={"action": "grill"}).status_code == 200
+    assert client.get("/api/s/kv-cache").json()["grilling"] is True
+    client.post("/api/s/kv-cache/batch", json={"action": "stop-grill"})
+    assert client.get("/api/s/kv-cache").json()["grilling"] is False
+
+
+def test_api_plan_skips_the_open_questions(client, session):
+    session.add_question("Level?")
+    assert client.post("/api/s/kv-cache/batch", json={"action": "plan"}).status_code == 200
+    assert client.get("/api/s/kv-cache").json()["questions"][0]["status"] == "skipped"
+
+
 def test_api_sends_the_session_workflow(client, session):
     assert client.get("/api/s/kv-cache").json()["workflow"] == "view-concept"
 
