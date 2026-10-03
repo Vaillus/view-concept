@@ -124,6 +124,7 @@ function render() {
   document.title = `${openQuestions().length ? "● " : ""}${plan.title} · view-concept`;
   $("#title").textContent = plan.title;
   renderListening();
+  renderPublish();
   renderStatus();
   followSession();
   renderPlan();
@@ -1497,12 +1498,92 @@ function threadToBatch(tid) {
   renderPopover();
 }
 
-/* ---------------- export, tooltips ---------------- */
+/* ---------------- export, publish, tooltips ---------------- */
 
 $("#export").addEventListener("click", async () => {
   const r = await fetch(`/api/s/${SLUG}/export`, { method: "POST" });
   const body = await r.json();
   toast(r.ok ? `Exported to explanations/${body.name}` : `Export failed: ${body.detail}`, 5000);
+});
+
+/* The publish buttons follow the publish record (state.published: {url, at, out_of_date}
+   or null): « Publish » when never published; « Published <date> » (copies the link) and
+   « Unpublish » when published; « Republish · changed since <date> » and « Unpublish »
+   when out of date. A code session is never published, so they are hidden in one. */
+let publishing = false;  // a publish or unpublish is running
+
+function localDate(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function renderPublish() {
+  const pub = $("#publish"), unpub = $("#unpublish");
+  const code = state.plan.kind === "code";
+  const rec = state.published;
+  pub.hidden = code;
+  unpub.hidden = code || !rec;
+  if (publishing) return;  // keep « Publishing… » until the request ends
+  pub.disabled = unpub.disabled = false;
+  if (!rec) {
+    pub.textContent = "Publish";
+    pub.title = "Publish the explanation as a page on the web and copy its link";
+  } else if (rec.out_of_date) {
+    pub.textContent = `Republish · changed since ${localDate(rec.at)}`;
+    pub.title = `Publish again at ${rec.url}`;
+  } else {
+    pub.textContent = `Published ${localDate(rec.at)}`;
+    pub.title = `Copy the link: ${rec.url}`;
+  }
+}
+
+async function copyLink(url) {
+  try { await navigator.clipboard.writeText(url); return true; } catch (e) { return false; }
+}
+
+$("#publish").addEventListener("click", async () => {
+  const rec = state.published;
+  if (rec && !rec.out_of_date) {
+    toast(await copyLink(rec.url) ? `Link copied: ${rec.url}` : rec.url, 5000);
+    return;
+  }
+  const pub = $("#publish"), unpub = $("#unpublish");
+  publishing = true;
+  pub.disabled = unpub.disabled = true;
+  pub.textContent = "Publishing…";
+  try {
+    const r = await fetch(`/api/s/${SLUG}/publish`, { method: "POST" });
+    const body = await r.json();
+    if (r.ok) {
+      const copied = await copyLink(body.url);
+      toast(`Published: ${body.url}${copied ? " — link copied" : ""}`, 6000);
+    } else toast(`Publish failed: ${body.detail}`, 8000);
+  } catch (e) {
+    toast(`Publish failed: ${e.message}`, 8000);
+  } finally {
+    publishing = false;
+    await load();  // the new record, without waiting for the change stream
+  }
+});
+
+$("#unpublish").addEventListener("click", async () => {
+  const rec = state.published;
+  if (!rec || !confirm(`Take ${rec.url} off the web? The repo's history keeps the old version.`)) return;
+  const pub = $("#publish"), unpub = $("#unpublish");
+  publishing = true;
+  pub.disabled = unpub.disabled = true;
+  try {
+    const r = await fetch(`/api/s/${SLUG}/unpublish`, { method: "POST" });
+    const body = await r.json();
+    toast(r.ok ? `Unpublished: ${rec.url}` : `Unpublish failed: ${body.detail}`, r.ok ? 5000 : 8000);
+  } catch (e) {
+    toast(`Unpublish failed: ${e.message}`, 8000);
+  } finally {
+    publishing = false;
+    await load();  // the new record, without waiting for the change stream
+  }
 });
 
 document.addEventListener("mouseover", (e) => {
