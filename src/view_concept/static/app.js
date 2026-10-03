@@ -1,10 +1,10 @@
 /* view-concept — the session page.
 
-   Tabs share the main space: the plan (outline, model changes, lexicon), the
-   explanation (one block per explanation section) and, in a branch review that has reached
-   the refactoring step, the refactor tab (the refactor sections, Part 2); the review pane (a
-   conversation: sent batches and answered agent questions, the open agent questions, then
-   the draft comments) stays on the right. The page never edits the explanation: the agent
+   Tabs share the main space: the plan (the scope block with the agent questions, outline,
+   model changes, lexicon), the explanation (one block per explanation section) and, in a
+   branch review that has reached the refactoring step, the refactor tab (the refactor
+   sections, Part 2); the review pane (a conversation: sent batches and answered agent
+   questions, a line counting the open ones, then the draft comments) stays on the right. The page never edits the explanation: the agent
    writes the files, the server streams "changed", the page re-fetches. The page writes
    batches of comments, and side threads: separate read-only agent conversations run by
    the server, streamed through "threads" events. A thread shows in a popover on its
@@ -196,8 +196,8 @@ const sentToast = (msg) => toast(state.listening ? msg : NOT_LISTENING, state.li
 
 const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
 
-/* "awaiting-answer" waits on the open agent questions, answered from their cards in the
-   review pane (see "agent questions" below), so it has no button here. */
+/* "awaiting-answer" waits on the open agent questions, answered from their boxes in the
+   scope block (see "agent questions" below), so it has no button here. */
 const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "answered · the agent is reading it" };
 
 /* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
@@ -265,6 +265,7 @@ for (const b of [$("#approve"), docButton, prButton]) b.addEventListener("click"
 
 function renderPlan() {
   const { plan } = state;
+  renderScope();
   const rev = $("#revision");
   if (plan.revision) {
     rev.hidden = false;
@@ -979,64 +980,125 @@ $("#composer textarea").addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeComposer();
 });
 
-/* ---------------- agent questions ----------------
+/* ---------------- agent questions: the scope block ----------------
    An agent question is one the agent puts to the user in the page (`view-concept question`,
    questions.json): its text, optional options (one choice, or several when `multi`),
-   and always a free-text field. Each open one is a card headed « Question from the agent »
-   in the review pane, in the order asked. A card is built once and kept while its
-   question is open, so a re-render never takes the user's choice or text. « Answer »
-   sends the answer at once, as a batch whose action is "answer": The agent is blocked on
-   it, so it is never held as a draft. */
+   always a free-text field, and maybe a recommended answer (`recommended`). Every agent
+   question lives in the scope block, at the top of the Plan tab: one box per open
+   question, oldest first, then the answered and skipped ones folded under « answered ».
+   The review pane only counts the open ones (see renderWaiting).
+   A box is built once and kept while its question is open, so a re-render never takes
+   the user's choice or text. A recommended answer that is one of the options is
+   preselected; any other is pre-filled in the text field; either is marked « suggested ».
+   A box has three exits: « Validate » sends the answer at once (a batch whose action is
+   "answer"), « Skip » sends « no answer, use your default » the same way (its entry
+   `{question, skipped: true}`), or the box stays open: no question blocks the agent.
+   The header holds « Grill me » (a batch whose action is "grill"; « Stop grill » sends
+   "stop-grill" while a grill runs) and, while scoping runs or a question is open,
+   « Plan » (action "plan": scoping ends, the open questions count as skipped). These
+   three take the draft comments with them, like the approvals. */
 
 const openQuestions = () => (state ? state.questions || [] : []).filter((q) => q.status === "open");
-const questionCards = new Map(); // question id -> its card
+const questionCards = new Map(); // question id -> its box
 
 function questionCard(q) {
   if (questionCards.has(q.id)) return questionCards.get(q.id);
   const type = q.multi ? "checkbox" : "radio";
+  const rec = q.recommended || "";
+  const recOption = q.options.includes(rec);
+  const suggested = () => el("span", { class: "badge accent", text: "suggested" });
   const options = el("div", { class: "q-options" }, ...q.options.map((o) =>
-    el("label", {}, el("input", { type, name: `answer-${q.id}`, value: o }), el("span", { text: o }))));
+    el("label", {}, el("input", { type, name: `answer-${q.id}`, value: o, checked: recOption && o === rec }),
+       el("span", { text: o }), recOption && o === rec ? suggested() : null)));
   const ta = el("textarea", { class: "c-text", rows: "2",
                               placeholder: q.options.length ? "Something to add, or another answer (optional)" : "Your answer" });
-  const button = el("button", { class: "btn primary q-answer", text: "Answer", disabled: true });
+  if (rec && !recOption) ta.value = rec;
+  const skip = el("button", { class: "btn", text: "Skip", title: "No answer: the agent uses its default" });
+  const button = el("button", { class: "btn primary q-answer", text: "Validate" });
   const choices = () => [...options.querySelectorAll("input:checked")].map((i) => i.value);
   const update = () => { button.disabled = !choices().length && !ta.value.trim(); };
+  update();
   options.addEventListener("change", update);
   ta.addEventListener("input", update);
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); button.click(); }
   });
-  button.addEventListener("click", async () => {
-    if (button.disabled) return;
-    button.disabled = true;
+  const exit = async (path, body, done) => {
+    button.disabled = skip.disabled = true;
     try {
-      await postJSON(`/api/s/${SLUG}/questions/${q.id}/answer`, { choices: choices(), text: ta.value });
-    } catch (e) { toast(`Answer failed: ${e.message}`); update(); return; }
+      await postJSON(`/api/s/${SLUG}/questions/${q.id}/${path}`, body);
+    } catch (e) { toast(`${done} failed: ${e.message}`); skip.disabled = false; update(); return; }
     await load();
-    sentToast(`Answered ${q.id}`);
-  });
+    sentToast(`${done} ${q.id}`);
+  };
+  button.addEventListener("click", () => { if (!button.disabled) exit("answer", { choices: choices(), text: ta.value }, "Answered"); });
+  skip.addEventListener("click", () => { if (!skip.disabled) exit("skip", {}, "Skipped"); });
   const card = el("div", { class: "question", "data-question": q.id },
-    el("div", { class: "q-head" }, "Question from the agent ", el("span", { class: "dim", text: q.id })),
-    el("div", { class: "q-text", text: q.text }),
+    el("div", { class: "q-text" }, el("span", { class: "num", text: q.id }), " ", q.text),
     q.options.length ? options : null,
-    ta, button);
+    rec && !recOption ? el("div", { class: "q-suggested" }, suggested()) : null,
+    ta,
+    el("div", { class: "q-actions" }, skip, button));
   questionCards.set(q.id, card);
   return card;
 }
 
-function renderQuestions() {
+// A « plan » batch sent since the status last moved, with no question asked after it:
+// scoping is over, the agent is writing the plan (or the model).
+function planPending() {
+  const since = state.status.since || "";
+  return !openQuestions().length && state.comments.batches.some((b) => b.action === "plan" && b.sent >= since);
+}
+
+function renderScope() {
+  const questions = state.questions || [];
   const open = openQuestions();
   for (const id of questionCards.keys()) if (!open.some((q) => q.id === id)) questionCards.delete(id);
-  const box = $("#questions");
+  const box = $("#scope-questions");
   const cardsNow = open.map(questionCard);
-  // Re-attaching a card would blur its text field: only when the list changed.
+  // Re-attaching a box would blur its text field: only when the list changed.
   if (cardsNow.length !== box.children.length || cardsNow.some((c, i) => box.children[i] !== c)) box.replaceChildren(...cardsNow);
+
+  const closed = questions.filter((q) => q.status !== "open");
+  const folded = $("#scope-answered");
+  folded.hidden = !closed.length;
+  $("summary", folded).textContent = `answered (${closed.length})`;
+  $("ol", folded).replaceChildren(...closed.map((q) => el("li", {},
+    el("div", { class: "q-text" }, el("span", { class: "num", text: q.id }), " ", q.text),
+    el("div", { class: `q-reply ${q.status === "skipped" ? "dim" : ""}`,
+                text: answerText(q.status === "skipped" ? { skipped: true } : q.answer || {}) }))));
+  $("#scope-empty").hidden = questions.length > 0 || state.status.phase === "scoping";
+
+  const grill = $("#grill");
+  grill.textContent = state.grilling ? "Stop grill" : "Grill me";
+  grill.title = state.grilling ? "Stop the interview" : "The agent asks about every open decision, each with its suggestion, until none is left";
+  const plan = $("#scope-plan");
+  plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending();
+  plan.title = "Enough questions: the open ones count as skipped, and the agent writes the plan";
 }
+
+$("#grill").addEventListener("click", (e) => send(state.grilling ? "stop-grill" : "grill", e.currentTarget));
+$("#scope-plan").addEventListener("click", (e) => send("plan", e.currentTarget));
+
+/* The review pane keeps one line for the open agent questions: it opens the Plan tab
+   at the scope block. */
+function renderWaiting() {
+  const n = openQuestions().length;
+  const line = $("#questions-waiting");
+  line.hidden = !n;
+  line.textContent = `${n} question${n > 1 ? "s" : ""} waiting →`;
+}
+
+$("#questions-waiting").addEventListener("click", () => {
+  setTab("plan");
+  $("#scope").scrollIntoView({ block: "start", behavior: "smooth" });
+});
 
 /* ---------------- review pane ----------------
    The pane reads like a conversation, oldest at the top: the sent batches in time order
-   (a batch answering an agent question shows the question, then the answer), then the
-   open agent questions, then the drafts, the note and « Send » at the bottom. It stays
+   (a batch answering an agent question shows the question, then the answer or « skipped »),
+   then a line counting the open agent questions (they live in the scope block), then the
+   drafts, the note and « Send » at the bottom. It stays
    scrolled to the bottom as content arrives, unless the user scrolled up. */
 
 let reviewAtEnd = true;
@@ -1059,7 +1121,7 @@ function quoteLine(c) {
 }
 
 function renderReview() {
-  renderQuestions();
+  renderWaiting();
   $("#draft-count").textContent = drafts.length ? `· ${drafts.length} draft${drafts.length > 1 ? "s" : ""}` : "";
   $("#drafts").replaceChildren(...drafts.map((d) => {
     const ta = el("textarea", { class: "c-text", rows: "2",
@@ -1121,9 +1183,12 @@ $("#note").addEventListener("keydown", (e) => {
 });
 $("#send").addEventListener("click", () => send());
 
-async function send(action = "") {
+/* A batch from « Send », an approval button, or a scope block button (`button`). */
+const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped" };
+
+async function send(action = "", button = null) {
   const approval = Object.values(APPROVALS).find((a) => a.action === action);
-  const btn = approval ? buttonOf(approval) : $("#send");
+  const btn = button || (approval ? buttonOf(approval) : $("#send"));
   if (btn.disabled) return;
   btn.disabled = true;
   const r = await fetch(`/api/s/${SLUG}/batch`, {
@@ -1143,7 +1208,7 @@ async function send(action = "") {
   $("#note").value = "";
   saveJSON(NOTE_KEY, "");
   await load();
-  sentToast(approval ? approval.toast : `Sent ${b.id} to the session`);
+  sentToast(approval ? approval.toast : SCOPE_TOASTS[action] || `Sent ${b.id} to the session`);
 }
 
 /* ---------------- divider ----------------

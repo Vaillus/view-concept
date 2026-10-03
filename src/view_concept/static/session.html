@@ -31,6 +31,17 @@
     </nav>
     <div id="plan-view" class="view plan" data-view="plan">
       <div class="plan-inner">
+        <div id="scope" class="scope">
+          <div class="pane-head scope-head">scope
+            <span class="scope-actions">
+              <button id="grill" class="btn">Grill me</button>
+              <button id="scope-plan" class="btn primary" hidden>Plan</button>
+            </span>
+          </div>
+          <p id="scope-empty" class="hint dim">No question from the agent. « Grill me » has it ask about every open decision.</p>
+          <div id="scope-questions"></div>
+          <details id="scope-answered" hidden><summary></summary><ol></ol></details>
+        </div>
         <button id="approve" class="btn primary approve" hidden>Approve plan</button>
         <div id="revision" class="revision" hidden></div>
         <div class="pane-head">outline</div>
@@ -49,7 +60,7 @@
   <aside class="review">
     <div class="pane-head">review <span id="draft-count" class="dim"></span></div>
     <div id="history"></div>
-    <div id="questions"></div>
+    <button id="questions-waiting" class="questions-waiting" hidden></button>
     <p class="hint dim">Select text in the explanation, or use « + comment » on an item of the plan. Comments stay here until you send them together.</p>
     <div id="drafts"></div>
     <textarea id="note" class="note" rows="3" placeholder="General note for the whole batch (optional)"></textarea>
