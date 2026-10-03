@@ -32,6 +32,9 @@ The code to refactor is whatever the user typed after the command name.
 - **Level**: the user owns the repository. Skip the level question.
 - **Goal**: decide what stays, and restructure it. Skip the goal question.
 - **Phase 3 (calibrate)**: skip.
+- **Scoping**: as view-branch says (its **Bindings**), on the refactor about
+  to be done, before Part 1 is written. The questions below (the scope, the
+  code nothing calls) are agent questions too.
 
 ## Scope
 
