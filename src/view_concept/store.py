@@ -18,6 +18,7 @@ reach the agent session through the inbox.
         agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text   (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
+        published.json  the publish record: link, time, fingerprint  (written by `publish`)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}. An
 answer to a comment that belongs in the explanation amends a section or adds one at its
@@ -75,10 +76,19 @@ marked that section read later. A section whose file differs from its baseline i
 the highlights show what it changed for that batch. The first text of a section is its
 first baseline, recorded when the page first loads it, so a first write is never an
 update.
+
+published.json is the publish record, what the session remembers of its last publish
+(see publish.py): {url (the published page's link), at (when), fingerprint}. The
+fingerprint is a hash of what a published page shows: the title, the published sections
+(the explanation sections that are written, in outline order) and the lexicon. The
+session is "out of date" when its fingerprint now differs from the recorded one;
+comments, threads and highlights do not count, since a published page does not show them.
+Unpublishing deletes the record.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -267,6 +277,10 @@ class Session:
     @property
     def threads_dir(self) -> Path:
         return self.dir / "threads"
+
+    @property
+    def published_path(self) -> Path:
+        return self.dir / "published.json"
 
     def thread_path(self, tid: str) -> Path:
         if not THREAD_ID_RE.match(tid):
@@ -536,6 +550,7 @@ class Session:
             self.status_path,
             self.changes_path,
             self.questions_path,
+            self.published_path,
         ]
         if self.sections_dir.is_dir():
             paths += sorted(self.sections_dir.glob("*.md"))
@@ -727,6 +742,55 @@ class Session:
             raise SessionError(f"unknown id(s): {', '.join(sorted(unknown))}")
         _write_json(self.comments_path, data)
         return touched
+
+    # ---- the publish record ----
+    def published_sections(self, plan: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        """What a published page shows of the prose: every explanation section (no
+        `"part": 2`) that is written, in outline order, as {id, number (its position in
+        the outline, as the page numbers it), title, markdown}."""
+        plan = plan or self.read_plan()
+        sections = self.read_sections()
+        return [
+            {"id": s["id"], "number": i + 1, "title": s.get("title", s["id"]),
+             "markdown": sections[s["id"]]}
+            for i, s in enumerate(plan["outline"])
+            if s.get("part") != 2 and s["id"] in sections
+        ]  # fmt: skip
+
+    def fingerprint(self) -> str:
+        """A hash of what a published page shows: the title, the published sections and
+        the lexicon. The publish date, comments and highlights are left out."""
+        plan = self.read_plan()
+        content = {
+            "title": str(plan["title"]).strip() or self.slug,
+            "sections": [
+                [s["id"], s["title"], s["markdown"]] for s in self.published_sections(plan)
+            ],
+            "lexicon": [
+                [str(t.get(k) or "") for k in ("term", "section", "definition", "tip")]
+                for t in plan["lexicon"]
+            ],
+        }
+        canonical = json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def read_published(self) -> dict[str, Any]:
+        """The publish record: {url, at, fingerprint}, {} when the session is not published."""
+        return _read_json(self.published_path, {})
+
+    def write_published(self, url: str, fingerprint: str) -> dict[str, Any]:
+        record = {"url": url, "at": now_iso(), "fingerprint": fingerprint}
+        _write_json(self.published_path, record)
+        return record
+
+    def delete_published(self) -> None:
+        self.published_path.unlink(missing_ok=True)
+
+    def is_out_of_date(self) -> bool:
+        """Whether the session changed since its last publish: its fingerprint differs from
+        the recorded one. A session never published is not out of date."""
+        record = self.read_published()
+        return bool(record) and record.get("fingerprint") != self.fingerprint()
 
     # ---- export ----
     def export(self, vault_dir: Path | None = None) -> Path:

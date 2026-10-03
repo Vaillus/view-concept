@@ -411,3 +411,54 @@ def test_check_writes_audit_and_reruns_idempotently(ordered):
     assert {"term": "KKT conditions", "section": "a", "issue": "early",
             "note": "introduced in section 2"} in first  # fmt: skip
     assert len(first) == 4
+
+
+def test_fingerprint_follows_what_a_published_page_shows(session):
+    before = session.fingerprint()
+    assert session.fingerprint() == before  # stable
+    session.add_batch([{"section": "s1", "text": "a comment"}])
+    session.mark_seen({"s1": "older text"})
+    assert session.fingerprint() == before  # comments and highlights do not count
+    (session.sections_dir / "s2.md").write_text("Le cache, réécrit.")
+    assert session.fingerprint() != before
+
+
+def test_fingerprint_leaves_out_refactor_sections(session):
+    before = session.fingerprint()
+    plan = session.read_plan()
+    plan["outline"].append({"id": "r1", "title": "Refactor", "part": 2})
+    session.plan_path.write_text(json.dumps(plan))
+    (session.sections_dir / "r1.md").write_text("Part 2.")
+    assert session.fingerprint() == before
+
+
+def test_fingerprint_follows_the_lexicon(session):
+    before = session.fingerprint()
+    plan = session.read_plan()
+    plan["lexicon"][0]["tip"] = "un vecteur, développé"
+    session.plan_path.write_text(json.dumps(plan))
+    assert session.fingerprint() != before
+
+
+def test_published_sections_in_outline_order(session):
+    plan = session.read_plan()
+    plan["outline"].insert(0, {"id": "s0", "title": "Unwritten"})
+    session.plan_path.write_text(json.dumps(plan))
+    rows = session.published_sections()
+    assert [(r["id"], r["number"], r["title"]) for r in rows] == [
+        ("s1", 2, "Attention"),
+        ("s2", 3, "Cache"),
+    ]
+
+
+def test_out_of_date(session):
+    assert session.read_published() == {} and not session.is_out_of_date()
+    before = session.signature()
+    record = session.write_published("https://x.github.io/e/kv-cache/", session.fingerprint())
+    assert session.read_published() == record and set(record) == {"url", "at", "fingerprint"}
+    assert session.signature() != before  # the page re-renders its buttons
+    assert not session.is_out_of_date()
+    (session.sections_dir / "s1.md").write_text("L'attention, réécrite.")
+    assert session.is_out_of_date()
+    session.delete_published()
+    assert session.read_published() == {} and not session.is_out_of_date()
