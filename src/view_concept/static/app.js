@@ -134,9 +134,9 @@ function render() {
 /* ---------------- tabs ----------------
    The plan, the explanation and the refactor tab share one space; one is shown at a
    time. The refactor tab exists only once a section is in Part 2. The tab follows the
-   session at the two moments that matter — the plan waiting for approval, the writing
-   starting (in the tab of the section being written) — and otherwise stays where the
-   user put it. A model waiting for approval does not move it, nor does a PR waiting to
+   session at the moments that matter — scoping starting (its questions are in the scope
+   block, on the Plan tab), the plan waiting for approval, the writing starting (in the
+   tab of the section being written) — and otherwise stays where the user put it. A model waiting for approval does not move it, nor does a PR waiting to
    be created: « Approve model » sits at the end of the explanation, where the model is
    read, and « Create PR » at the end of the refactor tab. */
 
@@ -152,9 +152,10 @@ function setTab(name) {
 
 function followSession() {
   const phase = state.status.phase;
-  if (tab === null) setTab(Object.keys(state.sections).length && phase !== "awaiting-approval" ? "doc" : "plan");
+  const onPlan = ["scoping", "awaiting-approval"].includes(phase);
+  if (tab === null) setTab(Object.keys(state.sections).length && !onPlan ? "doc" : "plan");
   else if (phase !== lastPhase) {
-    if (phase === "awaiting-approval") setTab("plan");
+    if (onPlan) setTab("plan");
     if (phase === "writing") setTab(tabOf(state.status.section));
   }
   lastPhase = phase;
@@ -233,8 +234,12 @@ function approvalPending() {
 function renderStatus() {
   const { phase, section, message } = state.status;
   const approval = APPROVALS[phase];
+  const asking = ["scoping", "awaiting-answer"].includes(phase) && openQuestions().length > 0;
   const labels = {
-    scoping: "scoping the question",
+    // Scoping runs while the agent asks; its questions wait in the scope block, and « Plan » ends it.
+    scoping: asking ? "scoping · questions waiting for you"
+           : planPending() ? `scoping ended · the agent is writing the ${state.workflow === "view-branch" ? "model" : "plan"}`
+           : "scoping the question",
     planning: "drafting the plan",
     ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
     "awaiting-answer": openQuestions().length ? QUESTION_LABELS.ready : QUESTION_LABELS.sent,
@@ -242,8 +247,7 @@ function renderStatus() {
     audit: "vocabulary audit",
     revising: "revising",
   };
-  const asking = phase === "awaiting-answer" && openQuestions().length > 0;
-  const active = ["scoping", "planning", "writing", "audit", "revising"].includes(phase) ||
+  const active = (phase === "scoping" && !asking) || ["planning", "writing", "audit", "revising"].includes(phase) ||
                  (approval && approvalPending()) || (phase === "awaiting-answer" && !asking);
   const p = $("#phase");
   p.hidden = !labels[phase];
