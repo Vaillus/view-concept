@@ -236,6 +236,24 @@ def test_answer_is_sent_as_a_batch(session):
         session.answer_question("q9", [], "hm")
 
 
+def test_answered_in_terminal_sends_no_batch(session):
+    session.add_question("PR or merge?", ["a PR", "a merge"])
+    session.add_question("Why?")
+    assert session.read_status()["phase"] == "awaiting-answer"
+    q = session.answered_in_terminal("q1", " a PR, squashed ")
+    assert q["status"] == "answered"
+    assert q["answer"]["choices"] == [] and q["answer"]["text"] == "a PR, squashed"
+    assert q["answer"]["from"] == "terminal" and q["answer"]["at"]
+    assert session.read_questions()[0] == q
+    assert not session.inbox_path.exists() and session.read_comments().get("batches", []) == []
+    assert session.answered_in_terminal("q2")["answer"]["text"] == ""
+    assert session.read_status()["phase"] == "awaiting-answer"  # the agent sets the next one
+    with pytest.raises(SessionError, match="already answered"):
+        session.answered_in_terminal("q1", "again")
+    with pytest.raises(SessionError, match="no question"):
+        session.answered_in_terminal("q9")
+
+
 def test_a_question_keeps_the_scoping_phase(session):
     session.write_status("scoping")
     session.add_question("How familiar are you with KKT?")

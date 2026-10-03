@@ -217,6 +217,14 @@ def cmd_question(a: argparse.Namespace) -> None:
         )
 
 
+def cmd_answered(a: argparse.Namespace) -> None:
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    q = s.answered_in_terminal(a.qid, a.text or "")
+    print(f"{q['id']} answered")
+
+
 def cmd_change(a: argparse.Namespace) -> None:
     d = Session(a.slug).add_change(a.change, a.why or "", a.instead or "", a.files)
     print(f"{d['id']} recorded")
@@ -342,6 +350,14 @@ def main() -> None:
     q.add_argument("--multi", action="store_true", help="the user may pick several choices")
     q.add_argument("--recommended", help="the answer you suggest: an option, or a text")
     q.set_defaults(fn=cmd_question)
+
+    q = sub.add_parser(
+        "answered", help="mark an open agent question answered in the terminal (sends no batch)"
+    )
+    q.add_argument("slug")
+    q.add_argument("qid", help="the question id, e.g. q1")
+    q.add_argument("--text", help="the answer as the user gave it")
+    q.set_defaults(fn=cmd_answered)
 
     q = sub.add_parser("change", help="record a model change accepted in a branch review")
     q.add_argument("slug")

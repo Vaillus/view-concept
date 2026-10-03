@@ -459,6 +459,17 @@ class Session:
         _write_json(self.questions_path, questions)
         return batch
 
+    def answered_in_terminal(self, qid: str, text: str = "") -> dict[str, Any]:
+        """Mark an open agent question answered in the terminal: the user answered it there,
+        so the agent already has the answer and no batch is sent. `text` is the answer as
+        the user gave it. The phase is left alone. Returns the question."""
+        questions = self.read_questions()
+        q = self._open_question(questions, qid)
+        q["status"] = "answered"
+        q["answer"] = {"choices": [], "text": text.strip(), "at": now_iso(), "from": "terminal"}
+        _write_json(self.questions_path, questions)
+        return q
+
     def skip_question(self, qid: str) -> dict[str, Any]:
         """Skip an open agent question: the user leaves it to the agent's default. Sent at
         once, as an answer batch whose entry is `{question, skipped: true}`. Returns the

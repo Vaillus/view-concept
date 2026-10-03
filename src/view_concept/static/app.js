@@ -1069,8 +1069,9 @@ function renderScope() {
   $("summary", folded).textContent = `answered (${closed.length})`;
   $("ol", folded).replaceChildren(...closed.map((q) => el("li", {},
     el("div", { class: "q-text" }, el("span", { class: "num", text: q.id }), " ", q.text),
-    el("div", { class: `q-reply ${q.status === "skipped" ? "dim" : ""}`,
-                text: answerText(q.status === "skipped" ? { skipped: true } : q.answer || {}) }))));
+    el("div", { class: `q-reply ${q.status === "skipped" ? "dim" : ""}` },
+       answerText(q.status === "skipped" ? { skipped: true } : q.answer || {}),
+       q.answer?.from === "terminal" ? el("span", { class: "dim", text: " (in the terminal)" }) : null))));
   $("#scope-empty").hidden = questions.length > 0 || state.status.phase === "scoping";
 
   const grill = $("#grill");
