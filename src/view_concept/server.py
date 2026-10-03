@@ -80,6 +80,7 @@ def state(slug: str) -> dict[str, Any]:
         status = s.read_status()
         changes = s.read_changes()
         questions = s.read_questions()
+        grilling = s.is_grilling()
         seen = s.read_seen(sections)
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
@@ -98,6 +99,7 @@ def state(slug: str) -> dict[str, Any]:
         "comments": comments,
         "changes": changes,
         "questions": questions,
+        "grilling": grilling,
         "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),
     }
 
@@ -189,6 +191,16 @@ def answer_question(slug: str, qid: str, body: AnswerIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
         return s.answer_question(qid, body.choices, body.text)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/s/{slug}/questions/{qid}/skip")
+def skip_question(slug: str, qid: str) -> dict[str, Any]:
+    """Skip an agent question: sent to the session at once, as an answer batch."""
+    s = get_session(slug)
+    try:
+        return s.skip_question(qid)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
 

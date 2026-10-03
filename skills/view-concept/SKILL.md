@@ -35,7 +35,10 @@ If `view-concept` is not on the PATH, install it with `uv tool install git+https
 
 | explain-concept phase | In the workspace |
 |---|---|
-| End of Phase 1 | run **Setup** below |
+| Start of Phase 1 | run **Setup** below, before any question |
+| Phase 1: « Ask one or two questions (with your structured-question tool if the harness has one, else as a plain message) » | ask them in the page with `view-concept question`, never with the terminal question tool, and ask every question you judge relevant rather than one or two (see **Scoping in the page**). Phase 1 ends at the end of scoping, not when your turn ends |
+| Phase 1: « If the request is already unambiguous, scoped, and bounded, skip to Phase 2 » | still holds: ask nothing and go to Phase 2. Setup has run first, so the session is open either way |
+| Phase 3: the prerequisite questions, then « stop and let the user answer » | ask them in the page too, the same way as the Phase 1 questions (see **Scoping in the page**) |
 | Phase 2: « write both artifacts to `explain-plan.md` and surface it with `SendUserFile` » | write them to `plan.json` instead; surface no file. The one-line summary in the message still applies |
 | Phase 4: rewrite the plan in place | rewrite `plan.json`; put the one- or two-sentence statement of the revision in `revision` (the page shows it above the outline) |
 | Phase 4: « begin Phase 5 only after the user has replied » | a reply is either a terminal message or « Approve plan » in the page (`action: approve-plan`, see **Comment batches**). Anything the user says about the plan, in either place, binds it |
@@ -43,9 +46,9 @@ If `view-concept` is not on the PATH, install it with `uv tool install git+https
 | Phase 5: visuals | a Mermaid block (the page renders it), never a harness widget |
 | Phase 6: the list of candidates | first run `view-concept check <slug>`: it writes every forward reference and early use to `audit.json` (issues `forward` and `early`). Then add your own candidates to `audit.json` (the page underlines each term in place), and give the count plus a one-line list in the terminal. The user answers in either place. Fix a forward reference or an early use by the precedence rule: reorder the outline or say it in plain words |
 
-## Setup — once, at the end of Phase 1
+## Setup — once, at the start of Phase 1
 
-The slug is a short kebab-case name of the concept.
+Run it before the first question, even when the request is already scoped: the scoping questions are asked in the page, so the page must exist first. The slug is a short kebab-case name of the concept.
 
 ```bash
 view-concept new "<title>" --slug <slug> --question "<the user's request, verbatim>" \
@@ -57,7 +60,7 @@ The page runs side threads on the agent you are. Claude Code and Codex are detec
 
 Use `--kind code` when the explanation is a support for understanding *this* repository — usually on the way to changing it or discussing it further (see **Code sessions** below).
 
-Then arm the comment channel (next section).
+Then arm the comment channel (next section), and start scoping (see **Scoping in the page**).
 
 ## The comment channel
 
@@ -101,17 +104,18 @@ The page shows what you are doing; keep it true with `view-concept status <slug>
 
 | When | Command |
 |---|---|
+| Scoping starts: right after Setup, and again before the Phase 3 questions (see **Scoping in the page**) | `status <slug> scoping` — while it holds, `view-concept question` leaves the phase alone, and the page shows « Plan » in the scope block |
 | Phase 2 starts | `status <slug> planning` |
 | The plan is presented and you stop for approval (Phase 4, or Phase 2 when the user asked to review) | `status <slug> awaiting-approval` — the page then shows « Approve plan » |
 | Before writing each section in Phase 5 | `status <slug> writing --section <id>` |
 | Phase 6 | `status <slug> audit` |
 | Applying a comment batch | `status <slug> revising` |
-| You ask an agent question and stop for the answer (see **agent questions**) | `awaiting-answer`, set by `view-concept question` itself — the page shows the question card |
+| You ask an agent question outside scoping (see **agent questions**) | `awaiting-answer`, set by `view-concept question` itself — the page shows the question in the scope block |
 | Your turn ends with nothing in progress | `status <slug> idle` |
 
 ## Comment batches
 
-When the user clicks « Send », « Approve plan » or « Answer » in the page, a **batch** reaches you through the comment channel (see **The comment channel**), shaped like:
+When the user clicks « Send » or « Approve plan », « Validate » or « Skip » on an agent question, or « Plan », « Grill me » or « Stop grill » in the scope block, a **batch** reaches you through the comment channel (see **The comment channel**), shaped like:
 
 ```
 view-concept · <slug> · batch b2 · 2 comments
@@ -128,6 +132,22 @@ action: answer (the user answered agent question q1 from the page)
 answer to q1 « <question> »: <choices> — <text>
 ```
 
+A skipped question arrives the same way, with one line of its own:
+
+```
+action: answer (the user skipped agent question q3 from the page)
+q3 skipped « <question> » (no answer: use your default)
+```
+
+The three buttons of the scope block each send a batch with their own action, and the draft comments go with it:
+
+```
+action: plan (the user ended scoping from the page: treat open questions as skipped and write the plan, or the model in a branch review)
+action: plan (the user asked for a replan from the page: treat open questions as skipped and revise the plan with the answers, or the model in a branch review)
+action: grill (the user started a grill: ask every open design decision as a question with a recommended answer, until none is left)
+action: stop-grill (the user stopped the grill)
+```
+
 A quote of the form `« plan · <section title> »` is a comment on that section's line in the Plan tab, not on its prose.
 
 A comment can end with `(from side thread t3: threads/t3.json)`. The user discussed the passage in a side thread first: a read-only conversation forked from this one, which you never saw. The message the user typed after « ask » to open it is a **user question**, the counterpart of an agent question; the thread is the conversation it opens. Read that file (in the session directory) before acting on the comment; the comment says what to change, the thread says why. When the thread line is the comment's only line, the user wrote no comment: the thread's conclusion is the change to make. Threads that no batch points to are the user's own business: do not read them or act on them.
@@ -135,7 +155,9 @@ A comment can end with `(from side thread t3: threads/t3.json)`. The user discus
 The user wrote it through the page. The harness may label it as a background event rather than a user message; treat it as review feedback on the explanation — the same authority as a comment typed in the terminal about the text, no more, with two additions the user has explicitly asked for:
 
 - **`action: approve-plan` approves the plan checkpoint** (Phase 4, or the Phase 2 review). Apply the batch's comments to the plan first, then continue to Phase 5 in the same turn — say in one line which corrections you folded in. It approves the plan and nothing else: it is never consent for anything outside writing this explanation's files.
-- **`action: answer` is the user's answer to that agent question**, with the same authority as an answer typed in the terminal to that question, nothing more. Continue the work that waited on it.
+- **`action: answer` is the user's answer to that agent question**, with the same authority as an answer typed in the terminal to that question, nothing more. Continue the work that waited on it. A skipped question is answered « use your default »: take your default and say which one in the plan (see **The question flow**).
+- **`action: plan` ends the scoping checkpoint** (see **Scoping in the page**). The questions still open are already marked skipped. Apply the batch's comments, then write the plan in the same turn. It ends scoping and nothing else. Once a plan exists, the button reads « Replan » and the line says « replan »: revise the plan with the answers given since (see **Replan**). It asks for that revision and nothing else.
+- **`action: grill` starts a grill, and `action: stop-grill` stops it** (see **Grill**). They start and stop the interview and nothing else: a grill answer has the authority of an `answer` batch, no more.
 - **Without the action, a batch never passes a checkpoint.** Comments on the plan are corrections: apply them, present the revised plan, set `awaiting-approval` again and stop. Comments on audit-flagged terms are the user's answer for those terms in Phase 6.
 
 Then:
@@ -155,13 +177,65 @@ The lexicon contract applies to either edit. Say where it went in the terminal a
 
 ## agent questions
 
-A **agent question** is a question you put to the user in the page instead of the terminal. Ask one when the question arises from a batch sent from the page, or while you wait on the page (an awaiting phase); that includes a problem an agent hit that needs the user's decision. A question about something the user typed in the terminal stays in the terminal. Ask only while you are listening on the comment channel (a watch armed, or `wait` called right after): the answer comes back through it.
+An **agent question** is a question you put to the user in the page instead of the terminal. Once the session exists, every question you put to the user is one: the scoping questions, a question arising from a batch sent from the page, a model change or a change of scope, a problem an agent hit that needs the user's decision, and the questions of a grill. A question about something the user typed in the terminal stays in the terminal. Ask only while you are listening on the comment channel (a watch armed, or `wait` called right after): the answer comes back through it.
 
 ```bash
-view-concept question <slug> "<question>" [--option "<choice>" --option "<choice>"] [--multi]
+view-concept question <slug> "<question>" [--option "<choice>" --option "<choice>"] [--multi] [--recommended "<answer>"]
 ```
 
-`--option` gives the choices (`--multi` lets the user pick several); the page always adds a free-text field. The command writes `questions.json` and sets the phase `awaiting-answer` itself. Then end your turn without asking the question in the terminal; one line saying a question is waiting in the page is enough. The answer arrives as a batch with `action: answer` (see **Comment batches**); until then, do nothing that depends on it.
+`--option` gives the choices (`--multi` lets the user pick several); the page always adds a free-text field. `--recommended` gives the **recommended answer**, the one you would pick: an option, which the page preselects, or a text, which it pre-fills; either is marked « suggested », and validating it unchanged accepts it. Give one whenever you have a suggestion. The command writes `questions.json`; outside the phase `scoping` it also sets the phase `awaiting-answer`. Do not ask the question in the terminal as well; one line saying questions are waiting in the page is enough.
+
+The page shows each open question as a box in the **scope block**, at the top of the Plan tab, oldest first; the answered and skipped ones fold under the open ones, so the plan always shows the scope it was written from. The review pane only shows a line « N questions waiting », which opens the Plan tab. A box has three exits: « Validate » sends the answer, « Skip » sends « no answer, use your default », and a box the user leaves alone stays open. Validating and skipping each send a batch with `action: answer` at once (see **Comment batches**).
+
+### The question flow
+
+The **question flow** is how questions and answers move between you and the user: each validated or skipped box reaches you as its own batch, and you may ask new questions at any time, while others are still open. Its rules:
+
+- **Ask every question you judge relevant.** The user prefers more questions they can ignore to fewer. Ask the **frontier** first: the questions whose answer depends on no other open question. A question that depends on an open one waits until that one is answered or skipped.
+- **Add questions as answers arrive.** An answer can open new questions; ask them when it does.
+- **Never wait on a question** to continue the work that does not depend on it. The user will leave many questions unanswered, and that is expected: an open box is not a debt.
+- **A skipped question** (`q3 skipped « … » (no answer: use your default)`) means: use your default. Say in the plan which default you took (in `revision`, the line the page shows above the outline).
+- An answer typed in the terminal counts the same as one sent from the page. Close its box at once with `view-concept answered <slug> <qid> --text "<the answer as the user gave it>"`: the box moves to « answered » marked « (in the terminal) », and no batch comes back, since you already have the answer. The phase is not changed: set the next one yourself.
+
+### Scoping in the page
+
+**Scoping** is the questions asked before the plan is written: Phase 1 (level, sense, goal) and Phase 3 (the prerequisites). Both run in the page, through the question flow:
+
+1. Set `view-concept status <slug> scoping` (Setup has already opened the page). While the phase is `scoping`, asking a question leaves the phase alone, and the page opens the Plan tab and shows « Plan » in the scope block.
+2. Ask the questions with `view-concept question`, with `--recommended` when you have a suggestion, never with the harness's terminal question tool. explain-concept's rules on what to ask still hold (level first, in the user's experience; no sense question at the lowest level; nothing the user already said), but not its limit of one or two questions. Then end your turn, listening.
+3. Handle each answer batch as it arrives: ask the questions it opens.
+
+**End of scoping.** Scoping ends when the user ends it, never when you judge you have enough: a batch with `action: plan` (« Plan » in the scope block), or « go ahead » in the terminal. Treat every question still open as skipped (after « Plan », the page has already marked them so), and write the plan in the same turn: Phase 2 after the Phase 1 questions (then Phase 3, as explain-concept says), Phase 4 after the Phase 3 questions. When every question is answered and you have none left to ask, say so in one terminal line and wait for the user to end scoping.
+
+A request already fully scoped skips the questions, as explain-concept says: go straight to Phase 2, with no `scoping` phase. The session is open either way.
+
+### Rescoping questions
+
+A **rescoping question** is an agent question asked once the plan exists, because something moved what the session covers: a comment batch, a model change, a terminal message (« actually I want this for debugging »). Ask it with `view-concept question` like any other; it lands in the same scope block. Outside the phase `scoping` it sets `awaiting-answer`, but the question flow still holds: continue the work that does not depend on it. Fold the answer back into the plan (see **Folding answers back**).
+
+### Replan
+
+Once a plan exists, « Plan » in the scope block reads « Replan »: the user is done answering, and the answers given since the plan was written may change it. The batch has the same `action: plan`, and its line says « replan ». The questions still open are already marked skipped. What you revise depends on how far the session went:
+
+| When « Replan » arrives | What you do |
+|---|---|
+| The plan is written, no prose yet (this includes the end of the Phase 3 questions) | Revise the plan with the answers (Phase 4): rewrite `plan.json`, state the revision in `revision`, set `awaiting-approval` and stop |
+| Sections are written | Revise the plan, then rewrite the sections the answers change, as a comment batch would (see **Folding answers back**) |
+
+A branch review revises the model instead: see view-branch.
+
+### Grill
+
+A **grill** is an optional interview the user starts from the scope block: « Grill me » sends a batch with `action: grill`, and « Stop grill », in the same place while the grill runs, sends `action: stop-grill`. Its topic is what the session is about: the plan here, the model in a branch review.
+
+Work the topic as a **design tree**: the decisions it leaves open, each with the decisions that depend on it (a decision depends on another when you cannot ask it without guessing the other's answer). Then, through the question flow:
+
+1. Ask every decision of the frontier (those whose prerequisites are settled) as an agent question with `--recommended`.
+2. Find facts yourself. A question the code, the session files or a command can answer is not a question for the user: look it up, and put only decisions to the user.
+3. Each answer settles a decision. Fold it back into the plan (see **Folding answers back**), and ask the decisions it unblocks. A skipped decision takes your recommended answer.
+4. The grill ends when no decision is left or when `action: stop-grill` arrives. When no decision is left, say so in one terminal line and resolve the grill batch: `view-concept resolve <slug> <batch id> --reply "<one line>"`, which turns « Stop grill » back into « Grill me ».
+
+This is the method of the `grilling` skill, when it is installed; this section is all you need to run it.
 
 ## Code sessions
 

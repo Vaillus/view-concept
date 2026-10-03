@@ -116,6 +116,58 @@ def test_create_pr_batch(session):
     assert "action: create-pr (the user asked to open the PR from the page)" in out
 
 
+def test_plan_batch_skips_the_open_questions(session):
+    session.write_status("scoping")
+    session.add_question("Level?")
+    session.add_question("Goal?")
+    session.answer_question("q1", [], "heard the words")
+    b = session.add_batch([{"text": "keep it short"}], action="plan")
+    q1, q2 = session.read_questions()
+    assert q1["status"] == "answered" and "skipped" not in q1
+    assert q2["status"] == "skipped" and q2["skipped"] == b["sent"]
+    assert (
+        "action: plan (the user ended scoping from the page: treat open questions as "
+        "skipped and write the plan, or the model in a branch review)"
+    ) in format_batch("kv-cache", b, [])
+    # Once a plan exists, « Plan » asks for a replan.
+    assert (
+        "action: plan (the user asked for a replan from the page: treat open questions "
+        "as skipped and revise the plan with the answers, or the model in a branch review)"
+    ) in format_batch("kv-cache", b, [{"id": "s1", "title": "Intro", "earns": ""}])
+
+
+def test_grill_batches(session):
+    assert session.is_grilling() is False
+    outline = session.read_plan()["outline"]
+    b = session.add_batch([], action="grill")
+    assert session.is_grilling() is True
+    assert (
+        "action: grill (the user started a grill: ask every open design decision as a "
+        "question with a recommended answer, until none is left)"
+    ) in format_batch("kv-cache", b, outline)
+    session.add_batch([{"text": "unrelated"}])
+    assert session.is_grilling() is True
+    b = session.add_batch([], action="stop-grill")
+    assert session.is_grilling() is False
+    assert "action: stop-grill (the user stopped the grill)" in format_batch("kv-cache", b, outline)
+
+
+def test_grill_ends(session):
+    b = session.add_batch([], action="grill")
+    session.resolve([b["id"]], reply="no decision left")
+    assert session.is_grilling() is False
+    session.add_batch([], action="grill")
+    assert session.is_grilling() is True
+    session.add_batch([], action="approve-model")
+    assert session.is_grilling() is False
+    session.add_batch([], action="grill")
+    assert session.is_grilling() is True
+    session.add_batch([], action="stop-grill")
+    assert session.is_grilling() is False
+    session.add_batch([], action="grill")
+    assert session.is_grilling() is True
+
+
 def test_code_session_needs_repo(tmp_path):
     with pytest.raises(SessionError):
         Session("x", tmp_path).create("X", kind="code")
@@ -202,6 +254,66 @@ def test_answer_is_sent_as_a_batch(session):
         session.answer_question("q1", [], "again")
     with pytest.raises(SessionError, match="no question"):
         session.answer_question("q9", [], "hm")
+
+
+def test_answered_in_terminal_sends_no_batch(session):
+    session.add_question("PR or merge?", ["a PR", "a merge"])
+    session.add_question("Why?")
+    assert session.read_status()["phase"] == "awaiting-answer"
+    q = session.answered_in_terminal("q1", " a PR, squashed ")
+    assert q["status"] == "answered"
+    assert q["answer"]["choices"] == [] and q["answer"]["text"] == "a PR, squashed"
+    assert q["answer"]["from"] == "terminal" and q["answer"]["at"]
+    assert session.read_questions()[0] == q
+    assert not session.inbox_path.exists() and session.read_comments().get("batches", []) == []
+    assert session.answered_in_terminal("q2")["answer"]["text"] == ""
+    assert session.read_status()["phase"] == "awaiting-answer"  # the agent sets the next one
+    with pytest.raises(SessionError, match="already answered"):
+        session.answered_in_terminal("q1", "again")
+    with pytest.raises(SessionError, match="no question"):
+        session.answered_in_terminal("q9")
+
+
+def test_a_question_keeps_the_scoping_phase(session):
+    session.write_status("scoping")
+    session.add_question("How familiar are you with KKT?")
+    session.add_question("What is it for?")
+    assert session.read_status()["phase"] == "scoping"
+
+
+def test_question_with_a_recommended_answer(session):
+    assert "recommended" not in session.add_question("PR or merge?", ["a PR", "a merge"])
+    q = session.add_question("Which?", ["a PR", "a merge"], recommended=" a PR ")
+    assert q["recommended"] == "a PR"
+    assert session.read_questions()[1]["recommended"] == "a PR"
+
+
+def test_skip_is_sent_as_a_batch(session):
+    session.add_question("PR or merge?", ["a PR", "a merge"])
+    b = session.skip_question("q1")
+    assert b["action"] == "answer" and b["comments"] == []
+    assert b["answers"] == [{"question": "q1", "skipped": True}]
+    assert json.loads(session.inbox_path.read_text().splitlines()[-1])["id"] == b["id"]
+    (q,) = session.read_questions()
+    assert q["status"] == "skipped" and q["skipped"] == b["sent"] and "answer" not in q
+    with pytest.raises(SessionError, match="already skipped"):
+        session.skip_question("q1")
+    with pytest.raises(SessionError, match="already skipped"):
+        session.answer_question("q1", [], "after all")
+    with pytest.raises(SessionError, match="no question"):
+        session.skip_question("q9")
+    session.add_question("Why?")
+    session.answer_question("q2", [], "because")
+    with pytest.raises(SessionError, match="already answered"):
+        session.skip_question("q2")
+
+
+def test_format_skip_batch(session):
+    session.add_question("Which  files?", ["a.py", "b.py"])
+    b = session.skip_question("q1")
+    out = format_batch("kv-cache", b, session.read_plan()["outline"], session.read_questions())
+    assert "action: answer (the user skipped agent question q1 from the page)" in out
+    assert "q1 skipped « Which files? » (no answer: use your default)" in out
 
 
 def test_answer_batch_needs_answers(session):

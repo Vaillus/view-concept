@@ -64,8 +64,21 @@ always shows the model as it now stands, not as the branch wrote it.
 - **Goal**: decide what the branch should be, and get it there. Skip the goal
   question.
 - **Phase 3 (calibrate)**: skip.
+- **Scoping**: do not skip it. Before Part 1 is written, scope the feature
+  the branch implements or is about to implement: what is in, what is out,
+  which design, which constraints. Ask through the question flow, as
+  view-concept's **Scoping in the page** says (Setup first, then
+  `status <slug> scoping` and one `view-concept question` per question, with
+  `--recommended` when you have a suggestion), so the first model is right.
+  This matters most when the branch has no diff yet: the answers are then
+  most of what the model starts from. The end of scoping (« Plan » in the
+  scope block, a batch with `action: plan`, or « go ahead » in the terminal)
+  means: write Part 1.
 
 ## Before Phase 2 — ground it
+
+Scoping runs before this read or alongside it: ask the questions that
+depend on nothing first, then read while the user answers.
 
 Read, in this order:
 
@@ -136,7 +149,22 @@ the user it is written or set `awaiting-model`. When the user is confused,
 make the order clearer or add a picture: more prose is not the answer.
 
 Then the discussion: the user challenges the model, in the page or in the
-terminal. Record each model change as above. When no correction is pending,
+terminal. Record each model change as above.
+
+The user can also start a grill (view-concept's **Grill**) during model
+consolidation; its topic is the model. An answer that settles a decision is
+a model change the user took: record it and rewrite what it makes false. A
+skipped decision records no change: the model keeps what it says. Approving
+the model ends a grill still running.
+
+A **replan** (« Replan » in the scope block, view-concept's **Replan**)
+revises the model with the answers given since it was written: each answer
+that changes the model is a model change the user took; record it and
+rewrite what it makes false. Before « Approve model », set
+`awaiting-model` again. After it, the model has moved under the code: list
+the new gaps and close them as model matching says, then update Part 2.
+
+When no correction is pending,
 run `view-concept status <slug> awaiting-model`: the page shows « Approve
 model ».
 

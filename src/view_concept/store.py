@@ -46,11 +46,27 @@ every HEARTBEAT_EVERY seconds, and a heartbeat older than LISTENING_FOR seconds 
 means no watch runs. The margin covers the seconds between a Monitor expiry and the re-arm.
 
 An agent question is a question the agent puts to the user in the page rather than in the
-terminal: {id: q1…, text, options, multi (several options may be picked), status:
-"open" | "answered", asked, answer?: {choices, text, at}}. Asking one sets the phase
-"awaiting-answer"; the page shows each open one as a card in the review pane. The user's
-answer reaches the session as a batch whose action is "answer", carrying
-`answers: [{question, choices, text}]`.
+terminal: {id: q1…, text, options, multi (several options may be picked), recommended?
+(the answer the agent suggests: an option, which the page preselects, or a text it
+pre-fills), status: "open" | "answered" | "skipped", asked, answer?: {choices, text, at,
+from?}, skipped? (when)}. Asking one sets the phase "awaiting-answer", except during
+scoping: in the phase "scoping" the agent keeps asking without waiting, so the phase
+stays. The page shows each open one in the scope block at the top of the Plan tab. The
+user's answer reaches the session as a batch whose action is "answer", carrying
+`answers: [{question, choices, text}]`. A skipped question (the user leaves it to the
+agent's default) is sent the same way, its entry `{question, skipped: true}`. When the
+user answers in the terminal instead, the agent runs `answered`: the question is marked
+answered with `from: "terminal"`, empty choices and the user's words as text, and no
+batch is sent, since the agent already has the answer; the phase is left to the agent.
+
+Scoping ends when the user clicks « Plan »: a batch whose action is "plan", after which
+every question still open is marked skipped (the agent treats them as skipped and writes
+the plan, or the model in a branch review). « Grill me » sends a batch whose action is
+"grill" (the agent asks every open design decision as a question with a recommended
+answer, until none is left) and « Stop grill » one whose action is "stop-grill". A grill
+runs while the latest "grill" batch is not resolved (the agent resolves it with a reply
+when no decision is left) and no "stop-grill" or "approve-model" batch follows it
+(`is_grilling`).
 
 seen.json holds the highlight baseline: it maps a section id to the markdown the section
 had when the user sent the last batch (any batch: comments, an approval, an answer), or
@@ -82,7 +98,8 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
 # "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-pr"
 # (set by the view-branch skill once refactoring is written) « Create PR ».
-# "awaiting-answer" (set by `question`) waits on an agent question shown in the review pane.
+# "awaiting-answer" (set by `question`, outside scoping) waits on an agent question shown in
+# the scope block at the top of the Plan tab.
 PHASES = (
     "scoping",
     "planning",
@@ -95,7 +112,16 @@ PHASES = (
     "revising",
     "idle",
 )
-ACTIONS = ("", "approve-plan", "approve-model", "create-pr", "answer")
+ACTIONS = (
+    "",
+    "approve-plan",
+    "approve-model",
+    "create-pr",
+    "answer",
+    "plan",
+    "grill",
+    "stop-grill",
+)
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
@@ -379,10 +405,15 @@ class Session:
         return _read_json(self.questions_path, [])
 
     def add_question(
-        self, text: str, options: list[str] | None = None, multi: bool = False
+        self,
+        text: str,
+        options: list[str] | None = None,
+        multi: bool = False,
+        recommended: str = "",
     ) -> dict[str, Any]:
         """Put an agent question to the user, and wait for the answer: the phase becomes
-        "awaiting-answer"."""
+        "awaiting-answer". During scoping nothing waits: the phase stays "scoping".
+        `recommended` is the answer the agent suggests."""
         if not text.strip():
             raise SessionError("empty question")
         questions = self.read_questions()
@@ -394,20 +425,28 @@ class Session:
             "status": "open",
             "asked": now_iso(),
         }
+        if recommended.strip():
+            q["recommended"] = recommended.strip()
         questions.append(q)
         _write_json(self.questions_path, questions)
-        self.write_status("awaiting-answer")
+        if self.read_status().get("phase") != "scoping":
+            self.write_status("awaiting-answer")
+        return q
+
+    def _open_question(self, questions: list[dict[str, Any]], qid: str) -> dict[str, Any]:
+        """The open agent question `qid` of `questions`."""
+        q = next((q for q in questions if q["id"] == qid), None)
+        if q is None:
+            raise SessionError(f"no question {qid!r}")
+        if q["status"] != "open":
+            raise SessionError(f"{qid} is already {q['status']}")
         return q
 
     def answer_question(self, qid: str, choices: list[str], text: str = "") -> dict[str, Any]:
         """Record the user's answer to an open agent question and send it at once, as a
         batch whose action is "answer". Returns the batch."""
         questions = self.read_questions()
-        q = next((q for q in questions if q["id"] == qid), None)
-        if q is None:
-            raise SessionError(f"no question {qid!r}")
-        if q["status"] != "open":
-            raise SessionError(f"{qid} is already answered")
+        q = self._open_question(questions, qid)
         choices = [c for c in choices if c]
         unknown = [c for c in choices if c not in q["options"]]
         if unknown:
@@ -422,6 +461,29 @@ class Session:
         )
         q["status"] = "answered"
         q["answer"] = {"choices": choices, "text": text, "at": batch["sent"]}
+        _write_json(self.questions_path, questions)
+        return batch
+
+    def answered_in_terminal(self, qid: str, text: str = "") -> dict[str, Any]:
+        """Mark an open agent question answered in the terminal: the user answered it there,
+        so the agent already has the answer and no batch is sent. `text` is the answer as
+        the user gave it. The phase is left alone. Returns the question."""
+        questions = self.read_questions()
+        q = self._open_question(questions, qid)
+        q["status"] = "answered"
+        q["answer"] = {"choices": [], "text": text.strip(), "at": now_iso(), "from": "terminal"}
+        _write_json(self.questions_path, questions)
+        return q
+
+    def skip_question(self, qid: str) -> dict[str, Any]:
+        """Skip an open agent question: the user leaves it to the agent's default. Sent at
+        once, as an answer batch whose entry is `{question, skipped: true}`. Returns the
+        batch."""
+        questions = self.read_questions()
+        q = self._open_question(questions, qid)
+        batch = self.add_batch([], action="answer", answers=[{"question": qid, "skipped": True}])
+        q["status"] = "skipped"
+        q["skipped"] = batch["sent"]
         _write_json(self.questions_path, questions)
         return batch
 
@@ -572,8 +634,10 @@ class Session:
         approved the plan from the page, "approve-model" that they approved the model of a
         branch review (so the implementation starts), "create-pr" that they asked the agent to
         open the branch's PR once the refactoring is written, with the comments as last
-        corrections, "answer" that they answered agent questions (`answers`, see
-        `answer_question`)."""
+        corrections, "answer" that they answered or skipped agent questions (`answers`, see
+        `answer_question` and `skip_question`), "plan" that they ended scoping (every open
+        question is then marked skipped), "grill" that they started a grill and
+        "stop-grill" that they stopped it."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         if (action == "answer") != bool(answers):
@@ -612,7 +676,37 @@ class Session:
             f.write(json.dumps(batch, ensure_ascii=False) + "\n")
         # Highlights show what changed since the last batch: every baseline moves here.
         self.mark_seen(self.read_sections())
+        if action == "plan":
+            self._skip_open_questions(batch["sent"])
         return batch
+
+    def _skip_open_questions(self, at: str) -> None:
+        """Mark every open agent question skipped: scoping ended without their answers."""
+        questions = self.read_questions()
+        open_ = [q for q in questions if q["status"] == "open"]
+        for q in open_:
+            q["status"] = "skipped"
+            q["skipped"] = at
+        if open_:
+            _write_json(self.questions_path, questions)
+
+    def is_grilling(self) -> bool:
+        """Whether a grill runs: the latest "grill" batch is not resolved (the agent resolves
+        it when no decision is left) and no "stop-grill" or "approve-model" batch follows it.
+        A batch without comments is resolved once it has a reply, one with comments once
+        all of them are."""
+        batches = self.read_comments()["batches"]
+        starts = [i for i, b in enumerate(batches) if b.get("action") == "grill"]
+        if not starts:
+            return False
+        grill = batches[starts[-1]]
+        comments = grill["comments"]
+        if comments and all(c["status"] == "resolved" for c in comments):
+            return False
+        if not comments and grill.get("reply"):
+            return False
+        later = batches[starts[-1] + 1 :]
+        return not any(b.get("action") in ("stop-grill", "approve-model") for b in later)
 
     def resolve(self, ids: list[str], reply: str = "") -> list[str]:
         """Mark comments (c…) or whole batches (b…) resolved. Returns the comment ids touched."""
@@ -763,15 +857,39 @@ def format_batch(
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")
+    if batch.get("action") == "plan" and outline:
+        # A plan already exists: the answers given since may change it.
+        lines.append(
+            "action: plan (the user asked for a replan from the page: treat open questions "
+            "as skipped and revise the plan with the answers, or the model in a branch review)"
+        )
+    elif batch.get("action") == "plan":
+        lines.append(
+            "action: plan (the user ended scoping from the page: treat open questions as "
+            "skipped and write the plan, or the model in a branch review)"
+        )
+    if batch.get("action") == "grill":
+        lines.append(
+            "action: grill (the user started a grill: ask every open design decision as a "
+            "question with a recommended answer, until none is left)"
+        )
+    if batch.get("action") == "stop-grill":
+        lines.append("action: stop-grill (the user stopped the grill)")
     if batch.get("action") == "answer":
         asked = {q["id"]: q["text"] for q in questions or []}
-        ids = ", ".join(a["question"] for a in batch.get("answers", []))
-        lines.append(f"action: answer (the user answered agent question {ids} from the page)")
-        for a in batch.get("answers", []):
+        answers = batch.get("answers", [])
+        ids = ", ".join(a["question"] for a in answers)
+        verb = "skipped" if all(a.get("skipped") for a in answers) else "answered"
+        lines.append(f"action: answer (the user {verb} agent question {ids} from the page)")
+        for a in answers:
             text = " ".join(asked.get(a["question"], "").split())
-            head = f"answer to {a['question']}" + (f" « {text} »" if text else "")
-            answer = " — ".join(p for p in [", ".join(a["choices"]), a["text"]] if p)
-            lines.append(f"{head}: {answer}")
+            quoted = f" « {text} »" if text else ""
+            if a.get("skipped"):
+                lines.append(f"{a['question']} skipped{quoted} (no answer: use your default)")
+                continue
+            parts = [", ".join(a.get("choices", [])), a.get("text", "")]
+            answer = " — ".join(p for p in parts if p)
+            lines.append(f"answer to {a['question']}{quoted}: {answer}")
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
     for c in batch["comments"]:

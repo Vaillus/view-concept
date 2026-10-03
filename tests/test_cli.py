@@ -83,8 +83,28 @@ def test_question_prints_its_id(tmp_path):
     r = view_concept(tmp_path, "question", "ask", "Which files?", "--multi")
     assert r.stdout.strip() == "q2"
     assert r.stderr == ""
+    r = view_concept(tmp_path, "question", "ask", "Squash?", "--recommended", "yes")
+    assert r.stdout.strip() == "q3"
+    assert json.loads((d / "questions.json").read_text())[2]["recommended"] == "yes"
     assert view_concept(tmp_path, "question", "nope", "Hm?").returncode != 0
     assert not (tmp_path / "sessions" / "nope").exists()
+
+
+def test_answered_marks_a_question_answered_in_the_terminal(tmp_path):
+    assert view_concept(tmp_path, "new", "Ask").returncode == 0
+    assert view_concept(tmp_path, "question", "ask", "PR or merge?").returncode == 0
+    r = view_concept(tmp_path, "answered", "ask", "q1", "--text", "a PR")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "q1 answered"
+    d = tmp_path / "sessions" / "ask"
+    (q,) = json.loads((d / "questions.json").read_text())
+    assert q["status"] == "answered"
+    assert q["answer"]["text"] == "a PR" and q["answer"]["from"] == "terminal"
+    assert not (d / "inbox.jsonl").exists()
+    r = view_concept(tmp_path, "answered", "ask", "q1")
+    assert r.returncode != 0 and "already answered" in r.stderr
+    assert view_concept(tmp_path, "answered", "ask", "q2").returncode != 0
+    assert view_concept(tmp_path, "answered", "nope", "q1").returncode != 0
 
 
 def test_check_prints_and_writes_problems(tmp_path):
