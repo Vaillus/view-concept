@@ -6,7 +6,7 @@ import yaml
 from fastapi.testclient import TestClient
 
 from view_concept import server
-from view_concept.store import Session
+from view_concept.store import Session, SessionError
 
 
 @pytest.fixture
@@ -177,3 +177,41 @@ def test_api_updated_sections(client, session):
     assert client.get("/api/s/kv-cache").json()["sections"]["s1"]["updated"] is False
     (session.sections_dir / "s3.md").write_text("Nouvelle.\n")
     assert client.get("/api/s/kv-cache").json()["sections"]["s3"]["updated"] is False
+
+
+def test_api_sends_the_publish_record(client, session):
+    assert client.get("/api/s/kv-cache").json()["published"] is None
+    record = session.write_published("https://example.org/kv-cache/", session.fingerprint())
+    published = client.get("/api/s/kv-cache").json()["published"]
+    assert published == {"url": record["url"], "at": record["at"], "out_of_date": False}
+    (session.sections_dir / "s1.md").write_text("L'attention, réécrite.")
+    assert client.get("/api/s/kv-cache").json()["published"]["out_of_date"] is True
+
+
+def test_api_publishes(client, session, monkeypatch):
+    def fake_publish(s):
+        assert s.slug == "kv-cache"
+        return "https://example.org/kv-cache/"
+
+    monkeypatch.setattr(server.publish, "publish", fake_publish)
+    r = client.post("/api/s/kv-cache/publish")
+    assert r.status_code == 200 and r.json() == {"url": "https://example.org/kv-cache/"}
+
+
+def test_api_unpublishes(client, session, monkeypatch):
+    called = []
+    monkeypatch.setattr(server.publish, "unpublish", lambda s: called.append(s.slug))
+    r = client.post("/api/s/kv-cache/unpublish")
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert called == ["kv-cache"]
+
+
+@pytest.mark.parametrize("action", ["publish", "unpublish"])
+def test_api_publish_errors_are_bad_requests(client, monkeypatch, action):
+    def refuse(s):
+        raise SessionError("kv-cache is a code session")
+
+    monkeypatch.setattr(server.publish, action, refuse)
+    r = client.post(f"/api/s/kv-cache/{action}")
+    assert r.status_code == 400 and r.json()["detail"] == "kv-cache is a code session"
+    assert client.post(f"/api/s/missing/{action}").status_code == 404

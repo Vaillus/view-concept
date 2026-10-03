@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import threads
+from . import publish, threads
 from .render import md
 from .store import Session, SessionError, list_sessions
 
@@ -75,6 +75,7 @@ def state(slug: str) -> dict[str, Any]:
         questions = s.read_questions()
         grilling = s.is_grilling()
         seen = s.read_seen(sections)
+        published = published_view(s)
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
     # The hover text of a term: its developed `tip` when the agent wrote one, else the
@@ -94,7 +95,17 @@ def state(slug: str) -> dict[str, Any]:
         "questions": questions,
         "grilling": grilling,
         "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),
+        "published": published,
     }
+
+
+def published_view(s: Session) -> dict[str, Any] | None:
+    """The publish record as the page reads it: {url, at, out_of_date}, None when the
+    session is not published."""
+    record = s.read_published()
+    if not record:
+        return None
+    return {"url": record.get("url"), "at": record.get("at"), "out_of_date": s.is_out_of_date()}
 
 
 def section_view(text: str, seen: str) -> dict[str, Any]:
@@ -267,6 +278,27 @@ def thread_stop(slug: str, tid: str) -> dict[str, bool]:
 def export(slug: str) -> dict[str, str]:
     path = get_session(slug).export()
     return {"path": str(path), "name": path.name}
+
+
+# Sync handlers: FastAPI runs them in a threadpool, and publishing runs git and gh.
+@app.post("/api/s/{slug}/publish")
+def publish_session(slug: str) -> dict[str, str]:
+    s = get_session(slug)
+    try:
+        url = publish.publish(s)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"url": url}
+
+
+@app.post("/api/s/{slug}/unpublish")
+def unpublish_session(slug: str) -> dict[str, bool]:
+    s = get_session(slug)
+    try:
+        publish.unpublish(s)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True}
 
 
 def run(host: str, port: int) -> None:
