@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<script>
+/* Light or dark from the reader's system setting, following its changes: the fallback
+   of theme.js, without a picker or a stored choice. */
+(function () {
+  var dark = window.matchMedia("(prefers-color-scheme: dark)");
+  var apply = function () {
+    document.documentElement.setAttribute("data-theme", dark.matches ? "tokyo-night" : "catppuccin-latte");
+  };
+  apply();
+  dark.addEventListener("change", apply);
+})();
+</script>
+<style>
+{{skin}}
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css">
+<style>
+{{css}}
+</style>
+</head>
+<body>
+<article class="doc">
+<header class="head">
+<h1>{{title}}</h1>
+<p class="published dim">published {{date}}</p>
+</header>
+{{sections}}
+</article>
+<div id="tip" class="tip" hidden></div>
+<script type="application/json" id="lexicon">{{lexicon}}</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
+<script>
+{{script}}
+</script>
+</body>
+</html>

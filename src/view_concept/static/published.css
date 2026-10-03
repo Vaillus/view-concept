@@ -1,0 +1,45 @@
+/* view-concept — the published page: the reading rules of app.css (the explanation, the
+   terms, the tooltip), for a page that scrolls as a normal document and reads on a phone.
+   Only semantic tokens from terminal.css, never a raw colour. */
+
+[hidden] { display: none !important; }
+.num { color: var(--accent); }
+
+/* ---- the explanation ---- */
+.doc { padding: 16px 32px 40vh; }
+.doc > * { max-width: 78ch; margin-left: auto; margin-right: auto; }
+.head { padding: 8px 0 12px; border-bottom: 1px solid var(--line); }
+.head h1 { font-size: 18px; line-height: 26px; margin: 8px 0 4px; }
+.published { margin: 0; font-size: 12px; }
+.sec { padding: 8px 0 16px; border-bottom: 1px solid var(--line); }
+.sec h2 { font-size: 15px; margin: 16px 0 8px; display: flex; align-items: baseline; gap: 6px; }
+.sec h2 .num { min-width: 1.5em; flex: none; }
+.body { font-size: 14px; line-height: 23px; overflow-wrap: break-word; }
+.body h3, .body h4 { font-size: 14px; color: var(--ink-dim); }
+.body code { background: var(--raised); padding: 0 3px; }
+.body pre { background: var(--raised); padding: 8px 12px; overflow-x: auto; }
+.body pre code { padding: 0; }
+.body table { border-collapse: collapse; margin: 8px 0; display: block; overflow-x: auto; }
+.body th, .body td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; vertical-align: top; }
+.body th { color: var(--ink-dim); }
+.body blockquote { margin: 8px 0; padding-left: 12px; border-left: 2px solid var(--line-strong); color: var(--ink-dim); }
+.body .math.block { overflow-x: auto; }
+.body .mermaid { background: var(--raised); padding: 8px; text-align: center; overflow-x: auto; }
+.body iframe { max-width: 100%; }
+
+.term { text-decoration: underline dotted var(--line-strong); text-underline-offset: 3px; }
+.term.def { text-decoration: underline solid var(--accent); font-weight: bold; }
+
+/* ---- the tooltip of a term ---- */
+.tip { position: absolute; z-index: 12; max-width: min(420px, calc(100vw - 16px)); background: var(--raised);
+       border: 1px solid var(--line-strong); padding: 8px 10px; font-size: 12px; line-height: 18px; pointer-events: none; }
+.tip-term { font-weight: bold; color: var(--ink); margin-bottom: 2px; }
+.tip-body { color: var(--ink-dim); }
+.tip-body code { background: var(--bg); padding: 0 3px; }
+
+/* ---- a phone ---- */
+@media (max-width: 600px) {
+  .doc { padding: 8px 16px 30vh; }
+  .body { font-size: 13px; line-height: 21px; }
+  .body ul, .body ol { padding-left: 24px; }
+}
