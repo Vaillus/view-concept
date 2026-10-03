@@ -30,6 +30,8 @@ You type `/view-concept explain KKT conditions`. The agent opens the page and as
 
 The page and the terminal talk through the session's files: the page appends each batch to an inbox file, and the agent listens on that file, with `view-concept watch` under a background monitor (Claude Code) or `view-concept wait` called after each turn (every other agent), and revises.
 
+To keep an explanation, « Export to vault » writes it as an Obsidian note, and « Publish » puts it on the web as a read-only page, hosted in a public GitHub repository, at a link you can send (see [`docs/reference.md`](docs/reference.md#publishing)).
+
 ## Three skills
 
 | Skill | Use it to |
@@ -82,6 +84,6 @@ Start a new session and type the command to check.
 
 ## Further reading
 
-- [`docs/reference.md`](docs/reference.md): commands, session files, page controls, configuration.
+- [`docs/reference.md`](docs/reference.md): commands, session files, page controls, publishing, configuration.
 - [`docs/related-work.md`](docs/related-work.md): similar tools and what this one adds.
 - Development: `uv sync && uv run pytest`, then `uv run ruff check --fix . && uv run ruff format . && uv run ty check .`. After changing the server, run `view-concept stop`.

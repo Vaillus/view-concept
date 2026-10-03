@@ -244,10 +244,13 @@ A code session explains part of the repository at `--repo`, and it is read to ac
 - **Level** is bound — the user knows their own code; skip the level question. Still ask **Goal** when it is open (understand before changing, choose between designs, debug).
 - **Before Phase 2, ground it**: read the code the explanation covers — the files, the callers, the tests — before outlining. The outline follows how the code actually works, not how its names suggest it works.
 - **Citations are required.** Every claim about the code cites where it is true, as inline code: `` `src/pkg/store.py:118` `` (path relative to the repo root, `:line` or `:start-end`). The page turns each citation into a link that opens the file at that line in VS Code. A claim you cannot cite is a claim you have not checked: check it or cut it.
-- **No vault export by default.** The code will change and the explanation will go stale, so do not offer the export.
+- **No vault export by default, no publishing.** The code will change and the explanation will go stale, so do not offer the export. Never offer to publish: the page hides « Publish » in a code session and `view-concept publish` refuses one, because the session cites the user's repositories and published pages are public.
 
 A review of a branch is a code session with more around it: use `view-branch`, which records the model changes (`view-concept change`).
 
 ## Keeping it
 
-The page's « Export to vault » button writes the explanation to `~/Documents/Vault/explanations/<title>.md`, frontmatter + sections + lexicon; re-exporting overwrites the same note. `view-concept export <slug>` does the same from the terminal — offer it once the audit is done, except in a code session.
+Two ways to keep an explanation; offer both once, in one terminal line, after the vocabulary audit (Phase 6), and neither in a code session.
+
+- **Vault export**: the page's « Export to vault » button writes the explanation to `~/Documents/Vault/explanations/<title>.md`, frontmatter + sections + lexicon; re-exporting overwrites the same note. `view-concept export <slug>` does the same from the terminal.
+- **Publish**: the page's « Publish » button, or `view-concept publish <slug>`, puts the explanation on the web as a published page: a read-only copy, one HTML file anyone can open from a link (the title, the sections, the lexicon terms with their definition on hover), hosted in a public GitHub repository, the pages repo. The command prints the link; the page copies it. Publishing again replaces the page at the same link, which changes only when you publish again: once the session changes, the page shows « Republish ». « Unpublish », or `view-concept unpublish <slug>`, takes the page down. Publishing refuses a code session.

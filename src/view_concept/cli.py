@@ -276,6 +276,19 @@ def cmd_export(a: argparse.Namespace) -> None:
     print(Session(a.slug).export())
 
 
+def cmd_publish(a: argparse.Namespace) -> None:
+    from .publish import publish
+
+    print(publish(Session(a.slug)))
+
+
+def cmd_unpublish(a: argparse.Namespace) -> None:
+    from .publish import unpublish
+
+    unpublish(Session(a.slug))
+    print(f"unpublished {a.slug}")
+
+
 def cmd_list(a: argparse.Namespace) -> None:
     for r in list_sessions():
         pending = f"  ({r['pending']} open comments)" if r["pending"] else ""
@@ -395,6 +408,16 @@ def main() -> None:
     q = sub.add_parser("export", help="write the explanation to the Obsidian vault")
     q.add_argument("slug")
     q.set_defaults(fn=cmd_export)
+
+    q = sub.add_parser(
+        "publish", help="publish the explanation as a page in the pages repo, print its link"
+    )
+    q.add_argument("slug")
+    q.set_defaults(fn=cmd_publish)
+
+    q = sub.add_parser("unpublish", help="delete the published page from the pages repo")
+    q.add_argument("slug")
+    q.set_defaults(fn=cmd_unpublish)
 
     sub.add_parser("list", help="list sessions").set_defaults(fn=cmd_list)
 
