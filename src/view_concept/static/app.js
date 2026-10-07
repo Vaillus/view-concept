@@ -1017,17 +1017,29 @@ function questionCard(q) {
   const recOption = q.options.some((o) => o.label === rec);
   const suggested = () => el("span", { class: "badge accent", text: "suggested" });
   const OTHER = "Other"; // never an option label: the store refuses it
-  const tradeoffs = (kind, items) => items.length
-    ? el("ul", { class: `q-tradeoffs ${kind}` }, ...items.map((t) => el("li", { text: t })))
-    : null;
-  const optionLabel = (value, text, checked, ...details) => el("label", {},
-    el("input", { type, name: `answer-${q.id}`, value, checked }),
-    el("div", { class: "q-option" },
-       el("div", {}, el("span", { text }), checked && value !== OTHER ? suggested() : null), ...details));
-  const options = el("div", { class: "q-options" },
-    ...q.options.map((o) => optionLabel(o.label, o.label, recOption && o.label === rec,
+  const tradeoffs = (kind, items) => el("td", { class: `q-tradeoffs ${kind}` },
+    items.length ? el("ul", {}, ...items.map((t) => el("li", { text: t }))) : el("span", { class: "dim", text: "—" }));
+  const optionRow = (value, text, checked, ...cells) => {
+    const input = el("input", { type, name: `answer-${q.id}`, value, checked });
+    const row = el("tr", {},
+      el("th", { scope: "row" }, el("label", {}, input, el("span", { text }),
+                                    checked && value !== OTHER ? suggested() : null)),
+      ...cells);
+    // The whole row picks the option, so the pros and cons are a click target too.
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("label")) return;
+      input.checked = type === "radio" ? true : !input.checked;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    return row;
+  };
+  const options = el("table", { class: "q-options" },
+    el("thead", {}, el("tr", {}, el("th", { text: "Option" }), el("th", { text: "Pros" }), el("th", { text: "Cons" }))),
+    el("tbody", {},
+      ...q.options.map((o) => optionRow(o.label, o.label, recOption && o.label === rec,
                                         tradeoffs("pros", o.pros), tradeoffs("cons", o.cons))),
-    q.options.length ? optionLabel(OTHER, "Other", Boolean(rec) && !recOption) : null);
+      optionRow(OTHER, "Other", Boolean(rec) && !recOption,
+                el("td", { colspan: "2", class: "dim", text: "Your own answer, in the field below" }))));
   const ta = el("textarea", { class: "c-text", rows: "2",
                               placeholder: q.options.length ? "Your answer when « Other », or something to add (optional)" : "Your answer" });
   if (rec && !recOption) ta.value = rec;
