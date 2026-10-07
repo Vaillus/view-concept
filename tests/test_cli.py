@@ -70,14 +70,23 @@ def test_watch_writes_its_heartbeat(tmp_path):
 def test_question_prints_its_id(tmp_path):
     assert view_concept(tmp_path, "new", "Ask").returncode == 0
     r = view_concept(
-        tmp_path, "question", "ask", "PR or merge?", "--option", "PR", "--option", "merge"
+        tmp_path,
+        "question",
+        "ask",
+        "PR or merge?",
+        *("--option", "PR", "--pro", "reviewed", "--pro", "CI runs", "--con", "slower"),
+        *("--option", "merge", "--pro", "fast", "--con", "no review"),
     )
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == "q1"
     assert "no watch or wait is running" in r.stderr
     d = tmp_path / "sessions" / "ask"
     (q,) = json.loads((d / "questions.json").read_text())
-    assert q["options"] == ["PR", "merge"] and q["multi"] is False
+    assert q["options"] == [
+        {"label": "PR", "pros": ["reviewed", "CI runs"], "cons": ["slower"]},
+        {"label": "merge", "pros": ["fast"], "cons": ["no review"]},
+    ]
+    assert q["multi"] is False
     assert json.loads((d / "status.json").read_text())["phase"] == "awaiting-answer"
     Session("ask", root=tmp_path / "sessions").write_heartbeat()
     r = view_concept(tmp_path, "question", "ask", "Which files?", "--multi")
@@ -86,6 +95,10 @@ def test_question_prints_its_id(tmp_path):
     r = view_concept(tmp_path, "question", "ask", "Squash?", "--recommended", "yes")
     assert r.stdout.strip() == "q3"
     assert json.loads((d / "questions.json").read_text())[2]["recommended"] == "yes"
+    r = view_concept(tmp_path, "question", "ask", "Squash?", "--option", "yes", "--pro", "tidy")
+    assert r.returncode != 0 and "needs at least one pro and one con" in r.stderr
+    r = view_concept(tmp_path, "question", "ask", "Squash?", "--pro", "tidy")
+    assert r.returncode != 0 and "--pro must follow the --option" in r.stderr
     assert view_concept(tmp_path, "question", "nope", "Hm?").returncode != 0
     assert not (tmp_path / "sessions" / "nope").exists()
 

@@ -9,6 +9,10 @@ from view_concept import server
 from view_concept.store import Session, SessionError
 
 
+def options(*labels: str) -> list[dict]:
+    return [{"label": label, "pros": ["a gain"], "cons": ["a cost"]} for label in labels]
+
+
 @pytest.fixture
 def client(session, monkeypatch):
     """A client whose server reads sessions from the test session's directory."""
@@ -33,14 +37,14 @@ def test_api_says_whether_claude_is_listening(client, session):
 
 def test_api_sends_the_claude_questions(client, session):
     assert client.get("/api/s/kv-cache").json()["questions"] == []
-    session.add_question("PR or merge?", ["PR", "merge"])
+    session.add_question("PR or merge?", options("PR", "merge"))
     state = client.get("/api/s/kv-cache").json()
     assert [q["id"] for q in state["questions"]] == ["q1"]
     assert state["status"]["phase"] == "awaiting-answer"
 
 
 def test_api_answers_a_claude_question(client, session):
-    session.add_question("PR or merge?", ["PR", "merge"])
+    session.add_question("PR or merge?", options("PR", "merge"))
     url = "/api/s/kv-cache/questions/q1/answer"
     assert client.post(url, json={"choices": [], "text": " "}).status_code == 400
     r = client.post(url, json={"choices": ["PR"], "text": ""})
@@ -52,7 +56,7 @@ def test_api_answers_a_claude_question(client, session):
 
 
 def test_api_skips_a_claude_question(client, session):
-    session.add_question("PR or merge?", ["PR", "merge"], recommended="PR")
+    session.add_question("PR or merge?", options("PR", "merge"), recommended="PR")
     assert client.get("/api/s/kv-cache").json()["questions"][0]["recommended"] == "PR"
     url = "/api/s/kv-cache/questions/q1/skip"
     r = client.post(url)

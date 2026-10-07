@@ -202,6 +202,23 @@ def cmd_status(a: argparse.Namespace) -> None:
     print(f"{st['phase']} {st['section']}".strip())
 
 
+class OptionAction(argparse.Action):
+    """`--option` starts an option; the `--pro` and `--con` after it describe it."""
+
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
+        options = [*getattr(namespace, self.dest), {"label": values, "pros": [], "cons": []}]
+        setattr(namespace, self.dest, options)
+
+
+class TradeoffAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
+        options = getattr(namespace, self.dest)
+        if not options:
+            parser.error(f"{option_string} must follow the --option it describes")
+        key = "pros" if option_string == "--pro" else "cons"
+        options[-1][key].append(values)
+
+
 def cmd_question(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
@@ -359,7 +376,18 @@ def main() -> None:
     q = sub.add_parser("question", help="put an agent question to the user in the page")
     q.add_argument("slug")
     q.add_argument("text", help="the question")
-    q.add_argument("--option", action="append", default=[], help="one choice (repeatable)")
+    q.add_argument(
+        "--option",
+        action=OptionAction,
+        default=[],
+        help="one choice (repeatable), followed by its --pro and --con",
+    )
+    q.add_argument(
+        "--pro", action=TradeoffAction, dest="option", help="an advantage of the option before it"
+    )
+    q.add_argument(
+        "--con", action=TradeoffAction, dest="option", help="a drawback of the option before it"
+    )
     q.add_argument("--multi", action="store_true", help="the user may pick several choices")
     q.add_argument("--recommended", help="the answer you suggest: an option, or a text")
     q.set_defaults(fn=cmd_question)

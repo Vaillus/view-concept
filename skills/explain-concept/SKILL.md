@@ -41,7 +41,9 @@ The level answer gates the other two dimensions:
 
 **Goal.** What the explanation is *for*. A conceptual understanding, a debugging session, a design decision, and a formatting task all want the same concept explained with different emphases and different depths. This one is usually still worth asking even at a low level, provided the options are in plain language.
 
-Ask one or two questions (with your structured-question tool if the harness has one, else as a plain message) covering whichever dimensions are actually open — if the user already specified their goal, don't ask for it. Write one short line of framing before the tool call, then stop. Your turn is over.
+**Every option carries its trade-off, and « Other » is always there.** Give each option its pros and cons: what the user gets by picking it and what they give up (for a level option, say, "from scratch: no gaps, but longer"). The user picks better when the cost of each choice is on the page. And always offer « Other », a free answer of their own: list it as the last option unless the harness adds one itself. This holds for every question you ask, here and in Phase 3.
+
+Ask one or two questions (with your structured-question tool if the harness has one, putting the pros and cons in each option's description, else as a plain message) covering whichever dimensions are actually open — if the user already specified their goal, don't ask for it. Write one short line of framing before the tool call, then stop. Your turn is over.
 
 **Treat confusion or deferral as data.** If the user answers any scoping question with "I don't understand the options", "I don't know", or "you decide", that is a strong signal for the lowest level and the narrowest scope — not an invitation to choose freely. Do not fill the gap with outside context about who the user is or what they work on; the signal they just gave you outranks it. State the reading you have taken in a clause ("taking this from scratch") so they can correct it.
 
