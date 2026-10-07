@@ -66,10 +66,15 @@ always shows the model as it now stands, not as the branch wrote it.
 - **Phase 3 (calibrate)**: skip.
 - **Scoping**: do not skip it. Before Part 1 is written, scope the feature
   the branch implements or is about to implement: what is in, what is out,
-  which design, which constraints. Ask through the question flow, as
-  view-concept's **Scoping in the page** says (Setup first, then
-  `status <slug> scoping` and one `view-concept question` per question, with
-  `--recommended` when you have a suggestion), so the first model is right.
+  which design, which constraints. **Today comes first**: the user answers
+  the scoping questions from an understanding of where the branch stands, so
+  read the code (**Before Phase 2 — ground it**) and write the Today section
+  (**Today, before the questions**) before asking any of them. Then ask
+  through the question flow, as view-concept's **Scoping in the page** says
+  (Setup first, then `status <slug> scoping` and one `view-concept question`
+  per question, with `--recommended` when you have a suggestion), so the
+  first model is right. Point a question at the part of Today it rests on
+  when that helps the user answer.
   This matters most when the branch has no diff yet: the answers are then
   most of what the model starts from. The end of scoping (« Plan » in the
   scope block, a batch with `action: plan`, or « go ahead » in the terminal)
@@ -77,8 +82,9 @@ always shows the model as it now stands, not as the branch wrote it.
 
 ## Before Phase 2 — ground it
 
-Scoping runs before this read or alongside it: ask the questions that
-depend on nothing first, then read while the user answers.
+This read comes before any scoping question: its result is Today, which the
+user reads to answer them. Set `status <slug> scoping --message "reading the
+branch"` while you read, so the page says what you are doing.
 
 Read, in this order:
 
@@ -94,6 +100,36 @@ Read, in this order:
 Note what the diff does that the description does not mention, and the
 reverse. Both are findings. So is a doc that is missing or that the code
 contradicts: it is a gap, and you rebuild the concept from the code.
+
+## Today, before the questions
+
+Write the Today section (the first section of Part 1, see **Model
+consolidation**) as soon as the read is done, before the first scoping
+question. Write `plan.json` with an outline holding only this section, marked
+`"grounding": true` (`{"id": "today", "title": "Today", "earns": "…",
+"grounding": true}`), and its prose to `sections/today.md`. Keep the phase
+`scoping` (set the message, not the phase: `status <slug> scoping --message
+"writing Today"`). A grounding section is not a plan: the page still shows
+« Plan », and the scope block links to Today above the questions.
+
+Today gives the user what they need to answer the scoping questions and to
+judge the branch. It has two parts:
+
+1. **Before the branch.** What the user works with on the base, shown on a
+   real example: an existing session, a real file, a command and its output.
+   Only the vocabulary the code already has.
+2. **Where the branch stands.** When the branch has commits, a table of what
+   it does so far, one row per piece of work: the piece, its state (done,
+   partial, not started, or only in the description), and where it lives
+   (cited). Take the rows from the PR description, the commits, the diff and
+   the TODOs, so the user sees in one place what is finished, what is half
+   done, what the description promises that the diff does not do, and what
+   the diff does that the description does not say. When the branch has no
+   diff yet, say so in one line.
+
+The eight-line limit of Part 1 counts prose only, so the table may be as long
+as the branch needs. When scoping ends, write the rest of Part 1 after Today,
+and revise Today when an answer changed the picture.
 
 ## The flow
 
@@ -113,9 +149,10 @@ review).
 
 The Phase 2 outline is this fixed skeleton:
 
-1. **Today.** What the user works with before the branch, shown on a real
-   example: an existing session, a real file, a command and its output. No
-   new concept yet; only the vocabulary the code already has.
+1. **Today.** Written before the scoping questions (see **Today, before the
+   questions**): what the user works with before the branch, shown on a real
+   example, then where the branch stands. No new concept yet; only the
+   vocabulary the code already has.
 2. **What goes wrong.** The problems the example shows, in the user's terms:
    what they cannot do, what breaks, what is confusing. Each concept later in
    Part 1 answers one of them; a concept that answers none is a finding.
