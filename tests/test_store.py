@@ -74,6 +74,24 @@ def test_export_does_not_clobber_foreign_note(session, tmp_path):
     assert (vault / "Le KV cache.md").read_text() == "my own note"
 
 
+def test_export_moves_media_out_of_the_note(session, tmp_path):
+    vault = tmp_path / "vault"
+    (vault / ".obsidian").mkdir(parents=True)
+    gif = "data:image/gif;base64,R0lGODlhAQABAAAAACw="
+    widget = '<div onclick="this.x=1"><video src="data:video/mp4;base64,AAAA"></video></div>'
+    (session.sections_dir / "s1.md").write_text(f"Avant.\n\n![schéma]({gif})\n\n{widget}\n\nAprès.")
+    note = session.export(vault / "explanations").read_text()
+    assert "base64" not in note
+    media = vault / "explanations" / "kv-cache"
+    [img] = list((media / "assets").glob("*.gif"))
+    assert f"![schéma](kv-cache/assets/{img.name})" in note
+    [html] = list((media / "widgets").glob("*.html"))
+    assert 'src="assets/' in html.read_text() and "onclick" in html.read_text()
+    assert 'dv.view("explanations/kv-cache/widget", ' in note
+    assert f'"file": "explanations/kv-cache/widgets/{html.name}"' in note
+    assert (media / "widget.js").exists()
+
+
 def test_list_sessions(session, tmp_path):
     session.add_batch([{"text": "a"}])
     rows = list_sessions(tmp_path)

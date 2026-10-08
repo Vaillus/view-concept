@@ -88,6 +88,7 @@ Unpublishing deletes the record.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -803,12 +804,18 @@ class Session:
         path = vault_dir / f"{base}.md"
         if path.exists() and f"view-concept: {self.slug}\n" not in path.read_text(encoding="utf-8"):
             path = vault_dir / f"{base} ({self.slug}).md"
-        path.write_text(self.render_markdown(plan), encoding="utf-8")
+        sections = {
+            sid: _externalize(text, vault_dir, self.slug)
+            for sid, text in self.read_sections().items()
+        }
+        path.write_text(self.render_markdown(plan, sections), encoding="utf-8")
         return path
 
-    def render_markdown(self, plan: dict[str, Any] | None = None) -> str:
+    def render_markdown(
+        self, plan: dict[str, Any] | None = None, sections: dict[str, str] | None = None
+    ) -> str:
         plan = plan or self.read_plan()
-        sections = self.read_sections()
+        sections = self.read_sections() if sections is None else sections
         title = str(plan["title"]).strip() or self.slug
         question = str(plan.get("question", "")).replace('"', "'")
         lines = [
@@ -850,6 +857,102 @@ class Session:
         if changes:
             lines += ["## Model changes", "", format_changes(changes), ""]
         return "\n".join(lines)
+
+
+# ---- export: media out of the note ----
+# Sections embed their visuals as base64 data URIs, and their widgets (step players, sliders)
+# as HTML whose behaviour sits in inline on* attributes. Obsidian slows down on a note of
+# several MB and does not run inline handlers, so the export moves both out of the note:
+# each data URI becomes a file in <slug>/assets/, each widget a file in <slug>/widgets/
+# rendered by a dataviewjs block (Dataview plugin, JavaScript queries enabled) through
+# <slug>/widget.js, which turns the on* attributes back into event listeners.
+
+DATA_URI = re.compile(r"data:([a-z0-9.+/-]+);base64,([A-Za-z0-9+/=]+)")
+MD_IMAGE = re.compile(r"!\[([^\]]*)\]\(" + DATA_URI.pattern + r"\)")
+ON_ATTR = re.compile(r"\son[a-z]+\s*=", re.IGNORECASE)
+MEDIA_EXT = {
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "audio/ogg": "ogg",
+}
+
+WIDGET_JS = """\
+// Dataview view written by `view-concept export`: renders one widget of the note.
+// The widget HTML keeps its behaviour in inline on* attributes, which Obsidian does not
+// run, so each one is turned back into an event listener. src="assets/..." resolve
+// against `root`, the vault path of this folder.
+const { file, root } = input;
+const resolve = p => app.vault.adapter.getResourcePath(`${root}/${p}`);
+const html = (await app.vault.adapter.read(file))
+  .replace(/src="(assets\\/[^"]+)"/g, (_, p) => `src="${resolve(p)}"`);
+const box = dv.container.createDiv();
+box.innerHTML = html;
+for (const el of box.querySelectorAll("*")) {
+  for (const a of [...el.attributes]) {
+    if (!a.name.startsWith("on")) continue;
+    const fn = new Function("event", a.value);
+    el.removeAttribute(a.name);
+    el.addEventListener(a.name.slice(2), function (event) { return fn.call(this, event); });
+  }
+}
+"""
+
+
+def _vault_root(path: Path) -> Path:
+    """The Obsidian vault holding `path`: the nearest ancestor with a .obsidian folder."""
+    for p in [path, *path.parents]:
+        if (p / ".obsidian").is_dir():
+            return p
+    return path
+
+
+def _externalize(text: str, vault_dir: Path, slug: str) -> str:
+    """Rewrite one section for the vault note, writing its media under vault_dir/<slug>/."""
+    media = vault_dir / slug
+    rel = media.resolve().relative_to(_vault_root(vault_dir.resolve())).as_posix()
+
+    def save(mime: str, b64: str) -> str | None:
+        ext = MEDIA_EXT.get(mime)
+        if not ext:
+            return None
+        data = base64.b64decode(b64)
+        name = f"{hashlib.sha1(data).hexdigest()[:12]}.{ext}"
+        (media / "assets").mkdir(parents=True, exist_ok=True)
+        if not (media / "assets" / name).exists():
+            (media / "assets" / name).write_bytes(data)
+        return name
+
+    def asset_src(m: re.Match[str]) -> str:
+        name = save(m.group(1), m.group(2))
+        return f"assets/{name}" if name else m.group(0)
+
+    def widget(block: str) -> str:
+        html = DATA_URI.sub(asset_src, block)
+        name = f"{hashlib.sha1(html.encode()).hexdigest()[:12]}.html"
+        (media / "widgets").mkdir(parents=True, exist_ok=True)
+        (media / "widgets" / name).write_text(html, encoding="utf-8")
+        (media / "widget.js").write_text(WIDGET_JS, encoding="utf-8")
+        args = json.dumps({"file": f"{rel}/widgets/{name}", "root": rel}, ensure_ascii=False)
+        return f'```dataviewjs\nawait dv.view("{rel}/widget", {args})\n```'
+
+    def image(m: re.Match[str]) -> str:
+        name = save(m.group(2), m.group(3))
+        return f"![{m.group(1)}]({slug}/assets/{name})" if name else m.group(0)
+
+    parts = re.split(r"(\n\s*\n)", text)
+    for i, part in enumerate(parts):
+        if part.lstrip().startswith("<") and (DATA_URI.search(part) or ON_ATTR.search(part)):
+            parts[i] = widget(part.strip())
+        else:
+            parts[i] = MD_IMAGE.sub(image, part)
+    return "".join(parts)
 
 
 def list_sessions(root: Path | None = None) -> list[dict[str, Any]]:
