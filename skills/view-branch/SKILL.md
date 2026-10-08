@@ -60,31 +60,30 @@ always shows the model as it now stands, not as the branch wrote it.
 
 - **Session**: a code session, `--kind code --repo <repo root> --workflow view-branch`, opened on the
   branch. Citations are required, as view-concept says.
-- **Level**: the user owns the repository. Skip the level question.
+- **Level**: the user owns the repository, but not every topic the branch
+  touches. Ask the level only during scoping, per topic (see **Scoping**).
 - **Goal**: decide what the branch should be, and get it there. Skip the goal
   question.
 - **Phase 3 (calibrate)**: skip.
-- **Scoping**: do not skip it. Before Part 1 is written, scope the feature
-  the branch implements or is about to implement: what is in, what is out,
-  which design, which constraints. **Today comes first**: the user answers
-  the scoping questions from an understanding of where the branch stands, so
-  read the code (**Before Phase 2 — ground it**) and write the Today section
-  (**Today, before the questions**) before asking any of them. Then ask
-  through the question flow, as view-concept's **Scoping in the page** says
-  (Setup first, then `status <slug> scoping` and one `view-concept question`
-  per question, with `--recommended` when you have a suggestion), so the
-  first model is right. Point a question at the part of Today it rests on
-  when that helps the user answer.
-  This matters most when the branch has no diff yet: the answers are then
-  most of what the model starts from. The end of scoping (« Plan » in the
-  scope block, a batch with `action: plan`, or « go ahead » in the terminal)
-  means: write Part 1.
+- **Scoping**: do not skip it, but ask only the user's level, never a
+  design decision: each decision is asked later, at the end of the Part 1
+  section that gives its context (see **One section at a time**). Read the
+  branch first (**Before Phase 2 — ground it**): only then do you know which
+  topics it touches. Ask the level on those topics only, and skip a topic
+  an earlier answer makes obvious. Ask through the question flow, as
+  view-concept's **Scoping in the page** says (Setup first, then
+  `status <slug> scoping` and one `view-concept question` per question,
+  with `--recommended` when you have a suggestion). The end of scoping
+  (« Plan » in the scope block, a batch with `action: plan`, or « go ahead »
+  in the terminal) means: write the first section of Part 1.
 
 ## Before Phase 2 — ground it
 
-This read comes before any scoping question: its result is Today, which the
-user reads to answer them. Set `status <slug> scoping --message "reading the
-branch"` while you read, so the page says what you are doing.
+This read comes before the scoping questions: the topics they ask about are
+the ones the branch touches. Set `status <slug> scoping --message "reading
+the branch"` while you read, so the page says what you are doing. One
+question may go out at once, to cover the read: the user's level on the
+branch itself.
 
 Read, in this order:
 
@@ -100,36 +99,6 @@ Read, in this order:
 Note what the diff does that the description does not mention, and the
 reverse. Both are findings. So is a doc that is missing or that the code
 contradicts: it is a gap, and you rebuild the concept from the code.
-
-## Today, before the questions
-
-Write the Today section (the first section of Part 1, see **Model
-consolidation**) as soon as the read is done, before the first scoping
-question. Write `plan.json` with an outline holding only this section, marked
-`"grounding": true` (`{"id": "today", "title": "Today", "earns": "…",
-"grounding": true}`), and its prose to `sections/today.md`. Keep the phase
-`scoping` (set the message, not the phase: `status <slug> scoping --message
-"writing Today"`). A grounding section is not a plan: the page still shows
-« Plan », and the scope block links to Today above the questions.
-
-Today gives the user what they need to answer the scoping questions and to
-judge the branch. It has two parts:
-
-1. **Before the branch.** What the user works with on the base, shown on a
-   real example: an existing session, a real file, a command and its output.
-   Only the vocabulary the code already has.
-2. **Where the branch stands.** When the branch has commits, a table of what
-   it does so far, one row per piece of work: the piece, its state (done,
-   partial, not started, or only in the description), and where it lives
-   (cited). Take the rows from the PR description, the commits, the diff and
-   the TODOs, so the user sees in one place what is finished, what is half
-   done, what the description promises that the diff does not do, and what
-   the diff does that the description does not say. When the branch has no
-   diff yet, say so in one line.
-
-The eight-line limit of Part 1 counts prose only, so the table may be as long
-as the branch needs. When scoping ends, write the rest of Part 1 after Today,
-and revise Today when an answer changed the picture.
 
 ## The flow
 
@@ -149,10 +118,10 @@ review).
 
 The Phase 2 outline is this fixed skeleton:
 
-1. **Today.** Written before the scoping questions (see **Today, before the
-   questions**): what the user works with before the branch, shown on a real
-   example, then where the branch stands. No new concept yet; only the
-   vocabulary the code already has.
+1. **Today.** What the user works with before the branch, shown on a real
+   example: an existing session, a real file, a command and its output. Only
+   the code before the branch: no new concept yet, only the vocabulary the
+   code already has.
 2. **What goes wrong.** The problems the example shows, in the user's terms:
    what they cannot do, what breaks, what is confusing. Each concept later in
    Part 1 answers one of them; a concept that answers none is a finding.
@@ -169,8 +138,31 @@ The order is fixed: the user reads the concepts after seeing what they are
 for. A concept-first Part 1, with no picture of the result, was too abstract
 to discuss.
 
-Write only these sections in Phase 5, then run the Phase 6 audit on them: the
-vocabulary of the model is what the agents and the code will inherit.
+Write the whole outline in Phase 2, so the user sees it in the Plan tab from
+the start. Write only these sections in Phase 5, then the closing section
+below, and run the Phase 6 audit on them: the vocabulary of the model is
+what the agents and the code will inherit.
+
+**One section at a time.** Write Part 1 section by section, in the outline's
+order. After each section, ask the design decisions it gives the context
+for, one or several, as agent questions at its end (`view-concept question`,
+with `--recommended`): a decision is asked once the user has read what it
+rests on, never at scoping. Write the next section only once they are
+answered or skipped, and write it from the answers: an answer the user took
+is a model change, so record it and rewrite what it makes false. A section
+that settles no decision is followed by the next one at once.
+
+**Steering between sections.** The user redirects the sections still to
+write by commenting on their titles in the outline of the Plan tab and
+clicking « Send ». Before writing the next section, apply the comments that
+arrived: rename, merge, drop or add a section, and update the outline.
+
+**Further directions.** After the last concept section, add a short closing
+section at the bottom of the Model tab, titled « Further directions »: about
+three ways to push the concepts beyond the plan, one line each, each marked
+« fits this PR » or « follow-up ». It proposes, it does not grow the
+branch: a direction the user picks becomes an agent question or a new
+section, placed where it belongs.
 
 **Keep Part 1 short.** It is read to discuss the concepts, not to check them:
 each section gives the core in a few lines (three to eight), a table or a
@@ -179,11 +171,11 @@ placed where it belongs when the user asks for one (a folded answer, as
 view-concept says). A first version of Part 1 written at full
 explanation depth was judged far too long to read at this stage.
 
-**Check the length before showing it.** After writing Part 1, and again after
-each revision, count the lines of prose in every section (tables, code blocks
-and diagrams don't count). Cut any section over eight lines before you tell
-the user it is written or set `awaiting-model`. When the user is confused,
-make the order clearer or add a picture: more prose is not the answer.
+**Check the length before showing it.** After writing each section, and
+again after each revision, count its lines of prose (tables, code blocks and
+diagrams don't count). Cut a section over eight lines before you ask its
+decisions or set `awaiting-model`. When the user is confused, make the order
+clearer or add a picture: more prose is not the answer.
 
 Then the discussion: the user challenges the model, in the page or in the
 terminal. Record each model change as above.
@@ -201,7 +193,7 @@ rewrite what it makes false. Before « Approve model », set
 `awaiting-model` again. After it, the model has moved under the code: list
 the new gaps and close them as model matching says, then update Part 2.
 
-When no correction is pending,
+When the closing section is written and no correction is pending,
 run `view-concept status <slug> awaiting-model`: the page shows « Approve
 model ».
 

@@ -66,9 +66,6 @@ The Phase 2 outline starts with this fixed skeleton, in this order:
 
 1. **Today.** The scope on one real example: a script run with its output, a
    file it writes, a chain of imports. Only the vocabulary the code has.
-   Written before the scoping questions, as a grounding section, as
-   view-branch's **Today, before the questions** says (its first part only:
-   a refactor has no branch to report on).
 2. **What goes wrong.** The problems the example shows, in the user's terms:
    duplicated logic, a file doing several jobs, code nothing reads, a module
    in the wrong place.
