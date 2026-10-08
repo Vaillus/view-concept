@@ -68,8 +68,9 @@ always shows the model as it now stands, not as the branch wrote it.
   the branch implements or is about to implement: what is in, what is out,
   which design, which constraints. Ask through the question flow, as
   view-concept's **Scoping in the page** says (Setup first, then
-  `status <slug> scoping` and one `view-concept question` per question, with
-  `--recommended` when you have a suggestion), so the first model is right.
+  `status <slug> scoping` and one `view-concept question` per question, each
+  option with its `--pro` and `--con`, and `--recommended` when you have a
+  suggestion), so the first model is right.
   This matters most when the branch has no diff yet: the answers are then
   most of what the model starts from. The end of scoping (« Plan » in the
   scope block, a batch with `action: plan`, or « go ahead » in the terminal)

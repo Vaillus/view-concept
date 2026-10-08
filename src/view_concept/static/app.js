@@ -989,8 +989,9 @@ $("#composer textarea").addEventListener("keydown", (e) => {
 
 /* ---------------- agent questions: the scope block ----------------
    An agent question is one the agent puts to the user in the page (`view-concept question`,
-   questions.json): its text, optional options (one choice, or several when `multi`),
-   always a free-text field, and maybe a recommended answer (`recommended`). Every agent
+   questions.json): its text, optional options (one choice, or several when `multi`), each
+   with its pros and cons, then « Other », whose answer is the free-text field, and maybe a
+   recommended answer (`recommended`). Every agent
    question lives in the scope block, at the top of the Plan tab: one box per open
    question, oldest first, then the answered and skipped ones folded under « answered ».
    The review pane only counts the open ones (see renderWaiting).
@@ -1013,20 +1014,45 @@ function questionCard(q) {
   if (questionCards.has(q.id)) return questionCards.get(q.id);
   const type = q.multi ? "checkbox" : "radio";
   const rec = q.recommended || "";
-  const recOption = q.options.includes(rec);
+  const recOption = q.options.some((o) => o.label === rec);
   const suggested = () => el("span", { class: "badge accent", text: "suggested" });
-  const options = el("div", { class: "q-options" }, ...q.options.map((o) =>
-    el("label", {}, el("input", { type, name: `answer-${q.id}`, value: o, checked: recOption && o === rec }),
-       el("span", { text: o }), recOption && o === rec ? suggested() : null)));
+  const OTHER = "Other"; // never an option label: the store refuses it
+  const tradeoffs = (kind, items) => el("td", { class: `q-tradeoffs ${kind}` },
+    items.length ? el("ul", {}, ...items.map((t) => el("li", { text: t }))) : el("span", { class: "dim", text: "—" }));
+  const optionRow = (value, text, checked, ...cells) => {
+    const input = el("input", { type, name: `answer-${q.id}`, value, checked });
+    const row = el("tr", {},
+      el("th", { scope: "row" }, el("label", {}, input, el("span", { text }),
+                                    checked && value !== OTHER ? suggested() : null)),
+      ...cells);
+    // The whole row picks the option, so the pros and cons are a click target too.
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("label")) return;
+      input.checked = type === "radio" ? true : !input.checked;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    return row;
+  };
+  const options = el("table", { class: "q-options" },
+    el("thead", {}, el("tr", {}, el("th", { text: "Option" }), el("th", { text: "Pros" }), el("th", { text: "Cons" }))),
+    el("tbody", {},
+      ...q.options.map((o) => optionRow(o.label, o.label, recOption && o.label === rec,
+                                        tradeoffs("pros", o.pros), tradeoffs("cons", o.cons))),
+      optionRow(OTHER, "Other", Boolean(rec) && !recOption,
+                el("td", { colspan: "2", class: "dim", text: "Your own answer, in the field below" }))));
   const ta = el("textarea", { class: "c-text", rows: "2",
-                              placeholder: q.options.length ? "Something to add, or another answer (optional)" : "Your answer" });
+                              placeholder: q.options.length ? "Your answer when « Other », or something to add (optional)" : "Your answer" });
   if (rec && !recOption) ta.value = rec;
   const skip = el("button", { class: "btn", text: "Skip", title: "No answer: the agent uses its default" });
   const button = el("button", { class: "btn primary q-answer", text: "Validate" });
-  const choices = () => [...options.querySelectorAll("input:checked")].map((i) => i.value);
-  const update = () => { button.disabled = !choices().length && !ta.value.trim(); };
+  const picked = () => [...options.querySelectorAll("input:checked")].map((i) => i.value);
+  const choices = () => picked().filter((v) => v !== OTHER);
+  const update = () => {
+    const text = ta.value.trim();
+    button.disabled = picked().includes(OTHER) ? !text : !choices().length && !text;
+  };
   update();
-  options.addEventListener("change", update);
+  options.addEventListener("change", (e) => { if (e.target.value === OTHER && e.target.checked) ta.focus(); update(); });
   ta.addEventListener("input", update);
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); button.click(); }

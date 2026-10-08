@@ -13,6 +13,10 @@ from view_concept.store import (
 )
 
 
+def options(*labels: str) -> list[dict]:
+    return [{"label": label, "pros": ["a gain"], "cons": ["a cost"]} for label in labels]
+
+
 def test_create_is_idempotent(session):
     assert session.create("other") is False
     assert session.read_plan()["title"] == "Le KV cache"
@@ -240,9 +244,9 @@ def test_listening_follows_the_heartbeat(session):
 
 def test_claude_question(session):
     before = session.signature()
-    q1 = session.add_question(" Which one? ", ["a PR", " ", "a merge"])
+    q1 = session.add_question(" Which one? ", options("a PR", " ", "a merge"))
     assert q1["id"] == "q1" and q1["text"] == "Which one?" and q1["status"] == "open"
-    assert q1["options"] == ["a PR", "a merge"] and q1["multi"] is False
+    assert q1["options"] == options("a PR", "a merge") and q1["multi"] is False
     assert session.read_status()["phase"] == "awaiting-answer"
     assert session.signature() != before  # the page shows the card
     q2 = session.add_question("Anything else?", multi=True)
@@ -252,8 +256,29 @@ def test_claude_question(session):
         session.add_question(" ")
 
 
+def test_every_option_carries_a_pro_and_a_con(session):
+    q = session.add_question(
+        "PR or merge?", [{"label": " a PR ", "pros": [" reviewed ", " "], "cons": ["slower"]}]
+    )
+    assert q["options"] == [{"label": "a PR", "pros": ["reviewed"], "cons": ["slower"]}]
+    with pytest.raises(SessionError, match="'a merge' needs at least one pro and one con"):
+        session.add_question("Which?", [{"label": "a merge", "pros": ["fast"], "cons": [" "]}])
+    with pytest.raises(SessionError, match="Other"):
+        session.add_question("Which?", options("a PR", "other"))
+    assert len(session.read_questions()) == 1
+
+
+def test_bare_label_options_read_as_options_without_tradeoffs(session):
+    session.questions_path.write_text(
+        json.dumps([{"id": "q1", "text": "PR?", "options": ["a PR"], "status": "open"}])
+    )
+    (q,) = session.read_questions()
+    assert q["options"] == [{"label": "a PR", "pros": [], "cons": []}]
+    session.answer_question("q1", ["a PR"])
+
+
 def test_answer_is_sent_as_a_batch(session):
-    session.add_question("PR or merge?", ["a PR", "a merge"])
+    session.add_question("PR or merge?", options("a PR", "a merge"))
     with pytest.raises(SessionError, match="empty answer"):
         session.answer_question("q1", [], " ")
     with pytest.raises(SessionError, match="not an option"):
@@ -275,7 +300,7 @@ def test_answer_is_sent_as_a_batch(session):
 
 
 def test_answered_in_terminal_sends_no_batch(session):
-    session.add_question("PR or merge?", ["a PR", "a merge"])
+    session.add_question("PR or merge?", options("a PR", "a merge"))
     session.add_question("Why?")
     assert session.read_status()["phase"] == "awaiting-answer"
     q = session.answered_in_terminal("q1", " a PR, squashed ")
@@ -300,14 +325,14 @@ def test_a_question_keeps_the_scoping_phase(session):
 
 
 def test_question_with_a_recommended_answer(session):
-    assert "recommended" not in session.add_question("PR or merge?", ["a PR", "a merge"])
-    q = session.add_question("Which?", ["a PR", "a merge"], recommended=" a PR ")
+    assert "recommended" not in session.add_question("PR or merge?", options("a PR", "a merge"))
+    q = session.add_question("Which?", options("a PR", "a merge"), recommended=" a PR ")
     assert q["recommended"] == "a PR"
     assert session.read_questions()[1]["recommended"] == "a PR"
 
 
 def test_skip_is_sent_as_a_batch(session):
-    session.add_question("PR or merge?", ["a PR", "a merge"])
+    session.add_question("PR or merge?", options("a PR", "a merge"))
     b = session.skip_question("q1")
     assert b["action"] == "answer" and b["comments"] == []
     assert b["answers"] == [{"question": "q1", "skipped": True}]
@@ -327,7 +352,7 @@ def test_skip_is_sent_as_a_batch(session):
 
 
 def test_format_skip_batch(session):
-    session.add_question("Which  files?", ["a.py", "b.py"])
+    session.add_question("Which  files?", options("a.py", "b.py"))
     b = session.skip_question("q1")
     out = format_batch("kv-cache", b, session.read_plan()["outline"], session.read_questions())
     assert "action: answer (the user skipped agent question q1 from the page)" in out
@@ -342,7 +367,7 @@ def test_answer_batch_needs_answers(session):
 
 
 def test_format_answer_batch(session):
-    session.add_question("Which  files?", ["a.py", "b.py"], multi=True)
+    session.add_question("Which  files?", options("a.py", "b.py"), multi=True)
     session.add_question("Why?")
     b1 = session.answer_question("q1", ["a.py", "b.py"], "and the tests")
     b2 = session.answer_question("q2", [], "because")

@@ -47,10 +47,12 @@ every HEARTBEAT_EVERY seconds, and a heartbeat older than LISTENING_FOR seconds 
 means no watch runs. The margin covers the seconds between a Monitor expiry and the re-arm.
 
 An agent question is a question the agent puts to the user in the page rather than in the
-terminal: {id: q1…, text, options, multi (several options may be picked), recommended?
-(the answer the agent suggests: an option, which the page preselects, or a text it
-pre-fills), status: "open" | "answered" | "skipped", asked, answer?: {choices, text, at,
-from?}, skipped? (when)}. Asking one sets the phase "awaiting-answer", except during
+terminal: {id: q1…, text, options: [{label, pros, cons}] (every option carries at least one
+pro and one con, so the user weighs the trade-off; the page always adds « Other », a free
+answer), multi (several options may be picked), recommended? (the answer the agent
+suggests: an option's label, which the page preselects, or a text it pre-fills), status:
+"open" | "answered" | "skipped", asked, answer?: {choices, text, at, from?}, skipped?
+(when)}. Asking one sets the phase "awaiting-answer", except during
 scoping: in the phase "scoping" the agent keeps asking without waiting, so the phase
 stays. The page shows each open one in the scope block at the top of the Plan tab. The
 user's answer reaches the session as a batch whose action is "answer", carrying
@@ -177,6 +179,24 @@ def _write_json(path: Path, data: Any) -> None:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
     os.replace(tmp, path)
+
+
+def _question_options(options: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The options of an agent question, stripped, each with at least one pro and one con.
+    « Other » is the page's own free answer, so no option takes that label."""
+    cleaned = []
+    for option in options:
+        label = str(option.get("label", "")).strip()
+        if not label:
+            continue
+        if label.casefold() == "other":
+            raise SessionError("« Other » is always offered: leave it out of the options")
+        pros = [p.strip() for p in option.get("pros", []) if p.strip()]
+        cons = [c.strip() for c in option.get("cons", []) if c.strip()]
+        if not pros or not cons:
+            raise SessionError(f"option {label!r} needs at least one pro and one con")
+        cleaned.append({"label": label, "pros": pros, "cons": cons})
+    return cleaned
 
 
 # Text the page never marks terms in: fenced code (and Mermaid), inline code, maths.
@@ -417,17 +437,26 @@ class Session:
         return d
 
     def read_questions(self) -> list[dict[str, Any]]:
-        return _read_json(self.questions_path, [])
+        """The agent questions. A question written before options carried their trade-offs
+        has bare-label options: they read as options with no pros or cons."""
+        questions = _read_json(self.questions_path, [])
+        for q in questions:
+            q["options"] = [
+                {"label": o, "pros": [], "cons": []} if isinstance(o, str) else o
+                for o in q.get("options", [])
+            ]
+        return questions
 
     def add_question(
         self,
         text: str,
-        options: list[str] | None = None,
+        options: list[dict[str, Any]] | None = None,
         multi: bool = False,
         recommended: str = "",
     ) -> dict[str, Any]:
         """Put an agent question to the user, and wait for the answer: the phase becomes
         "awaiting-answer". During scoping nothing waits: the phase stays "scoping".
+        Each option is {label, pros, cons}, with at least one pro and one con.
         `recommended` is the answer the agent suggests."""
         if not text.strip():
             raise SessionError("empty question")
@@ -435,7 +464,7 @@ class Session:
         q = {
             "id": f"q{len(questions) + 1}",
             "text": text.strip(),
-            "options": [o.strip() for o in options or [] if o.strip()],
+            "options": _question_options(options or []),
             "multi": multi,
             "status": "open",
             "asked": now_iso(),
@@ -463,7 +492,8 @@ class Session:
         questions = self.read_questions()
         q = self._open_question(questions, qid)
         choices = [c for c in choices if c]
-        unknown = [c for c in choices if c not in q["options"]]
+        labels = [o["label"] for o in q["options"]]
+        unknown = [c for c in choices if c not in labels]
         if unknown:
             raise SessionError(f"not an option of {qid}: {', '.join(unknown)}")
         if len(choices) > 1 and not q.get("multi"):
