@@ -134,12 +134,6 @@ def test_plan_batch_skips_the_open_questions(session):
         "action: plan (the user asked for a replan from the page: treat open questions "
         "as skipped and revise the plan with the answers, or the model in a branch review)"
     ) in format_batch("kv-cache", b, [{"id": "s1", "title": "Intro", "earns": ""}])
-    # A grounding section alone (the Today written for the questions) is not yet a plan.
-    today = {"id": "today", "title": "Today", "earns": "", "grounding": True}
-    assert "the user ended scoping" in format_batch("kv-cache", b, [today])
-    assert "replan" in format_batch(
-        "kv-cache", b, [today, {"id": "s2", "title": "What goes wrong", "earns": ""}]
-    )
 
 
 def test_grill_batches(session):

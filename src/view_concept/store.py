@@ -20,11 +20,7 @@ reach the agent session through the inbox.
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
 
-A section is one element of the `outline` list in plan.json: {id, title, earns,
-grounding?}. A grounding section (`grounding: true`, the « Today » of a branch review or
-a refactor) is written before scoping ends, so the user answers the scoping questions
-knowing the code they are about: an outline holding only grounding sections is not yet
-a plan, so « Plan » still ends scoping rather than asking for a replan. An
+A section is one element of the `outline` list in plan.json: {id, title, earns}. An
 answer to a comment that belongs in the explanation amends a section or adds one at its
 place in the outline; a `kind: "question"` left by an older session is ignored, and the
 section reads as any other. A refactor section, marked `part: 2`, belongs to Part 2 of
@@ -925,7 +921,7 @@ def format_batch(
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")
-    if batch.get("action") == "plan" and any(not s.get("grounding") for s in outline):
+    if batch.get("action") == "plan" and outline:
         # A plan already exists: the answers given since may change it.
         lines.append(
             "action: plan (the user asked for a replan from the page: treat open questions "

@@ -78,7 +78,7 @@ In the directory printed by `new` (`~/.view-concept/sessions/<slug>/`):
 
 | File | Content | Written in |
 |---|---|---|
-| `plan.json` | `{"title", "question", "created", "revision", "outline": [{"id": "s1", "title", "earns", "grounding"?}], "lexicon": [{"term", "section": "s1", "definition", "tip"}]}` — keep the fields `new` wrote. `"grounding": true` marks a section written before scoping ends so the user answers the questions knowing the code (view-branch's Today); an outline of grounding sections only is not yet a plan | Phase 2, rewritten in Phase 4; `tip` in Phase 5 |
+| `plan.json` | `{"title", "question", "created", "revision", "outline": [{"id": "s1", "title", "earns"}], "lexicon": [{"term", "section": "s1", "definition", "tip"}]}` — keep the fields `new` wrote | Phase 2, rewritten in Phase 4; `tip` in Phase 5 |
 | `sections/<id>.md` | the prose of one outline section, Markdown, no heading of its own (the page renders the title). `$…$` / `$$…$$` for maths, ```` ```mermaid ```` for diagrams | Phase 5, and every later edit |
 | `audit.json` | `[{"term", "section", "issue": "undefined\|metaphor\|ambiguous\|assumes-context\|forward\|early", "note"}]` | Phase 6 |
 

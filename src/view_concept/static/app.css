@@ -227,7 +227,6 @@ a.cite:hover code { text-decoration: underline; }
 .scope-actions { margin-left: auto; display: flex; gap: 6px; text-transform: none; letter-spacing: 0; font-size: 12px; }
 .scope-actions .btn { color: var(--ink); }
 .scope-actions .btn.primary { color: var(--on-accent); }
-.scope-read-first { margin-bottom: 8px; color: var(--ink-dim); }
 #scope-questions { display: flex; flex-direction: column; gap: 8px; }
 #scope-questions:empty { display: none; }
 .question { border: 1px solid var(--flag); padding: 6px 8px; background: var(--bg); display: flex; flex-direction: column; gap: 6px; }

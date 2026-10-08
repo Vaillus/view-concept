@@ -1064,12 +1064,8 @@ function scopingProduct() {
   return ["view-branch", "view-refactor"].includes(state.workflow) ? "model" : "plan";
 }
 
-// A grounding section (`grounding: true`) is written before scoping ends, so the user
-// answers the questions knowing the code they are about; it is not yet a plan.
-const groundingSections = () => (state.plan.outline || []).filter((s) => s.grounding);
-
 // Once a plan exists, the answers given since may change it: « Plan » becomes « Replan ».
-const replanning = () => (state.plan.outline || []).some((s) => !s.grounding);
+const replanning = () => (state.plan.outline || []).length > 0;
 
 function renderScope() {
   const questions = state.questions || [];
@@ -1090,13 +1086,6 @@ function renderScope() {
        answerText(q.status === "skipped" ? { skipped: true } : q.answer || {}),
        q.answer?.from === "terminal" ? el("span", { class: "dim", text: " (in the terminal)" }) : null))));
   $("#scope-empty").hidden = questions.length > 0 || state.status.phase === "scoping";
-  const grounding = groundingSections().filter((s) => state.sections[s.id]);
-  const readFirst = $("#scope-read-first");
-  readFirst.hidden = !grounding.length || !(state.status.phase === "scoping" || open.length);
-  readFirst.replaceChildren("Before answering, read ", ...grounding.flatMap((s, i) => [
-    i ? ", " : "",
-    el("a", { href: `#sec-${s.id}`, text: `« ${s.title} »`,
-              onclick: (e) => { e.preventDefault(); scrollToSection(s.id); } })]), " →");
 
   const grill = $("#grill");
   grill.textContent = state.grilling ? "Stop grill" : "Grill me";
