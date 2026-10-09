@@ -950,7 +950,7 @@ function openComposer(target, mode = "comment") {
   $(".add", c).textContent = mode === "ask" ? "Ask" : "Add";
   $("#no-parent").hidden = mode !== "ask" || threadsState.forkable;
   $("textarea", c).placeholder = mode === "ask"
-    ? "Your question for a side thread  (⌘↵ to ask, Esc to cancel)"
+    ? "Your question for a side thread  (↵ to ask, ⇧↵ for a new line, Esc to cancel)"
     : "Your comment  (⌘↵ to add, Esc to cancel)";
   const rect = target.rect || document.getElementById(`sec-${target.section}`).getBoundingClientRect();
   c.style.top = `${window.scrollY + Math.min(rect.bottom + 6, innerHeight - 220)}px`;
@@ -982,8 +982,12 @@ function addDraft() {
 
 $("#composer .add").addEventListener("click", submitComposer);
 $("#composer .cancel").addEventListener("click", closeComposer);
+// In a thread, Enter sends and Shift+Enter breaks the line; a comment keeps ⌘↵.
+const sendsOnEnter = (e) => e.key === "Enter" && !e.shiftKey && !e.isComposing;
+
 $("#composer textarea").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitComposer(); }
+  const ask = $("#composer")._mode === "ask";
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey || (ask && sendsOnEnter(e)))) { e.preventDefault(); submitComposer(); }
   if (e.key === "Escape") closeComposer();
 });
 
@@ -1403,7 +1407,7 @@ docViews().forEach((v) => v.addEventListener("mousemove", (e) => {
 
 function threadCard(t) {
   if (cards.has(t.id)) return cards.get(t.id);
-  const ta = el("textarea", { class: "c-text", rows: "2", placeholder: "Reply  (⌘↵ to send, Esc to close)" });
+  const ta = el("textarea", { class: "c-text", rows: "2", placeholder: "Reply  (↵ to send, ⇧↵ for a new line, Esc to close)" });
   const card = {
     root: el("div", { class: "thread-card" }),
     head: el("div", { class: "t-head" }),
@@ -1417,7 +1421,7 @@ function threadCard(t) {
     del: el("button", { class: "btn t-delete", text: "Delete", onclick: () => deleteThread(t.id) }),
   };
   ta.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); replyThread(t.id); }
+    if (sendsOnEnter(e)) { e.preventDefault(); replyThread(t.id); }
   });
   card.foot = el("div", { class: "t-foot" }, ta, el("div", { class: "t-actions" }, card.del, card.batch, card.stop, card.reply));
   card.root.append(card.head, card.msgs, card.error, card.foot);
