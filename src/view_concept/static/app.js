@@ -1,9 +1,9 @@
 /* view-concept — the session page.
 
    Tabs share the main space: the plan (the scope block with the agent questions, outline,
-   model changes, lexicon), the explanation (one block per explanation section) and, in a
+   change history, lexicon), the explanation (one block per explanation section) and, in a
    branch review that has reached the refactoring step, the refactor tab (the refactor
-   sections, Part 2); the review pane (a conversation: sent batches and answered agent
+   sections, the refactoring part); the review pane (a conversation: sent batches and answered agent
    questions, a line counting the open ones, then the draft comments) stays on the
    right. The page never edits the explanation: the agent writes the files, the server
    streams "changed", the page re-fetches. The page writes batches of comments, and side
@@ -106,13 +106,15 @@ const numberOf = (id) => {
 };
 const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).title || id;
 
-/* Part 2 of a branch review, written in the refactoring step, is made of refactor sections
-   (sections with "part": 2): they are read in their own tab, "refactor"; every other
-   section is an explanation section, in the explanation. Both tabs are rendered into
-   their own view, with the same section blocks. */
-const isPart2 = (id) => (state.plan.outline.find((s) => s.id === id) || {}).part === 2;
-const tabOf = (id) => (isPart2(id) ? "refactor" : "doc");
-const hasRefactorTab = () => state.plan.outline.some((s) => s.part === 2);
+/* The refactoring part of a branch review, written in the refactoring step, is made of
+   refactor sections (sections with "part": "refactoring"): they are read in their own
+   tab, "refactor"; every other section is an explanation section, in the explanation (in
+   a branch review, the modeling part). Both tabs are rendered into their own view, with
+   the same section blocks. Sessions written before the rename mark them "part": 2. */
+const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
+const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
+const tabOf = (id) => (inRefactoringPart(id) ? "refactor" : "doc");
+const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
 const docViews = () => [$("#doc"), $("#refactor")];
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
@@ -134,7 +136,7 @@ function render() {
 
 /* ---------------- tabs ----------------
    The plan, the explanation and the refactor tab share one space; one is shown at a
-   time. The refactor tab exists only once a section is in Part 2. The tab follows the
+   time. The refactor tab exists only once a section is in the refactoring part. The tab follows the
    session at the moments that matter — scoping starting (its questions are in the scope
    block, on the Plan tab), the plan waiting for approval, the writing starting (in the
    tab of the section being written) — and otherwise stays where the user put it. A
@@ -163,7 +165,7 @@ function followSession() {
   lastPhase = phase;
   $('.tab[data-tab="refactor"]').hidden = !hasRefactorTab();
   if (tab === "refactor" && !hasRefactorTab()) setTab("doc");
-  // In a branch review, Part 1 is the model of the branch, so its tab is named after it.
+  // In a branch review, the explanation is the modeling part, so its tab is named after the model.
   const docLabel = state.workflow === "view-branch" ? "model" : "explanation";
   $('.tab[data-tab="doc"]').title = `${docLabel[0].toUpperCase()}${docLabel.slice(1)} (2)`;
   for (const [name, label] of [["doc", docLabel], ["refactor", "refactor"]]) {
@@ -210,7 +212,7 @@ const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "a
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until the agent moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it.
-   « Approve model » sits at the end of the explanation, after the last section of Part 1,
+   « Approve model » sits at the end of the explanation, after the last section of the modeling part,
    where the model is read; « Create PR » at the end of the refactor tab. The page does not
    switch tabs for them. */
 const docButton = el("button", { id: "doc-approve", class: "btn primary approve doc-approve", hidden: true });
@@ -238,9 +240,9 @@ function renderStatus() {
   const approval = APPROVALS[phase];
   const asking = ["scoping", "awaiting-answer"].includes(phase) && openQuestions().length > 0;
   const labels = {
-    // Scoping runs while the agent asks; its questions wait in the scope block, and « Plan » ends it.
+    // Scoping runs while the agent asks; its questions wait in the scope block, and « Write plan » ends it.
     scoping: asking ? "scoping · questions waiting for you"
-           : planPending() ? `scoping ended · the agent is ${replanning() ? "revising" : "writing"} the ${scopingProduct()}`
+           : planPending() ? `scoping ended · the agent is ${rewriting() ? "revising" : "writing"} the ${scopingProduct()}`
            : "scoping the question",
     planning: "drafting the plan",
     ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
@@ -272,12 +274,16 @@ for (const b of [$("#approve"), docButton, prButton]) b.addEventListener("click"
 function renderPlan() {
   const { plan } = state;
   renderScope();
+  // A branch review logs every change of the model: its last entry says what moved last.
+  // Other sessions state their last plan revision in plan.json.
+  const changes = state.changes || [];
+  const last = changes.length && changes[changes.length - 1].cause ? changes[changes.length - 1].change : "";
   const rev = $("#revision");
-  if (plan.revision) {
+  if (last || plan.revision) {
     rev.hidden = false;
     rev.replaceChildren(
-      el("span", { class: planChanged ? "badge flag" : "badge", text: planChanged ? "revised" : "last revision" }),
-      " ", plan.revision,
+      el("span", { class: planChanged ? "badge flag" : "badge", text: planChanged ? "revised" : last ? "last change" : "last revision" }),
+      " ", last || plan.revision,
     );
     rev.onclick = () => { planChanged = false; renderPlan(); };
   } else rev.hidden = true;
@@ -318,8 +324,12 @@ function renderChanges() {
   const list = state.changes || [];
   $("#changes-head").hidden = !list.length;
   $("#changes").replaceChildren(...list.map((d) => {
+    // An entry of the change history says who made it and what caused it; one written
+    // before the change history (changes.json) has why, instead and files.
+    const meta = [d.by, d.cause && d.cause.length ? `cause: ${d.cause.join(", ")}` : ""].filter(Boolean).join(" · ");
     const item = el("li", { class: "change" },
       el("div", {}, el("span", { class: "num", text: d.id }), " ", d.change),
+      meta ? el("div", { class: "d-why muted", text: meta }) : null,
       d.instead ? el("div", { class: "d-instead dim", text: `rather than ${d.instead}` }) : null,
       d.why ? el("div", { class: "d-why muted", text: d.why }) : null);
     if (d.files && d.files.length) {
@@ -1001,8 +1011,9 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    `{question, skipped: true}`), or the box stays open: no question blocks the agent.
    The header holds « Grill me » (a batch whose action is "grill"; « Stop grill » sends
    "stop-grill" while a grill runs) and, while scoping runs or a question is open,
-   « Plan » (action "plan": scoping ends, the open questions count as skipped; once a
-   plan exists it reads « Replan », and the agent revises the plan with the answers).
+   « Write plan » (action "plan": scoping ends, the open questions count as skipped; once a
+   plan exists it reads « Rewrite plan », and the agent revises the plan with the answers).
+   In a branch review or a refactor, what is written is the model: « Write model ».
    These three take the draft comments with them, like the approvals. */
 
 const openQuestions = () => (state ? state.questions || [] : []).filter((q) => q.status === "open");
@@ -1063,8 +1074,12 @@ function scopingProduct() {
   return ["view-branch", "view-refactor"].includes(state.workflow) ? "model" : "plan";
 }
 
-// Once a plan exists, the answers given since may change it: « Plan » becomes « Replan ».
-const replanning = () => (state.plan.outline || []).length > 0;
+// Once what the button writes exists, the answers given since may change it: « Write »
+// becomes « Rewrite ». A branch review's planner drafts an outline before scoping ends, so
+// there the button rewrites once the sections are written (as Session.has_written).
+const rewriting = () => (state.workflow === "view-branch"
+  ? Object.keys(state.sections).length > 0
+  : (state.plan.outline || []).length > 0);
 
 function renderScope() {
   const questions = state.questions || [];
@@ -1091,8 +1106,8 @@ function renderScope() {
   grill.title = state.grilling ? "Stop the interview" : "The agent asks about every open decision, each with its suggestion, until none is left";
   const plan = $("#scope-plan");
   plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending();
-  plan.textContent = replanning() ? "Replan" : "Plan";
-  plan.title = replanning()
+  plan.textContent = `${rewriting() ? "Rewrite" : "Write"} ${scopingProduct()}`;
+  plan.title = rewriting()
     ? `Enough questions: the open ones count as skipped, and the agent revises the ${scopingProduct()} with your answers`
     : `Enough questions: the open ones count as skipped, and the agent writes the ${scopingProduct()}`;
 }

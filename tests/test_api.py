@@ -108,10 +108,10 @@ def test_api_threads(client, session):
 
 def test_api_keeps_the_part_of_an_outline_item(client, session):
     plan = session.read_plan()
-    plan["outline"].append({"id": "s9", "title": "Cards", "part": 2})
+    plan["outline"].append({"id": "s9", "title": "Cards", "part": "refactoring"})
     session.plan_path.write_text(json.dumps(plan))
     outline = client.get("/api/s/kv-cache").json()["plan"]["outline"]
-    assert outline[-1]["part"] == 2
+    assert outline[-1]["part"] == "refactoring"
 
 
 VERDICT_FILE = yaml.safe_load((Path(server.__file__).parent / "verdicts.yaml").read_text())
@@ -177,3 +177,16 @@ def test_api_updated_sections(client, session):
     assert client.get("/api/s/kv-cache").json()["sections"]["s1"]["updated"] is False
     (session.sections_dir / "s3.md").write_text("Nouvelle.\n")
     assert client.get("/api/s/kv-cache").json()["sections"]["s3"]["updated"] is False
+
+
+def test_a_branch_review_needs_no_fork_for_its_threads(client, session):
+    # Its threads start from the session folder, so the page does not warn about a fork.
+    s = Session("gate", session.dir.parent)
+    s.create("The gate", kind="code", repo=str(session.dir))
+    assert client.get("/api/s/gate/threads").json()["forkable"] is True
+
+
+def test_api_shows_the_change_history(client, session):
+    session.add_change("gate split in two", by="writer", cause=["c7"])
+    (d,) = client.get("/api/s/kv-cache").json()["changes"]
+    assert d["change"] == "gate split in two" and d["cause"] == ["c7"]

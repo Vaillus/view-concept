@@ -125,15 +125,28 @@ def test_plan_batch_skips_the_open_questions(session):
     q1, q2 = session.read_questions()
     assert q1["status"] == "answered" and "skipped" not in q1
     assert q2["status"] == "skipped" and q2["skipped"] == b["sent"]
+    # The session already has a plan: the button asked for a rewrite.
+    assert b["rewrite"] is True
+    assert (
+        "action: plan (the user asked to rewrite the plan from the page: treat open "
+        "questions as skipped and revise the plan with the answers, or the model in a "
+        "branch review)"
+    ) in format_batch("kv-cache", b, [])
     assert (
         "action: plan (the user ended scoping from the page: treat open questions as "
         "skipped and write the plan, or the model in a branch review)"
-    ) in format_batch("kv-cache", b, [])
-    # Once a plan exists, « Plan » asks for a replan.
-    assert (
-        "action: plan (the user asked for a replan from the page: treat open questions "
-        "as skipped and revise the plan with the answers, or the model in a branch review)"
-    ) in format_batch("kv-cache", b, [{"id": "s1", "title": "Intro", "earns": ""}])
+    ) in format_batch("kv-cache", {**b, "rewrite": False}, [])
+
+
+def test_a_branch_review_rewrites_once_its_sections_exist(tmp_path):
+    s = Session("x", tmp_path)
+    s.create("X", kind="code", repo=str(tmp_path))
+    plan = s.read_plan()
+    plan["outline"] = [{"id": "s1", "title": "Today"}]  # the planner's draft
+    s.plan_path.write_text(json.dumps(plan))
+    assert s.add_batch([], action="plan")["rewrite"] is False
+    (s.sections_dir / "s1.md").write_text("Today.")
+    assert s.add_batch([], action="plan")["rewrite"] is True
 
 
 def test_grill_batches(session):
@@ -176,15 +189,49 @@ def test_code_session_needs_repo(tmp_path):
     assert s.read_plan()["repo"] == str(tmp_path.resolve())
 
 
-def test_changes(session, tmp_path):
-    d = session.add_change("Keep one inbox", why="Simpler", instead="a socket", files=["a.py"])
-    assert d["id"] == "m1" and session.changes_path.name == "changes.json"
+def test_change_history(session):
+    d = session.add_change("gate split in two", by="writer", cause=["c7", "q3"])
+    assert d["id"] == "m1" and d["by"] == "writer" and d["cause"] == ["c7", "q3"]
+    assert session.change_history_path.name == "change-history.json"
+    # A change no event led to is the agent's own.
+    assert session.add_change("section 5 added")["cause"] == ["own judgment"]
+    assert format_changes(session.read_changes()) == "- gate split in two\n- section 5 added"
+    assert "## Change history" in session.render_markdown()
+    with pytest.raises(SessionError):
+        session.add_change(" ")
+
+
+def test_a_session_written_before_the_change_history_keeps_its_changes(session):
+    old = [
+        {
+            "id": "m1",
+            "change": "Keep one inbox",
+            "why": "Simpler",
+            "instead": "a socket",
+            "files": ["a.py"],
+        }
+    ]
+    session.legacy_changes_path.write_text(json.dumps(old))
     assert format_changes(session.read_changes()) == (
         "- Keep one inbox, rather than a socket. Simpler (`a.py`)"
     )
-    assert "## Model changes" in session.render_markdown()
+
+
+def test_terminal_messages(session):
+    session.write_status("scoping")
+    m = session.add_terminal_message("  keep the CLI as it is  ")
+    assert m["id"] == "tm1" and m["phase"] == "scoping" and m["text"] == "keep the CLI as it is"
+    assert session.read_terminal_messages() == [m]
     with pytest.raises(SessionError):
-        session.add_change(" ")
+        session.add_terminal_message(" ")
+
+
+def test_a_branch_review_records_its_base(tmp_path):
+    s = Session("x", tmp_path)
+    s.create("X", "rework the gate", kind="code", repo=str(tmp_path), base="main")
+    plan = s.read_plan()
+    assert plan["base"] == "main" and plan["initial_request"] == "rework the gate"
+    assert s.coordinated and s.fork_parent() == ""
 
 
 def test_workflow_is_stored_and_defaults_by_kind(tmp_path):
@@ -411,3 +458,20 @@ def test_check_writes_audit_and_reruns_idempotently(ordered):
     assert {"term": "KKT conditions", "section": "a", "issue": "early",
             "note": "introduced in section 2"} in first  # fmt: skip
     assert len(first) == 4
+
+
+def test_write_plan_keeps_the_other_fields(tmp_path):
+    s = Session("x", tmp_path)
+    s.create("X", "rework the gate", kind="code", repo=str(tmp_path), base="main")
+    s.write_plan(outline=[{"id": "s1", "title": "Today", "earns": "e"}])
+    s.write_plan(lexicon=[{"term": "gate", "section": "s1", "definition": "d"}])
+    plan = s.read_plan()
+    assert plan["initial_request"] == "rework the gate" and plan["base"] == "main"
+    assert plan["outline"][0]["id"] == "s1" and plan["lexicon"][0]["term"] == "gate"
+    with pytest.raises(SessionError, match="no section: s9"):
+        s.write_plan(lexicon=[{"term": "x", "section": "s9"}])
+    with pytest.raises(SessionError, match="unique"):
+        s.write_plan(outline=[{"id": "s1", "title": "A"}, {"id": "s1", "title": "B"}])
+    with pytest.raises(SessionError, match="nothing to write"):
+        s.write_plan()
+    assert s.read_plan()["lexicon"][0]["term"] == "gate"  # a refused write changes nothing

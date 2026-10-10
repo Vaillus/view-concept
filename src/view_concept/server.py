@@ -227,7 +227,8 @@ def list_threads(slug: str) -> dict[str, Any]:
     s = get_session(slug)
     try:
         rows = [thread_view(s, t) for t in s.read_threads()]
-        return {"forkable": bool(s.read_parent()), "threads": rows}
+        # A coordinated session's threads start from the folder: they need no fork.
+        return {"forkable": bool(s.fork_parent()) or s.coordinated, "threads": rows}
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
 

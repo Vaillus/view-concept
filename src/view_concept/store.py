@@ -5,11 +5,12 @@ the plan and the sections; the page reads them; the page writes review comments,
 reach the agent session through the inbox.
 
     <home>/sessions/<slug>/
-        plan.json       title, question, kind, workflow, outline, lexicon  (written by the agent)
+        plan.json       title, initial_request, kind, workflow, repo, base, outline, lexicon
         sections/<id>.md  the prose of one outline section         (written by the agent)
         audit.json      vocabulary-audit findings       (written by the agent and `check`)
         status.json     what the agent is doing now: phase, section    (written by `status`)
-        changes.json    model changes accepted in a branch review       (written by `change`)
+        change-history.json  every change of the model, oldest first     (written by `change`)
+        terminal-messages.json  the user's later terminal messages      (written by `message`)
         questions.json  agent questions put to the user, with their answers  (`question`, server)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
@@ -22,13 +23,14 @@ reach the agent session through the inbox.
 A section is one element of the `outline` list in plan.json: {id, title, earns}. An
 answer to a comment that belongs in the explanation amends a section or adds one at its
 place in the outline; a `kind: "question"` left by an older session is ignored, and the
-section reads as any other. A refactor section, marked `part: 2`, belongs to Part 2 of
-a branch review or a refactor and is shown in the refactor tab; every other section is
-an explanation section, shown in the Explanation tab. A refactor section about one item
-of the diff carries its item fields under `item`: {files, verdict (one of the keys of
-the session workflow's list in verdicts.yaml, next to this module), batch? (a short
-label or number), implements, note, relations: [{to, kind, from?}]}, where the optional
-`from` names which of the item's files a relation starts from (by default the first).
+section reads as any other. A refactor section, marked `part: "refactoring"`, belongs
+to the refactoring part of a branch review or a refactor and is shown in the refactor
+tab; every other section is an explanation section, shown in the Explanation tab. A
+refactor section about one item of the diff carries its item fields under `item`:
+{files, verdict (one of the keys of the session workflow's list in verdicts.yaml, next
+to this module), batch? (a short label or number), implements, note, relations: [{to,
+kind, from?}]}, where the optional `from` names which of the item's files a relation
+starts from (by default the first).
 One with `kind: "finding"` and `items: [<section ids>]` is a finding across items.
 
 The session workflow, `workflow` in plan.json, is the skill that drives the session:
@@ -37,9 +39,19 @@ verdict set the page shows: verdicts.yaml holds one list per workflow, and each 
 carries the `tone` the page colours it with. A session created before workflows existed
 has no workflow and gets view-branch's list.
 
-A side thread is a separate headless agent conversation, forked from the session in
-agent.json, that the user opens from the page to discuss a passage without changing
-anything (see threads.py). Only a comment batch reaches the main session.
+A side thread is a separate headless agent conversation that the user opens from the page
+to discuss a passage without changing anything (see threads.py). Only a comment batch
+reaches the main session.
+
+A coordinated session (the view-branch workflow) is driven by a main session that only
+coordinates: subagents do the work, each started from the session folder as
+`view-concept context` prints it (context.py). The initial request is the user's first
+message, kept verbatim in plan.json. The change history logs every change of the model:
+{id: m1…, at, by (planner or writer), change (a few words), cause (the ids of the
+questions, comments or terminal messages that led to it, or "own judgment")}. A session
+written before it has changes.json instead, read as its change history. The terminal
+messages are the user's later messages about the feature, typed in the terminal: {id:
+tm1…, at, phase (the phase when it was recorded), text}.
 
 The agent is "listening" while a watch runs for the session: the watch rewrites watch.json
 every HEARTBEAT_EVERY seconds, and a heartbeat older than LISTENING_FOR seconds (or none)
@@ -59,7 +71,8 @@ user answers in the terminal instead, the agent runs `answered`: the question is
 answered with `from: "terminal"`, empty choices and the user's words as text, and no
 batch is sent, since the agent already has the answer; the phase is left to the agent.
 
-Scoping ends when the user clicks « Plan »: a batch whose action is "plan", after which
+Scoping ends when the user clicks « Write plan » (« Write model » in a branch review or
+a refactor): a batch whose action is "plan", after which
 every question still open is marked skipped (the agent treats them as skipped and writes
 the plan, or the model in a branch review). « Grill me » sends a batch whose action is
 "grill" (the agent asks every open design decision as a question with a recommended
@@ -232,8 +245,17 @@ class Session:
         return self.dir / "status.json"
 
     @property
-    def changes_path(self) -> Path:
+    def change_history_path(self) -> Path:
+        return self.dir / "change-history.json"
+
+    @property
+    def legacy_changes_path(self) -> Path:
+        """What the change history was called when it only held accepted model changes."""
         return self.dir / "changes.json"
+
+    @property
+    def terminal_messages_path(self) -> Path:
+        return self.dir / "terminal-messages.json"
 
     @property
     def questions_path(self) -> Path:
@@ -280,10 +302,11 @@ class Session:
     def create(
         self,
         title: str,
-        question: str = "",
+        initial_request: str = "",
         kind: str = "explanation",
         repo: str = "",
         workflow: str = "",
+        base: str = "",
     ) -> bool:
         """Create the session. Returns False when it already existed (left untouched).
         `workflow` defaults by kind (DEFAULT_WORKFLOW)."""
@@ -301,7 +324,7 @@ class Session:
         self.sections_dir.mkdir(parents=True, exist_ok=True)
         plan: dict[str, Any] = {
             "title": title,
-            "question": question,
+            "initial_request": initial_request,
             "kind": kind,
             "workflow": workflow,
             "created": date.today().isoformat(),
@@ -310,6 +333,8 @@ class Session:
         }
         if repo:
             plan["repo"] = str(Path(repo).expanduser().resolve())
+        if base:
+            plan["base"] = base
         _write_json(self.plan_path, plan)
         return True
 
@@ -319,6 +344,34 @@ class Session:
         plan.setdefault("title", self.slug)
         plan.setdefault("outline", [])
         plan.setdefault("lexicon", [])
+        return plan
+
+    def write_plan(
+        self,
+        outline: list[dict[str, Any]] | None = None,
+        lexicon: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Replace the outline, the lexicon or both, and leave every other field of plan.json
+        as it is (the initial request, the base branch, the workflow...)."""
+        if outline is None and lexicon is None:
+            raise SessionError("nothing to write: give an outline, a lexicon or both")
+        plan = self.read_plan()
+        if outline is not None:
+            ids = [str(sec.get("id", "")) for sec in outline]
+            if not all(ids) or any(not sec.get("title") for sec in outline):
+                raise SessionError("every outline entry needs an id and a title")
+            if len(set(ids)) != len(ids):
+                raise SessionError("outline ids must be unique")
+            plan["outline"] = outline
+        if lexicon is not None:
+            if any(not t.get("term") or not t.get("section") for t in lexicon):
+                raise SessionError("every lexicon entry needs a term and a section")
+            plan["lexicon"] = lexicon
+        known = {sec["id"] for sec in plan["outline"]}
+        unknown = sorted({t["section"] for t in plan["lexicon"]} - known)
+        if unknown:
+            raise SessionError(f"lexicon entries point to no section: {', '.join(unknown)}")
+        _write_json(self.plan_path, plan)
         return plan
 
     def read_sections(self) -> dict[str, str]:
@@ -379,26 +432,47 @@ class Session:
         return _read_json(self.comments_path, {"batches": []})
 
     def read_changes(self) -> list[dict[str, Any]]:
-        return _read_json(self.changes_path, [])
+        """The change history, oldest first."""
+        if self.change_history_path.exists() or not self.legacy_changes_path.exists():
+            return _read_json(self.change_history_path, [])
+        return _read_json(self.legacy_changes_path, [])
 
     def add_change(
-        self, change: str, why: str = "", instead: str = "", files: list[str] | None = None
+        self, change: str, by: str = "", cause: list[str] | None = None
     ) -> dict[str, Any]:
-        """Append a model change: one correction of the model the user accepted, written
-        as an instruction an agent can execute. `instead` is what the PR does now."""
+        """Append one change of the model to the change history: a few words, who made it
+        and what caused it."""
         if not change.strip():
-            raise SessionError("empty model change")
+            raise SessionError("empty change")
         changes = self.read_changes()
         d = {
             "id": f"m{len(changes) + 1}",
+            "at": now_iso(),
+            "by": by.strip(),
             "change": change.strip(),
-            "why": why.strip(),
-            "instead": instead.strip(),
-            "files": files or [],
-            "date": date.today().isoformat(),
+            "cause": [c.strip() for c in cause or [] if c.strip()] or ["own judgment"],
         }
         changes.append(d)
-        _write_json(self.changes_path, changes)
+        _write_json(self.change_history_path, changes)
+        return d
+
+    def read_terminal_messages(self) -> list[dict[str, Any]]:
+        return _read_json(self.terminal_messages_path, [])
+
+    def add_terminal_message(self, text: str) -> dict[str, Any]:
+        """Record a terminal message of the user about the feature, so the subagents,
+        which never see the terminal, read it."""
+        if not text.strip():
+            raise SessionError("empty message")
+        messages = self.read_terminal_messages()
+        d = {
+            "id": f"tm{len(messages) + 1}",
+            "at": now_iso(),
+            "phase": self.read_status().get("phase", ""),
+            "text": text.strip(),
+        }
+        messages.append(d)
+        _write_json(self.terminal_messages_path, messages)
         return d
 
     def read_questions(self) -> list[dict[str, Any]]:
@@ -534,7 +608,8 @@ class Session:
             self.audit_path,
             self.comments_path,
             self.status_path,
-            self.changes_path,
+            self.change_history_path,
+            self.legacy_changes_path,
             self.questions_path,
         ]
         if self.sections_dir.is_dir():
@@ -561,6 +636,22 @@ class Session:
     def read_parent(self) -> str:
         """Id of the agent conversation that drives this one, "" when unknown."""
         return self.read_agent().get("parent", "")
+
+    def has_written(self) -> bool:
+        """Whether what « Write plan » or « Write model » asks for exists already, so the
+        button asks for a rewrite: the plan, or in a coordinated session the sections (its
+        planner drafts an outline before scoping ends)."""
+        return bool(self.read_sections() if self.coordinated else self.read_plan()["outline"])
+
+    @property
+    def coordinated(self) -> bool:
+        """Whether the main session only coordinates subagents (the view-branch workflow)."""
+        return self.read_plan().get("workflow") == "view-branch"
+
+    def fork_parent(self) -> str:
+        """The conversation a side thread forks from, "" when it starts from the folder: a
+        coordinated session's main conversation holds coordination, not content."""
+        return "" if self.coordinated else self.read_parent()
 
     def bind_agent(self, agent: str, parent: str = "", name: str = "") -> bool:
         """Record the agent driving the session. Returns True when it changed (a resumed
@@ -670,6 +761,8 @@ class Session:
         }
         if answers:
             batch["answers"] = answers
+        if action == "plan":
+            batch["rewrite"] = self.has_written()
         batches.append(batch)
         _write_json(self.comments_path, data)
         with self.inbox_path.open("a", encoding="utf-8") as f:
@@ -746,11 +839,13 @@ class Session:
         plan = plan or self.read_plan()
         sections = self.read_sections()
         title = str(plan["title"]).strip() or self.slug
-        question = str(plan.get("question", "")).replace('"', "'")
+        # Sessions created before the rename call it `question`.
+        request = plan.get("initial_request", plan.get("question", ""))
+        request = str(request).replace('"', "'")
         lines = [
             "---",
             "type: explanation",
-            f'question: "{question}"',
+            f'initial_request: "{request}"',
             f"created: {plan.get('created', date.today().isoformat())}",
             f"updated: {date.today().isoformat()}",
             "tags:",
@@ -784,7 +879,7 @@ class Session:
             lines.append("")
         changes = self.read_changes()
         if changes:
-            lines += ["## Model changes", "", format_changes(changes), ""]
+            lines += ["## Change history", "", format_changes(changes), ""]
         return "\n".join(lines)
 
 
@@ -857,11 +952,12 @@ def format_batch(
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")
-    if batch.get("action") == "plan" and outline:
-        # A plan already exists: the answers given since may change it.
+    if batch.get("action") == "plan" and batch.get("rewrite", bool(outline)):
+        # What the button writes exists already: the answers given since may change it.
         lines.append(
-            "action: plan (the user asked for a replan from the page: treat open questions "
-            "as skipped and revise the plan with the answers, or the model in a branch review)"
+            "action: plan (the user asked to rewrite the plan from the page: treat open "
+            "questions as skipped and revise the plan with the answers, or the model in a "
+            "branch review)"
         )
     elif batch.get("action") == "plan":
         lines.append(
@@ -892,14 +988,19 @@ def format_batch(
             lines.append(f"answer to {a['question']}{quoted}: {answer}")
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
-    for c in batch["comments"]:
-        sec = c["section"]
-        where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
-        quote = " ".join(c["quote"].split())
-        lines.append(f"[{c['id']}] {where} « {quote} »" if quote else f"[{c['id']}] {where}")
-        lines += [f"    {line}" for line in c["text"].splitlines()]
-        if c.get("thread"):
-            lines.append(f"    (from side thread {c['thread']}: threads/{c['thread']}.json)")
+    lines += [format_comment(c, number) for c in batch["comments"]]
+    return "\n".join(lines)
+
+
+def format_comment(c: dict[str, Any], number: dict[str, int]) -> str:
+    """One comment of a batch: where it is anchored, its text, the thread it comes from."""
+    sec = c["section"]
+    where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
+    quote = " ".join(c["quote"].split())
+    lines = [f"[{c['id']}] {where} « {quote} »" if quote else f"[{c['id']}] {where}"]
+    lines += [f"    {line}" for line in c["text"].splitlines()]
+    if c.get("thread"):
+        lines.append(f"    (from side thread {c['thread']}: threads/{c['thread']}.json)")
     return "\n".join(lines)
 
 
@@ -908,6 +1009,7 @@ def format_changes(changes: list[dict[str, Any]]) -> str:
     out = []
     for d in changes:
         line = f"- {d['change']}"
+        # `instead`, `why` and `files`: entries of a session written before the change history.
         if d.get("instead"):
             line += f", rather than {d['instead']}"
         if d.get("why"):

@@ -189,3 +189,37 @@ def test_new_detects_codex_and_its_thread(tmp_path):
     assert subprocess.run(cmd, env=env, capture_output=True, text=True).returncode == 0
     record = json.loads((tmp_path / "sessions" / "detected" / "agent.json").read_text())
     assert (record["agent"], record["parent"]) == ("codex", "thr-1")
+
+
+def test_a_branch_review_logs_and_prints_its_context(tmp_path):
+    repo = str(tmp_path)
+    r = view_concept(
+        tmp_path,
+        "new",
+        "Gate",
+        "--kind",
+        "code",
+        "--repo",
+        repo,
+        "--base",
+        "main",
+        "--initial-request",
+        "rework the gate",
+    )
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "message", "gate", "keep the CLI").stdout.strip() == (
+        "tm1 recorded"
+    )
+    r = view_concept(tmp_path, "change", "gate", "gate split", "--by", "planner", "--cause", "tm1")
+    assert r.stdout.strip() == "m1 recorded"
+    r = view_concept(tmp_path, "context", "gate", "--role", "planner", "--trigger", "tm1")
+    assert r.returncode == 0, r.stderr
+    assert "## Initial request\nrework the gate" in r.stdout
+    assert "## Trigger\n- tm1 (idle): keep the CLI" in r.stdout
+    assert "- m1 by planner: gate split (cause: tm1)" in r.stdout
+    assert view_concept(tmp_path, "changes", "gate").stdout.strip() == "- gate split"
+    plan = tmp_path / "p.json"
+    plan.write_text(json.dumps({"outline": [{"id": "s1", "title": "Today"}]}))
+    assert view_concept(tmp_path, "plan", "gate", str(plan)).stdout.strip() == "1 sections, 0 terms"
+    saved = json.loads((tmp_path / "sessions" / "gate" / "plan.json").read_text())
+    assert saved["initial_request"] == "rework the gate" and saved["base"] == "main"
