@@ -10,14 +10,14 @@ The agent writes plain files; the **page** renders them in your browser as they 
 
 In the terminal, a long explanation scrolls away, you cannot point at the sentence you did not understand, and each revision is a new copy to compare with the old one. In the page, the text stays put, comments are anchored to their passage, and a rewritten section highlights what changed.
 
-The page is built around **explain-concept**, a skill that holds an explanation method. Two of its rules show in the page:
+The page is built around an explanation method, which the `view-concept` skill carries (it started as the **explain-concept** skill). Two of its rules show in the page:
 
 - **The plan comes before the prose.** The **plan** is the outline plus the **lexicon**, the list of every term the explanation uses, with the section that introduces it and its definition. You approve the plan before any paragraph is written.
 - **Every term is defined before it is used.** Hovering a lexicon term shows its definition, and a final **vocabulary audit** flags terms that slipped through undefined.
 
 ## What a session looks like
 
-You type `/view-concept explain KKT conditions`. The agent opens the page and asks its questions about your level and goal there, at the top of the Plan tab; you answer those you want, then click « Plan ».
+You type `/view-concept explain KKT conditions`. The agent opens the page and asks its questions about your level and goal there, at the top of the Plan tab; you answer those you want, then click « Write plan ».
 
 1. **Plan.** The agent writes the outline and the lexicon in the Plan tab. You correct it or click « Approve plan ».
 2. **Prose.** The agent writes the sections one by one; the page re-renders as each one lands.

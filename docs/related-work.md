@@ -22,11 +22,11 @@ AI code-review tools ([PR-Agent, Gito and others](https://dev.to/rahulxsingh/15-
 
 ## What view-concept does that none of them do
 
-- **An explanation method in the page.** The other tools let the user annotate whatever the agent produced. view-concept runs `explain-concept`: the user approves the outline and the lexicon before any prose is written, a vocabulary audit flags undefined terms, and hovering a lexicon term shows its definition.
+- **An explanation method in the page.** The other tools let the user annotate whatever the agent produced. view-concept runs an explanation method (from the `explain-concept` skill): the user approves the outline and the lexicon before any prose is written, a vocabulary audit flags undefined terms, and hovering a lexicon term shows its definition.
 - **A concepts-first branch review.** `view-branch` first settles the model (the concepts the branch introduces), then sends agents to bring the code in line with it, then gives each item a verdict against it.
 - **What changed in a rewrite.** The page highlights the words changed since the user last read a section, and `seen.json` keeps what was read across reloads. The others only re-render.
 - **A live channel to the session.** `view-concept watch` runs under `Monitor`, so comment batches reach the session as they are sent, and Claude can put questions to the user in the page. The others wait for a slash command or act only at the plan-mode hook.
-- **Model changes that feed the PR.** Corrections accepted in a branch review are recorded with `view-concept change` and become the Decisions section of the PR description.
+- **A change history that feeds the PR.** Every change of the model in a branch review is logged with `view-concept change`, with what caused it, and the Decisions section of the PR description is written from it.
 
 ## The problem in the literature: comprehension debt
 
