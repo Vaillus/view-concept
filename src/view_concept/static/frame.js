@@ -1,7 +1,9 @@
-/* view-concept — the head of a section frame: written at the start of every HTML section
-   the page, the published page or the vault note draws (frame.py), after the theme
-   tokens. The page cannot read the frame, nor the frame the page: the frame has an origin
-   of its own, so they talk by frame messages, each an object whose `viewConcept` names it.
+/* view-concept — the frame script: the page's own script, written at the start of every
+   HTML section the page, the published page or the vault note draws (frame.py), after the
+   theme tokens. The page cannot read the frame, nor the frame the page: the frame has an
+   origin of its own, so they talk by frame messages, each an object whose `viewConcept`
+   names it. The frame script is the frame's end of every one; the section's own scripts
+   take no part.
 
    - The theme (page -> frame): the tokens define every theme, keyed by data-theme on
      <html>. The page posts its theme at load and at every change; until then (and where
@@ -16,9 +18,10 @@
    - The anchors (page -> frame): the passages the page's drafts, sent comments and side
      threads quote in this section. Each is highlighted, and highlighted again when a
      script of the section redraws its text.
-   - The reveal (page -> frame): a passage to show. The frame highlights it for a moment
-     and answers with where it sits ("revealed"), so the page scrolls to it; the frame
-     takes the height of its content, so the scrolling is the page's.
+   - The reveal (page -> frame), answered by "revealed" (frame -> page): a passage to
+     show. The frame highlights it for a moment and answers with where it sits, so the
+     page scrolls to it; the frame takes the height of its content, so the scrolling is
+     the page's.
 
    Text a script paints into a <canvas> is pixels, not text: it cannot be selected nor
    highlighted. */
