@@ -170,8 +170,10 @@ to which change of the model the code is implemented, and lists the changes
 **not implemented yet**. Pass that output to a new subagent with this
 instruction: « Read `<role file>` (and `roles/planning-rules.md` for the
 planner and the writer) in `~/Documents/code/view-concept/skills/view-branch/`,
-then do your run. » Nothing else from this conversation: what the agents need
-is in the folder. When the run ends, give its one-line report in the
+then do your run. » Start it as an agent that can write files and run
+commands, never a read-only type: each role file says what that agent may
+change, and nothing beyond it. Nothing else from this conversation: what the
+agents need is in the folder. When the run ends, give its one-line report in the
 terminal.
 
 Only you start agents, with one exception: the implementer may start helper

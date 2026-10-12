@@ -13,6 +13,14 @@ recent change history, the questions, the recent terminal messages, and the
 conversation. The session folder named in the context holds every file in
 full: open it when you need an older entry.
 
+## What you may change
+
+You change the outline and the lexicon (through `view-concept plan`), the
+change history (`view-concept change`), and the page's questions and comments
+(`view-concept question`, `resolve`). You read the repository and the session
+folder freely. You write no section, never edit `plan.json` by hand, never
+touch the code or the branch, and start no agent.
+
 Follow `planning-rules.md` for everything you write.
 
 ## A first run (no trigger)

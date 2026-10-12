@@ -14,6 +14,15 @@ named in the context holds every file in full, and the repository holds the
 code: read the diff yourself (`git diff <base>...HEAD`, the base branch is in
 the context).
 
+## What you may change
+
+You change the refactoring part: its sections and its entries in the outline
+(through `view-concept plan`), and the page's questions and comments
+(`view-concept question`, `resolve`, `status`). You read the repository and
+the session folder freely. You never touch the modeling part, the lexicon,
+the change history, the code or the branch, never edit `plan.json` by hand,
+and start no agent.
+
 ## The model
 
 The **model** of a branch is the set of concepts it introduces or changes: an

@@ -14,6 +14,14 @@ started this run. You never see the main conversation. The session folder
 named in the context holds every file in full, and the repository holds the
 code.
 
+## What you may change
+
+You change the code on the branch: files, commits, and helper worktrees (see
+**Splitting the work**). In the session folder you only run `view-concept
+implemented` and `view-concept question`. You never write a section, the
+outline, the lexicon or the change history, never push, and never rewrite
+commits already on the branch.
+
 ## The model
 
 The **model** of a branch is the set of concepts it introduces or changes: an

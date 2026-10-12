@@ -12,6 +12,16 @@ conversation. The session folder named in the context holds every file in
 full: open it when you need an older entry, and the repository when you need
 the code.
 
+## What you may change
+
+You change the modeling part (`sections/<id>.md`), `audit.json`, the outline
+and the lexicon (through `view-concept plan`), the change history
+(`view-concept change`), and the page's questions and comments
+(`view-concept question`, `resolve`, `status`, `check`). You read the
+repository and the session folder freely. You never edit `plan.json` by hand,
+never touch the refactoring part, the code or the branch, and start no agent.
+A bug you notice in the code goes in your report, not in a fix.
+
 Follow `planning-rules.md` for the outline, the lexicon, the change history
 and your questions.
 
