@@ -732,7 +732,10 @@ function annotateLexicon(doc) {
    unchanged (same version), so a figure does not reload whenever another file of the
    session changes: before a render the frames are parked, after it each one is moved
    into its section's slot. moveBefore keeps a moved frame running; a browser without it
-   reloads the frame. The frame takes the height its content posts (static/frame.js). */
+   reloads the frame. The frame takes the height its content posts (static/frame.js).
+   Comments and side threads reach a passage inside it through frame messages: the frame
+   posts the reader's selection, the page posts the passages to highlight and the one to
+   reveal. Term underlines and change highlights stop at the frame. */
 
 // As frame.SANDBOX: scripts run, and no allow-same-origin, so the frame cannot reach the page.
 const SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms";
@@ -759,7 +762,7 @@ function placeFrames() {
       if (f) f.remove();
       f = el("iframe", { class: "frame", sandbox: SANDBOX, allow: "fullscreen", title: titleOf(id),
                          "data-version": version, src: `/s/${SLUG}/sections/${encodeURIComponent(id)}.html?v=${version}` });
-      f.addEventListener("load", () => postTheme(f));
+      f.addEventListener("load", () => { postTheme(f); postAnchors(id, f); });
       frames.set(id, f);
     }
     moveInto(slot, f);
@@ -776,11 +779,69 @@ function postTheme(f) {
 new MutationObserver(() => frames.forEach(postTheme))
   .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
+/* The frame messages a frame posts: its height, the reader's selection inside it, and
+   where a revealed passage sits (static/frame.js). */
+const revealing = new Map(); // section id -> the comment whose passage its frame looks for
+
 window.addEventListener("message", (e) => {
   const d = e.data;
-  if (!d || d.viewConcept !== "height") return;
-  for (const f of frames.values()) if (f.contentWindow === e.source) f.style.height = `${d.height}px`;
+  if (!d || typeof d.viewConcept !== "string") return;
+  const hit = [...frames].find(([, f]) => f.contentWindow === e.source);
+  if (!hit) return;
+  const [id, f] = hit;
+  if (d.viewConcept === "height") f.style.height = `${d.height}px`;
+  else if (d.viewConcept === "selection") frameSelection(id, f, d);
+  else if (d.viewConcept === "revealed") frameRevealed(id, f, d);
 });
+
+/* A rect of the frame's viewport, in the page's viewport. */
+function pageRect(f, r) {
+  const b = f.getBoundingClientRect();
+  const x = b.left + f.clientLeft, y = b.top + f.clientTop;
+  return { left: x + r.left, right: x + r.right, top: y + r.top, bottom: y + r.bottom };
+}
+
+/* The selection message: a passage selected in an HTML section gets the box a passage of
+   a Markdown section gets, anchored the same way (section id, quote, prefix). */
+function frameSelection(id, f, d) {
+  const btn = $("#sel-actions");
+  if (!d.quote || !d.rect) {
+    if (pendingSelection && pendingSelection.section === id) { btn.hidden = true; pendingSelection = null; }
+    return;
+  }
+  const rect = pageRect(f, d.rect);
+  pendingSelection = { section: id, quote: collapse(String(d.quote)), prefix: collapse(String(d.prefix || "")), rect };
+  btn.hidden = false;
+  btn.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  btn.style.left = `${Math.max(8, rect.left)}px`;
+}
+
+/* The anchors message: the passages the drafts, the sent comments and the side threads
+   quote in an HTML section, which its frame highlights. */
+const quotesIn = (id, list) => list.filter((c) => c.section === id && c.quote && !c.quote.startsWith("plan · "));
+function postAnchors(id, f = frames.get(id)) {
+  if (!f || !f.contentWindow || !state) return;
+  const anchor = (kind) => ({ quote, prefix }) => ({ kind, quote, prefix: prefix || "" });
+  const sent = state.comments.batches.flatMap((b) => b.comments).filter((c) => c.status === "sent");
+  const anchors = [
+    ...quotesIn(id, drafts).map(anchor("draft")),
+    ...quotesIn(id, sent).map(anchor("sent")),
+    ...quotesIn(id, threadsState.threads).map(anchor("thread")),
+  ];
+  f.contentWindow.postMessage({ viewConcept: "anchors", anchors }, "*");
+}
+
+/* The reveal message: the frame finds the passage and answers where it sits; the frame
+   takes the height of its content, so the page does the scrolling. */
+function frameRevealed(id, f, d) {
+  if (!revealing.delete(id)) return;
+  if (!d.found) { scrollToSection(id); return; }
+  const r = pageRect(f, { left: 0, right: 0, top: d.top, bottom: d.bottom });
+  const view = f.closest(".view");
+  if (!view) return;
+  const v = view.getBoundingClientRect();
+  view.scrollBy({ top: (r.top + r.bottom) / 2 - (v.top + view.clientHeight / 2), behavior: "smooth" });
+}
 
 /* ---------------- quotes <-> ranges ---------------- */
 
@@ -831,6 +892,7 @@ function applyHighlights() {
   CSS.highlights.set("ev-draft", new Highlight(...draftRanges));
   CSS.highlights.set("ev-sent", new Highlight(...sentRanges));
   CSS.highlights.set("ev-thread", new Highlight(...threadRanges.map(([, r]) => r)));
+  frames.forEach((f, id) => postAnchors(id, f));
   markUpdates();
 }
 
@@ -955,6 +1017,12 @@ function revealQuote(c) {
   if (c.quote.startsWith("plan · ")) { setTab("plan"); return; }
   setTab(tabOf(c.section));
   openItemOf(c.section);
+  const f = c.quote && (state.sections[c.section] || {}).kind === "html" && frames.get(c.section);
+  if (f && f.contentWindow) {
+    revealing.set(c.section, c);
+    f.contentWindow.postMessage({ viewConcept: "reveal", quote: c.quote, prefix: c.prefix || "" }, "*");
+    return;
+  }
   const r = findQuote(c.section, c.quote, c.prefix);
   if (r) {
     r.startContainer.parentElement.scrollIntoView({ block: "center", behavior: "smooth" });

@@ -14,7 +14,11 @@ nothing, so the head brings them, and the page tells the frame which theme it is
 load and at every change of theme. A section paints with var(--ink) and matches the page
 without copying its palette. Where no page tells it, the section takes the page's default
 theme: Catppuccin Latte in light mode, Tokyo Night in dark mode. frame.js also tells the
-page the height of the section's content, which the frame takes. The published page and
+page the height of the section's content, which the frame takes, and brings passages
+back across the separation: the reader's selection goes to the page, which comments or
+asks on it as on a passage of a Markdown section; the page sends the passages its
+comments and side threads quote, which frame.js highlights, and a passage to reveal.
+Term underlines and change highlights stay outside the frame. The published page and
 the vault note add the same head. Kept apart from the server so publishing and exporting
 do not import FastAPI.
 """
