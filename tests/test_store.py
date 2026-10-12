@@ -92,6 +92,23 @@ def test_export_moves_media_out_of_the_note(session, tmp_path):
     assert (media / "widget.js").exists()
 
 
+def test_export_links_an_html_section_and_frames_it(session, tmp_path):
+    vault = tmp_path / "vault"
+    (vault / ".obsidian").mkdir(parents=True)
+    document = '<p>Une figure.</p><video src="s2/a.mp4"></video>'
+    (session.sections_dir / "s2.html").write_text(document)
+    (session.sections_dir / "s2").mkdir()
+    (session.sections_dir / "s2" / "a.mp4").write_bytes(b"mp4")
+    note = session.export(vault / "explanations").read_text()
+    media = vault / "explanations" / "kv-cache"
+    assert (media / "s2.html").read_text() == document  # copied as it is
+    assert (media / "s2" / "a.mp4").read_bytes() == b"mp4"
+    assert "## Cache\n\n[Open this section in the browser](kv-cache/s2.html)" in note
+    assert 'dv.view("explanations/kv-cache/section", ' in note and "Une figure" not in note
+    assert 'sandbox: "allow-scripts ' in (media / "section.js").read_text()
+    assert (media / "frame.css").exists() and (media / "frame.js").exists()
+
+
 def test_list_sessions(session, tmp_path):
     session.add_batch([{"text": "a"}])
     rows = list_sessions(tmp_path)

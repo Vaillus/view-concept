@@ -118,6 +118,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import tempfile
 import unicodedata
 from datetime import UTC, date, datetime
@@ -1000,8 +1001,11 @@ class Session:
         path = vault_dir / f"{base}.md"
         if path.exists() and f"view-concept: {self.slug}\n" not in path.read_text(encoding="utf-8"):
             path = vault_dir / f"{base} ({self.slug}).md"
+        html = self.html_sections()
         sections = {
-            sid: _externalize(text, vault_dir, self.slug)
+            sid: _export_html_section(self, sid, text, vault_dir)
+            if sid in html
+            else _externalize(text, vault_dir, self.slug)
             for sid, text in self.read_sections().items()
         }
         path.write_text(self.render_markdown(plan, sections), encoding="utf-8")
@@ -1058,12 +1062,13 @@ class Session:
 
 
 # ---- export: media out of the note ----
-# Sections embed their visuals as base64 data URIs, and their widgets (step players, sliders)
-# as HTML whose behaviour sits in inline on* attributes. Obsidian slows down on a note of
-# several MB and does not run inline handlers, so the export moves both out of the note:
-# each data URI becomes a file in <slug>/assets/, each widget a file in <slug>/widgets/
-# rendered by a dataviewjs block (Dataview plugin, JavaScript queries enabled) through
-# <slug>/widget.js, which turns the on* attributes back into event listeners.
+# Markdown sections embed their visuals as base64 data URIs, and their widgets (step
+# players, sliders) as raw HTML whose behaviour sits in inline on* attributes. Obsidian
+# slows down on a note of several MB and does not run inline handlers, so the export moves
+# both out of the note: each data URI becomes a file in <slug>/assets/, each widget a file
+# in <slug>/widgets/ rendered by a dataviewjs block (Dataview plugin, JavaScript queries
+# enabled) through <slug>/widget.js, which turns the on* attributes back into event
+# listeners.
 
 DATA_URI = re.compile(r"data:([a-z0-9.+/-]+);base64,([A-Za-z0-9+/=]+)")
 MD_IMAGE = re.compile(r"!\[([^\]]*)\]\(" + DATA_URI.pattern + r"\)")
@@ -1101,6 +1106,35 @@ for (const el of box.querySelectorAll("*")) {
   }
 }
 """
+
+
+# An HTML section needs no guessing: its file is copied as it is into <slug>/, with its
+# media folder, and the note holds, under the section's title, a link to the file (it
+# opens the section in the browser, as a page of its own) and a dataviewjs block that
+# draws the section in a section frame inside the note, as the page does (frame.py),
+# through <slug>/section.js, a copy of static/vault-section.js. The note does not hold
+# the section's prose, so Obsidian's search does not find it.
+
+
+def _export_html_section(s: Session, sid: str, text: str, vault_dir: Path) -> str:
+    """Copy an HTML section's file and media folder into vault_dir/<slug>/, and return
+    what the note holds in its place: a link to the file and the dataviewjs block that
+    draws it."""
+    media = vault_dir / s.slug
+    rel = media.resolve().relative_to(_vault_root(vault_dir.resolve())).as_posix()
+    media.mkdir(parents=True, exist_ok=True)
+    (media / f"{sid}.html").write_text(text, encoding="utf-8")
+    if s.media_folder(sid).is_dir():
+        shutil.copytree(s.media_folder(sid), media / sid, dirs_exist_ok=True)
+    (media / "frame.css").write_text(frame.tokens_css(), encoding="utf-8")
+    (media / "frame.js").write_text(frame.frame_js(), encoding="utf-8")
+    view = (frame.STATIC / "vault-section.js").read_text(encoding="utf-8")
+    (media / "section.js").write_text(view.replace("{SANDBOX}", frame.SANDBOX), "utf-8")
+    args = json.dumps({"file": f"{rel}/{sid}.html", "root": rel}, ensure_ascii=False)
+    return (
+        f"[Open this section in the browser]({s.slug}/{sid}.html)\n\n"
+        f'```dataviewjs\nawait dv.view("{rel}/section", {args})\n```'
+    )
 
 
 def _vault_root(path: Path) -> Path:
