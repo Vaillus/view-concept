@@ -101,11 +101,19 @@ def test_export_links_an_html_section_and_frames_it(session, tmp_path):
     (session.sections_dir / "s2" / "a.mp4").write_bytes(b"mp4")
     note = session.export(vault / "explanations").read_text()
     media = vault / "explanations" / "kv-cache"
-    assert (media / "s2.html").read_text() == document  # copied as it is
+    # copied with the frame's head, so the link shows the page's default theme
+    exported = (media / "s2.html").read_text()
+    assert exported.startswith(
+        '<link rel="stylesheet" href="frame.css"><script src="frame.js"></script>'
+    )
+    assert exported.endswith(document)
     assert (media / "s2" / "a.mp4").read_bytes() == b"mp4"
     assert "## Cache\n\n[Open this section in the browser](kv-cache/s2.html)" in note
     assert 'dv.view("explanations/kv-cache/section", ' in note and "Une figure" not in note
-    assert 'sandbox: "allow-scripts ' in (media / "section.js").read_text()
+    view = (media / "section.js").read_text()
+    assert 'sandbox: "allow-scripts ' in view
+    # the view drops the file's two links and writes the two files' text in their place
+    assert 'html.split("<link rel=\\"stylesheet\\" href=\\"frame.css\\">' in view
     assert (media / "frame.css").exists() and (media / "frame.js").exists()
 
 

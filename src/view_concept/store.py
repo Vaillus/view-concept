@@ -1159,28 +1159,34 @@ for (const el of box.querySelectorAll("*")) {
 """
 
 
-# An HTML section needs no guessing: its file is copied as it is into <slug>/, with its
-# media folder, and the note holds, under the section's title, a link to the file (it
-# opens the section in the browser, as a page of its own) and a dataviewjs block that
-# draws the section in a section frame inside the note, as the page does (frame.py),
-# through <slug>/section.js, a copy of static/vault-section.js. The note does not hold
-# the section's prose, so Obsidian's search does not find it.
+# An HTML section needs no guessing: its file is copied into <slug>/ with the frame's
+# head written in (VAULT_FRAME_HEAD), with its media folder, and the note holds, under
+# the section's title, a link to the file (it opens the section in the browser, as a page
+# of its own, in the page's default theme) and a dataviewjs block that draws the section
+# in a section frame inside the note, as the page does (frame.py), through
+# <slug>/section.js, a copy of static/vault-section.js. The note does not hold the
+# section's prose, so Obsidian's search does not find it.
+
+# The head an exported HTML section gets: the theme tokens and frame.js, written next to
+# it in <slug>/. section.js replaces these two links by the files' text (see there).
+VAULT_FRAME_HEAD = '<link rel="stylesheet" href="frame.css"><script src="frame.js"></script>'
 
 
 def _export_html_section(s: Session, sid: str, text: str, vault_dir: Path) -> str:
-    """Copy an HTML section's file and media folder into vault_dir/<slug>/, and return
-    what the note holds in its place: a link to the file and the dataviewjs block that
-    draws it."""
+    """Copy an HTML section's file, with the frame's head, and its media folder into
+    vault_dir/<slug>/, and return what the note holds in its place: a link to the file
+    and the dataviewjs block that draws it."""
     media = vault_dir / s.slug
     rel = media.resolve().relative_to(_vault_root(vault_dir.resolve())).as_posix()
     media.mkdir(parents=True, exist_ok=True)
-    (media / f"{sid}.html").write_text(text, encoding="utf-8")
+    (media / f"{sid}.html").write_text(frame.inject(text, VAULT_FRAME_HEAD), encoding="utf-8")
     if s.media_folder(sid).is_dir():
         shutil.copytree(s.media_folder(sid), media / sid, dirs_exist_ok=True)
     (media / "frame.css").write_text(frame.tokens_css(), encoding="utf-8")
     (media / "frame.js").write_text(frame.frame_js(), encoding="utf-8")
     view = (frame.STATIC / "vault-section.js").read_text(encoding="utf-8")
-    (media / "section.js").write_text(view.replace("{SANDBOX}", frame.SANDBOX), "utf-8")
+    view = view.replace("{SANDBOX}", frame.SANDBOX).replace("{HEAD}", json.dumps(VAULT_FRAME_HEAD))
+    (media / "section.js").write_text(view, "utf-8")
     args = json.dumps({"file": f"{rel}/{sid}.html", "root": rel}, ensure_ascii=False)
     return (
         f"[Open this section in the browser]({s.slug}/{sid}.html)\n\n"
