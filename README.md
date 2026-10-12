@@ -22,7 +22,7 @@ You type `/view-concept explain KKT conditions`. The agent opens the page and as
 1. **Plan.** The agent writes the outline and the lexicon in the Plan tab. You correct it or click « Approve plan ».
 2. **Prose.** The agent writes the sections one by one; the page re-renders as each one lands.
 3. **Comments.** Select a passage, « + comment », repeat, then « Send ». The agent edits the sections, replies to each comment, and the words it changed stay highlighted until your next batch.
-4. **Side threads.** To discuss a passage before asking for a change, select it and click « ask ». A **side thread** is a separate, read-only conversation forked from the session, so it knows the discussion so far; the session never sees it. (On Claude Code and Codex it forks the real conversation; on any other agent it is briefed from the session's files.)
+4. **Side threads.** To discuss a passage before asking for a change, select it and click « ask ». A **side thread** is a separate, read-only conversation forked from the session, so it knows the discussion so far; the session never sees it. (On Claude Code and Codex it forks the real conversation; on any other agent, and in a branch review, it starts from the session's files.)
 
 ![The Plan tab waiting for approval](docs/screenshots/plan.png)
 
@@ -40,7 +40,7 @@ To keep an explanation, « Export to vault » writes it as an Obsidian note, and
 | `/view-branch` | review a branch you are building, concepts first |
 | `/view-refactor` | decide what stays in quickly written code, then restructure it |
 
-A **branch review** (`/view-branch`) first writes the concepts the branch introduces, with their rules; you correct them and approve. The agent then fixes the code to match, and the Refactor tab lists each changed file with its **verdict** (the decision recorded for that item) and a chart of how the files relate. « Create PR » opens the pull request.
+A **branch review** (`/view-branch`) first writes the concepts the branch introduces, with their rules; you correct them and approve. The main session only coordinates: separate agents write the concepts, change the code to match them, and check the result. The Refactor tab lists each changed file with its **verdict** (the decision recorded for that item) and a chart of how the files relate. A concept you change after approval shows as « not implemented yet » until the code catches up. « Create PR » opens the pull request.
 
 ![The Refactor tab of a branch review: one verdict per item, then the structure chart](docs/screenshots/branch-review.png)
 
