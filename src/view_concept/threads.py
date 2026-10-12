@@ -189,7 +189,8 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
         "- Answer the question asked, and only that one. When it opens a larger point,"
         " name it in one sentence and let the user decide whether to go there.",
         f"- The {doc} may have changed since this conversation started: the"
-        f" current text of a section is in {s.sections_dir}/<id>.md.",
+        f" current text of a section is in {s.sections_dir}/<id>.md, or <id>.html for"
+        " an HTML section.",
         f"- When the discussion leads to a change (to the {doc} or to the code),"
         " say so plainly. The user sends it to the main session from the page.",
         _vocabulary(plan["lexicon"], number, number.get(sec) if sec else None),

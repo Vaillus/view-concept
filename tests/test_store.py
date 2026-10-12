@@ -569,3 +569,22 @@ def test_an_explanation_has_no_unimplemented_changes(session):
     session.add_change("renamed")
     session.add_batch([], action="approve-model")
     assert session.unimplemented_changes() == []
+
+
+def test_an_html_section_is_read_from_its_html_file(session):
+    (session.sections_dir / "s3.html").write_text("<p>Une figure.</p>")
+    assert session.read_sections()["s3"] == "<p>Une figure.</p>"
+    assert session.html_sections() == {"s3"}
+    assert session.two_file_sections() == []
+
+
+def test_the_html_file_wins_over_the_md_file(session):
+    (session.sections_dir / "s1.html").write_text("<p>Réécrite en HTML.</p>")
+    assert session.read_sections()["s1"] == "<p>Réécrite en HTML.</p>"
+    assert session.two_file_sections() == ["s1"]
+
+
+def test_an_html_section_changes_the_signature(session):
+    before = session.signature()
+    (session.sections_dir / "s3.html").write_text("<p>x</p>")
+    assert session.signature() != before

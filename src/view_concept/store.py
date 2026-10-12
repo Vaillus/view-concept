@@ -7,6 +7,7 @@ reach the agent session through the inbox.
     <home>/sessions/<slug>/
         plan.json       title, initial_request, kind, workflow, repo, base, outline, lexicon
         sections/<id>.md  the prose of one outline section         (written by the agent)
+        sections/<id>.html  an HTML section instead: a self-contained HTML document
         audit.json      vocabulary-audit findings       (written by the agent and `check`)
         status.json     what the agent is doing now: phase, section    (written by `status`)
         change-history.json  every change of the model, oldest first     (written by `change`)
@@ -23,7 +24,12 @@ reach the agent session through the inbox.
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
 
-A section is one element of the `outline` list in plan.json: {id, title, earns}. An
+A section is one element of the `outline` list in plan.json: {id, title, earns}. Its text
+is one file of sections/, whose extension alone says which kind of section it is: Markdown
+in <id>.md, or an HTML section in <id>.html, a self-contained HTML document (its HTML, CSS
+and JavaScript) which may hold prose and visuals alike, as an artifact does. A section has
+one file; when both exist (an agent switched the kind and left the old file), every
+reader takes the .html file, and `check` reports the pair. An
 answer to a comment that belongs in the explanation amends a section or adds one at its
 place in the outline; a `kind: "question"` left by an older session is ignored, and the
 section reads as any other. A refactor section, marked `part: "refactoring"`, belongs
@@ -395,12 +401,30 @@ class Session:
         _write_json(self.plan_path, plan)
         return plan
 
-    def read_sections(self) -> dict[str, str]:
+    def section_files(self) -> dict[str, Path]:
+        """Each written section's file, by id in id order: <id>.html for an HTML section,
+        else <id>.md. When both exist, the .html file."""
         if not self.sections_dir.is_dir():
             return {}
-        return {
-            p.stem: p.read_text(encoding="utf-8") for p in sorted(self.sections_dir.glob("*.md"))
-        }
+        files = {p.stem: p for p in self.sections_dir.glob("*.md") if p.is_file()}
+        files.update({p.stem: p for p in self.sections_dir.glob("*.html") if p.is_file()})
+        return dict(sorted(files.items()))
+
+    def read_sections(self) -> dict[str, str]:
+        """Each written section's text: the Markdown of a Markdown section, the HTML
+        document of an HTML section."""
+        return {sid: p.read_text(encoding="utf-8") for sid, p in self.section_files().items()}
+
+    def html_sections(self) -> set[str]:
+        """The ids of the HTML sections."""
+        return {sid for sid, p in self.section_files().items() if p.suffix == ".html"}
+
+    def two_file_sections(self) -> list[str]:
+        """The ids of the sections with both an <id>.md and an <id>.html file: the .md file
+        is ignored."""
+        return sorted(
+            sid for sid in self.html_sections() if (self.sections_dir / f"{sid}.md").is_file()
+        )
 
     def read_audit(self) -> list[dict[str, Any]]:
         return _read_json(self.audit_path, [])
@@ -685,7 +709,7 @@ class Session:
             self.published_path,
         ]
         if self.sections_dir.is_dir():
-            paths += sorted(self.sections_dir.glob("*.md"))
+            paths += sorted([*self.sections_dir.glob("*.md"), *self.sections_dir.glob("*.html")])
         return _stat_signature(paths)
 
     def thread_signature(self) -> tuple:
