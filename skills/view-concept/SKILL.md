@@ -94,11 +94,21 @@ The rules below scale with the level and the goal of Phase 1: at a beginner leve
 
 Write each term's `tip` with the section that introduces it (see **Files you write**).
 
+#### The visual rule: Markdown or HTML
+
+A section may be written as an **HTML section**: `sections/<id>.html` instead of `sections/<id>.md`. The page draws it in a frame of its own, as claude.ai draws an artifact: its scripts run, its styles stay inside the frame, and it can load from the web. The extension alone says the kind; a section has one file, so delete the `.md` when you switch a section to HTML (`view-concept check` reports a pair).
+
+- **When.** Write a section as an HTML section when its visual needs its own styles, behaviour (a step player, a slider, an animation) or a library (a chart, d3). A diagram Mermaid can draw stays a ```` ```mermaid ```` block in a Markdown section. Never write an HTML block (raw HTML that starts its own paragraph) into a Markdown section: `view-concept check` reports it; inline HTML in a sentence (`<b>`, `<span>`) is fine.
+- **What the file holds.** One self-contained HTML document: its HTML, CSS and JavaScript in the file, no heading of its own (the page renders the title). Paint with the page's theme tokens, `var(--bg)`, `var(--ink)`, `var(--ink-dim)`, `var(--muted)`, `var(--line)`, `var(--raised)`, `var(--accent)`, `var(--ok)`, `var(--warn)`, `var(--flag)`, `var(--danger)`, `var(--info)`, `var(--alt)` and `var(--mono)` for the font: the frame receives them and follows the page's light or dark theme, so never hard-code a palette.
+- **Size.** Under 2 MB, embedded media included. Never write a large image or video into the file as a data URI: load it from the web or, when you produced it yourself (a manim render, a GIF), put it in the section's media folder, `sections/<id>/`, and load it by a relative address (`<video src="<id>/step-1.mp4">`). The page serves the folder, and the published page and the vault export copy it along. `view-concept check` reports a file over the limit.
+- **Loading from the web.** Libraries from cdnjs.cloudflare.com, cdn.jsdelivr.net or unpkg.com; any other site when the section needs it. Either way, a section that loads from the web needs a connection to show.
+- **Prose.** No preference: an HTML section may hold prose as well as visuals, as an artifact does; choose how much goes there. Know its cost: inside the frame the page draws no term underline, and the user comments the section as a whole, never a passage. Its visible text (outside its scripts and styles) still counts for `view-concept check`.
+
 ### Phase 6 — Vocabulary audit
 
 The lexicon catches the terms you planned to use; the audit catches the terms you used without noticing. Run `view-concept status <slug> audit`, then:
 
-1. Run `view-concept check <slug>`. It writes every forward reference and early use to `audit.json` (issues `forward` and `early`). Fix each one by the precedence rule: reorder the outline, or say the idea in plain words.
+1. Run `view-concept check <slug>`. It writes every forward reference and early use to `audit.json` (issues `forward` and `early`). Fix each one by the precedence rule: reorder the outline, or say the idea in plain words. It also prints the section problems, which it does not write to `audit.json`: an HTML block in a Markdown section (move it into an HTML section), two files for one section, an HTML section over 2 MB. Fix each one.
 2. Re-read the finished text for the terms that slipped past the lexicon, and add each one to `audit.json`, keeping the entries `check` wrote, with one of these issues:
    - `undefined`: a domain term absent from the lexicon, which a reader outside the project would need defined;
    - `metaphor`: a word such as « bridge » or « funnel » that names an intuition instead of the mechanism;
@@ -142,6 +152,7 @@ In the directory printed by `new` (`~/.view-concept/sessions/<slug>/`):
 |---|---|---|
 | `plan.json` | `{"title", "initial_request", "created", "revision", "outline": [{"id": "s1", "title", "earns"}], "lexicon": [{"term", "section": "s1", "definition", "tip"}]}` — keep the fields `new` wrote | Phase 2, rewritten in Phase 4; `tip` in Phase 5 |
 | `sections/<id>.md` | the prose of one outline section, Markdown, no heading of its own (the page renders the title). `$…$` / `$$…$$` for maths, ```` ```mermaid ```` for diagrams | Phase 5, and every later edit |
+| `sections/<id>.html` | an HTML section instead, by the visual rule (Phase 5): a self-contained HTML document; its media files in `sections/<id>/` | Phase 5, and every later edit |
 | `audit.json` | `[{"term", "section", "issue": "undefined\|metaphor\|ambiguous\|assumes-context\|forward\|early", "note"}]` | Phase 6 |
 
 **The lexicon texts.** The page shows a term's `tip` when the reader hovers any use of it, so it is read mid-sentence, far from the section that introduced the term. Without a `tip`, the page falls back to `definition`, the one-line meaning the plan commits to before the prose. Write both for the **first-use reader**: someone who has read the sections in order up to the term's home section (the section the entry names in `section`) and nothing after. A text that works for this reader works for anyone who has read further; the reverse fails.

@@ -235,6 +235,45 @@ prose.
   names them. Name a section to the user by its number in words
   (« section 6 »), never by its id (`s6`, `applied`) or `§6`.
 
+### The visual rule: Markdown or HTML
+
+A section may be written as an **HTML section**: `sections/<id>.html` instead
+of `sections/<id>.md`. The page draws it in a frame of its own, as claude.ai
+draws an artifact: its scripts run, its styles stay inside the frame, and it
+can load from the web. The extension alone says the kind; a section has one
+file, so delete the `.md` when you switch a section to HTML (`view-concept
+check` reports a pair).
+
+- **When.** Write a section as an HTML section when its visual needs its own
+  styles, behaviour (a step player, a slider, an animation) or a library (a
+  chart, d3). A diagram Mermaid can draw stays a ```` ```mermaid ```` block in
+  a Markdown section. Never write an HTML block (raw HTML that starts its own
+  paragraph) into a Markdown section: `view-concept check` reports it; inline
+  HTML in a sentence (`<b>`, `<span>`) is fine.
+- **What the file holds.** One self-contained HTML document: its HTML, CSS and
+  JavaScript in the file, no heading of its own (the page renders the title).
+  Paint with the page's theme tokens, `var(--bg)`, `var(--ink)`,
+  `var(--ink-dim)`, `var(--muted)`, `var(--line)`, `var(--raised)`,
+  `var(--accent)`, `var(--ok)`, `var(--warn)`, `var(--flag)`, `var(--danger)`,
+  `var(--info)`, `var(--alt)` and `var(--mono)` for the font: the frame
+  receives them and follows the page's light or dark theme, so never hard-code
+  a palette.
+- **Size.** Under 2 MB, embedded media included. Never write a large image or
+  video into the file as a data URI: load it from the web or, when you
+  produced it yourself (a manim render, a GIF), put it in the section's media
+  folder, `sections/<id>/`, and load it by a relative address (`<video
+  src="<id>/step-1.mp4">`). The page serves the folder, and the published page
+  and the vault export copy it along. `view-concept check` reports a file over
+  the limit.
+- **Loading from the web.** Libraries from cdnjs.cloudflare.com,
+  cdn.jsdelivr.net or unpkg.com; any other site when the section needs it.
+  Either way, a section that loads from the web needs a connection to show.
+- **Prose.** No preference: an HTML section may hold prose as well as visuals,
+  as an artifact does; choose how much goes there. Know its cost: inside the
+  frame the page draws no term underline, and the user comments the section as
+  a whole, never a passage. Its visible text (outside its scripts and styles)
+  still counts for `view-concept check`.
+
 ### The audit
 
 Run `view-concept status <slug> audit`, then:
@@ -242,6 +281,10 @@ Run `view-concept status <slug> audit`, then:
 1. `view-concept check <slug>` writes every forward reference and early use
    to `audit.json` (issues `forward` and `early`). Fix each one by the
    precedence rule.
+   It also prints the section problems, which it does not write to
+   `audit.json`: an HTML block in a Markdown section (move it into an HTML
+   section), two files for one section, an HTML section over 2 MB. Fix each
+   one.
 2. Re-read every section for the words that slipped past the lexicon, and add
    each one to `audit.json` (`[{"term", "section", "issue", "note"}]`, keeping
    the entries `check` wrote), with one of these issues: `undefined` (a
