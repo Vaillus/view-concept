@@ -34,7 +34,8 @@ obeys, and how it relates to the concepts that existed before the branch.
 A UI element, a file, a function or a table row is not a concept: it is where
 a concept is implemented. « a row of the review table » is a part of a page;
 the concept behind it is what the row stands for (« an item is one unit of the
-diff that gets a verdict »). Name the concept, and cite the part.
+diff that gets a verdict »). Name the concept; name the part only to say
+where it lives.
 
 In the page, the model is the outline and the lexicon of `plan.json` (one
 entry per concept, `definition` + `tip`), and the **modeling part** of the

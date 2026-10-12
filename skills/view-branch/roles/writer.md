@@ -31,10 +31,13 @@ Each section goes to `sections/<id>.md`: Markdown, no heading of its own (the
 page renders the title). Before writing one, run
 `view-concept status <slug> writing --section <id>`.
 
-- **Citations are required.** Every claim about the code cites where it is
-  true, as inline code: `` `src/pkg/store.py:118` `` (path relative to the
-  repo root). A claim you cannot cite is a claim you have not checked: check
-  it or cut it.
+- **Few citations.** The reader wants the concepts, not a map of the code.
+  When a concept first comes up, name the file or script it lives in, as
+  inline code (`` `src/pkg/store.py` ``, path relative to the repo root). Cite
+  a line (`` `src/pkg/store.py:118` ``) only where the user must see the code
+  to judge the model: a threshold, a format, a name the branch changes. Most
+  sections cite no line. Still check every claim against the code before
+  writing it: an unchecked claim is cut, cited or not.
 - **A short first draft.** The first draft (« Write model ») is read to
   discuss the concepts, not to check them: each section gives its core in
   three to eight lines of prose, a table or a diagram (a ```` ```mermaid ````

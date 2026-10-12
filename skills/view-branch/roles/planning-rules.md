@@ -10,7 +10,8 @@ The **model** of a branch is the set of concepts it introduces or changes. A
 **concept** is an object, a rule, a format or a name the code relies on: « a
 gate drops a segment when its silence ratio exceeds the threshold ». A UI
 element, a file, a function or a table row is not a concept: it is where a
-concept is implemented. Name the concept, and cite the part.
+concept is implemented. Name the concept; name the part only to say where
+it lives.
 
 The model starts from the concepts the repo's docs already define; the
 modeling part covers only what the branch adds or changes.
@@ -83,8 +84,8 @@ section placed before its home section. `view-concept check <slug>` lists
 both.
 
 No location details in a `definition` or a `tip` (a file, a key, a section
-number): those go in the home section's prose, as citations. A `tip` does not
-repeat what other entries define.
+number): a file the reader needs goes in the home section's prose. A `tip`
+does not repeat what other entries define.
 
 ## The change history
 

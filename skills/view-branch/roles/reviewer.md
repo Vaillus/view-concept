@@ -42,9 +42,11 @@ Write the outline with `view-concept plan <slug> <file>` (`{"outline":
 [...]}`, the whole list: the modeling part's entries kept exactly as they
 are, the refactor sections after them), never by hand. Each section goes to
 `sections/<id>.md`; run `view-concept status <slug> writing --section <id>`
-before writing one. Every claim about the code cites where it is true, as
-inline code: `` `src/pkg/store.py:118` `` (path relative to the repo root).
-Name a section to the user by its number in words (« section 6 »), never by
+before writing one. The item's files are in its fields: the description does
+not repeat them. Cite a line (`` `src/pkg/store.py:118` ``, path relative to
+the repo root) only where a finding sits, so the implementer and the user can
+find what must change; a description of what an item does cites none. Name
+a section to the user by its number in words (« section 6 »), never by
 its id.
 
 ### Items
