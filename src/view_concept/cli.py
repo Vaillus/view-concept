@@ -27,6 +27,7 @@ from .store import (
     format_batch,
     format_changes,
     format_precedence,
+    format_section_problem,
     list_sessions,
     slugify,
 )
@@ -288,7 +289,9 @@ def cmd_changes(a: argparse.Namespace) -> None:
 
 def cmd_check(a: argparse.Namespace) -> None:
     """The precedence check: list forward references and early uses, write them to
-    audit.json (replacing the previous ones, keeping the agent's own entries)."""
+    audit.json (replacing the previous ones, keeping the agent's own entries). Then the
+    section problems (an HTML block in a Markdown section, two files for one section, an
+    HTML section file over the limit), printed only: they name no word to underline."""
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
@@ -296,6 +299,12 @@ def cmd_check(a: argparse.Namespace) -> None:
     for p in problems:
         print(format_precedence(p))
     print(f"{len(problems)} problem{'' if len(problems) == 1 else 's'} written to audit.json")
+    sections = s.check_sections()
+    for p in sections:
+        print(format_section_problem(p))
+    if sections:
+        n = len(sections)
+        print(f"{n} section problem{'' if n == 1 else 's'}, printed only (not in audit.json)")
 
 
 def cmd_pending(a: argparse.Namespace) -> None:
@@ -469,7 +478,8 @@ def main() -> None:
 
     q = sub.add_parser(
         "check",
-        help="list forward references and early uses of the lexicon, write them to audit.json",
+        help="list forward references and early uses of the lexicon, write them to audit.json;"
+        " list section problems (HTML blocks, two files, an HTML section over 2 MB)",
     )
     q.add_argument("slug")
     q.set_defaults(fn=cmd_check)

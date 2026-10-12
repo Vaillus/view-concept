@@ -126,6 +126,7 @@ from pathlib import Path
 from typing import Any
 
 from . import frame
+from .render import md
 
 HOME = Path(os.environ.get("VIEW_CONCEPT_HOME", Path.home() / ".view-concept"))
 SESSIONS = HOME / "sessions"
@@ -173,6 +174,9 @@ DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 HEARTBEAT_EVERY = 2.5  # seconds between two heartbeats of a running watch
 LISTENING_FOR = 15.0  # seconds a heartbeat proves a watch runs
+# The size an HTML section file stays under, embedded media included (the visual rule of the
+# skills); its media folder does not count. `check` reports a file over it.
+HTML_SECTION_LIMIT = 2 * 2**20
 
 
 class SessionError(Exception):
@@ -231,6 +235,11 @@ def precedence_audit_entry(p: dict[str, Any]) -> dict[str, Any]:
     else:
         note = f"introduced in section {p['home']}"
     return {"term": p["term"], "section": p["section"], "issue": p["issue"], "note": note}
+
+
+def format_section_problem(p: dict[str, Any]) -> str:
+    """One terminal line for a section problem of the check."""
+    return f"{p['issue']:10} §{p['at']} ({p['section']})  {p['note']}"
 
 
 def format_precedence(p: dict[str, Any]) -> str:
@@ -494,6 +503,48 @@ class Session:
             kept = [a for a in self.read_audit() if a.get("issue") not in ("forward", "early")]
             _write_json(self.audit_path, kept + [precedence_audit_entry(p) for p in problems])
         return problems
+
+    def check_sections(self) -> list[dict[str, Any]]:
+        """The section problems of the check: how a section is written, not a term. Never
+        written to audit.json, whose entries the page draws as an underline on their term:
+        these name no word, so `check` only prints them, for the agent.
+
+        - html-block: an HTML block in a Markdown section, raw HTML that starts its own
+          paragraph (a line beginning with a tag, up to the next blank line), as Markdown
+          reads it: inline HTML, and tags in a code block or a Mermaid diagram, are not.
+        - two-files: a section with both <id>.md and <id>.html; the .md file is ignored.
+        - too-large: an HTML section file over HTML_SECTION_LIMIT, its media folder apart.
+
+        Returns {issue, section, at (its position in the outline, "·" outside it), note},
+        in outline order."""
+        pos = {sec["id"]: i + 1 for i, sec in enumerate(self.read_plan()["outline"])}
+        files = self.section_files()
+        problems: list[dict[str, Any]] = []
+
+        def add(issue: str, sid: str, note: str) -> None:
+            problems.append({"issue": issue, "section": sid, "at": pos.get(sid, "·"), "note": note})
+
+        for sid, path in files.items():
+            if path.suffix == ".html":
+                size = path.stat().st_size
+                if size > HTML_SECTION_LIMIT:
+                    add("too-large", sid, f"{path.name} is {size / 2**20:.1f} MB, over "
+                        f"{HTML_SECTION_LIMIT // 2**20} MB: move its media to the media folder "
+                        f"sections/{sid}/ or the web")  # fmt: skip
+                continue
+            for token in md.parse(path.read_text(encoding="utf-8")):
+                head = token.content.strip().splitlines()[0] if token.content.strip() else ""
+                if token.type != "html_block" or not head or head.startswith("<!--"):
+                    continue
+                line = token.map[0] + 1 if token.map else 0
+                head = head if len(head) <= 60 else head[:57] + "..."
+                add("html-block", sid, f"{path.name}:{line} {head}  move this HTML block "
+                    "into an HTML section")  # fmt: skip
+        for sid in self.two_file_sections():
+            add("two-files", sid, f"{sid}.md and {sid}.html both present: the page shows "
+                f"{sid}.html, {sid}.md is ignored")  # fmt: skip
+        # In outline order; a section outside the outline last.
+        return sorted(problems, key=lambda p: p["at"] if isinstance(p["at"], int) else len(pos) + 1)
 
     def read_comments(self) -> dict[str, Any]:
         return _read_json(self.comments_path, {"batches": []})
