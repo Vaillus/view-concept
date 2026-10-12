@@ -141,6 +141,12 @@ FRAME_HEAD = (
 )
 
 
+# Sent with a section frame's document and its media files: the frame's sandbox flags as
+# a header, so the browser gives them an origin of their own wherever they are opened
+# (a new tab, their address), not only inside the page's <iframe>.
+FRAME_SANDBOX_HEADER = {"Content-Security-Policy": f"sandbox {frame.SANDBOX}"}
+
+
 @app.get("/frame/tokens.css")
 def frame_tokens() -> Response:
     """The theme tokens of a section frame (frame.py)."""
@@ -158,7 +164,7 @@ def section_document(slug: str, name: str) -> HTMLResponse:
     text = s.section_files()[sid].read_text(encoding="utf-8")
     return HTMLResponse(
         frame.inject(text, FRAME_HEAD),
-        headers={"Cache-Control": "no-store"},
+        headers={"Cache-Control": "no-store", **FRAME_SANDBOX_HEADER},
     )
 
 
@@ -328,7 +334,7 @@ def section_media(slug: str, sid: str, path: str) -> FileResponse:
     file = (folder / path).resolve()
     if sid not in s.html_sections() or not file.is_relative_to(folder) or not file.is_file():
         raise HTTPException(404, f"no media file {sid}/{path}")
-    return FileResponse(file)
+    return FileResponse(file, headers=FRAME_SANDBOX_HEADER)
 
 
 @app.post("/api/s/{slug}/export")

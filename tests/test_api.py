@@ -248,6 +248,8 @@ def test_an_html_section_is_drawn_in_a_frame(client, session):
     r = client.get("/s/kv-cache/sections/s3.html")
     assert r.status_code == 200
     assert r.text.startswith(f"<html><head>{server.FRAME_HEAD}<title>")
+    # Opened on its own (a new tab, its address), it keeps an origin of its own.
+    assert r.headers["content-security-policy"] == f"sandbox {frame.SANDBOX}"
     tokens = client.get("/frame/tokens.css").text
     assert '[data-theme="catppuccin-latte"]' in tokens and "--ink: var(--om-foreground)" in tokens
     assert "font-family" not in tokens  # the tokens, without the skin's styles
@@ -271,7 +273,9 @@ def test_the_page_serves_an_html_sections_media_folder(client, session):
     (session.sections_dir / "s3.html").write_text('<video src="s3/step-1.mp4"></video>')
     (session.sections_dir / "s3").mkdir()
     (session.sections_dir / "s3" / "step-1.mp4").write_bytes(b"mp4")
-    assert client.get("/s/kv-cache/sections/s3/step-1.mp4").content == b"mp4"
+    media = client.get("/s/kv-cache/sections/s3/step-1.mp4")
+    assert media.content == b"mp4"
+    assert media.headers["content-security-policy"] == f"sandbox {frame.SANDBOX}"
     assert client.get("/s/kv-cache/sections/s3/missing.mp4").status_code == 404
     assert client.get("/s/kv-cache/sections/s3/..%2F..%2Fplan.json").status_code == 404
     (session.sections_dir / "s1").mkdir()
