@@ -265,3 +265,15 @@ def test_an_html_section_is_drawn_in_a_frame(client, session):
 )
 def test_the_frame_head_comes_first_in_the_head(document, framed):
     assert frame.inject(document, "H") == framed
+
+
+def test_the_page_serves_an_html_sections_media_folder(client, session):
+    (session.sections_dir / "s3.html").write_text('<video src="s3/step-1.mp4"></video>')
+    (session.sections_dir / "s3").mkdir()
+    (session.sections_dir / "s3" / "step-1.mp4").write_bytes(b"mp4")
+    assert client.get("/s/kv-cache/sections/s3/step-1.mp4").content == b"mp4"
+    assert client.get("/s/kv-cache/sections/s3/missing.mp4").status_code == 404
+    assert client.get("/s/kv-cache/sections/s3/..%2F..%2Fplan.json").status_code == 404
+    (session.sections_dir / "s1").mkdir()
+    (session.sections_dir / "s1" / "a.png").write_bytes(b"png")
+    assert client.get("/s/kv-cache/sections/s1/a.png").status_code == 404  # not an HTML section

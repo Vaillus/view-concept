@@ -319,6 +319,18 @@ def thread_stop(slug: str, tid: str) -> dict[str, bool]:
     return {"ok": True}
 
 
+@app.get("/s/{slug}/sections/{sid}/{path:path}")
+def section_media(slug: str, sid: str, path: str) -> FileResponse:
+    """A file of an HTML section's media folder, sections/<id>/: the media the agent
+    produced for it, which the section loads by a relative address."""
+    s = get_session(slug)
+    folder = s.media_folder(sid).resolve()
+    file = (folder / path).resolve()
+    if sid not in s.html_sections() or not file.is_relative_to(folder) or not file.is_file():
+        raise HTTPException(404, f"no media file {sid}/{path}")
+    return FileResponse(file)
+
+
 @app.post("/api/s/{slug}/export")
 def export(slug: str) -> dict[str, str]:
     path = get_session(slug).export()

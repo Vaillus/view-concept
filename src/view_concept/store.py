@@ -8,6 +8,7 @@ reach the agent session through the inbox.
         plan.json       title, initial_request, kind, workflow, repo, base, outline, lexicon
         sections/<id>.md  the prose of one outline section         (written by the agent)
         sections/<id>.html  an HTML section instead: a self-contained HTML document
+        sections/<id>/  its media folder: media files the agent produced for it
         audit.json      vocabulary-audit findings       (written by the agent and `check`)
         status.json     what the agent is doing now: phase, section    (written by `status`)
         change-history.json  every change of the model, oldest first     (written by `change`)
@@ -29,7 +30,10 @@ is one file of sections/, whose extension alone says which kind of section it is
 in <id>.md, or an HTML section in <id>.html, a self-contained HTML document (its HTML, CSS
 and JavaScript) which may hold prose and visuals alike, as an artifact does. A section has
 one file; when both exist (an agent switched the kind and left the old file), every
-reader takes the .html file, and `check` reports the pair. An
+reader takes the .html file, and `check` reports the pair. An HTML section's media folder,
+sections/<id>/, holds the media files the agent produced for it (a manim render, a GIF),
+which have no web address: the section loads them by a relative address (<id>/<file>),
+the page serves them, and the published page and the vault export copy them along. An
 answer to a comment that belongs in the explanation amends a section or adds one at its
 place in the outline; a `kind: "question"` left by an older session is ignored, and the
 section reads as any other. A refactor section, marked `part: "refactoring"`, belongs
@@ -318,6 +322,12 @@ class Session:
     @property
     def published_path(self) -> Path:
         return self.dir / "published.json"
+
+    def media_folder(self, sid: str) -> Path:
+        """The media folder of section `sid`: sections/<sid>/."""
+        if not sid or "/" in sid or sid in (".", ".."):
+            raise SessionError(f"invalid section id {sid!r}")
+        return self.sections_dir / sid
 
     def thread_path(self, tid: str) -> Path:
         if not THREAD_ID_RE.match(tid):
