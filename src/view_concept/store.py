@@ -942,12 +942,14 @@ class Session:
     def published_sections(self, plan: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """What a published page shows of the prose: every explanation section (no
         `"part": 2`) that is written, in outline order, as {id, number (its position in
-        the outline, as the page numbers it), title, markdown}."""
+        the outline, as the page numbers it), title, markdown (the file's text: the HTML
+        document of an HTML section), html (whether it is an HTML section)}."""
         plan = plan or self.read_plan()
         sections = self.read_sections()
+        html = self.html_sections()
         return [
             {"id": s["id"], "number": i + 1, "title": s.get("title", s["id"]),
-             "markdown": sections[s["id"]]}
+             "markdown": sections[s["id"]], "html": s["id"] in html}
             for i, s in enumerate(plan["outline"])
             if s.get("part") != 2 and s["id"] in sections
         ]  # fmt: skip

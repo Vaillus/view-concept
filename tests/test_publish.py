@@ -216,3 +216,18 @@ def test_cli_publish_and_unpublish(tmp_path, pages):
     assert pushed(pages)[0][0] == "unpublish kv"
     r = view_concept(home, "unpublish", "kv")
     assert r.returncode == 1 and "not published" in r.stderr
+
+
+def test_build_draws_an_html_section_in_a_frame(session, tmp_path):
+    (session.sections_dir / "s2.html").write_text('<head></head><video src="s2/a.mp4"></video>')
+    (session.sections_dir / "s2").mkdir()
+    (session.sections_dir / "s2" / "a.mp4").write_bytes(b"mp4")
+    out = tmp_path / "out"
+    pub.build(session, out)
+    page = (out / "index.html").read_text()
+    assert '<iframe class="frame" sandbox="allow-scripts ' in page
+    assert 'src="sections/s2.html"' in page and "<video" not in page
+    framed = (out / "sections" / "s2.html").read_text()
+    assert framed.startswith(f"<head>{pub.FRAME_HEAD}</head>")
+    assert (out / "sections" / "s2" / "a.mp4").read_bytes() == b"mp4"
+    assert (out / "frame" / "tokens.css").exists() and (out / "frame" / "frame.js").exists()

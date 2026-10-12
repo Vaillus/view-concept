@@ -1,5 +1,6 @@
 /* view-concept — the published page's script: underlines the lexicon terms and shows
-   their tip on hover, typesets the maths and draws the Mermaid charts.
+   their tip on hover, typesets the maths, draws the Mermaid charts and talks to the
+   section frames.
 
    wrapTerm, annotateLexicon, typesetMath, renderMermaid and the tooltip handler mirror
    their namesakes in app.js (the session page): change them together. They differ only
@@ -111,6 +112,24 @@ document.addEventListener("mouseover", (e) => {
   tip.style.top = `${window.scrollY + r.bottom + 4}px`;
   tip.style.left = `${window.scrollX + Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8))}px`;
 });
+
+/* Section frames (an HTML section, see frame.py): each takes the height its content posts,
+   and is told the page's theme at load and whenever it changes. Mirrors the section
+   frames of app.js. */
+function postTheme(f) {
+  if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "theme", theme: document.documentElement.dataset.theme }, "*");
+}
+window.addEventListener("message", (e) => {
+  const d = e.data;
+  if (!d || d.viewConcept !== "height") return;
+  for (const f of document.querySelectorAll("iframe.frame")) if (f.contentWindow === e.source) f.style.height = `${d.height}px`;
+});
+document.querySelectorAll("iframe.frame").forEach((f) => {
+  f.addEventListener("load", () => postTheme(f));
+  postTheme(f);
+});
+new MutationObserver(() => document.querySelectorAll("iframe.frame").forEach(postTheme))
+  .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
 // KaTeX loads deferred: it is there once the document is parsed.
 document.addEventListener("DOMContentLoaded", () => {

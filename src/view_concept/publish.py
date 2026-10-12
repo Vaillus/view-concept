@@ -6,8 +6,11 @@ explanation sections that are written, in outline order, numbered by their posit
 the outline), with every lexicon term underlined and its tip shown on hover. Its CSS and
 JavaScript are written in (static/published.html, published.css, reader.js, and the
 omarchy skin); only KaTeX and Mermaid load from the web, as in the page. An image a
-section takes from this machine is copied into `<slug>/assets/`. It leaves out the plan,
-comments, threads, highlights and audit underlines.
+section takes from this machine is copied into `<slug>/assets/`. An HTML section is drawn
+in a section frame, as in the page (frame.py): its file is written to
+`<slug>/sections/<id>.html` with the frame's head, its media folder copied next to it, and
+the theme tokens and frame.js to `<slug>/frame/`; the page posts its theme to the frame.
+It leaves out the plan, comments, threads, highlights and audit underlines.
 
 The pages repo is a public GitHub repository whose GitHub Pages site serves its `main`
 branch as-is (a `.nojekyll` at its root), together with its clone on this machine
@@ -34,8 +37,10 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Any
 from urllib.parse import unquote, urlparse
 
+from . import frame
 from .render import md
 from .store import HOME, Session, SessionError
 
@@ -89,7 +94,7 @@ def build(s: Session, folder: Path, published: date | None = None) -> None:
     assets = Assets(s.dir, folder / "assets")
     blocks = []
     for sec in sections:
-        body = assets.rewrite(md.render(sec["markdown"]))
+        body = _frame(s, sec, folder) if sec["html"] else assets.rewrite(md.render(sec["markdown"]))
         blocks.append(
             f'<section class="sec" id="sec-{html.escape(sec["id"])}">\n'
             f'<h2><span class="num">{sec["number"]}</span> {html.escape(sec["title"])}</h2>\n'
@@ -116,6 +121,32 @@ def build(s: Session, folder: Path, published: date | None = None) -> None:
     }
     page = PLACEHOLDER_RE.sub(lambda m: values[m.group(1)], _static("published.html"))
     (folder / "index.html").write_text(page, encoding="utf-8")
+
+
+# The head a published HTML section gets, from sections/<id>.html.
+FRAME_HEAD = (
+    '<link rel="stylesheet" href="../frame/tokens.css"><script src="../frame/frame.js"></script>'
+)
+
+
+def _frame(s: Session, sec: dict[str, Any], folder: Path) -> str:
+    """Write an HTML section's file, with the frame's head, and its media folder into the
+    published folder; return the section frame that draws it."""
+    sid = sec["id"]
+    (folder / "frame").mkdir(exist_ok=True)
+    (folder / "frame" / "tokens.css").write_text(frame.tokens_css(), encoding="utf-8")
+    (folder / "frame" / "frame.js").write_text(frame.frame_js(), encoding="utf-8")
+    (folder / "sections").mkdir(exist_ok=True)
+    document = frame.inject(sec["markdown"], FRAME_HEAD)
+    (folder / "sections" / f"{sid}.html").write_text(document, encoding="utf-8")
+    media = s.media_folder(sid)
+    if media.is_dir():
+        shutil.copytree(media, folder / "sections" / sid)
+    src = html.escape(f"sections/{sid}.html")
+    return (
+        f'<iframe class="frame" sandbox="{frame.SANDBOX}" allow="fullscreen" '
+        f'title="{html.escape(sec["title"])}" src="{src}"></iframe>\n'
+    )
 
 
 def _static(name: str) -> str:
