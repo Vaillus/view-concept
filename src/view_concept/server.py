@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -135,6 +135,18 @@ def section_view(text: str, seen: str, html: bool = False) -> dict[str, Any]:
     return view
 
 
+# The head the page writes into an HTML section: its theme tokens, then frame.js.
+FRAME_HEAD = (
+    '<link rel="stylesheet" href="/frame/tokens.css"><script src="/static/frame.js"></script>'
+)
+
+
+@app.get("/frame/tokens.css")
+def frame_tokens() -> Response:
+    """The theme tokens of a section frame (frame.py)."""
+    return Response(frame.tokens_css(), media_type="text/css")
+
+
 @app.get("/s/{slug}/sections/{name}")
 def section_document(slug: str, name: str) -> HTMLResponse:
     """The document a section frame loads: the HTML section's file, with the frame's head
@@ -145,7 +157,7 @@ def section_document(slug: str, name: str) -> HTMLResponse:
         raise HTTPException(404, f"no HTML section {name!r}")
     text = s.section_files()[sid].read_text(encoding="utf-8")
     return HTMLResponse(
-        frame.inject(text, '<script src="/static/frame.js"></script>'),
+        frame.inject(text, FRAME_HEAD),
         headers={"Cache-Control": "no-store"},
     )
 

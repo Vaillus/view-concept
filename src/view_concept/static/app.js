@@ -759,6 +759,7 @@ function placeFrames() {
       if (f) f.remove();
       f = el("iframe", { class: "frame", sandbox: SANDBOX, allow: "fullscreen", title: titleOf(id),
                          "data-version": version, src: `/s/${SLUG}/sections/${encodeURIComponent(id)}.html?v=${version}` });
+      f.addEventListener("load", () => postTheme(f));
       frames.set(id, f);
     }
     moveInto(slot, f);
@@ -766,6 +767,14 @@ function placeFrames() {
   });
   for (const [id, f] of frames) if (!placed.has(id)) { f.remove(); frames.delete(id); }
 }
+
+/* The theme tokens: the frame defines every theme; the page tells it which one it is in,
+   at load and at every change of the page's theme. */
+function postTheme(f) {
+  if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "theme", theme: document.documentElement.dataset.theme }, "*");
+}
+new MutationObserver(() => frames.forEach(postTheme))
+  .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
 window.addEventListener("message", (e) => {
   const d = e.data;
