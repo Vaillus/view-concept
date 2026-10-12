@@ -5,7 +5,7 @@ import time
 import pytest
 
 from view_concept import threads
-from view_concept.store import SessionError, format_batch
+from view_concept.store import Session, SessionError, format_batch
 
 # Stands in for `claude -p`: records its arguments and prompt, then streams a reply.
 FAKE = """\
@@ -282,3 +282,32 @@ def test_detect_names_the_running_agent():
     assert detect({"CODEX_THREAD_ID": "x1"}) == ("codex", "x1")
     assert detect({"JAZZ_AGENT_PROCESS": "1"}) == ("jazz", "")
     assert detect({}) == ("", "")
+
+
+def test_a_branch_review_thread_starts_from_the_folder(tmp_path, fake_claude):
+    s = Session("gate", tmp_path)
+    s.create("The gate", "rework the gate", kind="code", repo=str(tmp_path))
+    s.bind_agent("claude", "main-1")
+    threads.create(s, "", "", "", "why a gate?")
+    t = wait_idle(s, "t1")
+    assert t["forked_from"] == ""
+    (call,) = calls(fake_claude)
+    assert "--resume" not in call["args"]
+    assert "starts from the session folder" in call["prompt"]
+    assert "## Initial request\nrework the gate" in call["prompt"]
+    assert call["prompt"].endswith("why a gate?")
+
+
+def test_the_briefing_gives_the_vocabulary_read_up_to_the_passage(session):
+    from view_concept.agents import ClaudeBackend
+
+    plan = session.read_plan()
+    plan["lexicon"].append({"term": "cache", "section": "s2", "definition": "stored keys"})
+    session.plan_path.write_text(json.dumps(plan))
+    thread = {"id": "t1", "section": "s1", "quote": "attention"}
+    text = threads._briefing(session, thread, ClaudeBackend())
+    assert "read the document up to section 1" in text
+    assert "clé | key (vecteur)" in text and "cache (stored keys)" not in text
+    assert "skills loaded above" not in text and "not a section of the explanation" in text
+    general = threads._briefing(session, {**thread, "section": "", "quote": ""}, ClaudeBackend())
+    assert "read the whole document" in general and "cache (stored keys)" in general

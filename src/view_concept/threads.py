@@ -3,7 +3,10 @@
 A thread discusses a passage without changing anything. On an agent that can fork its
 conversation (Claude Code, Codex), its first turn forks the main session, so it starts
 knowing the whole conversation so far while the main session stays untouched; every later
-turn resumes the thread's own session. On any other agent (a program that answers a prompt
+turn resumes the thread's own session. In a coordinated session (view-branch) the main
+session only coordinates subagents, so a thread never forks it: its first turn carries the
+context a subagent gets (`view-concept context --role thread`), and later turns resume the
+thread's own session as usual. On any other agent (a program that answers a prompt
 on stdin, such as `jazz run`) every turn restates where the explanation is and what the
 thread has said. Each turn is one process, run by the server in a background Python thread;
 its reply streams into threads/<id>.json, which the server's event stream watches like the
@@ -24,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from .agents import Backend, TurnState, resolve
+from .context import build
 from .store import Session, SessionError, now_iso
 
 FLUSH_EVERY = 0.25  # seconds between writes of a streaming reply
@@ -80,7 +84,7 @@ def send(s: Session, tid: str, text: str) -> dict[str, Any]:
             {"role": "assistant", "text": "", "at": now_iso()},
         ]
         if first and backend.forks:
-            thread["forked_from"] = s.read_parent()
+            thread["forked_from"] = s.fork_parent()
         try:
             proc = subprocess.Popen(
                 args,
@@ -122,17 +126,48 @@ def _cwd(s: Session) -> Path:
     return repo if repo.is_dir() else s.dir
 
 
+def _vocabulary(lexicon: list[dict[str, Any]], number: dict[str, int], upto: int | None) -> str:
+    """The lexicon terms the user has read when they reach the passage: those whose home
+    section is at or before the passage's (every term for a question with no passage)."""
+    known = [
+        t
+        for t in lexicon
+        if t.get("term") and (upto is None or number.get(t.get("section", ""), upto + 1) <= upto)
+    ]
+    if not known:
+        return ""
+    terms = "; ".join(f"{t['term']} ({t.get('definition', '')})" for t in known)
+    read = "the whole document" if upto is None else f"the document up to section {upto}"
+    later = (
+        ""
+        if upto is None
+        else " A term introduced after it is new to the user: say the idea"
+        " in plain words, or define the term in one clause."
+    )
+    return (
+        f"- Vocabulary: the user has read {read}. Use these terms as the lexicon defines"
+        f" them, and no other technical term without defining it: {terms}.{later}"
+    )
+
+
 def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
-    outline = s.read_plan()["outline"]
+    plan = s.read_plan()
+    outline = plan["outline"]
     number = {sec["id"]: i + 1 for i, sec in enumerate(outline)}
     titles = {sec["id"]: sec.get("title", sec["id"]) for sec in outline}
+    doc = "review" if plan.get("workflow") in ("view-branch", "view-refactor") else "explanation"
     sec = thread["section"]
     if sec:
         where = f"§{number.get(sec, '?')} {titles.get(sec, sec)} ({sec})"
         anchor = f"{where}: « {thread['quote']} »" if thread["quote"] else f"the whole of {where}"
     else:
-        anchor = "none (a general question about the explanation)"
-    if backend.forks and s.read_parent():
+        anchor = f"none (a general question about the {doc})"
+    if s.coordinated:
+        origin = (
+            "The main session only coordinates subagents, so this thread starts from the"
+            " session folder: the context below is where the feature stands now."
+        )
+    elif backend.forks and s.read_parent():
         origin = (
             "It is a separate conversation forked from the main one: you know everything said"
             " so far, but the main session will not see what is said here."
@@ -140,28 +175,33 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
     else:
         origin = (
             "There is no main conversation to start from: read plan.json and sections/ in"
-            " the session directory to know the explanation."
+            f" the session directory to know the {doc}."
         )
-    return "\n".join(
-        [
-            f"[view-concept side thread {thread['id']}]",
-            f"The user opened a side thread from the view-concept page of the session"
-            f" {s.slug!r} ({s.dir}). {origin}",
-            "- Answer and discuss. Your tools are read-only: do not try to edit files or"
-            " run view-concept commands, and do not resolve comments.",
-            "- This is a conversation, not the explanation: the formats of the skills loaded"
-            " above (sections, lexicon, tables) do not apply here. Answer in a few sentences"
-            " of plain prose, without tables, headings or bullet lists unless the user asks"
-            " for them.",
-            "- Answer the question asked, and only that one. When it opens a larger point,"
-            " name it in one sentence and let the user decide whether to go there.",
-            f"- The explanation may have changed since this conversation started: the"
-            f" current text of a section is in {s.sections_dir}/<id>.md.",
-            "- When the discussion leads to a change (to the explanation or to the code),"
-            " say so plainly. The user sends it to the main session from the page.",
-            f"Passage: {anchor}",
+    lines = [
+        f"[view-concept side thread {thread['id']}]",
+        f"The user opened a side thread from the view-concept page of the session"
+        f" {s.slug!r} ({s.dir}). {origin}",
+        "- Answer and discuss. Your tools are read-only: do not try to edit files or"
+        " run view-concept commands, and do not resolve comments.",
+        f"- This is a conversation, not a section of the {doc}: answer in a few sentences"
+        " of plain prose, without tables, headings or bullet lists unless the user asks"
+        " for them.",
+        "- Answer the question asked, and only that one. When it opens a larger point,"
+        " name it in one sentence and let the user decide whether to go there.",
+        f"- The {doc} may have changed since this conversation started: the"
+        f" current text of a section is in {s.sections_dir}/<id>.md.",
+        f"- When the discussion leads to a change (to the {doc} or to the code),"
+        " say so plainly. The user sends it to the main session from the page.",
+        _vocabulary(plan["lexicon"], number, number.get(sec) if sec else None),
+        f"Passage: {anchor}",
+    ]
+    lines = [line for line in lines if line]
+    if s.coordinated:
+        lines += [
+            "",
+            build(s, "thread", ["the user's message below, about the passage above"], sec),
         ]
-    )
+    return "\n".join(lines)
 
 
 def _run(

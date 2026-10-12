@@ -10,19 +10,19 @@ The agent writes plain files; the **page** renders them in your browser as they 
 
 In the terminal, a long explanation scrolls away, you cannot point at the sentence you did not understand, and each revision is a new copy to compare with the old one. In the page, the text stays put, comments are anchored to their passage, and a rewritten section highlights what changed.
 
-The page is built around **explain-concept**, a skill that holds an explanation method. Two of its rules show in the page:
+The page is built around an explanation method, which the `view-concept` skill carries (it started as the **explain-concept** skill). Two of its rules show in the page:
 
 - **The plan comes before the prose.** The **plan** is the outline plus the **lexicon**, the list of every term the explanation uses, with the section that introduces it and its definition. You approve the plan before any paragraph is written.
 - **Every term is defined before it is used.** Hovering a lexicon term shows its definition, and a final **vocabulary audit** flags terms that slipped through undefined.
 
 ## What a session looks like
 
-You type `/view-concept explain KKT conditions`. The agent opens the page and asks its questions about your level and goal there, at the top of the Plan tab; you answer those you want, then click « Plan ».
+You type `/view-concept explain KKT conditions`. The agent opens the page and asks its questions about your level and goal there, at the top of the Plan tab; you answer those you want, then click « Write plan ».
 
 1. **Plan.** The agent writes the outline and the lexicon in the Plan tab. You correct it or click « Approve plan ».
 2. **Prose.** The agent writes the sections one by one; the page re-renders as each one lands.
 3. **Comments.** Select a passage, « + comment », repeat, then « Send ». The agent edits the sections, replies to each comment, and the words it changed stay highlighted until your next batch.
-4. **Side threads.** To discuss a passage before asking for a change, select it and click « ask ». A **side thread** is a separate, read-only conversation forked from the session, so it knows the discussion so far; the session never sees it. (On Claude Code and Codex it forks the real conversation; on any other agent it is briefed from the session's files.)
+4. **Side threads.** To discuss a passage before asking for a change, select it and click « ask ». A **side thread** is a separate, read-only conversation forked from the session, so it knows the discussion so far; the session never sees it. (On Claude Code and Codex it forks the real conversation; on any other agent, and in a branch review, it starts from the session's files.)
 
 ![The Plan tab waiting for approval](docs/screenshots/plan.png)
 
@@ -40,7 +40,7 @@ To keep an explanation, « Export to vault » writes it as an Obsidian note, and
 | `/view-branch` | review a branch you are building, concepts first |
 | `/view-refactor` | decide what stays in quickly written code, then restructure it |
 
-A **branch review** (`/view-branch`) first writes the concepts the branch introduces, with their rules; you correct them and approve. The agent then fixes the code to match, and the Refactor tab lists each changed file with its **verdict** (the decision recorded for that item) and a chart of how the files relate. « Create PR » opens the pull request.
+A **branch review** (`/view-branch`) first writes the concepts the branch introduces, with their rules; you correct them and approve. The main session only coordinates: separate agents write the concepts, change the code to match them, and check the result. The Refactor tab lists each changed file with its **verdict** (the decision recorded for that item) and a chart of how the files relate. A concept you change after approval shows as « not implemented yet » until the code catches up. « Create PR » opens the pull request.
 
 ![The Refactor tab of a branch review: one verdict per item, then the structure chart](docs/screenshots/branch-review.png)
 

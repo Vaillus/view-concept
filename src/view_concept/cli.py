@@ -15,6 +15,7 @@ import webbrowser
 from pathlib import Path
 
 from .agents import AGENTS, detect
+from .context import ROLES, build
 from .store import (
     HEARTBEAT_EVERY,
     HOME,
@@ -100,7 +101,9 @@ def bind_agent(s: Session, a: argparse.Namespace) -> None:
 def cmd_new(a: argparse.Namespace) -> None:
     slug = a.slug or slugify(a.title)
     s = Session(slug)
-    created = s.create(a.title, a.question or "", a.kind, a.repo or "", a.workflow or "")
+    created = s.create(
+        a.title, a.initial_request or "", a.kind, a.repo or "", a.workflow or "", a.base or ""
+    )
     bind_agent(s, a)
     print(json.dumps({"slug": slug, "dir": str(s.dir), "created": created}))
 
@@ -226,12 +229,50 @@ def cmd_answered(a: argparse.Namespace) -> None:
 
 
 def cmd_change(a: argparse.Namespace) -> None:
-    d = Session(a.slug).add_change(a.change, a.why or "", a.instead or "", a.files)
+    d = Session(a.slug).add_change(a.change, a.by or "", a.cause)
     print(f"{d['id']} recorded")
 
 
+def cmd_implemented(a: argparse.Namespace) -> None:
+    """Record the last change of the model an implementer run took into account, or, with
+    no change id, print how far the code carries the model."""
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    if a.change_id:
+        print(f"implemented through {s.mark_implemented(a.change_id)['through']}")
+        return
+    through = s.implemented_through()
+    print(f"implemented through {through}" if through else "no implementer run yet")
+    pending = [d["id"] for d in s.unimplemented_changes()]
+    print(f"not implemented yet: {', '.join(pending)}" if pending else "nothing left to implement")
+
+
+def cmd_plan(a: argparse.Namespace) -> None:
+    raw = sys.stdin.read() if a.file == "-" else Path(a.file).read_text(encoding="utf-8")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise SessionError(f"{a.file} is not valid JSON: {e}") from e
+    if not isinstance(data, dict) or not {"outline", "lexicon"} & data.keys():
+        raise SessionError('expected {"outline": [...], "lexicon": [...]} (either or both)')
+    plan = Session(a.slug).write_plan(data.get("outline"), data.get("lexicon"))
+    print(f"{len(plan['outline'])} sections, {len(plan['lexicon'])} terms")
+
+
+def cmd_message(a: argparse.Namespace) -> None:
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    print(f"{s.add_terminal_message(a.text)['id']} recorded")
+
+
+def cmd_context(a: argparse.Namespace) -> None:
+    print(build(Session(a.slug), a.role, a.trigger, a.section or ""), end="")
+
+
 def cmd_changes(a: argparse.Namespace) -> None:
-    """Model changes of one session, or of every code session on a repository."""
+    """The change history of one session, or of every code session on a repository."""
     if a.slug:
         slugs = [a.slug]
     else:
@@ -312,9 +353,10 @@ def main() -> None:
     q = sub.add_parser("new", help="create a session (no-op if it exists)")
     q.add_argument("title")
     q.add_argument("--slug")
-    q.add_argument("--question")
+    q.add_argument("--initial-request", help="the user's first message, verbatim")
     q.add_argument("--kind", choices=KINDS, default="explanation")
     q.add_argument("--repo", help="repository a code session is about (citations link into it)")
+    q.add_argument("--base", help="the branch a branch review compares with")
     q.add_argument(
         "--workflow",
         choices=WORKFLOWS,
@@ -372,17 +414,54 @@ def main() -> None:
     q.add_argument("--text", help="the answer as the user gave it")
     q.set_defaults(fn=cmd_answered)
 
-    q = sub.add_parser("change", help="record a model change accepted in a branch review")
+    q = sub.add_parser("change", help="append a change of the model to the change history")
     q.add_argument("slug")
-    q.add_argument("change", help="the model change, one sentence")
-    q.add_argument("--why", help="the reason, one sentence")
-    q.add_argument("--instead", help="what the PR does now")
-    q.add_argument("--files", nargs="*", default=[], help="files the model change touches")
+    q.add_argument("change", help="what changed in the model, in a few words")
+    q.add_argument("--by", help="who made it: planner or writer")
+    q.add_argument(
+        "--cause",
+        nargs="*",
+        default=[],
+        help="the question, comment or terminal message ids that led to it (default: own judgment)",
+    )
     q.set_defaults(fn=cmd_change)
 
     q = sub.add_parser(
+        "implemented",
+        help="record the last model change the code now carries, or print what is left",
+    )
+    q.add_argument("slug")
+    q.add_argument("change_id", nargs="?", help="the last change taken into account, e.g. m8")
+    q.set_defaults(fn=cmd_implemented)
+
+    q = sub.add_parser("plan", help="replace the outline and/or the lexicon, nothing else")
+    q.add_argument("slug")
+    q.add_argument(
+        "file", help='a JSON file {"outline": [...], "lexicon": [...]} (either or both), or -'
+    )
+    q.set_defaults(fn=cmd_plan)
+
+    q = sub.add_parser("message", help="record a terminal message of the user about the feature")
+    q.add_argument("slug")
+    q.add_argument("text", help="the message, as the user wrote it")
+    q.set_defaults(fn=cmd_message)
+
+    q = sub.add_parser("context", help="print the context a subagent or a side thread starts from")
+    q.add_argument("slug")
+    q.add_argument("--role", choices=ROLES, required=True)
+    q.add_argument(
+        "--trigger",
+        nargs="*",
+        default=[],
+        help="the events that started this run: question, comment, batch, terminal "
+        "message, change or section ids, or a word such as « Write model »",
+    )
+    q.add_argument("--section", help="for a side thread: the section of its passage")
+    q.set_defaults(fn=cmd_context)
+
+    q = sub.add_parser(
         "changes",
-        help="print model changes as Markdown bullets (for a PR description's Decisions section)",
+        help="print the change history as Markdown bullets (for a PR's Decisions section)",
     )
     q.add_argument("slug", nargs="?")
     q.add_argument("--repo", help="all code sessions on this repo (default: current dir)")

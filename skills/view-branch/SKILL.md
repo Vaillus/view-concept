@@ -4,8 +4,7 @@ description: >-
   Work on a branch in the view-concept page, concepts first: build the model
   of what the branch introduces and how it fits the existing code, challenge
   and revise it with the user, send agents to bring the code in line with the
-  revised model, then check the code item by item against it. Uses
-  view-concept. Use when the user wants to work on, understand or rework a
+  revised model, then check the code item by item against it. Use when the user wants to work on, understand or rework a
   branch they are building — "let's work on this branch", "review my branch",
   "explain this branch so I can decide what stays", invokes /view-branch.
 argument-hint: "[the branch or PR number]"
@@ -13,10 +12,10 @@ argument-hint: "[the branch or PR number]"
 
 # /view-branch
 
-Runs **`view-concept`** (the `view-concept` skill, which runs
-`explain-concept` in the page) on a branch, and adds what a review needs
-around it: a model of the branch, agents that change the code, and a check of the
-code against the model. Read view-concept and follow it, with what is below.
+Reviews a branch in the view-concept page (the `view-concept` command): a
+model of what the branch introduces, written and corrected with the user,
+agents that change the code to match it, and a check of the code against the
+model.
 
 The tool is self-contained: the model is built for this branch and lives in the
 session; it reaches the repository only through the docs update at closing.
@@ -35,243 +34,286 @@ obeys, and how it relates to the concepts that existed before the branch.
 A UI element, a file, a function or a table row is not a concept: it is where
 a concept is implemented. « a row of the review table » is a part of a page;
 the concept behind it is what the row stands for (« an item is one unit of the
-diff that gets a verdict »). Name the concept, and cite the part.
+diff that gets a verdict »). Name the concept; name the part only to say
+where it lives.
 
-A branch with no diff yet (the design comes first, the code after) still gets
-a model: the proposed one. Say so in the proposal section of Part 1, and mark
-each concept you propose yourself, as opposed to one the user asked for, so
-the user reads Part 1 as a proposal to approve, not a description to check.
+In the page, the model is the outline and the lexicon of `plan.json` (one
+entry per concept, `definition` + `tip`), and the **modeling part** of the
+review: the sections that write the model out, which the page shows in the
+Model tab. Every change of the model is logged in the **change history**
+(`change-history.json`), one entry each: a concept added, removed, renamed,
+merged or split, a rule or a relation changed, a section added, moved or
+removed. A wording fix that leaves the model as it was gets none.
 
-In the page, the model is the lexicon of `plan.json` (one entry per concept,
-`definition` + `tip`) and Part 1 of the explanation. A **model change** is one
-correction the user takes or agrees to during Part 1: a concept renamed,
-merged, split, added, removed, or one of its rules changed. Record each one at
-once, in one sentence that an agent could act on:
+## The page
+
+The page shows the review and sends the user's comments back to you; the
+terminal only drives the conversation. A **session** is the review, stored as
+plain files in `~/.view-concept/sessions/<slug>/` (the **session folder**).
+The agents write the outline, the lexicon and the sections there, and the
+page re-renders within a second of each write; nobody touches the page
+itself.
+
+If `view-concept` is not on the PATH, install it with `uv tool install
+git+https://github.com/Vaillus/view-concept` (ask first if the harness
+requires approval for commands).
+
+### Setup
+
+A code session opened on the branch, with the user's message verbatim as the
+initial request and the branch it is compared with (the slug is a short
+kebab-case name of the branch):
 
 ```bash
-view-concept change <slug> "<the change>" --why "<reason>" --instead "<what the branch does now>" --files <paths it touches>
+view-concept new "<title>" --slug <slug> --initial-request "<the message>" \
+    --kind code --repo <repo root> --base <base branch> --workflow view-branch
+view-concept open <slug>          # starts the server if needed, opens the browser
 ```
 
-Record only changes the user took or agreed to, never your own suggestion.
-Then rewrite the sections and lexicon entries the change makes false: the page
-always shows the model as it now stands, not as the branch wrote it.
+The page runs side threads on the agent you are. Claude Code and Codex are
+detected; any other agent (Jazz, …) adds `--agent jazz --agent-name <your own
+agent name>` to `new` and to every later `open`. After resuming in a new
+conversation, run `view-concept open <slug>` again, and `view-concept pending
+<slug>` to list the comments still open.
 
-## Bindings
+### The comment channel
 
-- **Session**: a code session, `--kind code --repo <repo root> --workflow view-branch`, opened on the
-  branch. Citations are required, as view-concept says.
-- **Level**: the user owns the repository. Skip the level question.
-- **Goal**: decide what the branch should be, and get it there. Skip the goal
-  question.
-- **Phase 3 (calibrate)**: skip.
-- **Scoping**: do not skip it. Before Part 1 is written, scope the feature
-  the branch implements or is about to implement: what is in, what is out,
-  which design, which constraints. Ask through the question flow, as
-  view-concept's **Scoping in the page** says (Setup first, then
-  `status <slug> scoping` and one `view-concept question` per question, with
-  `--recommended` when you have a suggestion), so the first model is right.
-  This matters most when the branch has no diff yet: the answers are then
-  most of what the model starts from. The end of scoping (« Plan » in the
-  scope block, a batch with `action: plan`, or « go ahead » in the terminal)
-  means: write Part 1.
+The user's comments reach you as **batches**, written by the page to the
+session's inbox file. Two commands read it; use the first your harness
+supports, and stay on it for the whole session.
 
-## Before Phase 2 — ground it
+- **Background stream**, for a harness with a background-monitor tool
+  (Claude Code's `Monitor`): run `view-concept watch <slug>` under it
+  (`timeout_ms: 1800000`, description `view-concept comments for <slug>`).
+  Each printed batch arrives as an event. A monitor expires after 30 minutes:
+  when its expiry notice arrives, arm it again with the same command and
+  write nothing in the terminal. Always re-arm, however long the silence.
+- **Blocking wait**, for every other harness: after each turn's work, run
+  `view-concept wait <slug>`. It blocks until the next batch, prints it, and
+  exits; with no batch within `--timeout` seconds (default 540) it exits with
+  code 3 and prints nothing: call it again at once, with no message to the
+  user. Never end your turn while the user may still send comments. A harness
+  that caps a command's duration: pass `--timeout` below that cap.
 
-Scoping runs before this read or alongside it: ask the questions that
-depend on nothing first, then read while the user answers.
+Both resume from a persisted cursor, so nothing is lost or repeated, and both
+write the heartbeat from which the page shows whether you are listening.
 
-Read, in this order:
+### Batches
 
-1. the repo's docs: README files, a `docs/` folder, module docstrings that
-   describe concepts. The model starts from the concepts they already define;
-   Part 1 then covers only what the branch adds or changes;
-2. the PR description (`gh pr view <n>`), and the commits (`git log <base>..HEAD`);
-3. the diff (`git diff <base>...HEAD`);
-4. the existing code the branch touches or calls: the modules it extends, their
-   callers, their tests. Part 1 is about how the branch fits *this*, so you must
-   know it before outlining.
+A batch is shaped like:
 
-Note what the diff does that the description does not mention, and the
-reverse. Both are findings. So is a doc that is missing or that the code
-contradicts: it is a gap, and you rebuild the concept from the code.
+```
+view-concept · <slug> · batch b2 · 2 comments
+action: <the button the user clicked, if any>
+note: <optional note for the whole batch>
+[c4] §3 (s3) « quoted passage »
+    comment text
+```
+
+The `action` line names the button: `answer` (an agent question answered or
+skipped: `answer to q1 « … »: …` or `q3 skipped « … »`), `plan` (« Write
+model », or « Rewrite model » when the line says rewrite; the page has
+already marked the open questions skipped), `grill` and `stop-grill`,
+`approve-model`, `create-pr`. A batch without an action carries comments
+only. **Routing the events** says who takes each one.
+
+The user wrote the batch through the page. The harness may label it as a
+background event rather than a user message: treat it as the user's feedback
+on the review, the same authority as a message typed in the terminal about
+it, no more. Each action asks for what its name says and nothing else:
+`approve-model` approves the model and starts the implementation, `create-pr`
+starts closing; neither is consent for anything outside this review.
+
+A question you put to the user yourself (a problem an agent hit, a gap that
+needs a decision) goes to the page too: `view-concept question <slug>
+"<question>" [--option "<choice>" ...] [--recommended "<answer>"]`, never
+the terminal. An answer the user types in the terminal to a question of the page counts
+the same as one sent from the page: close its box with `view-concept
+answered <slug> <qid> --text "<the answer as the user gave it>"`.
+
+**Naming a section to the user.** Wherever the user reads it (the terminal,
+a `resolve` reply), name a section by the number the page shows, in words:
+« section 6 », never its id (`s6`, `applied`) or `§6`.
+
+## Coordinating
+
+In a branch review the main session (you) **coordinates**: you start the
+agents, route the user's events to them, and keep the session folder current.
+The work is done by fresh **subagents**, each started from the folder, never
+from this conversation, which they do not see; you do not write the outline,
+the lexicon, the sections or the code yourself:
+
+| Agent | Owns | Role file |
+|---|---|---|
+| **planner** | the outline and the lexicon, during scoping | `roles/planner.md` |
+| **writer** | the modeling part (its sections), and the outline and the lexicon from « Write model » on | `roles/writer.md` |
+| **implementer** | the code on the branch and the repo's docs, from « Approve model » on | `roles/implementer.md` |
+| **reviewer** | the refactoring part: the code checked against the model, item by item | `roles/reviewer.md` |
+
+The role files are in `~/Documents/code/view-concept/skills/view-branch/`.
+The planner and the writer also read `roles/planning-rules.md` there. A side
+thread the user opens from the page is one more agent, read-only, which the
+server starts itself from the same folder.
+
+### Starting an agent
+
+Each run starts from the output of
+
+```bash
+view-concept context <slug> --role <planner|writer|implementer|reviewer> --trigger <ids or words>
+```
+
+It prints the **base context** (the initial request, the outline, the
+lexicon, the recent change history, the questions, the recent terminal
+messages, and the sections the role needs) and the **trigger**: the events
+that started this run, in full. Once the model is approved, it also says up
+to which change of the model the code is implemented, and lists the changes
+**not implemented yet**. Pass that output to a new subagent with this
+instruction: « Read `<role file>` (and `roles/planning-rules.md` for the
+planner and the writer) in `~/Documents/code/view-concept/skills/view-branch/`,
+then do your run. » Start it as an agent that can write files and run
+commands, never a read-only type: each role file says what that agent may
+change, and nothing beyond it. Nothing else from this conversation: what the
+agents need is in the folder. When the run ends, give its one-line report in the
+terminal.
+
+Only you start agents, with one exception: the implementer may start helper
+agents for the code, each in its own git worktree (its role file says how).
+No other agent starts one. A harness without subagents runs each run itself,
+one after the other, from the same context output and role files.
+
+### Routing the events
+
+The user's **events** are what reaches you: a batch from the page (an answer,
+a skip, comments, a button), or a message typed in the terminal. Each event
+starts one pass. Who takes it depends on the stage:
+
+| Event | During scoping | After « Write model » | After « Approve model » |
+|---|---|---|---|
+| an answer (`action: answer`) | planner | writer | the agent that asked it |
+| a skip | nothing: the outline already used the default | nothing | nothing |
+| comments with no action | planner | writer | by section: the modeling part to the writer, the refactoring part to the reviewer |
+| a terminal message about the feature | record it, then planner | record it, then writer | record it, then the writer if it is about the model, the implementer if it asks for a code change |
+| an answer to a page question typed in the terminal | `view-concept answered`, then planner | the same, then writer | the same, then the agent that asked it |
+| « Rewrite model » (`action: plan`, the line says rewrite) | — | writer | writer |
+| « Grill me » (`action: grill`) | planner | writer | writer |
+| « Write model » (`action: plan`, the line says write) | see **Model consolidation** | — | — |
+| « Approve model » (`action: approve-model`) | — | see **Model consolidation**, step 6 | — |
+| « Create PR » (`action: create-pr`) | — | — | see **Closing** |
+
+The agent that asked a question is the one whose report counted it; when you
+cannot tell, give it to the writer.
+
+Record a terminal message about the feature with
+`view-concept message <slug> "<the message, as the user wrote it>"` before
+anything else: the agents never see the terminal. Process messages (« go
+ahead », « stop ») are not recorded.
+
+**One agent at a time.** While an agent runs, queue the events that arrive.
+When it ends, start the next run with every queued event in its trigger,
+not one run each. Pass the trigger as the ids the context command resolves:
+question ids (`q3`), comment ids (`c7`), a batch id (`b4`) for a whole
+batch, terminal message ids (`tm2`), change ids (`m7`), section ids (`i3`); a
+button that carries nothing else goes in words (`"« Write model »"`), and so
+does an agent's report you pass on (`"implementer report: <the line>"`).
+
+« Stop grill » (`action: stop-grill`) starts nothing: the next runs no longer
+see a grill in their context.
+
+### Status
+
+Keep the page's status true: `view-concept status <slug> scoping` from Setup
+to « Write model », and after each writer run `view-concept status <slug>
+awaiting-model` when no question it asked is open. After « Approve model »,
+set `view-concept status <slug> awaiting-pr` at the end of each pass, when no
+question is open. The agents set `writing` themselves while they write a
+section.
 
 ## The flow
 
-The review runs in three steps: **model consolidation** (the model is written
-and corrected with the user), **model matching** (agents change the code to
-match it) and **refactoring** (the code is checked against it, item by item).
-Model consolidation is explain-concept's workflow on Part 1 only; model
-matching and refactoring come after it.
+The review runs in two steps: **model consolidation** (the model is written
+and corrected with the user) and **implementation** (the implementer makes
+the code carry the model, and the reviewer checks the code against it, item
+by item).
 
 A review is a list of **sections**: plan.json lists them under its `outline`
-key, and `sections/<id>.md` holds the text of each. A section with
-`"part": 2` is a **refactor section**: the page shows it in the refactor tab,
-not in the Model tab (the page's name for the Explanation tab in a branch
-review).
+key, and `sections/<id>.md` holds the text of each. The sections fall in two
+parts. The **modeling part** writes the model out; the page shows it in the
+Model tab (the page's name for the Explanation tab in a branch review). The
+**refactoring part** checks the code against the model; a section with
+`"part": "refactoring"` belongs to it, and is a **refactor section**: the
+page shows it in the refactor tab.
 
-### Model consolidation (Part 1)
+### Model consolidation — the modeling part
 
-The Phase 2 outline is this fixed skeleton:
+1. **Setup.** Run **Setup**, arm the comment channel, and set `status <slug>
+   scoping`.
+2. **First planner run**, no trigger: it reads the docs and the code, drafts
+   the outline and the lexicon, and asks the first questions in the page.
+3. **The scoping loop.** Each event goes to the planner, as **Routing the
+   events** says. When a run asks nothing and no question is open, say in one
+   terminal line that the planner has no question left, and wait.
+4. **« Write model ».** Scoping ends when the user ends it, never when an
+   agent judges it has enough: a batch with `action: plan` while no section
+   is written, or « go ahead » in the terminal. The open questions are marked
+   skipped. Let the planner run first if events are still queued, then start
+   the writer with the trigger `"« Write model »"` and the batch id. From here
+   the writer owns the outline and the lexicon too.
+5. **The discussion loop.** Each event goes to the writer. Set
+   `awaiting-model` after each run, as **Status** says.
+6. **« Approve model ».** Model consolidation ends when the user approves the
+   model: a batch with `action: approve-model`, or saying so in the terminal.
+   Approving also means « start the implementation »: when the batch carries
+   comments, run the writer on them first, then go to **Implementation** in
+   the same turn, without asking again. Approving ends a grill still running.
 
-1. **Today.** What the user works with before the branch, shown on a real
-   example: an existing session, a real file, a command and its output. No
-   new concept yet; only the vocabulary the code already has.
-2. **What goes wrong.** The problems the example shows, in the user's terms:
-   what they cannot do, what breaks, what is confusing. Each concept later in
-   Part 1 answers one of them; a concept that answers none is a finding.
-3. **The proposal.** What the branch changes, shown on the same example after the
-   change: a mockup of the page or the output, or a before/after Mermaid
-   diagram. Say what the branch does not do. When the branch has no diff yet,
-   say here that the model is a proposal.
-4. **One section per concept** it introduces or changes: what it is, its
-   rules, where it is implemented (cited). Concepts in the order they depend
-   on each other, starting from the one the others are defined by. Names
-   that clash with existing ones are said here.
+### Implementation — the code and the refactoring part
 
-The order is fixed: the user reads the concepts after seeing what they are
-for. A concept-first Part 1, with no picture of the result, was too abstract
-to discuss.
+After « Approve model », each pass runs the agents in this order, skipping
+those with nothing to do:
 
-Write only these sections in Phase 5, then run the Phase 6 audit on them: the
-vocabulary of the model is what the agents and the code will inherit.
+1. **The writer**, on the events about the model (comments on the modeling
+   part, answers to its questions, « Rewrite model »). Each change of the
+   model it logs is a change not implemented yet.
+2. **The implementer**, when there is code to change. Its trigger holds:
+   - « Approve model », on its first run: make the code carry the whole
+     model;
+   - the changes not implemented yet (`view-concept implemented <slug>`
+     lists them);
+   - the items the reviewer judged `diverges` or `move` in its last report;
+   - the comment ids that ask for a code change.
 
-**Keep Part 1 short.** It is read to discuss the concepts, not to check them:
-each section gives the core in a few lines (three to eight), a table or a
-diagram where it replaces prose. Details go to Part 2, or to a new section
-placed where it belongs when the user asks for one (a folded answer, as
-view-concept says). A first version of Part 1 written at full
-explanation depth was judged far too long to read at this stage.
+   It starts one run for all of it; it decides itself whether to split the
+   work. At the end it records the last change of the model it took into
+   account.
+3. **The reviewer**, after an implementer run (its trigger is the
+   implementer's report, in words) or on comments about the refactoring
+   part. The first time, it writes the whole refactoring part; later, it
+   judges again the items the run touched.
 
-**Check the length before showing it.** After writing Part 1, and again after
-each revision, count the lines of prose in every section (tables, code blocks
-and diagrams don't count). Cut any section over eight lines before you tell
-the user it is written or set `awaiting-model`. When the user is confused,
-make the order clearer or add a picture: more prose is not the answer.
+Then set `awaiting-pr` (see **Status**) and wait: the page shows « Create
+PR » at the bottom of the refactor tab.
 
-Then the discussion: the user challenges the model, in the page or in the
-terminal. Record each model change as above.
-
-The user can also start a grill (view-concept's **Grill**) during model
-consolidation; its topic is the model. An answer that settles a decision is
-a model change the user took: record it and rewrite what it makes false. A
-skipped decision records no change: the model keeps what it says. Approving
-the model ends a grill still running.
-
-A **replan** (« Replan » in the scope block, view-concept's **Replan**)
-revises the model with the answers given since it was written: each answer
-that changes the model is a model change the user took; record it and
-rewrite what it makes false. Before « Approve model », set
-`awaiting-model` again. After it, the model has moved under the code: list
-the new gaps and close them as model matching says, then update Part 2.
-
-When no correction is pending,
-run `view-concept status <slug> awaiting-model`: the page shows « Approve
-model ».
-
-Model consolidation ends when the user approves the model: a batch with
-`action: approve-model`, or saying so in the terminal. Approving the model
-also means « start the implementation »: apply the batch's comments to the
-model first, then go to model matching in the same turn, without asking
-again.
-
-### Model matching — the agents
-
-Compare the whole model with the code, not only the recorded changes: a
-concept the branch announces but half implements, or a rule the code contradicts,
-is a gap even if nobody corrected it. List the gaps in the terminal, one line
-each.
-
-Then close them, split as you judge best: one agent or several. Say in one
-line how you split the work; do not wait for a go, the model approval was it.
-
-Each agent gets the whole model (the lexicon and Part 1 as they now stand),
-the list of model changes (what moved since the branch as written), its gaps, the
-files, and these rules: work on the branch, one commit per change, run the
-repo's tests and lint before committing, do not change anything its gaps do
-not name. Run agents in parallel only when their files do not overlap;
-otherwise one after the other.
-
-When an agent finishes, add its result to the **applied changes**, its own
-Part 2 section, listed in plan.json as
-`{"id": "applied", "title": "Applied changes", "part": 2}`: the change, the
-commit, anything the agent could not do.
-Tell the user in the terminal in one line per agent.
-
-When all agents are done and the applied changes are up to date, start
-refactoring in the same turn, without asking: the user reads the commits
-alongside Part 2.
-
-### Refactoring — the code (Part 2)
-
-Append Part 2 to the outline, after Part 1. Every section of Part 2 is a
-refactor section, so the page shows it in the refactor tab. Part 2 holds one
-section per item, the findings across items, and the applied changes.
-
-An **item** is one unit of the diff that gets its own verdict: one file, or
-several files that share one job you can name (« command and storage »).
-Every changed file belongs to exactly one item, the docs and the tests
-included. Each item is its own refactor section.
-
-Where an item's section is listed in plan.json, write its **item fields**
-under `item`:
-
-```json
-{"id": "i3", "title": "command and storage", "part": 2,
- "item": {"files": ["src/view_concept/cli.py", "src/view_concept/store.py"],
-          "verdict": "diverges", "implements": ["model change"],
-          "note": "changes --repo mixes every review",
-          "relations": [{"to": "src/view_concept/server.py", "kind": "imported-by"}]}}
-```
-
-- `files`: the paths the item covers.
-- `verdict`: one of the keys below.
-- `implements`: the concepts of the model it carries, by their lexicon names.
-- `note`: one line, such as the point it diverges on or an exception.
-- `relations`: its links to other files, each `{"to": "<path>", "kind": ...}`
-  where the kind is `imports`, `imported-by`, `reads` or `writes`. When the
-  item has several files, an optional `"from": "<path>"` names the one the
-  link starts from; without it, the link starts from the item's first file.
-
-The section file holds the item's **description**: what it does, what it
-reads and writes, and, unless it simply conforms, the finding (why it got its
-verdict). Do not write the verdict or a « Porte : » line in the prose: they
-are fields now, and the page draws them.
-
-The verdict is one of the keys of the `view-branch` list in
-`~/Documents/code/view-concept/src/view_concept/verdicts.yaml`. Read that
-list for what each verdict means and which ones send the item back to an
-earlier step; it gives them in the order of the review table.
-
-A **finding across items** is a problem between items: the same logic in two
-files, an import across directories, a module in the wrong place judged from
-its relations. Write each one as a refactor section with `"kind": "finding"`
-and `"items": [<item section ids>]` in plan.json, and one sentence of prose.
-
-The page draws the review table and the structure view from these fields:
-do not write a summary table of items and verdicts.
-
-Code that does something no concept describes means the model has a gap: go
-back to model consolidation for that concept.
-
-Once Part 2 is written, and again after each revision of it when no
-correction is pending, run `view-concept status <slug> awaiting-pr`: the page
-shows « Create PR » at the bottom of the refactor tab.
+The reviewer's report can name items judged `diverges` or `move`, or
+comments that ask for a code change: run the implementer on them, then the
+reviewer, in the same pass. An item the reviewer judges `diverges` again
+right after the implementer worked on it is not sent back a second time: ask
+the user in the page what to do with it.
 
 ## Closing
 
 Closing starts when the user asks for the PR: a batch with
 `action: create-pr`, or saying so in the terminal. Apply the batch's comments
-first: a comment that corrects the model is a model change, so record it and
-go back to model consolidation or model matching for it. Then close in the
-same turn, without asking again: the click was the go.
+first, as **Implementation** says. Then close in the same turn, without
+asking again: the click was the go.
 
-First send one agent to update the repo's docs from the model: the concepts
-and their rules as they now stand, without the before/after comparison that
-Part 1 makes. One commit on the branch, under the agent rules of model
-matching.
+First run the implementer with the trigger `"« Create PR »"`: it updates the
+repo's docs from the model, in one commit.
 
-Then write the PR description with `short-pr-description`, using the model
-changes as its Decisions. Push the branch and open the PR with
+Then write the PR description with `short-pr-description`, using the change
+history as its Decisions (`view-concept changes <slug>` prints it as
+bullets; keep the changes the user asked for or agreed to, and merge the
+ones a later change undid). Push the branch and open the PR with
 `gh pr create --body-file <file>`, or, when the branch already has one,
 update it with `gh pr edit <n> --body-file <file>`. Give the PR link in the
 terminal: the user reviews it in VS Code. No vault export.

@@ -135,6 +135,9 @@ a.cite:hover code { text-decoration: underline; }
 .changes { list-style: none; margin: 0 0 16px; padding: 0; }
 .change { padding: 6px 8px; border-left: 2px solid var(--ok); margin-bottom: 6px; }
 .d-instead, .d-why { font-size: 12px; line-height: 17px; margin-top: 2px; }
+.change.unimplemented { border-left-color: var(--warn); }
+.lag-tag { color: var(--warn); font-size: 12px; }
+.lag { color: var(--warn); background: var(--warnbg); padding: 6px 8px; margin: 0 0 12px; }
 .d-files { font-size: 11px; margin-top: 2px; }
 .d-files a.cite, .d-files code { font-size: 11px; }
 

@@ -9,6 +9,9 @@ Three backends:
 
 - `claude`: `claude -p`, forking the main conversation on a thread's first turn.
 - `codex`: `codex exec`, forking the main conversation the same way.
+
+A coordinated session (view-branch) never forks: its main conversation only coordinates
+subagents, so a thread starts from the session folder instead (`Session.fork_parent`).
 - `command`: any program that reads a prompt on stdin and prints its answer on stdout
   (`VIEW_CONCEPT_AGENT_COMMAND`, or the `jazz run` preset). It has no conversation to
   fork, so every turn carries the explanation's location and the thread so far.
@@ -87,8 +90,8 @@ class ClaudeBackend(Backend):
         args += ["--add-dir", str(s.dir)]
         if thread["agent_session"]:
             args += ["--resume", thread["agent_session"]]
-        elif s.read_parent():
-            args += ["--resume", s.read_parent(), "--fork-session"]
+        elif s.fork_parent():
+            args += ["--resume", s.fork_parent(), "--fork-session"]
         return args
 
     def feed(
@@ -143,8 +146,8 @@ class CodexBackend(Backend):
         args = [os.environ.get(CODEX_ENV, "codex"), "exec"]
         if thread["agent_session"]:
             args += ["resume", thread["agent_session"]]
-        elif s.read_parent():
-            args += ["fork", s.read_parent()]
+        elif s.fork_parent():
+            args += ["fork", s.fork_parent()]
         args += ["--json", "--skip-git-repo-check"]
         args += ["-c", 'sandbox_mode="read-only"', "-c", 'approval_policy="never"']
         args += ["-"]
