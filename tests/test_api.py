@@ -228,3 +228,14 @@ def test_api_shows_the_change_history(client, session):
     session.add_change("gate split in two", by="writer", cause=["c7"])
     (d,) = client.get("/api/s/kv-cache").json()["changes"]
     assert d["change"] == "gate split in two" and d["cause"] == ["c7"]
+
+
+def test_api_shows_the_changes_not_implemented_yet(client, session):
+    s = Session("gate", session.dir.parent)
+    s.create("The gate", kind="code", repo=str(session.dir), workflow="view-branch")
+    s.add_change("gate split")
+    s.add_change("threshold renamed")
+    s.add_batch([], action="approve-model")
+    s.mark_implemented("m1")
+    state = client.get("/api/s/gate").json()
+    assert state["implemented"] == "m1" and state["unimplemented"] == ["m2"]

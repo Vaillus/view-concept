@@ -67,3 +67,43 @@ def test_logs_are_capped_but_open_questions_are_not(session):
     assert "change 2 " not in text and "change 3 (" in text
     assert f"## Terminal messages ({CONTEXT_RECENT} most recent of {n})" in text
     assert "message 2\n" not in text and "message 3\n" in text
+
+
+@pytest.fixture
+def branch(tmp_path):
+    s = Session("gate", tmp_path)
+    s.create("The gate", "rework the gate", kind="code", repo=str(tmp_path), workflow="view-branch")
+    s.write_plan(
+        outline=[
+            {"id": "s1", "title": "Today"},
+            {"id": "s2", "title": "The gate"},
+            {"id": "i1", "title": "cli", "part": "refactoring", "item": {"verdict": "diverges"}},
+            {"id": "i2", "title": "store", "part": "refactoring", "item": {"verdict": "conforms"}},
+        ]
+    )
+    for sid, text in [("s1", "Today."), ("s2", "The gate."), ("i1", "Cli."), ("i2", "Store.")]:
+        (s.sections_dir / f"{sid}.md").write_text(text)
+    return s
+
+
+def test_the_implementer_gets_the_modeling_part_and_the_items_it_must_act_on(branch):
+    text = build(branch, "implementer", ["i1"])
+    assert "- section 3. cli (i1), below" in text
+    assert "The gate." in text and "Cli." in text and "Store." not in text
+    assert "Store." in build(branch, "reviewer")
+
+
+def test_changes_not_implemented_yet_are_shown_once_the_model_is_approved(branch):
+    for i in range(CONTEXT_RECENT + 2):
+        branch.add_change(f"change {i}")
+    assert "Not implemented yet" not in build(branch, "writer")
+    branch.add_batch([], action="approve-model")
+    assert "No implementer has run." in build(branch, "writer")
+    branch.mark_implemented("m1")
+    text = build(branch, "implementer", ["m2", "m3"])
+    assert "- m2: change 1 (cause: own judgment)" in text.split("## Trigger\n")[1]
+    assert "The code carries the model up to m1." in text
+    # m2 is older than the recent window but not implemented yet, so it is loaded anyway.
+    assert "Not implemented yet: m2, m3," in text and text.count("- m2: change 1") == 2
+    branch.mark_implemented(f"m{CONTEXT_RECENT + 2}")
+    assert "Every change of the model is implemented." in build(branch, "reviewer")

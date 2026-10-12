@@ -11,6 +11,8 @@ reach the agent session through the inbox.
         status.json     what the agent is doing now: phase, section    (written by `status`)
         change-history.json  every change of the model, oldest first     (written by `change`)
         terminal-messages.json  the user's later terminal messages      (written by `message`)
+        implemented.json     the last model change each implementer run took into account
+                                                            (written by `implemented`)
         questions.json  agent questions put to the user, with their answers  (`question`, server)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
@@ -269,6 +271,10 @@ class Session:
         return self.dir / "terminal-messages.json"
 
     @property
+    def implemented_path(self) -> Path:
+        return self.dir / "implemented.json"
+
+    @property
     def questions_path(self) -> Path:
         return self.dir / "questions.json"
 
@@ -471,6 +477,55 @@ class Session:
         _write_json(self.change_history_path, changes)
         return d
 
+    def read_implemented(self) -> list[dict[str, Any]]:
+        """Each implementer run's trace, oldest first: `through`, the last change of the model
+        it took into account, and `at`."""
+        return _read_json(self.implemented_path, [])
+
+    def mark_implemented(self, change_id: str) -> dict[str, Any]:
+        """Record that the code now carries the model up to this change. Later changes of the
+        model are not implemented yet (see `unimplemented_changes`)."""
+        ids = [d["id"] for d in self.read_changes()]
+        if change_id not in ids:
+            raise SessionError(f"no change {change_id!r} in the change history")
+        runs = self.read_implemented()
+        if (
+            runs
+            and runs[-1]["through"] in ids
+            and ids.index(change_id) < ids.index(runs[-1]["through"])
+        ):
+            raise SessionError(
+                f"{change_id} comes before {runs[-1]['through']}, already implemented"
+            )
+        d = {"through": change_id, "at": now_iso()}
+        runs.append(d)
+        _write_json(self.implemented_path, runs)
+        return d
+
+    def implemented_through(self) -> str:
+        """The last change of the model the code carries, "" when no implementer has run."""
+        runs = self.read_implemented()
+        return runs[-1]["through"] if runs else ""
+
+    def model_approved(self) -> bool:
+        """Whether the user approved the model (a branch review's « Approve model »), or an
+        implementer already ran."""
+        if self.read_implemented():
+            return True
+        return any(b.get("action") == "approve-model" for b in self.read_comments()["batches"])
+
+    def unimplemented_changes(self) -> list[dict[str, Any]]:
+        """The changes of the model the code does not carry yet: every change logged after
+        the last one an implementer took into account. None before the model is approved:
+        until then there is no code to keep up with the model."""
+        if not self.coordinated or not self.model_approved():
+            return []
+        changes = self.read_changes()
+        ids = [d["id"] for d in changes]
+        through = self.implemented_through()
+        start = ids.index(through) + 1 if through in ids else 0
+        return changes[start:]
+
     def read_terminal_messages(self) -> list[dict[str, Any]]:
         return _read_json(self.terminal_messages_path, [])
 
@@ -625,6 +680,7 @@ class Session:
             self.status_path,
             self.change_history_path,
             self.legacy_changes_path,
+            self.implemented_path,
             self.questions_path,
             self.published_path,
         ]

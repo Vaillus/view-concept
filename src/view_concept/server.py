@@ -72,6 +72,8 @@ def state(slug: str) -> dict[str, Any]:
         comments = s.read_comments()
         status = s.read_status()
         changes = s.read_changes()
+        implemented = s.implemented_through()
+        unimplemented = [d["id"] for d in s.unimplemented_changes()]
         questions = s.read_questions()
         grilling = s.is_grilling()
         seen = s.read_seen(sections)
@@ -92,6 +94,10 @@ def state(slug: str) -> dict[str, Any]:
         "audit": audit,
         "comments": comments,
         "changes": changes,
+        # How far the code carries the model in a branch review: the last change an
+        # implementer took into account, and the changes logged after it.
+        "implemented": implemented,
+        "unimplemented": unimplemented,
         "questions": questions,
         "grilling": grilling,
         "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),

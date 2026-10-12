@@ -17,8 +17,16 @@ Roles:
 - `planner`: owns the outline and the lexicon during scoping. No sections exist yet.
 - `writer`: owns the modeling part (its sections) and, from « Write model » on, the
   outline and the lexicon. Gets every section.
+- `implementer`: owns the code, from « Approve model » on. Gets the modeling part, and the
+  sections its trigger names (the reviewer's items it must act on).
+- `reviewer`: owns the refactoring part, which checks the code against the model. Gets
+  every section.
 - `thread`: a side thread, read-only. Gets the section its passage belongs to; it reads
   the others on demand.
+
+Once the model is approved, every role also sees which changes of the model the code does
+not carry yet, in full however old: the implementer acts on them, the others must know the
+code lags behind them.
 """
 
 from __future__ import annotations
@@ -29,12 +37,13 @@ from typing import Any
 from .store import Session, SessionError, format_batch, format_comment
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
-ROLES = ("planner", "writer", "thread")
+ROLES = ("planner", "writer", "implementer", "reviewer", "thread")
 
 QUESTION_ID = re.compile(r"^q\d+$")
 COMMENT_ID = re.compile(r"^c\d+$")
 BATCH_ID = re.compile(r"^b\d+$")
 MESSAGE_ID = re.compile(r"^tm\d+$")
+CHANGE_ID = re.compile(r"^m\d+$")
 
 
 def build(s: Session, role: str, trigger: list[str] | None = None, section: str = "") -> str:
@@ -61,12 +70,17 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
         out.append("A grill is running: ask every open decision, each with its recommended answer.")
     out += ["", "## Outline (as it is now)", *_outline(outline)]
     out += ["", "## Lexicon (as it is now)", *_lexicon(plan["lexicon"], outline)]
-    out += ["", *_recent("Change history", s.read_changes(), _change_line)]
+    out += ["", *_change_history(s)]
     out += ["", *_questions(questions)]
     out += ["", *_recent("Terminal messages", s.read_terminal_messages(), _message_line)]
     sections = s.read_sections()
-    if role == "writer":
+    if role in ("writer", "reviewer"):
         out += ["", "## Sections", *_sections(outline, sections, None)]
+    elif role == "implementer":
+        named = set(trigger or [])
+        wanted = {sec["id"] for sec in outline if not _refactoring(sec) or sec["id"] in named}
+        out += ["", "## Sections (the modeling part, and the sections the trigger names)"]
+        out += _sections(outline, sections, None, wanted)
     elif role == "thread" and section:
         out += ["", "## Section of the passage", *_sections(outline, sections, section)]
     return "\n".join(out).rstrip() + "\n"
@@ -87,6 +101,9 @@ def _trigger(
     batches = s.read_comments()["batches"]
     comments = {c["id"]: c for b in batches for c in b["comments"]}
     messages = {m["id"]: m for m in s.read_terminal_messages()}
+    changes = {d["id"]: d for d in s.read_changes()}
+    number = _number(outline)
+    titles = {sec["id"]: sec.get("title", sec["id"]) for sec in outline}
     lines = []
     for event in ids:
         if QUESTION_ID.match(event) and event in by_question:
@@ -100,11 +117,38 @@ def _trigger(
             lines.append(format_batch(s.slug, batch, outline, questions))
         elif MESSAGE_ID.match(event) and event in messages:
             lines.append(_message_line(messages[event]))
-        elif re.match(r"^(q|c|tm)\d+$", event):
+        elif CHANGE_ID.match(event) and event in changes:
+            lines.append(_change_line(changes[event]))
+        elif event in number:
+            lines.append(f"- section {number[event]}. {titles[event]} ({event}), below")
+        elif re.match(r"^(q|c|tm|m)\d+$", event):
             raise SessionError(f"no {event!r} in this session")
         else:
             lines.append(event)
     return lines
+
+
+def _refactoring(sec: dict[str, Any]) -> bool:
+    return sec.get("part") in ("refactoring", 2)
+
+
+def _change_history(s: Session) -> list[str]:
+    """The recent changes of the model; once it is approved, how far the code carries it,
+    and every change not implemented yet, even one older than the recent ones."""
+    changes = s.read_changes()
+    lines = _recent("Change history", changes, _change_line)
+    if not s.coordinated or not s.model_approved():
+        return lines
+    through = s.implemented_through()
+    pending = s.unimplemented_changes()
+    lines.append(
+        f"The code carries the model up to {through}." if through else "No implementer has run."
+    )
+    if not pending:
+        return [*lines, "Every change of the model is implemented."]
+    lines.append(f"Not implemented yet: {', '.join(d['id'] for d in pending)}.")
+    shown = {d["id"] for d in changes[-CONTEXT_RECENT:]}
+    return lines + [_change_line(d) for d in pending if d["id"] not in shown]
 
 
 def _outline(outline: list[dict[str, Any]]) -> list[str]:
@@ -112,7 +156,7 @@ def _outline(outline: list[dict[str, Any]]) -> list[str]:
         return ["(empty: no plan yet)"]
     lines = []
     for i, sec in enumerate(outline, 1):
-        part = " [refactoring part]" if sec.get("part") in ("refactoring", 2) else ""
+        part = " [refactoring part]" if _refactoring(sec) else ""
         earns = f": {sec['earns']}" if sec.get("earns") else ""
         lines.append(f"{i}. {sec.get('title', sec['id'])} ({sec['id']}){part}{earns}")
     return lines
@@ -185,13 +229,18 @@ def _questions(questions: list[dict[str, Any]]) -> list[str]:
 
 
 def _sections(
-    outline: list[dict[str, Any]], sections: dict[str, str], only: str | None
+    outline: list[dict[str, Any]],
+    sections: dict[str, str],
+    only: str | None,
+    among: set[str] | None = None,
 ) -> list[str]:
     number = _number(outline)
     ids = [
         sec["id"]
         for sec in outline
-        if sec["id"] in sections and (only is None or sec["id"] == only)
+        if sec["id"] in sections
+        and (only is None or sec["id"] == only)
+        and (among is None or sec["id"] in among)
     ]
     if not ids:
         return ["(none written yet)"]

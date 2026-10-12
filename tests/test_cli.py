@@ -223,3 +223,22 @@ def test_a_branch_review_logs_and_prints_its_context(tmp_path):
     assert view_concept(tmp_path, "plan", "gate", str(plan)).stdout.strip() == "1 sections, 0 terms"
     saved = json.loads((tmp_path / "sessions" / "gate" / "plan.json").read_text())
     assert saved["initial_request"] == "rework the gate" and saved["base"] == "main"
+
+
+def test_implemented_records_and_reports_what_the_code_carries(tmp_path):
+    r = view_concept(
+        tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path),
+        "--workflow", "view-branch",
+    )  # fmt: skip
+    assert r.returncode == 0, r.stderr
+    for change in ("gate split", "threshold renamed"):
+        view_concept(tmp_path, "change", "gate", change)
+    assert view_concept(tmp_path, "implemented", "gate", "m1").stdout.strip() == (
+        "implemented through m1"
+    )
+    assert view_concept(tmp_path, "implemented", "gate").stdout.splitlines() == [
+        "implemented through m1",
+        "not implemented yet: m2",
+    ]
+    r = view_concept(tmp_path, "implemented", "gate", "m9")
+    assert r.returncode != 0 and "no change 'm9'" in r.stderr

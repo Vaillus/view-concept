@@ -233,6 +233,21 @@ def cmd_change(a: argparse.Namespace) -> None:
     print(f"{d['id']} recorded")
 
 
+def cmd_implemented(a: argparse.Namespace) -> None:
+    """Record the last change of the model an implementer run took into account, or, with
+    no change id, print how far the code carries the model."""
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    if a.change_id:
+        print(f"implemented through {s.mark_implemented(a.change_id)['through']}")
+        return
+    through = s.implemented_through()
+    print(f"implemented through {through}" if through else "no implementer run yet")
+    pending = [d["id"] for d in s.unimplemented_changes()]
+    print(f"not implemented yet: {', '.join(pending)}" if pending else "nothing left to implement")
+
+
 def cmd_plan(a: argparse.Namespace) -> None:
     raw = sys.stdin.read() if a.file == "-" else Path(a.file).read_text(encoding="utf-8")
     try:
@@ -411,6 +426,14 @@ def main() -> None:
     )
     q.set_defaults(fn=cmd_change)
 
+    q = sub.add_parser(
+        "implemented",
+        help="record the last model change the code now carries, or print what is left",
+    )
+    q.add_argument("slug")
+    q.add_argument("change_id", nargs="?", help="the last change taken into account, e.g. m8")
+    q.set_defaults(fn=cmd_implemented)
+
     q = sub.add_parser("plan", help="replace the outline and/or the lexicon, nothing else")
     q.add_argument("slug")
     q.add_argument(
@@ -430,8 +453,8 @@ def main() -> None:
         "--trigger",
         nargs="*",
         default=[],
-        help="the events that started this run: question, comment, batch or terminal "
-        "message ids, or a word such as « Write model »",
+        help="the events that started this run: question, comment, batch, terminal "
+        "message, change or section ids, or a word such as « Write model »",
     )
     q.add_argument("--section", help="for a side thread: the section of its passage")
     q.set_defaults(fn=cmd_context)

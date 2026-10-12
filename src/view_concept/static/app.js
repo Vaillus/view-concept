@@ -321,15 +321,26 @@ function renderPlan() {
   }
 }
 
+/* In a branch review, once the model is approved, the changes logged after the last one an
+   implementer took into account are not implemented yet: the code does not carry them. */
+const unimplemented = () => new Set(state.unimplemented || []);
+const lagLine = () => {
+  const ids = state.unimplemented || [];
+  if (!ids.length) return null;
+  return el("p", { class: "lag", text: `${ids.length} model change${ids.length === 1 ? "" : "s"} not implemented yet: ${ids.join(", ")}` });
+};
+
 function renderChanges() {
   const list = state.changes || [];
+  const pending = unimplemented();
   $("#changes-head").hidden = !list.length;
   $("#changes").replaceChildren(...list.map((d) => {
     // An entry of the change history says who made it and what caused it; one written
     // before the change history (changes.json) has why, instead and files.
     const meta = [d.by, d.cause && d.cause.length ? `cause: ${d.cause.join(", ")}` : ""].filter(Boolean).join(" · ");
-    const item = el("li", { class: "change" },
-      el("div", {}, el("span", { class: "num", text: d.id }), " ", d.change),
+    const item = el("li", { class: pending.has(d.id) ? "change unimplemented" : "change" },
+      el("div", {}, el("span", { class: "num", text: d.id }), " ", d.change,
+        pending.has(d.id) ? el("span", { class: "lag-tag", text: " · not implemented yet" }) : null),
       meta ? el("div", { class: "d-why muted", text: meta }) : null,
       d.instead ? el("div", { class: "d-instead dim", text: `rather than ${d.instead}` }) : null,
       d.why ? el("div", { class: "d-why muted", text: d.why }) : null);
@@ -354,7 +365,8 @@ function renderDoc() {
     return;
   }
   doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map((s) => sectionBlock(s)), docButton);
-  $("#refactor").replaceChildren(...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), prButton);
+  $("#refactor").replaceChildren(...[lagLine()].filter(Boolean),
+    ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), prButton);
   for (const view of docViews()) {
     typesetMath(view);
     linkCitations(view);

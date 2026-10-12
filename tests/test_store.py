@@ -544,3 +544,28 @@ def test_write_plan_keeps_the_other_fields(tmp_path):
     with pytest.raises(SessionError, match="nothing to write"):
         s.write_plan()
     assert s.read_plan()["lexicon"][0]["term"] == "gate"  # a refused write changes nothing
+
+
+def test_unimplemented_changes_follow_the_last_implementer_run(tmp_path):
+    s = Session("gate", tmp_path)
+    s.create("The gate", kind="code", repo=str(tmp_path), workflow="view-branch")
+    s.add_change("gate split")
+    s.add_change("threshold renamed")
+    assert s.unimplemented_changes() == []  # the model is not approved yet
+    s.add_batch([], action="approve-model")
+    assert [d["id"] for d in s.unimplemented_changes()] == ["m1", "m2"]
+    s.mark_implemented("m1")
+    assert s.implemented_through() == "m1"
+    assert [d["id"] for d in s.unimplemented_changes()] == ["m2"]
+    s.mark_implemented("m2")
+    assert s.unimplemented_changes() == []
+    with pytest.raises(SessionError, match="comes before m2"):
+        s.mark_implemented("m1")
+    with pytest.raises(SessionError, match="no change 'm3'"):
+        s.mark_implemented("m3")
+
+
+def test_an_explanation_has_no_unimplemented_changes(session):
+    session.add_change("renamed")
+    session.add_batch([], action="approve-model")
+    assert session.unimplemented_changes() == []
