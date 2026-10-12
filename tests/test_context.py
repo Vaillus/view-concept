@@ -107,3 +107,10 @@ def test_changes_not_implemented_yet_are_shown_once_the_model_is_approved(branch
     assert "Not implemented yet: m2, m3," in text and text.count("- m2: change 1") == 2
     branch.mark_implemented(f"m{CONTEXT_RECENT + 2}")
     assert "Every change of the model is implemented." in build(branch, "reviewer")
+
+
+def test_an_html_section_is_given_by_its_visible_text(branch):
+    (branch.sections_dir / "s2.html").write_text("<style>p{}</style><p>The  gate,\n drawn.</p>")
+    text = build(branch, "writer")
+    assert "### 2. The gate (s2) · HTML section, its visible text (sections/s2.html)" in text
+    assert "The gate, drawn." in text and "<p>" not in text

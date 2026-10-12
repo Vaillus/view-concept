@@ -588,3 +588,15 @@ def test_an_html_section_changes_the_signature(session):
     before = session.signature()
     (session.sections_dir / "s3.html").write_text("<p>x</p>")
     assert session.signature() != before
+
+
+def test_the_visible_text_of_an_html_section_counts_for_the_precedence_check(ordered):
+    (ordered.sections_dir / "a.md").unlink()
+    (ordered.sections_dir / "a.html").write_text(
+        "<style>.convex-problem{}</style><svg><text>a convex problem</text></svg>"
+        "<script>label('rule')</script>"
+    )
+    early = {(p["term"], p["section"]) for p in ordered.check_precedence(write=False)
+             if p["issue"] == "early"}  # fmt: skip
+    assert ("convex problem", "a") in early
+    assert ordered.read_prose()["a"] == "a convex problem"

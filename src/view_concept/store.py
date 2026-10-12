@@ -120,6 +120,8 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+from . import frame
+
 HOME = Path(os.environ.get("VIEW_CONCEPT_HOME", Path.home() / ".view-concept"))
 SESSIONS = HOME / "sessions"
 VAULT_DIR = Path(
@@ -415,6 +417,15 @@ class Session:
         document of an HTML section."""
         return {sid: p.read_text(encoding="utf-8") for sid, p in self.section_files().items()}
 
+    def read_prose(self) -> dict[str, str]:
+        """Each written section's words, as the precedence check reads them: a Markdown
+        section without its code, diagrams and maths; an HTML section's visible text."""
+        html = self.html_sections()
+        return {
+            sid: frame.visible_text(text) if sid in html else _strip_unmarked(text)
+            for sid, text in self.read_sections().items()
+        }
+
     def html_sections(self) -> set[str]:
         """The ids of the HTML sections."""
         return {sid for sid, p in self.section_files().items() if p.suffix == ".html"}
@@ -447,7 +458,7 @@ class Session:
         entries = [
             e for e in plan["lexicon"] if e.get("term", "").strip() and e.get("section") in pos
         ]
-        prose = {sid: _strip_unmarked(text) for sid, text in self.read_sections().items()}
+        prose = self.read_prose()
         problems: list[dict[str, Any]] = []
         for e in entries:
             home = pos[e["section"]]

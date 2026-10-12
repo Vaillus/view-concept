@@ -22,6 +22,7 @@ do not import FastAPI.
 from __future__ import annotations
 
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 STATIC = Path(__file__).parent / "static"
@@ -61,3 +62,36 @@ def inject(document: str, head: str) -> str:
         if m:
             return document[: m.end()] + head + document[m.end() :]
     return head + document
+
+
+class _VisibleText(HTMLParser):
+    """Collects the text of a document outside its <script> and <style> elements."""
+
+    HIDDEN = frozenset({"script", "style"})
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+        self.hidden = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self.HIDDEN:
+            self.hidden += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self.HIDDEN and self.hidden:
+            self.hidden -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self.hidden:
+            self.parts.append(data)
+
+
+def visible_text(document: str) -> str:
+    """The visible text of an HTML section: the words written in its file, outside its
+    scripts and styles, whitespace collapsed. Text a script draws when the section runs
+    does not count: the precedence check and the agents' context run without a browser."""
+    parser = _VisibleText()
+    parser.feed(document)
+    parser.close()
+    return " ".join(" ".join(parser.parts).split())
