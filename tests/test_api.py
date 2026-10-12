@@ -5,7 +5,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from view_concept import server
+from view_concept import frame, server
 from view_concept.store import Session, SessionError
 
 
@@ -239,3 +239,26 @@ def test_api_shows_the_changes_not_implemented_yet(client, session):
     s.mark_implemented("m1")
     state = client.get("/api/s/gate").json()
     assert state["implemented"] == "m1" and state["unimplemented"] == ["m2"]
+
+
+def test_an_html_section_is_drawn_in_a_frame(client, session):
+    (session.sections_dir / "s3.html").write_text("<html><head><title>x</title></head><p>Fig</p>")
+    view = client.get("/api/s/kv-cache").json()["sections"]["s3"]
+    assert view["kind"] == "html" and view["version"] and "html" not in view
+    r = client.get("/s/kv-cache/sections/s3.html")
+    assert r.status_code == 200
+    assert r.text.startswith('<html><head><script src="/static/frame.js"></script><title>')
+    assert client.get("/s/kv-cache/sections/s1.html").status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("document", "framed"),
+    [
+        ("<p>x</p>", "H<p>x</p>"),
+        ("<!doctype html><p>x</p>", "<!doctype html>H<p>x</p>"),
+        ("<!DOCTYPE html><html lang=en><body>", "<!DOCTYPE html><html lang=en>H<body>"),
+        ("<html><HEAD id=h><style></style>", "<html><HEAD id=h>H<style></style>"),
+    ],
+)
+def test_the_frame_head_comes_first_in_the_head(document, framed):
+    assert frame.inject(document, "H") == framed

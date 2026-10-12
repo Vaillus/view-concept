@@ -4,17 +4,18 @@ runs side threads."""
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import publish, threads
+from . import frame, publish, threads
 from .render import md
 from .store import Session, SessionError, list_sessions
 
@@ -68,6 +69,7 @@ def state(slug: str) -> dict[str, Any]:
     try:
         plan = s.read_plan()
         sections = s.read_sections()
+        html_sections = s.html_sections()
         audit = s.read_audit()
         comments = s.read_comments()
         status = s.read_status()
@@ -90,7 +92,9 @@ def state(slug: str) -> dict[str, Any]:
         "listening": s.is_listening(),
         "workflow": plan.get("workflow", ""),
         "status": status,
-        "sections": {k: section_view(v, seen[k]) for k, v in sections.items()},
+        "sections": {
+            k: section_view(v, seen[k], html=k in html_sections) for k, v in sections.items()
+        },
         "audit": audit,
         "comments": comments,
         "changes": changes,
@@ -114,14 +118,36 @@ def published_view(s: Session) -> dict[str, Any] | None:
     return {"url": record.get("url"), "at": record.get("at"), "out_of_date": s.is_out_of_date()}
 
 
-def section_view(text: str, seen: str) -> dict[str, Any]:
+def section_view(text: str, seen: str, html: bool = False) -> dict[str, Any]:
     """A section as the page renders it. An updated section (its text differs from its
     highlight baseline, the text at the last batch or « mark read ») also carries the
-    HTML of the baseline, which the page diffs against to highlight what changed."""
+    HTML of the baseline, which the page diffs against to highlight what changed.
+
+    An HTML section is drawn in a section frame, which loads its file from the server
+    (`section_document`): its view carries no rendered HTML but `version`, a hash of its
+    text, so the page reloads the frame only when the file changed."""
+    if html:
+        version = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+        return {"md": text, "kind": "html", "version": version, "updated": text != seen}
     view: dict[str, Any] = {"md": text, "html": md.render(text), "updated": text != seen}
     if view["updated"]:
         view["seen_html"] = md.render(seen)
     return view
+
+
+@app.get("/s/{slug}/sections/{name}")
+def section_document(slug: str, name: str) -> HTMLResponse:
+    """The document a section frame loads: the HTML section's file, with the frame's head
+    (frame.py) written in. Its relative addresses resolve against /s/<slug>/sections/."""
+    s = get_session(slug)
+    sid = name.removesuffix(".html")
+    if not name.endswith(".html") or sid not in s.html_sections():
+        raise HTTPException(404, f"no HTML section {name!r}")
+    text = s.section_files()[sid].read_text(encoding="utf-8")
+    return HTMLResponse(
+        frame.inject(text, '<script src="/static/frame.js"></script>'),
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 class SeenIn(BaseModel):

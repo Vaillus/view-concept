@@ -364,6 +364,7 @@ function renderDoc() {
     $("#refactor").replaceChildren();
     return;
   }
+  parkFrames();
   doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map((s) => sectionBlock(s)), docButton);
   $("#refactor").replaceChildren(...[lagLine()].filter(Boolean),
     ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), prButton);
@@ -374,6 +375,7 @@ function renderDoc() {
     annotateAudit(view);
     annotateLexicon(view);
   }
+  placeFrames();
   applyHighlights();
   renderThreadChips();
   positionPopover();
@@ -384,7 +386,8 @@ function renderDoc() {
 function sectionBlock(s, { bare = false } = {}) {
   const body = el("div", { class: "body" });
   const written = s.id in state.sections;
-  if (written) body.innerHTML = state.sections[s.id].html;
+  if (written && state.sections[s.id].kind === "html") body.append(el("div", { class: "frame-slot", "data-frame": s.id }));
+  else if (written) body.innerHTML = state.sections[s.id].html;
   else if (writingId() === s.id) body.append(el("p", { class: "writing-line", text: "writing" }));
   const cls = ["sec", written ? "" : "unwritten", isUpdated(s.id) ? "updated" : "", bare ? "bare" : ""].join(" ");
   return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
@@ -722,6 +725,54 @@ function annotateLexicon(doc) {
   });
 }
 
+/* ---------------- section frames ----------------
+   An HTML section is drawn in a section frame (frame.py): an <iframe> that loads the
+   section's file from the server, sandboxed so it runs as a separate web page. Its block
+   holds a slot where the frame goes. A frame is kept across re-renders while its file is
+   unchanged (same version), so a figure does not reload whenever another file of the
+   session changes: before a render the frames are parked, after it each one is moved
+   into its section's slot. moveBefore keeps a moved frame running; a browser without it
+   reloads the frame. The frame takes the height its content posts (static/frame.js). */
+
+// As frame.SANDBOX: scripts run, and no allow-same-origin, so the frame cannot reach the page.
+const SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms";
+const frames = new Map(); // section id -> its frame
+
+function moveInto(parent, node, before = null) {
+  if (parent.moveBefore && node.isConnected) parent.moveBefore(node, before);
+  else parent.insertBefore(node, before);
+}
+
+function parkFrames() {
+  const park = $("#frame-park");
+  for (const f of frames.values()) if (f.isConnected && f.parentElement !== park) moveInto(park, f);
+}
+
+function placeFrames() {
+  const placed = new Set();
+  document.querySelectorAll(".frame-slot[data-frame]").forEach((slot) => {
+    const id = slot.dataset.frame;
+    if (placed.has(id)) return;
+    const { version } = state.sections[id];
+    let f = frames.get(id);
+    if (!f || f.dataset.version !== version) {
+      if (f) f.remove();
+      f = el("iframe", { class: "frame", sandbox: SANDBOX, allow: "fullscreen", title: titleOf(id),
+                         "data-version": version, src: `/s/${SLUG}/sections/${encodeURIComponent(id)}.html?v=${version}` });
+      frames.set(id, f);
+    }
+    moveInto(slot, f);
+    placed.add(id);
+  });
+  for (const [id, f] of frames) if (!placed.has(id)) { f.remove(); frames.delete(id); }
+}
+
+window.addEventListener("message", (e) => {
+  const d = e.data;
+  if (!d || d.viewConcept !== "height") return;
+  for (const f of frames.values()) if (f.contentWindow === e.source) f.style.height = `${d.height}px`;
+});
+
 /* ---------------- quotes <-> ranges ---------------- */
 
 /* Text of a section body with whitespace collapsed, plus the DOM position of every
@@ -861,6 +912,8 @@ function markUpdates() {
   for (const [id, sec] of Object.entries(state.sections)) {
     const body = sec.updated && document.querySelector(`#sec-${CSS.escape(id)} .body`);
     if (!body) continue;
+    // A section frame is out of the page's reach: an HTML section is marked changed as a whole.
+    if (sec.kind === "html") { body.querySelectorAll(".frame-slot").forEach((n) => n.classList.add("changed")); continue; }
     const before = document.createElement("div");
     before.innerHTML = sec.seen_html || "";
     const now = words(body);
