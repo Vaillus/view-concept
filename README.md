@@ -30,6 +30,8 @@ You type `/view-concept explain KKT conditions`. The agent opens the page and as
 
 The page and the terminal talk through the session's files: the page appends each batch to an inbox file, and the agent listens on that file, with `view-concept watch` under a background monitor (Claude Code) or `view-concept wait` called after each turn (every other agent), and revises.
 
+A section can also be written as an HTML file, which the page draws like an artifact on claude.ai: in a frame of its own, in the page's colours, its scripts running. The agent picks it for a visual Markdown and Mermaid cannot draw (a step player, a chart library).
+
 To keep an explanation, « Export to vault » writes it as an Obsidian note, and « Publish » puts it on the web as a read-only page, hosted in a public GitHub repository, at a link you can send (see [`docs/reference.md`](docs/reference.md#publishing)).
 
 ## Three skills
