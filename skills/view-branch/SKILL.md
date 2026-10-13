@@ -122,8 +122,9 @@ skipped, or not understood: `answer to q1 « … »: …`, `q3 skipped « … »
 **deferred** until an agent asks it again), `plan` (« Write
 model », or « Rewrite model » when the line says rewrite; the page has
 already marked the open questions skipped, except a section question whose
-section is not written yet, which stays open), `grill` and `stop-grill`,
-`approve-model`, `create-pr`. A batch without an action carries comments
+section is not written yet, which stays open), `go-on` (« Go on », during a
+pause: the writer goes on, the pause's questions stay open), `grill` and
+`stop-grill`, `approve-model`, `create-pr`. A batch without an action carries comments
 only. **Routing the events** says who takes each one.
 
 The user wrote the batch through the page. The harness may label it as a
@@ -206,6 +207,7 @@ starts one pass. Who takes it depends on the stage:
 | a terminal message about the feature | record it, then planner | record it, then writer | record it, then the writer if it is about the model, the implementer if it asks for a code change |
 | an answer to a page question typed in the terminal | `view-concept answered`, then planner | the same, then writer | the same, then the agent that asked it |
 | « Rewrite model » (`action: plan`, the line says rewrite) | — | writer | writer |
+| « Go on » (`action: go-on`) | — | writer | — |
 | « Grill me » (`action: grill`) | planner | writer | writer |
 | « Write model » (`action: plan`, the line says write) | see **Model consolidation** | — | — |
 | « Approve model » (`action: approve-model`) | — | see **Model consolidation**, step 7 | — |
@@ -236,7 +238,9 @@ Keep the page's status true: `view-concept status <slug> scoping` from Setup
 to « Write model », and after each writer run `view-concept status <slug>
 awaiting-model` when no question it asked is open and every section of the
 modeling part is written (a writer paused on its questions leaves the phase
-`awaiting-answer`). After « Approve model »,
+`awaiting-answer`, and so does a question « Go on » left open, still open
+once every section is written: « Approve model » waits until each is
+answered, skipped or deferred). After « Approve model »,
 set `view-concept status <slug> awaiting-pr` at the end of each pass, when no
 question is open. The agents set `writing` themselves while they write a
 section.
@@ -327,8 +331,11 @@ check` reports a pair).
    anchored to it): its report says « paused after
    section N ». Say so in one terminal line and wait. The answers, skips and
    unclear answers go to the writer, which goes on writing from there. « Go
-   on » in the terminal (a process message, not recorded) starts the writer
-   with the trigger `"go on"`: the open questions of the pause stay open.
+   on » ends a pause without answering: from the page (a batch with `action:
+   go-on`, shown under the paused section's questions and in the scope block
+   in place of « Rewrite model »), it starts the writer with the batch id; in
+   the terminal (a process message, not recorded), with the trigger `"go
+   on"`. Either way the open questions of the pause stay open.
 6. **The discussion loop.** Once every section is written, each event goes to
    the writer. Set `awaiting-model` after each run, as **Status** says.
 7. **« Approve model ».** Model consolidation ends when the user approves the

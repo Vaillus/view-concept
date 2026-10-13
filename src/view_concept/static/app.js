@@ -239,7 +239,7 @@ function approvalPending() {
 function renderStatus() {
   const { phase, section, message } = state.status;
   const approval = APPROVALS[phase];
-  const asking = ["scoping", "awaiting-answer"].includes(phase) && openQuestions().length > 0;
+  const asking = ["scoping", "awaiting-answer"].includes(phase) && openQuestions().length > 0 && !goOnPending();
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Write plan » ends it.
     scoping: asking ? "scoping · questions waiting for you"
@@ -247,7 +247,8 @@ function renderStatus() {
            : "scoping the question",
     planning: "drafting the plan",
     ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
-    "awaiting-answer": openQuestions().length ? QUESTION_LABELS.ready : QUESTION_LABELS.sent,
+    "awaiting-answer": goOnPending() ? "going on · the writer is writing the next sections"
+                     : openQuestions().length ? QUESTION_LABELS.ready : QUESTION_LABELS.sent,
     writing: section ? `writing §${numberOf(section)} ${titleOf(section)}` : "writing",
     audit: "vocabulary audit",
     revising: "revising",
@@ -413,7 +414,8 @@ function sectionBlock(s, { bare = false } = {}) {
                      onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }, "ask") })),
     body,
     ...(written && sectionQuestions(s.id).length
-      ? [el("div", { class: "sec-questions" }, ...sectionQuestions(s.id).map(questionCard))] : []));
+      ? [el("div", { class: "sec-questions" }, ...sectionQuestions(s.id).map(questionCard),
+            ...(paused() ? [goOnButton()] : []))] : []));
 }
 
 /* ---------------- the refactor tab ----------------
@@ -1278,7 +1280,8 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    `{question, skipped: true}`), « I don't understand » sends the text field as a note of
    what is missing (its entry `{question, unclear: true, note}`: the options are ignored,
    and the question is deferred until the agent asks it again, after the section that
-   explains it), or the box stays open: no question blocks the agent.
+   explains it), or the box stays open: no question blocks the agent, except during the
+   pause of a branch review's writer, which « Go on » ends (see paused).
    The header holds « Grill me » (a batch whose action is "grill"; « Stop grill » sends
    "stop-grill" while a grill runs) and, while scoping runs or a question is open,
    « Write plan » (action "plan": scoping ends, the open questions count as skipped, but a
@@ -1340,6 +1343,32 @@ function questionCard(q) {
   return card;
 }
 
+/* A pause: in a branch review, the writer stops after a section whose questions are open
+   (a box shows at the end of a written section) while sections of the modeling part are
+   left to write. « Go on » ends it without answering: a batch whose action is "go-on",
+   after which the writer writes the next sections and the pause's questions stay open.
+   It shows under the paused section's boxes and in the scope block, in place of
+   « Rewrite model » (which would skip those questions and start a rewrite). Once every
+   section is written there is no pause: a question still open holds back « Approve model »,
+   as any open question does. */
+function paused() {
+  if (state.workflow !== "view-branch" || goOnPending()) return false;
+  const left = (state.plan.outline || []).some((s) => !isRefactorSection(s) && !(s.id in state.sections));
+  return left && openQuestions().some(atSection);
+}
+
+// A « go-on » batch sent since the status last moved: the writer is going on.
+function goOnPending() {
+  const since = state.status.since || "";
+  return state.comments.batches.some((b) => b.action === "go-on" && b.sent >= since);
+}
+
+const goOnButton = () => el("button", {
+  class: "btn primary go-on", text: "Go on",
+  title: "The writer goes on with the next sections; these questions stay open",
+  onclick: (e) => send("go-on", e.currentTarget),
+});
+
 // A « plan » batch sent since the status last moved, with no question asked after it:
 // scoping is over, the agent is writing the plan (or the model).
 function planPending() {
@@ -1392,7 +1421,8 @@ function renderScope() {
   grill.textContent = state.grilling ? "Stop grill" : "Grill me";
   grill.title = state.grilling ? "Stop the interview" : "The agent asks about every open decision, each with its suggestion, until none is left";
   const plan = $("#scope-plan");
-  plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending();
+  plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending() || paused();
+  $("#scope-go-on").hidden = !paused();
   plan.textContent = `${rewriting() ? "Rewrite" : "Write"} ${scopingProduct()}`;
   plan.title = rewriting()
     ? `Enough questions: the open ones count as skipped (a question waiting for its section stays open), and the agent revises the ${scopingProduct()} with your answers`
@@ -1401,6 +1431,7 @@ function renderScope() {
 
 $("#grill").addEventListener("click", (e) => send(state.grilling ? "stop-grill" : "grill", e.currentTarget));
 $("#scope-plan").addEventListener("click", (e) => send("plan", e.currentTarget));
+$("#scope-go-on").addEventListener("click", (e) => send("go-on", e.currentTarget));
 
 /* The review pane keeps one line for the open agent questions: it opens the Plan tab
    at the scope block. */
@@ -1516,7 +1547,8 @@ $("#note").addEventListener("keydown", (e) => {
 $("#send").addEventListener("click", () => send());
 
 /* A batch from « Send », an approval button, or a scope block button (`button`). */
-const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped" };
+const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped",
+                       "go-on": "The writer goes on" };
 
 async function send(action = "", button = null) {
   const approval = Object.values(APPROVALS).find((a) => a.action === action);

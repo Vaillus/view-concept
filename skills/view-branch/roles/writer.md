@@ -218,8 +218,12 @@ on the sections written so far):
 - **A skip** takes the recommended answer, the same way.
 - A pause question left open does not block the next sections when the user
   sends comments only: answer the comments, and go on writing only when the
-  trigger answers, skips or defers every question of the pause, or the user
-  says to go on.
+  trigger answers, skips or defers every question of the pause, or holds
+  « Go on » (`action: go-on`, or `go on` from the terminal).
+- **« Go on »** ends the pause without answering: write the next sections,
+  with the same pauses. The pause's questions stay open; write the sections
+  after them on their recommended answer, and rewrite what an answer, when it
+  comes, contradicts.
 
 ## A later run
 

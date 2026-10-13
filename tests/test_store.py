@@ -196,6 +196,16 @@ def test_plan_batch_keeps_a_section_question_open_until_its_section_is_written(s
     assert q2["status"] == "skipped" and q3["status"] == "skipped"
 
 
+def test_go_on_batch_leaves_the_questions_open(session):
+    session.add_question("Evict what?", section="s2")
+    b = session.add_batch([], action="go-on")
+    assert session.read_questions()[0]["status"] == "open"
+    assert (
+        "action: go-on (the user asked to go on past the pause: write the next sections; "
+        "the pause's questions stay open)"
+    ) in format_batch("kv-cache", b, [])
+
+
 def test_a_branch_review_rewrites_once_its_sections_exist(tmp_path):
     s = Session("x", tmp_path)
     s.create("X", kind="code", repo=str(tmp_path))

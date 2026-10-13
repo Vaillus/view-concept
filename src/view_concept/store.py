@@ -98,7 +98,11 @@ every question still open is marked skipped (the agent treats them as skipped an
 the plan, or the model in a branch review), except a section question (one with an anchor
 section) whose section is not written yet: it stays open, and the page shows it at the end
 of its section once written. A deferred question stays deferred: it is asked
-again after its anchor section. « Grill me » sends a batch whose action is
+again after its anchor section. During a pause of a branch review (the writer
+stopped after a section whose questions are open, with sections left to write), « Go on »
+sends a batch whose action is "go-on": the writer goes on, and the pause's questions stay
+open; still open once every section is written, they hold back « Approve model » until
+each is answered, skipped or deferred. « Grill me » sends a batch whose action is
 "grill" (the agent asks every open design decision as a question with a recommended
 answer, until none is left) and « Stop grill » one whose action is "stop-grill". A grill
 runs while the latest "grill" batch is not resolved (the agent resolves it with a reply
@@ -172,6 +176,7 @@ ACTIONS = (
     "plan",
     "grill",
     "stop-grill",
+    "go-on",
 )
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
@@ -979,7 +984,9 @@ class Session:
         questions (`answers`, see `answer_question`, `skip_question` and
         `unclear_question`), "plan" that they ended scoping (every open question is then
         marked skipped, but a section question whose section is not written yet), "grill"
-        that they started a grill and "stop-grill" that they stopped it."""
+        that they started a grill, "stop-grill" that they stopped it, and "go-on" that they
+        asked the writer of a branch review to go on past a pause, leaving its questions
+        open."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         if (action == "answer") != bool(answers):
@@ -1423,6 +1430,11 @@ def format_batch(
         )
     if batch.get("action") == "stop-grill":
         lines.append("action: stop-grill (the user stopped the grill)")
+    if batch.get("action") == "go-on":
+        lines.append(
+            "action: go-on (the user asked to go on past the pause: write the next sections; "
+            "the pause's questions stay open)"
+        )
     if batch.get("action") == "answer":
         asked = {q["id"]: q["text"] for q in questions or []}
         answers = batch.get("answers", [])
