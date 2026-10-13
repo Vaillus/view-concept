@@ -27,6 +27,10 @@ Roles:
 An HTML section is loaded by its visible text, the words a reader sees in it, not its HTML
 source; its heading names its file, for an agent that needs the source.
 
+In a code session every role also gets the code map (code-map.md): which modules carry
+the feature and where each concept lives, as the planner wrote it and the implementer
+keeps it, so a run does not explore the same code again.
+
 Once the model is approved, every role also sees which changes of the model the code does
 not carry yet, in full however old: the implementer acts on them, the others must know the
 code lags behind them.
@@ -73,6 +77,8 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
         out.append("A grill is running: ask every open decision, each with its recommended answer.")
     out += ["", "## Outline (as it is now)", *_outline(outline)]
     out += ["", "## Lexicon (as it is now)", *_lexicon(plan["lexicon"], outline)]
+    if plan.get("repo"):
+        out += ["", "## Code map", s.read_code_map() or "(none written yet)"]
     out += ["", *_change_history(s)]
     out += ["", *_questions(questions)]
     out += ["", *_recent("Terminal messages", s.read_terminal_messages(), _message_line)]

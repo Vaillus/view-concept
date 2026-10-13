@@ -156,10 +156,15 @@ the lexicon, the sections or the code yourself:
 
 | Agent | Owns | Role file |
 |---|---|---|
-| **planner** | the outline and the lexicon, during scoping | `roles/planner.md` |
+| **planner** | the outline and the lexicon, during scoping, and the first code map | `roles/planner.md` |
 | **writer** | the modeling part (its sections), and the outline and the lexicon from « Write model » on | `roles/writer.md` |
-| **implementer** | the code on the branch and the repo's docs, from « Approve model » on | `roles/implementer.md` |
+| **implementer** | the code on the branch and the repo's docs, and the code map, from « Approve model » on | `roles/implementer.md` |
 | **reviewer** | the refactoring part: the code checked against the model, item by item | `roles/reviewer.md` |
+
+The **code map**, `code-map.md` in the session folder, says which modules
+carry the feature and where each concept lives, so a fresh agent does not
+explore the same code again: the planner writes it on its first run, the
+implementer updates it when it moves code, and every context loads it.
 
 The role files are in `~/Documents/code/view-concept/skills/view-branch/`.
 The planner and the writer also read `roles/planning-rules.md` there. A side
@@ -175,23 +180,50 @@ view-concept context <slug> --role <planner|writer|implementer|reviewer> --trigg
 ```
 
 It prints the **base context** (the initial request, the outline, the
-lexicon, the recent change history, the questions, the recent terminal
-messages, and the sections the role needs) and the **trigger**: the events
+lexicon, the code map, the recent change history, the questions, the recent
+terminal messages, and the sections the role needs) and the **trigger**: the events
 that started this run, in full. Once the model is approved, it also says up
 to which change of the model the code is implemented, and lists the changes
-**not implemented yet**. Pass that output to a new subagent with this
-instruction: « Read `<role file>` (and `roles/planning-rules.md` for the
-planner and the writer) in `~/Documents/code/view-concept/skills/view-branch/`,
-then do your run. » Start it as an agent that can write files and run
+**not implemented yet**.
+
+Hand the context over **by command**: give the new subagent the command, never
+its output, and let it run the command itself. Its prompt is: « Run
+`view-concept context <slug> --role <role> --trigger <ids or words>` and treat
+its output as your context. Then read `<role file>` (and
+`roles/planning-rules.md` for the planner and the writer) in
+`~/Documents/code/view-concept/skills/view-branch/`, and do your run. » Do not
+run the command yourself first, save its output to a file, or paste it into
+the prompt: the context grows with the session (a writer's holds every
+section), and it would go through your own conversation, where it stays, and
+be typed out again. Start it as an agent that can write files and run
 commands, never a read-only type: each role file says what that agent may
 change, and nothing beyond it. Nothing else from this conversation: what the
 agents need is in the folder. When the run ends, give its one-line report in the
 terminal.
 
-Only you start agents, with one exception: the implementer may start helper
-agents for the code, each in its own git worktree (its role file says how).
-No other agent starts one. A harness without subagents runs each run itself,
-one after the other, from the same context output and role files.
+You start the role agents. A role agent may in turn start **helper agents**,
+one per part of its run, so the parts are done at once; its role file says
+when and how:
+
+| Role | A helper's part |
+|---|---|
+| writer | one section of a **wave**: the sections from the next unwritten one up to the next section with a known waiting question; or one section to rewrite, when a run rewrites two or more |
+| reviewer | one item, or a few small items grouped |
+| implementer | a set of files no other part touches, in its own git worktree, when at least two such sets are each more than a small fix |
+
+The planner starts none, and a helper never starts one itself. Every helper
+obeys the **owner rule**: it writes only its own section file (or, for the
+implementer, its own code files), and returns everything else (lexicon terms
+and tips, outline moves, changes of the model, item fields, questions, what
+moved in the code) to the role agent that started it, which writes them
+alone, after its helpers end. The shared session files (`plan.json`, the
+change history, the questions) are rewritten whole by each command that
+writes them, with no lock, so two helpers writing them would lose each
+other's work.
+
+A harness without subagents runs each run itself, one after the other, from
+the same context command and role files, and a role agent's helpers the same
+way.
 
 ### Routing the events
 
@@ -327,11 +359,11 @@ check` reports a pair).
    anchor section. Let the planner run first if events are still queued, then start
    the writer with the trigger `"« Write model »"` and the batch id. From here
    the writer owns the outline and the lexicon too.
-5. **The pauses.** The writer writes the model section by section and stops
-   after a section that has questions to ask (a deferred question anchored to
-   it, a decision it makes answerable, or a section question still open and
-   anchored to it): its report says « paused after
-   section N ». Run `view-concept status <slug> awaiting-answer`, the phase
+5. **The pauses.** The writer writes the model in waves, each wave's
+   sections at once, and stops after a wave whose sections have questions to
+   ask (a deferred question anchored to one, a decision one makes answerable,
+   or a section question still open and anchored to one): its report says
+   « paused after section N ». Run `view-concept status <slug> awaiting-answer`, the phase
    the page reads as the pause (it shows « Go on » only then), say so in one
    terminal line and wait. The answers, skips and
    unclear answers go to the writer, which goes on writing from there. « Go
@@ -364,8 +396,9 @@ those with nothing to do:
    - the items the reviewer judged `diverges` or `move` in its last report;
    - the comment ids that ask for a code change.
 
-   It starts one run for all of it; it decides itself whether to split the
-   work. At the end it records the last change of the model it took into
+   It starts one run for all of it; it splits the work across helpers when
+   at least two parts with disjoint files are each more than a small fix, as
+   its role file says. At the end it records the last change of the model it took into
    account.
 3. **The reviewer**, after an implementer run (its trigger is the
    implementer's report, in words) or on comments about the refactoring
