@@ -210,7 +210,9 @@ def cmd_question(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
-    q = s.add_question(a.text, a.option, a.multi, a.recommended or "")
+    q = s.add_question(
+        a.text, a.option, a.multi, a.recommended or "", a.background or "", a.section or ""
+    )
     print(q["id"])
     # The answer only reaches the agent through a watch or a wait: say so while none runs.
     if not s.is_listening():
@@ -227,6 +229,28 @@ def cmd_answered(a: argparse.Namespace) -> None:
         raise SessionError(f"no session {a.slug!r}")
     q = s.answered_in_terminal(a.qid, a.text or "")
     print(f"{q['id']} answered")
+
+
+def cmd_anchor(a: argparse.Namespace) -> None:
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    q = s.anchor_question(a.qid, a.section)
+    print(f"{q['id']} anchored to {q['section']}")
+
+
+def cmd_reask(a: argparse.Namespace) -> None:
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    q = s.reask_question(a.qid, a.text or "", a.recommended or "")
+    print(f"{q['id']} open")
+    if not s.is_listening():
+        print(
+            f"view-concept: no watch or wait is running for {a.slug}; the answer will wait in the "
+            "inbox until one starts. Start listening now.",
+            file=sys.stderr,
+        )
 
 
 def cmd_change(a: argparse.Namespace) -> None:
@@ -291,7 +315,8 @@ def cmd_check(a: argparse.Namespace) -> None:
     """The precedence check: list forward references and early uses, write them to
     audit.json (replacing the previous ones, keeping the agent's own entries). Then the
     section problems (an HTML block in a Markdown section, two files for one section, an
-    HTML section file over the limit), printed only: they name no word to underline."""
+    HTML section file over the limit, a waiting question anchored to a section the outline
+    no longer has), printed only: they name no word to underline."""
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
@@ -413,7 +438,29 @@ def main() -> None:
     q.add_argument("--option", action="append", default=[], help="one choice (repeatable)")
     q.add_argument("--multi", action="store_true", help="the user may pick several choices")
     q.add_argument("--recommended", help="the answer you suggest: an option, or a text")
+    q.add_argument(
+        "--background",
+        help="what the user needs to know to answer: the mechanism today, each option's trade-offs",
+    )
+    q.add_argument("--section", help="the anchor section: the page shows the question after it")
     q.set_defaults(fn=cmd_question)
+
+    q = sub.add_parser(
+        "anchor", help="set the section after which an open or deferred question is asked"
+    )
+    q.add_argument("slug")
+    q.add_argument("qid", help="the question id, e.g. q1")
+    q.add_argument("section", help="the outline id of its anchor section")
+    q.set_defaults(fn=cmd_anchor)
+
+    q = sub.add_parser(
+        "reask", help="ask a deferred question again, under the same id (deferred -> open)"
+    )
+    q.add_argument("slug")
+    q.add_argument("qid", help="the question id, e.g. q1")
+    q.add_argument("--text", help="a new wording of the question")
+    q.add_argument("--recommended", help="a new recommended answer")
+    q.set_defaults(fn=cmd_reask)
 
     q = sub.add_parser(
         "answered", help="mark an open agent question answered in the terminal (sends no batch)"

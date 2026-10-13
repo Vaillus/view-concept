@@ -134,7 +134,9 @@ as it arrives: ask the questions it opens.
 **End of scoping.** Scoping ends when the user ends it, never when you judge
 you have enough: a batch with `action: plan` (« Write model » in the scope
 block), or « go ahead » in the terminal. Treat every question still open as
-skipped (after « Write model », the page has already marked them so), and
+skipped (after « Write model », the page has already marked them so), except
+a section question whose section is not written yet: it stays open, to be
+answered at the end of its section once written. Then
 write the outline and the lexicon in the same turn. When every question is
 answered and you have none left to ask, say so in one terminal line and wait
 for the user to end scoping.
@@ -143,14 +145,25 @@ for the user to end scoping.
 
 ### Outline and lexicon
 
-Run `view-concept status <slug> planning`. The outline starts with this fixed
-skeleton, in this order:
+Run `view-concept status <slug> planning`.
+
+**The reader** is the user, who asked for the triage. What they stated is
+**known**: the initial request, their answers, their comments, the terminal
+messages. Never explain back what is known: refer to it in a few words and
+spend the text on what is new to them, which here is mostly the code itself
+(what it does, what reads what, what nothing reads), since the scope was
+written quickly and its author has forgotten how it works. The problems they
+gave as the reason for the triage are known; the problems the code shows
+that they did not name are not.
+
+The outline starts with this skeleton, in this order:
 
 1. **Today.** The scope on one real example: a script run with its output, a
    file it writes, a chain of imports. Only the vocabulary the code has.
 2. **What goes wrong.** The problems the example shows, in the user's terms:
    duplicated logic, a file doing several jobs, code nothing reads, a module
-   in the wrong place.
+   in the wrong place. The problems the request already names get one line
+   each; the section spends its text on the ones it does not.
 3. **The proposal.** A mockup of the triage (the review table with a few of
    the real items, their verdicts and, in the big case, their batch) and a
    Mermaid diagram of the flow. Give the scope's boundary sentence here.
@@ -217,27 +230,38 @@ prose.
   repo root, `:line` or `:start-end`). The page turns each citation into a
   link to the file. A claim you cannot cite is a claim you have not checked:
   check it or cut it.
+- **One point, got quickly.** Each section makes one point, and the reader
+  should get it quickly: the fewest words that carry it, and a visual wherever
+  the point can be shown (see **The visual rule**). When a section has to
+  carry more than one point, or its visual has to hold several ideas at once
+  to fit, split it into sections, one point each, rather than condensing:
+  place each new section where it belongs in the outline, and say so.
 - **Short.** Each section gives its core in eight lines of prose or fewer, in
   full sentences, never in bullet fragments; a table or a diagram replaces
   prose where it can. Before showing the modeling part, count the lines of
   prose of every section (tables, code blocks and diagrams don't count) and
   cut any over eight.
+- **Never tell the user back what they told you.** What is known (see **The
+  reader**) is referred to in a few words, never explained. A sentence the
+  user could have written themselves before the triage is cut. Lead each
+  section with what is new to them, in its first sentence.
 - **Honour the lexicon**, and write each term's `tip` with its home section.
 - **Mechanism before abstraction.** Show a concept on the real example of the
   first sections before stating it in general. Never let a metaphor stand in
   for a mechanism you can show.
 - **Say why the concept earns its name**: what it lets the user see, predict
-  or decide. One sentence. **Say what it is not**, in a clause, when a
+  or decide. One sentence, and none for a concept the user named
+  themselves. **Say what it is not**, in a clause, when a
   neighbouring concept could be mistaken for it.
 - **A diagram** when the structure is a sequence or a containment that prose
   serialises badly; never one that re-renders a list.
 - Write in the language of the initial request, technical terms as the code
   names them. Name a section to the user by its number in words
   (« section 6 »), never by its id (`s6`, `applied`) or `§6`.
-- **Open on the subject.** A section starts with what it is about, never
-  with a question id, a side thread or a marker (« (q2) », « Asked for by
-  the user (q8) », « Proposed. »). Credit a decision to its question in the
-  middle of the text, where the decision is stated.
+- **No provenance in the prose.** A section is about the code and its
+  verdict, never about how they were decided: no question id, side thread or
+  marker (« (q2) », « Asked for by the user (q8) », « Proposed. ») anywhere
+  in its text.
 
 ### The visual rule: Markdown or HTML
 
@@ -248,12 +272,19 @@ can load from the web. The extension alone says the kind; a section has one
 file, so delete the `.md` when you switch a section to HTML (`view-concept
 check` reports a pair).
 
-- **When.** Write a section as an HTML section when its visual needs its own
-  styles, behaviour (a step player, a slider, an animation) or a library (a
-  chart, d3). A diagram Mermaid can draw stays a ```` ```mermaid ```` block in
-  a Markdown section. Never write an HTML block (raw HTML that starts its own
-  paragraph) into a Markdown section: `view-concept check` reports it; inline
-  HTML in a sentence (`<b>`, `<span>`) is fine.
+- **When.** The user prefers to be shown rather than told: whenever a
+  section has something to show, write it as an HTML section. Something to
+  show is a mockup of a page or an output (the box as the user will see it), a
+  flow over time (a step player through a run), a state machine (a question
+  going from open to deferred to answered), a before/after, or a comparison
+  the reader can play with (two options side by side). Write a Markdown
+  section when the section is an argument, a definition or a rule, with at
+  most a small table: a visual that only repeats the prose is not relevant.
+  A Mermaid block is for a plain structure in an otherwise prose section (a
+  short sequence, a tree), not a substitute for showing the thing itself.
+  Never write an HTML block (raw HTML that starts its own paragraph) into a
+  Markdown section: `view-concept check` reports it; inline HTML in a
+  sentence (`<b>`, `<span>`) is fine.
 - **What the file holds.** One self-contained HTML document: its HTML, CSS and
   JavaScript in the file, no heading of its own (the page renders the title).
   Paint with the page's theme tokens, `var(--bg)`, `var(--ink)`,
@@ -289,8 +320,9 @@ Run `view-concept status <slug> audit`, then:
    precedence rule.
    It also prints the section problems, which it does not write to
    `audit.json`: an HTML block in a Markdown section (move it into an HTML
-   section), two files for one section, an HTML section over 2 MB. Fix each
-   one.
+   section), two files for one section, an HTML section over 2 MB, a question
+   waiting on a section the outline no longer has (`stale-anchor`: re-anchor
+   it with `view-concept anchor`). Fix each one.
 2. Re-read every section for the words that slipped past the lexicon, and add
    each one to `audit.json` (`[{"term", "section", "issue", "note"}]`, keeping
    the entries `check` wrote), with one of these issues: `undefined` (a
@@ -469,8 +501,10 @@ asks for what its name says and nothing else:
   then write the sections in the same turn.
 - **`answer`** is the user's answer to that agent question (`answer to q1
   « … »: <choices> — <text>`), or a skip (`q3 skipped « … » (no answer: use
-  your default)`): take your default and say which one in the section it
-  touches.
+  your default)`): take your default and say which one in one line at the
+  end of the section it touches. An unclear answer (`q4 unclear « … »
+  (…): <note>`) means the user cannot answer before the review explains what
+  the question needs: see **Agent questions**.
 - **`plan`** ends scoping (« Write model »). Once the outline exists, the
   button reads « Rewrite model » and the line says rewrite: revise the model
   with the answers given since, log each change of it, rewrite the sections
@@ -503,8 +537,24 @@ conversation stays in the terminal.
 Every question you put to the user once the session exists goes to the page:
 
 ```bash
-view-concept question <slug> "<question>" [--option "<choice>" --option "<choice>"] [--multi] [--recommended "<answer>"]
+view-concept question <slug> "<question>" [--option "<choice>" --option "<choice>"] [--multi] [--recommended "<answer>"] [--background "<text>"]
 ```
+
+`--background` gives what the user needs to know to answer, shown folded
+under the question: the code the question is about, as it is today, in two or
+three sentences on a real example, and, for a choice, what each option keeps
+and loses. Never ask about code the review has not described without it.
+
+The page adds « I don't understand » next to « Skip ». An unclear answer
+defers the question: do not ask it again now. Make sure a section explains
+what the note says is missing, anchor the question to it (`view-concept
+anchor <slug> <qid> <section id>`), and once that section is written, ask it
+again under the same id: `view-concept reask <slug> <qid>`. The reask removes
+its background: the section above it explains it now, so put each option's
+cost in that section. The page then shows it at the end of that section. A second unclear
+answer to the same question: develop that section once, with what the note
+says is missing, and ask again; a third takes your recommended answer, said
+at the end of the section.
 
 `--option` gives the choices (`--multi` lets the user pick several); the page
 always adds a free-text field. `--recommended` gives the answer you would

@@ -239,7 +239,7 @@ function approvalPending() {
 function renderStatus() {
   const { phase, section, message } = state.status;
   const approval = APPROVALS[phase];
-  const asking = ["scoping", "awaiting-answer"].includes(phase) && openQuestions().length > 0;
+  const asking = ["scoping", "awaiting-answer"].includes(phase) && openQuestions().length > 0 && !goOnPending();
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Write plan » ends it.
     scoping: asking ? "scoping · questions waiting for you"
@@ -247,7 +247,8 @@ function renderStatus() {
            : "scoping the question",
     planning: "drafting the plan",
     ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
-    "awaiting-answer": openQuestions().length ? QUESTION_LABELS.ready : QUESTION_LABELS.sent,
+    "awaiting-answer": goOnPending() ? "going on · the writer is writing the next sections"
+                     : openQuestions().length ? QUESTION_LABELS.ready : QUESTION_LABELS.sent,
     writing: section ? `writing §${numberOf(section)} ${titleOf(section)}` : "writing",
     audit: "vocabulary audit",
     revising: "revising",
@@ -365,6 +366,10 @@ function renderDoc() {
     return;
   }
   parkFrames();
+  // A question box at the end of a section is re-attached on each render: keep its focus.
+  const active = document.activeElement;
+  const keep = active && active.closest && active.closest(".sec-questions")
+    ? [active, active.selectionStart, active.selectionEnd] : null;
   doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map((s) => sectionBlock(s)), docButton);
   $("#refactor").replaceChildren(...[lagLine()].filter(Boolean),
     ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), prButton);
@@ -374,6 +379,10 @@ function renderDoc() {
     renderMermaid(view);
     annotateAudit(view);
     annotateLexicon(view);
+  }
+  if (keep && keep[0].isConnected && document.activeElement !== keep[0]) {
+    keep[0].focus({ preventScroll: true });
+    if (keep[1] != null) keep[0].setSelectionRange(keep[1], keep[2]);
   }
   placeFrames();
   frames.forEach((f, id) => postTerms(id, f));
@@ -403,7 +412,10 @@ function sectionBlock(s, { bare = false } = {}) {
                      onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }) }),
       el("button", { class: "sec-comment ask", text: "ask", title: "Open a side thread about this section",
                      onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }, "ask") })),
-    body);
+    body,
+    ...(written && sectionQuestions(s.id).length
+      ? [el("div", { class: "sec-questions" }, ...sectionQuestions(s.id).map(questionCard),
+            ...(paused() ? [goOnButton()] : []))] : []));
 }
 
 /* ---------------- the refactor tab ----------------
@@ -1259,17 +1271,29 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    A box is built once and kept while its question is open, so a re-render never takes
    the user's choice or text. A recommended answer that is one of the options is
    preselected; any other is pre-filled in the text field; either is marked « suggested ».
-   A box has three exits: « Validate » sends the answer at once (a batch whose action is
+   A question may carry a background (the mechanism as it is today, each option's
+   trade-offs), shown folded under its text. A question with an anchor section (`section`)
+   whose section is written is shown at the end of that section in the Model tab instead,
+   and the scope block keeps a line pointing to it (see sectionQuestions).
+   A box has four exits: « Validate » sends the answer at once (a batch whose action is
    "answer"), « Skip » sends « no answer, use your default » the same way (its entry
-   `{question, skipped: true}`), or the box stays open: no question blocks the agent.
+   `{question, skipped: true}`), « I don't understand » sends the text field as a note of
+   what is missing (its entry `{question, unclear: true, note}`: the options are ignored,
+   and the question is deferred until the agent asks it again, after the section that
+   explains it), or the box stays open: no question blocks the agent, except during the
+   pause of a branch review's writer, which « Go on » ends (see paused).
    The header holds « Grill me » (a batch whose action is "grill"; « Stop grill » sends
    "stop-grill" while a grill runs) and, while scoping runs or a question is open,
-   « Write plan » (action "plan": scoping ends, the open questions count as skipped; once a
+   « Write plan » (action "plan": scoping ends, the open questions count as skipped, but a
+   section question whose section is not written yet, which stays open; once a
    plan exists it reads « Rewrite plan », and the agent revises the plan with the answers).
    In a branch review or a refactor, what is written is the model: « Write model ».
    These three take the draft comments with them, like the approvals. */
 
 const openQuestions = () => (state ? state.questions || [] : []).filter((q) => q.status === "open");
+// An open question shown at the end of its anchor section, once that section is written.
+const atSection = (q) => !!q.section && q.section in state.sections;
+const sectionQuestions = (id) => openQuestions().filter((q) => q.section === id && atSection(q));
 const questionCards = new Map(); // question id -> its box
 
 function questionCard(q) {
@@ -1285,6 +1309,8 @@ function questionCard(q) {
                               placeholder: q.options.length ? "Something to add, or another answer (optional)" : "Your answer" });
   if (rec && !recOption) ta.value = rec;
   const skip = el("button", { class: "btn", text: "Skip", title: "No answer: the agent uses its default" });
+  const unclear = el("button", { class: "btn", text: "I don't understand",
+                                 title: "The model explains what this question needs, then asks it again. The text field, if filled, says what is missing; the options are ignored" });
   const button = el("button", { class: "btn primary q-answer", text: "Validate" });
   const choices = () => [...options.querySelectorAll("input:checked")].map((i) => i.value);
   const update = () => { button.disabled = !choices().length && !ta.value.trim(); };
@@ -1295,24 +1321,55 @@ function questionCard(q) {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); button.click(); }
   });
   const exit = async (path, body, done) => {
-    button.disabled = skip.disabled = true;
+    button.disabled = skip.disabled = unclear.disabled = true;
     try {
       await postJSON(`/api/s/${SLUG}/questions/${q.id}/${path}`, body);
-    } catch (e) { toast(`${done} failed: ${e.message}`); skip.disabled = false; update(); return; }
+    } catch (e) { toast(`${done} failed: ${e.message}`); skip.disabled = unclear.disabled = false; update(); return; }
     await load();
     sentToast(`${done} ${q.id}`);
   };
   button.addEventListener("click", () => { if (!button.disabled) exit("answer", { choices: choices(), text: ta.value }, "Answered"); });
   skip.addEventListener("click", () => { if (!skip.disabled) exit("skip", {}, "Skipped"); });
+  unclear.addEventListener("click", () => { if (!unclear.disabled) exit("unclear", { note: ta.value }, "Deferred"); });
   const card = el("div", { class: "question", "data-question": q.id },
     el("div", { class: "q-text" }, el("span", { class: "num", text: q.id }), " ", q.text),
+    q.background ? el("details", { class: "q-background" }, el("summary", { text: "background" }),
+                      el("div", { class: "q-text", text: q.background })) : null,
     q.options.length ? options : null,
     rec && !recOption ? el("div", { class: "q-suggested" }, suggested()) : null,
     ta,
-    el("div", { class: "q-actions" }, skip, button));
+    el("div", { class: "q-actions" }, unclear, skip, button));
   questionCards.set(q.id, card);
   return card;
 }
+
+/* A pause: in a branch review, the writer stops after a section that opened questions while
+   sections of the modeling part are left to write, and the coordinator sets the phase
+   awaiting-answer. The page reads the pause from that phase, not from the open questions: a
+   question left open by an earlier « Go on » still sits at the end of a written section
+   while the writer writes on. « Go on » ends the pause without answering: a batch whose
+   action is "go-on", after which the writer writes the next sections and the pause's
+   questions stay open; the writer's next status ends the phase, and the button with it.
+   It shows under the paused section's boxes and in the scope block, in place of
+   « Rewrite model » (which would skip those questions and start a rewrite). Once every
+   section is written there is no pause: a question still open holds back « Approve model »,
+   as any open question does. */
+function paused() {
+  if (state.workflow !== "view-branch" || state.status.phase !== "awaiting-answer" || goOnPending()) return false;
+  return (state.plan.outline || []).some((s) => !isRefactorSection(s) && !(s.id in state.sections));
+}
+
+// A « go-on » batch sent since the status last moved: the writer is going on.
+function goOnPending() {
+  const since = state.status.since || "";
+  return state.comments.batches.some((b) => b.action === "go-on" && b.sent >= since);
+}
+
+const goOnButton = () => el("button", {
+  class: "btn primary go-on", text: "Go on",
+  title: "The writer goes on with the next sections; these questions stay open",
+  onclick: (e) => send("go-on", e.currentTarget),
+});
 
 // A « plan » batch sent since the status last moved, with no question asked after it:
 // scoping is over, the agent is writing the plan (or the model).
@@ -1339,18 +1396,26 @@ function renderScope() {
   const open = openQuestions();
   for (const id of questionCards.keys()) if (!open.some((q) => q.id === id)) questionCards.delete(id);
   const box = $("#scope-questions");
-  const cardsNow = open.map(questionCard);
+  const cardsNow = open.map((q) => (atSection(q)
+    ? el("button", { class: "questions-waiting", text: `${q.id} waits at the end of section ${numberOf(q.section)} →`,
+                     onclick: () => { setTab(tabOf(q.section)); scrollToSection(q.section); } })
+    : questionCard(q)));
   // Re-attaching a box would blur its text field: only when the list changed.
-  if (cardsNow.length !== box.children.length || cardsNow.some((c, i) => box.children[i] !== c)) box.replaceChildren(...cardsNow);
+  const same = cardsNow.length === box.children.length
+    && cardsNow.every((c, i) => box.children[i] === c || (c.tagName === "BUTTON" && box.children[i].textContent === c.textContent));
+  if (!same) box.replaceChildren(...cardsNow);
 
   const closed = questions.filter((q) => q.status !== "open");
   const folded = $("#scope-answered");
   folded.hidden = !closed.length;
-  $("summary", folded).textContent = `answered (${closed.length})`;
+  const deferred = closed.filter((q) => q.status === "deferred").length;
+  $("summary", folded).textContent = `answered (${closed.length - deferred})${deferred ? ` · deferred (${deferred})` : ""}`;
   $("ol", folded).replaceChildren(...closed.map((q) => el("li", {},
     el("div", { class: "q-text" }, el("span", { class: "num", text: q.id }), " ", q.text),
-    el("div", { class: `q-reply ${q.status === "skipped" ? "dim" : ""}` },
-       answerText(q.status === "skipped" ? { skipped: true } : q.answer || {}),
+    el("div", { class: `q-reply ${q.status === "answered" ? "" : "dim"}` },
+       q.status === "deferred"
+         ? deferredText(q)
+         : answerText(q.status === "skipped" ? { skipped: true } : q.answer || {}),
        q.answer?.from === "terminal" ? el("span", { class: "dim", text: " (in the terminal)" }) : null))));
   $("#scope-empty").hidden = questions.length > 0 || state.status.phase === "scoping";
 
@@ -1358,15 +1423,17 @@ function renderScope() {
   grill.textContent = state.grilling ? "Stop grill" : "Grill me";
   grill.title = state.grilling ? "Stop the interview" : "The agent asks about every open decision, each with its suggestion, until none is left";
   const plan = $("#scope-plan");
-  plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending();
+  plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending() || paused();
+  $("#scope-go-on").hidden = !paused();
   plan.textContent = `${rewriting() ? "Rewrite" : "Write"} ${scopingProduct()}`;
   plan.title = rewriting()
-    ? `Enough questions: the open ones count as skipped, and the agent revises the ${scopingProduct()} with your answers`
-    : `Enough questions: the open ones count as skipped, and the agent writes the ${scopingProduct()}`;
+    ? `Enough questions: the open ones count as skipped (a question waiting for its section stays open), and the agent revises the ${scopingProduct()} with your answers`
+    : `Enough questions: the open ones count as skipped (a question waiting for its section stays open), and the agent writes the ${scopingProduct()}`;
 }
 
 $("#grill").addEventListener("click", (e) => send(state.grilling ? "stop-grill" : "grill", e.currentTarget));
 $("#scope-plan").addEventListener("click", (e) => send("plan", e.currentTarget));
+$("#scope-go-on").addEventListener("click", (e) => send("go-on", e.currentTarget));
 
 /* The review pane keeps one line for the open agent questions: it opens the Plan tab
    at the scope block. */
@@ -1378,6 +1445,8 @@ function renderWaiting() {
 }
 
 $("#questions-waiting").addEventListener("click", () => {
+  const q = openQuestions()[0];
+  if (q && atSection(q)) { setTab(tabOf(q.section)); scrollToSection(q.section); return; }
   setTab("plan");
   $("#scope").scrollIntoView({ block: "start", behavior: "smooth" });
 });
@@ -1443,14 +1512,22 @@ function renderReview() {
 
 /* An answered agent question in the history: its text, the answer (« skipped » for a
    skipped one), the agent's reply. */
-const answerText = (a) => (a.skipped ? "skipped" : [(a.choices || []).join(", "), a.text].filter(Boolean).join(" — "));
+const answerText = (a) => (a.skipped ? "skipped"
+  : a.unclear ? ["I don't understand", a.note].filter(Boolean).join(" — ")
+  : [(a.choices || []).join(", "), a.text].filter(Boolean).join(" — "));
+// A deferred question: what the user said was missing, and where it will be asked again.
+const deferredText = (q) => {
+  const last = (q.unclear || []).slice(-1)[0] || {};
+  const where = q.section ? `asked again after section ${numberOf(q.section)}` : "asked again once the model explains it";
+  return [answerText({ unclear: true, note: last.note }), where].join(" · ");
+};
 
 function answeredQuestion(a, b) {
   const q = (state.questions || []).find((x) => x.id === a.question) || { id: a.question, text: "" };
   return el("div", { class: "question answered" },
     el("div", { class: "q-head" }, "Question from the agent ", el("span", { class: "dim", text: q.id })),
     q.text ? el("div", { class: "q-text", text: q.text }) : null,
-    el("div", { class: `q-reply ${a.skipped ? "dim" : ""}`, text: answerText(a) }),
+    el("div", { class: `q-reply ${a.skipped || a.unclear ? "dim" : ""}`, text: answerText(a) }),
     b.reply ? el("div", { class: "c-status" }, el("span", { class: "badge ok", text: "✓ resolved" }),
                  el("span", { class: "c-reply", text: ` ${b.reply}` })) : null);
 }
@@ -1472,7 +1549,8 @@ $("#note").addEventListener("keydown", (e) => {
 $("#send").addEventListener("click", () => send());
 
 /* A batch from « Send », an approval button, or a scope block button (`button`). */
-const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped" };
+const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped",
+                       "go-on": "The writer goes on" };
 
 async function send(action = "", button = null) {
   const approval = Object.values(APPROVALS).find((a) => a.action === action);

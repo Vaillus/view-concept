@@ -17,10 +17,28 @@ The model starts from the concepts the repo's docs already define; the
 modeling part covers only what the branch adds or changes.
 
 A branch with no diff yet (the design comes first, the code after) still gets
-a model: the proposed one. Say so in the proposal section, and mark each
-concept you propose yourself, as opposed to one the user asked for, so the
-user reads the modeling part as a proposal to approve, not a description to
-check.
+a model: the proposed one. Say so in the model sheet, and mark each concept
+you propose yourself, as opposed to one the user asked for, so the user reads
+the modeling part as a proposal to approve, not a description to check.
+
+## The reader
+
+The reader is the user, who asked for the branch. What they stated is
+**known**: the initial request, their answers, their comments, the terminal
+messages. Never explain back what is known: refer to it in a few words
+(« the deferred status you asked for ») and spend the text on what is
+**new to the user**:
+
+- a **finding**: the code does something the user did not say, or does not
+  do what they said; a doc that is missing or that the code contradicts;
+- a **decision made for them**: a choice the request left open that the
+  branch or an agent settled, a default taken on a skipped question;
+- a **consequence**: what the change does to a concept that existed before,
+  an edge case, an interaction between two concepts, a name that clashes.
+
+When the request says little (« review my branch »), the branch itself is
+what is new: the concepts are, but the problems the user gave as the reason
+for the branch still are not.
 
 ## Writing the outline and the lexicon
 
@@ -41,27 +59,37 @@ a lexicon entry whose section is not in the outline.
 ## The outline
 
 The outline (`outline` in `plan.json`, one entry `{"id", "title", "earns"}`
-per section, `earns` saying what the section gives the reader) follows this
-fixed skeleton:
+per section, `earns` saying what the section gives the reader: one point,
+which the reader should get quickly; an `earns` that names two points is two
+sections) follows this skeleton:
 
-1. **Today.** What the user works with before the branch, shown on a real
-   example: an existing session, a real file, a command and its output. No
-   new concept yet; only the vocabulary the code already has.
-2. **What goes wrong.** The problems the example shows, in the user's terms:
-   what they cannot do, what breaks, what is confusing. Each concept later
-   answers one of them; a concept that answers none is a finding.
-3. **The proposal.** What the branch changes, shown on the same example after
-   the change: a mockup of the page or the output, or a before/after Mermaid
-   diagram. Say what the branch does not do. When the branch has no diff yet,
-   say here that the model is a proposal.
-4. **One section per concept** it introduces or changes: what it is, its
-   rules, where it is implemented. Concepts in the order they depend on each
-   other, starting from the one the others are defined by. Names that clash
-   with existing ones are said here.
+1. **The model sheet.** The whole model on one screen, the section the user
+   keeps in mind while the code changes: one line on what the branch is for
+   (a reference to the request, not a retelling), a before/after of the
+   example the request is about (a mockup of the page or the output, or a
+   Mermaid diagram), and a table of the concepts, one row each: the concept,
+   its rule, its relation to what existed before, and whether it is new or
+   changed. Say what the branch does not do. When the branch has no diff
+   yet, say here that the model is a proposal. End with a **to-do list**:
+   one line per piece of work that changes no concept (see point 2).
+2. **One section per point new to the user** (see **The reader**): a
+   finding, a decision made for them, a consequence. Its title states the
+   point (« Write model drops a section question before its section
+   exists »), not the topic. Order them by the concepts they touch, in the
+   order of the table. A finding that changes no concept (a doc that is out
+   of date, which source a part of the branch came from, a missing test) gets
+   no section: it is a line of the sheet's to-do list. The test: after
+   reading the section, does the user think differently about a concept? If
+   not, it is a line.
+3. **A section per concept only when the table cannot carry it**: its rules
+   do not fit a row, and the user did not state them. A concept the user
+   named and described gets none: its row is enough.
+4. **Further directions.** The last section: about three ways to push the
+   concepts further, each marked « fits this PR » or « follow-up ».
 
-The order is fixed: the user reads the concepts after seeing what they are
-for. A concept-first modeling part, with no picture of the result, was too
-abstract to discuss.
+A « Today » or « What goes wrong » section is written only when the request
+does not state them, and then before the model sheet: the user does not need
+their own problem told back to them.
 
 Section ids are stable: when you reorder, keep each section's id and change
 its position. The page anchors the user's comments to ids.
@@ -73,7 +101,9 @@ One entry per concept in `lexicon` of `plan.json`:
 **home section**, the one that introduces it. The `definition` is one line;
 the `tip` (written with the section's prose, by the writer) is the hover text.
 Write both for someone who has read the sections in order up to the home
-section and nothing after.
+section and nothing after. The home section of a concept in the table is the
+model sheet; a term the user introduced keeps its definition to one line in
+their own words.
 
 **The precedence rule.** Every text about a term (its introducing prose, its
 `definition`, its `tip`) uses only terms whose home section is at or before
@@ -109,7 +139,8 @@ change you make on your own judgment.
 Every question you put to the user goes to the page:
 
 ```bash
-view-concept question <slug> "<question>" [--option "<choice>" ...] [--multi] [--recommended "<answer>"]
+view-concept question <slug> "<question>" [--option "<choice>" ...] [--multi] \
+    [--recommended "<answer>"] [--background "<text>"] [--section <id>]
 ```
 
 Never ask in the terminal: you do not have one. The user owns the
@@ -119,9 +150,59 @@ prerequisite. Ask every question you judge
 relevant, the frontier first (those whose answer depends on no other open
 question), each with `--recommended` when you have a suggestion. A question
 the code, the session files or a command can answer is not a question for the
-user: look it up. Never ask again a question the context lists, open, answered
-or skipped. A skipped question means: use your default.
+user: look it up, and so is one the request already settles. Never ask again a question the context lists, open,
+deferred, answered or skipped. A skipped question means: use your default.
+
+**A design question asked in scoping carries its background.** A design
+question chooses between designs, as opposed to a fact you can look up. The
+user can only choose when they know the mechanism the choice changes and
+everything each option costs, so give both in `--background`, which the page
+shows folded under the question:
+
+- **Today**: the existing mechanism the question is about, in two or three
+  sentences, on a real example (a real session, a real file, a command and
+  its output). Never ask about a mechanism you have not described.
+- **Per option, what it keeps and what it loses.** When the choice touches an
+  area (of a page, a file format, a command), list every capability of that
+  area first, and say per option whether it is kept, lost, or could be
+  brought back and how. List them all in this one question: a cost that comes
+  out later turns one decision into several.
+
+The question's text stays one or two lines; the background holds the rest.
+The background serves the user in scoping, before the model exists, and no
+agent reads it. A question asked at the end of a section (a section question,
+a deferred question asked again) carries none: the section explains it, and
+states each option's cost.
+
+**An unclear answer.** The user answers « I don't understand » when they
+cannot choose before the model explains what the question needs. It arrives
+as `q3 unclear « … » (…): <note>`, the note saying what is missing (it may be
+empty), and the question is now **deferred**. Do not ask it again during
+scoping. Instead:
+
+1. Make sure the outline explains what the note says is missing (without a
+   note, the mechanism the question's text and options are about): extend
+   the section that should hold it, or add one where it belongs.
+2. Anchor the question to that section, the one after which it can be
+   answered: `view-concept anchor <slug> <qid> <section id>`. The
+   prerequisites of the anchor section come before it, by the precedence
+   rule.
+3. Log the change of the model, with the question as its cause.
+
+The writer asks it again after writing the anchor section.
+
+**A section question.** A decision only the model's explanation makes
+answerable may be asked at the end of the section that explains it: ask it
+with `--section <id>`. The page shows it at the end of that section once the
+section is written, and in the scope block until then. Ask a decision the
+user can answer from its background in scoping, without `--section`: an
+answer given early shapes the whole model.
+
+**Provenance stays out of the prose.** Which question or comment a decision
+came from is logged in the change history (`--cause`), not written into a
+section. A section never cites a question id.
 
 During a grill (the context says « A grill is running »), work the outline as
 a design tree: ask every decision whose prerequisites are settled, each with
-its recommended answer. When no decision is left, say so in your report.
+its recommended answer and, in scoping, its background. An unclear answer during a grill
+is deferred as in scoping. When no decision is left, say so in your report.

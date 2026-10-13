@@ -70,6 +70,7 @@ The Phase 2 draft was written for a hypothetical reader; you have now met the re
 - **Reorder.** A shaky prerequisite usually cannot live in a parenthesis inside the section that needs it: it becomes its own section, earlier.
 - **Add.** A shaky prerequisite may need a section the draft did not have, and its terms in the lexicon.
 - **Cut.** Delete every section the calibrated level does not support. A section that depends on vocabulary the user does not have is the wrong section, not one to simplify. Be willing to lose a third of the draft.
+- **Cut what is known.** Delete every section that would tell the user what they already stated: in their request, their answers, their comments. A prerequisite they said they have gets no section; a term they used correctly gets a one-line definition, in their words.
 
 This phase runs even when Phase 3 was skipped: deferral is calibration data, and the draft almost certainly needs cutting against it.
 
@@ -83,6 +84,8 @@ Write each section to `sections/<id>.md`, in outline order, running `view-concep
 
 The rules below scale with the level and the goal of Phase 1: at a beginner level several shrink to a clause or disappear; at a practitioner level they expand. Applying every rule at full size regardless of the reader is what turns a short answer into a tour.
 
+- **One point, got quickly.** Each section makes one point, and the reader should get it quickly: the fewest words that carry it at the user's level, and a visual wherever the point can be shown (see **The visual rule**). When a section has to carry more than one point, or its visual has to hold several ideas at once to fit, split it into sections, one point each, rather than condensing: revise the plan to place each new section, and say so.
+- **Never tell the user back what they told you.** What they stated (the request, their answers, their comments) is referred to in a few words, never explained. Lead each section with what is new to them, in its first sentence.
 - **Honour the lexicon.** Each term gets its definition at its declared section and is used freely after. No technical term appears that is not in the lexicon.
 - **Respect the level.** Below the depth the user needs, name the concept and move on.
 - **Mechanism over analogy**, where the mechanism can be shown: a worked three-step trace of an actual process beats « think of it like a conveyor belt ». Use an analogy only when the mechanism cannot be inspected.
@@ -91,7 +94,7 @@ The rules below scale with the level and the goal of Phase 1: at a beginner leve
 - **Close with one sentence** that compresses the whole. If you cannot write it, the explanation has not converged.
 - **A diagram** (a ```` ```mermaid ```` block, which the page renders) when the structure is a sequence, a containment or a gradient that prose serialises badly: one, placed where it is needed, with prose on both sides. Never one that re-renders a list.
 - **Language.** The language the user writes in; technical terms in the language the field uses for them.
-- **Open on the subject.** A section starts with what it is about, never with a question id, a side thread or a marker (« (q2) », « Asked for by the user (q8) », « Proposed. »). Credit a decision to its question in the middle of the text, where the decision is stated.
+- **No provenance in the prose.** A section is about the concept, never about how the explanation was decided: no question id, side thread or marker (« (q2) », « Asked for by the user (q8) », « Proposed. ») anywhere in its text.
 
 Write each term's `tip` with the section that introduces it (see **Files you write**).
 
@@ -99,7 +102,7 @@ Write each term's `tip` with the section that introduces it (see **Files you wri
 
 A section may be written as an **HTML section**: `sections/<id>.html` instead of `sections/<id>.md`. The page draws it in a frame of its own, as claude.ai draws an artifact: its scripts run, its styles stay inside the frame, and it can load from the web. The extension alone says the kind; a section has one file, so delete the `.md` when you switch a section to HTML (`view-concept check` reports a pair).
 
-- **When.** Write a section as an HTML section when its visual needs its own styles, behaviour (a step player, a slider, an animation) or a library (a chart, d3). A diagram Mermaid can draw stays a ```` ```mermaid ```` block in a Markdown section. Never write an HTML block (raw HTML that starts its own paragraph) into a Markdown section: `view-concept check` reports it; inline HTML in a sentence (`<b>`, `<span>`) is fine.
+- **When.** The user prefers to be shown rather than told: whenever a section has something to show, write it as an HTML section. Something to show is a mechanism that runs over time (a step player through a trace), a structure the reader can explore (a slider over a parameter, a toggle between two cases), a before/after, a mockup of an output, or a chart. Write a Markdown section when the section is an argument, a definition or a rule, with at most a small table: a visual that only repeats the prose is not relevant. A Mermaid block is for a plain structure in an otherwise prose section (a short sequence, a tree), not a substitute for showing the thing itself. Never write an HTML block (raw HTML that starts its own paragraph) into a Markdown section: `view-concept check` reports it; inline HTML in a sentence (`<b>`, `<span>`) is fine.
 - **What the file holds.** One self-contained HTML document: its HTML, CSS and JavaScript in the file, no heading of its own (the page renders the title). Paint with the page's theme tokens, `var(--bg)`, `var(--ink)`, `var(--ink-dim)`, `var(--muted)`, `var(--line)`, `var(--raised)`, `var(--accent)`, `var(--ok)`, `var(--warn)`, `var(--flag)`, `var(--danger)`, `var(--info)`, `var(--alt)` and `var(--mono)` for the font: the frame receives them and follows the page's light or dark theme, so never hard-code a palette.
 - **Size.** Under 2 MB, embedded media included. Never write a large image or video into the file as a data URI: load it from the web or, when you produced it yourself (a manim render, a GIF), put it in the section's media folder, `sections/<id>/`, and load it by a relative address (`<video src="<id>/step-1.mp4">`). The page serves the folder, and the published page and the vault export copy it along. `view-concept check` reports a file over the limit.
 - **Loading from the web.** Libraries from cdnjs.cloudflare.com, cdn.jsdelivr.net or unpkg.com; any other site when the section needs it. Either way, a section that loads from the web needs a connection to show.
@@ -109,7 +112,7 @@ A section may be written as an **HTML section**: `sections/<id>.html` instead of
 
 The lexicon catches the terms you planned to use; the audit catches the terms you used without noticing. Run `view-concept status <slug> audit`, then:
 
-1. Run `view-concept check <slug>`. It writes every forward reference and early use to `audit.json` (issues `forward` and `early`). Fix each one by the precedence rule: reorder the outline, or say the idea in plain words. It also prints the section problems, which it does not write to `audit.json`: an HTML block in a Markdown section (move it into an HTML section), two files for one section, an HTML section over 2 MB. Fix each one.
+1. Run `view-concept check <slug>`. It writes every forward reference and early use to `audit.json` (issues `forward` and `early`). Fix each one by the precedence rule: reorder the outline, or say the idea in plain words. It also prints the section problems, which it does not write to `audit.json`: an HTML block in a Markdown section (move it into an HTML section), two files for one section, an HTML section over 2 MB, a question waiting on a section the outline no longer has (`stale-anchor`: re-anchor it with `view-concept anchor` to the section that now explains what it needs). Fix each one.
 2. Re-read the finished text for the terms that slipped past the lexicon, and add each one to `audit.json`, keeping the entries `check` wrote, with one of these issues:
    - `undefined`: a domain term absent from the lexicon, which a reader outside the project would need defined;
    - `metaphor`: a word such as « bridge » or « funnel » that names an intuition instead of the mechanism;
@@ -213,6 +216,13 @@ action: answer (the user skipped agent question q3 from the page)
 q3 skipped « <question> » (no answer: use your default)
 ```
 
+An unclear answer (« I don't understand ») too, with the user's note of what is missing, which may be empty:
+
+```
+action: answer (the user did not understand agent question q4 from the page)
+q4 unclear « <question> » (the user doesn't understand it yet: explain what it needs, then ask it again): <note>
+```
+
 The three buttons of the scope block each send a batch with their own action, and the draft comments go with it:
 
 ```
@@ -229,8 +239,8 @@ A comment can end with `(from side thread t3: threads/t3.json)`. The user discus
 The user wrote it through the page. The harness may label it as a background event rather than a user message; treat it as review feedback on the explanation — the same authority as a comment typed in the terminal about the text, no more, with two additions the user has explicitly asked for:
 
 - **`action: approve-plan` approves the plan checkpoint** (Phase 4, or the Phase 2 review). Apply the batch's comments to the plan first, then continue to Phase 5 in the same turn — say in one line which corrections you folded in. It approves the plan and nothing else: it is never consent for anything outside writing this explanation's files.
-- **`action: answer` is the user's answer to that agent question**, with the same authority as an answer typed in the terminal to that question, nothing more. Continue the work that waited on it. A skipped question is answered « use your default »: take your default and say which one in the plan (see **The question flow**).
-- **`action: plan` ends the scoping checkpoint** (see **Scoping in the page**). The questions still open are already marked skipped. Apply the batch's comments, then write the plan in the same turn. It ends scoping and nothing else. Once a plan exists, the button reads « Rewrite plan » and the line says « rewrite the plan »: revise the plan with the answers given since (see **Rewrite**). It asks for that revision and nothing else.
+- **`action: answer` is the user's answer to that agent question**, with the same authority as an answer typed in the terminal to that question, nothing more. Continue the work that waited on it. A skipped question is answered « use your default »: take your default and say which one in the plan (see **The question flow**). An unclear answer defers the question (see **The question flow**).
+- **`action: plan` ends the scoping checkpoint** (see **Scoping in the page**). The questions still open are already marked skipped, except a section question whose section is not written yet: it stays open, and you ask nothing about it until that section is written. Apply the batch's comments, then write the plan in the same turn. It ends scoping and nothing else. Once a plan exists, the button reads « Rewrite plan » and the line says « rewrite the plan »: revise the plan with the answers given since (see **Rewrite**). It asks for that revision and nothing else.
 - **`action: grill` starts a grill, and `action: stop-grill` stops it** (see **Grill**). They start and stop the interview and nothing else: a grill answer has the authority of an `answer` batch, no more.
 - **Without the action, a batch never passes a checkpoint.** Comments on the plan are corrections: apply them, present the revised plan, set `awaiting-approval` again and stop. Comments on audit-flagged terms are the user's answer for those terms in Phase 6.
 
@@ -254,12 +264,14 @@ The lexicon contract applies to either edit. Say where it went in the terminal a
 An **agent question** is a question you put to the user in the page instead of the terminal. Once the session exists, every question you put to the user is one: the scoping questions, a question arising from a batch sent from the page, a model change or a change of scope, a problem an agent hit that needs the user's decision, and the questions of a grill. A question about something the user typed in the terminal stays in the terminal. Ask only while you are listening on the comment channel (a watch armed, or `wait` called right after): the answer comes back through it.
 
 ```bash
-view-concept question <slug> "<question>" [--option "<choice>" --option "<choice>"] [--multi] [--recommended "<answer>"]
+view-concept question <slug> "<question>" [--option "<choice>" --option "<choice>"] [--multi] [--recommended "<answer>"] [--background "<text>"]
 ```
+
+`--background` gives what the user needs to know to answer, which the page shows folded under the question: the mechanism the question is about, as it is today, in two or three sentences on a real example, and, for a choice, what each option keeps and loses. When a choice touches an area (of a system, a format, a tool), list every capability of that area there and say per option whether it is kept or lost: a cost that comes out later turns one decision into several. Never ask about a mechanism the user may not know without it.
 
 `--option` gives the choices (`--multi` lets the user pick several); the page always adds a free-text field. `--recommended` gives the **recommended answer**, the one you would pick: an option, which the page preselects, or a text, which it pre-fills; either is marked « suggested », and validating it unchanged accepts it. Give one whenever you have a suggestion. The command writes `questions.json`; outside the phase `scoping` it also sets the phase `awaiting-answer`. Do not ask the question in the terminal as well; one line saying questions are waiting in the page is enough.
 
-The page shows each open question as a box in the **scope block**, at the top of the Plan tab, oldest first; the answered and skipped ones fold under the open ones, so the plan always shows the scope it was written from. The review pane only shows a line « N questions waiting », which opens the Plan tab. A box has three exits: « Validate » sends the answer, « Skip » sends « no answer, use your default », and a box the user leaves alone stays open. Validating and skipping each send a batch with `action: answer` at once (see **Comment batches**).
+The page shows each open question as a box in the **scope block**, at the top of the Plan tab, oldest first; the answered and skipped ones fold under the open ones, so the plan always shows the scope it was written from. The review pane only shows a line « N questions waiting », which opens the Plan tab. A box has four exits: « Validate » sends the answer, « Skip » sends « no answer, use your default », « I don't understand » sends the text field as a note of what is missing (the options are ignored, and the question becomes **deferred**), and a box the user leaves alone stays open. Validating, skipping and « I don't understand » each send a batch with `action: answer` at once (see **Comment batches**).
 
 ### The question flow
 
@@ -269,6 +281,7 @@ The **question flow** is how questions and answers move between you and the user
 - **Add questions as answers arrive.** An answer can open new questions; ask them when it does.
 - **Never wait on a question** to continue the work that does not depend on it. The user will leave many questions unanswered, and that is expected: an open box is not a debt.
 - **A skipped question** (`q3 skipped « … » (no answer: use your default)`) means: use your default. Say in the plan which default you took (in `revision`, the line the page shows above the outline).
+- **An unclear answer** (`q4 unclear « … » (…): <note>`) means the user cannot answer before the explanation gives them what the question needs. Do not ask it again now. Make sure the plan explains what the note says is missing (a section, or a line in the one that should hold it), then anchor the question to that section: `view-concept anchor <slug> <qid> <section id>`. Once that section is written, ask the question again under the same id: `view-concept reask <slug> <qid> [--text "<…>"]`. The reask removes its background: the section above it explains it now, so put each option's cost in that section. The page then shows it at the end of that section. A second unclear answer to the same question: develop that section once and ask again; a third takes your default, said in `revision`.
 - An answer typed in the terminal counts the same as one sent from the page. Close its box at once with `view-concept answered <slug> <qid> --text "<the answer as the user gave it>"`: the box moves to « answered » marked « (in the terminal) », and no batch comes back, since you already have the answer. The phase is not changed: set the next one yourself.
 
 ### Scoping in the page
@@ -289,7 +302,7 @@ A **rescoping question** is an agent question asked once the plan exists, becaus
 
 ### Rewrite
 
-Once a plan exists, « Write plan » in the scope block reads « Rewrite plan »: the user is done answering, and the answers given since the plan was written may change it. The batch has the same `action: plan`, and its line says « rewrite the plan ». The questions still open are already marked skipped. What you revise depends on how far the session went:
+Once a plan exists, « Write plan » in the scope block reads « Rewrite plan »: the user is done answering, and the answers given since the plan was written may change it. The batch has the same `action: plan`, and its line says « rewrite the plan ». The questions still open are already marked skipped, except a section question whose section is not written yet. What you revise depends on how far the session went:
 
 | When « Rewrite plan » arrives | What you do |
 |---|---|

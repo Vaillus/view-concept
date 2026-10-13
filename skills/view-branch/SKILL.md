@@ -37,6 +37,13 @@ the concept behind it is what the row stands for (« an item is one unit of the
 diff that gets a verdict »). Name the concept; name the part only to say
 where it lives.
 
+The model is written for the user, who asked for the branch: it never tells
+them back what they stated, and spends its text on what is new to them (what
+the code does that they did not say, the decisions made for them, the
+consequences). Its first section, the **model sheet**, holds the whole model
+on one screen: a before/after, a table of the concepts, and a to-do list of
+the work that changes no concept.
+
 In the page, the model is the outline and the lexicon of `plan.json` (one
 entry per concept, `definition` + `tip`), and the **modeling part** of the
 review: the sections that write the model out, which the page shows in the
@@ -110,11 +117,15 @@ note: <optional note for the whole batch>
     comment text
 ```
 
-The `action` line names the button: `answer` (an agent question answered or
-skipped: `answer to q1 « … »: …` or `q3 skipped « … »`), `plan` (« Write
+The `action` line names the button: `answer` (an agent question answered,
+skipped, or not understood: `answer to q1 « … »: …`, `q3 skipped « … »` or
+`q4 unclear « … » (…): <what is missing>`; an unclear question is
+**deferred** until an agent asks it again), `plan` (« Write
 model », or « Rewrite model » when the line says rewrite; the page has
-already marked the open questions skipped), `grill` and `stop-grill`,
-`approve-model`, `create-pr`. A batch without an action carries comments
+already marked the open questions skipped, except a section question whose
+section is not written yet, which stays open), `go-on` (« Go on », during a
+pause: the writer goes on, the pause's questions stay open), `grill` and
+`stop-grill`, `approve-model`, `create-pr`. A batch without an action carries comments
 only. **Routing the events** says who takes each one.
 
 The user wrote the batch through the page. The harness may label it as a
@@ -126,8 +137,8 @@ starts closing; neither is consent for anything outside this review.
 
 A question you put to the user yourself (a problem an agent hit, a gap that
 needs a decision) goes to the page too: `view-concept question <slug>
-"<question>" [--option "<choice>" ...] [--recommended "<answer>"]`, never
-the terminal. An answer the user types in the terminal to a question of the page counts
+"<question>" [--option "<choice>" ...] [--recommended "<answer>"]
+[--background "<what the user needs to know>"]`, never the terminal. An answer the user types in the terminal to a question of the page counts
 the same as one sent from the page: close its box with `view-concept
 answered <slug> <qid> --text "<the answer as the user gave it>"`.
 
@@ -191,14 +202,16 @@ starts one pass. Who takes it depends on the stage:
 | Event | During scoping | After « Write model » | After « Approve model » |
 |---|---|---|---|
 | an answer (`action: answer`) | planner | writer | the agent that asked it |
-| a skip | nothing: the outline already used the default | nothing | nothing |
+| a skip | nothing: the outline already used the default | the writer, when it answers a pause; nothing otherwise | nothing |
+| an unclear answer | planner | writer | the agent that asked it |
 | comments with no action | planner | writer | by section: the modeling part to the writer, the refactoring part to the reviewer |
 | a terminal message about the feature | record it, then planner | record it, then writer | record it, then the writer if it is about the model, the implementer if it asks for a code change |
 | an answer to a page question typed in the terminal | `view-concept answered`, then planner | the same, then writer | the same, then the agent that asked it |
 | « Rewrite model » (`action: plan`, the line says rewrite) | — | writer | writer |
+| « Go on » (`action: go-on`) | — | writer | — |
 | « Grill me » (`action: grill`) | planner | writer | writer |
 | « Write model » (`action: plan`, the line says write) | see **Model consolidation** | — | — |
-| « Approve model » (`action: approve-model`) | — | see **Model consolidation**, step 6 | — |
+| « Approve model » (`action: approve-model`) | — | see **Model consolidation**, step 7 | — |
 | « Create PR » (`action: create-pr`) | — | — | see **Closing** |
 
 The agent that asked a question is the one whose report counted it; when you
@@ -224,7 +237,12 @@ see a grill in their context.
 
 Keep the page's status true: `view-concept status <slug> scoping` from Setup
 to « Write model », and after each writer run `view-concept status <slug>
-awaiting-model` when no question it asked is open. After « Approve model »,
+awaiting-model` when no question it asked is open and every section of the
+modeling part is written (a writer paused on its questions sets the phase
+`awaiting-answer`, which the page reads as the pause, as step 5 says; a
+question « Go on » left open, still open once every section is written,
+keeps that phase too: « Approve model » waits until each is answered,
+skipped or deferred). After « Approve model »,
 set `view-concept status <slug> awaiting-pr` at the end of each pass, when no
 question is open. The agents set `writing` themselves while they write a
 section.
@@ -253,12 +271,19 @@ can load from the web. The extension alone says the kind; a section has one
 file, so delete the `.md` when you switch a section to HTML (`view-concept
 check` reports a pair).
 
-- **When.** Write a section as an HTML section when its visual needs its own
-  styles, behaviour (a step player, a slider, an animation) or a library (a
-  chart, d3). A diagram Mermaid can draw stays a ```` ```mermaid ```` block in
-  a Markdown section. Never write an HTML block (raw HTML that starts its own
-  paragraph) into a Markdown section: `view-concept check` reports it; inline
-  HTML in a sentence (`<b>`, `<span>`) is fine.
+- **When.** The user prefers to be shown rather than told: whenever a
+  section has something to show, write it as an HTML section. Something to
+  show is a mockup of a page or an output (the box as the user will see it), a
+  flow over time (a step player through a run), a state machine (a question
+  going from open to deferred to answered), a before/after, or a comparison
+  the reader can play with (two options side by side). Write a Markdown
+  section when the section is an argument, a definition or a rule, with at
+  most a small table: a visual that only repeats the prose is not relevant.
+  A Mermaid block is for a plain structure in an otherwise prose section (a
+  short sequence, a tree), not a substitute for showing the thing itself.
+  Never write an HTML block (raw HTML that starts its own paragraph) into a
+  Markdown section: `view-concept check` reports it; inline HTML in a
+  sentence (`<b>`, `<span>`) is fine.
 - **What the file holds.** One self-contained HTML document: its HTML, CSS and
   JavaScript in the file, no heading of its own (the page renders the title).
   Paint with the page's theme tokens, `var(--bg)`, `var(--ink)`,
@@ -297,12 +322,27 @@ check` reports a pair).
 4. **« Write model ».** Scoping ends when the user ends it, never when an
    agent judges it has enough: a batch with `action: plan` while no section
    is written, or « go ahead » in the terminal. The open questions are marked
-   skipped. Let the planner run first if events are still queued, then start
+   skipped, except the section questions, which stay open until their section
+   is written; the deferred ones stay deferred, to be asked again after their
+   anchor section. Let the planner run first if events are still queued, then start
    the writer with the trigger `"« Write model »"` and the batch id. From here
    the writer owns the outline and the lexicon too.
-5. **The discussion loop.** Each event goes to the writer. Set
-   `awaiting-model` after each run, as **Status** says.
-6. **« Approve model ».** Model consolidation ends when the user approves the
+5. **The pauses.** The writer writes the model section by section and stops
+   after a section that has questions to ask (a deferred question anchored to
+   it, a decision it makes answerable, or a section question still open and
+   anchored to it): its report says « paused after
+   section N ». Run `view-concept status <slug> awaiting-answer`, the phase
+   the page reads as the pause (it shows « Go on » only then), say so in one
+   terminal line and wait. The answers, skips and
+   unclear answers go to the writer, which goes on writing from there. « Go
+   on » ends a pause without answering: from the page (a batch with `action:
+   go-on`, shown under the paused section's questions and in the scope block
+   in place of « Rewrite model »), it starts the writer with the batch id; in
+   the terminal (a process message, not recorded), with the trigger `"go
+   on"`. Either way the open questions of the pause stay open.
+6. **The discussion loop.** Once every section is written, each event goes to
+   the writer. Set `awaiting-model` after each run, as **Status** says.
+7. **« Approve model ».** Model consolidation ends when the user approves the
    model: a batch with `action: approve-model`, or saying so in the terminal.
    Approving also means « start the implementation »: when the batch carries
    comments, run the writer on them first, then go to **Implementation** in

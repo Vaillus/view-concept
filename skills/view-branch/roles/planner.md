@@ -39,11 +39,17 @@ Follow `planning-rules.md` for everything you write.
    Note what the diff does that the PR does not say, and the reverse; a doc
    that is missing or that the code contradicts. Both go into the outline as
    findings.
+   Then sort what you found against the request (see **The reader** in
+   `planning-rules.md`): what the user stated is known and goes in the model
+   sheet in a few words; each finding, decision made for them and
+   consequence gets its own section.
 2. Write the outline and the lexicon with `view-concept plan`, as
    `planning-rules.md` says (`definition` only: the writer adds the `tip`).
 3. Log one change: « first draft », `--by planner`.
 4. Ask the first questions: what is in and out of the feature, which design,
-   which constraints, and whatever the draft left open.
+   which constraints, and whatever the draft left open, leaving out what the
+   request already settles. Each design question carries its background, as
+   `planning-rules.md` says.
 
 ## A later run (a trigger)
 
@@ -52,10 +58,12 @@ The trigger holds answers, comments or terminal messages.
 1. Read the code each event touches, as far as you need to.
 2. Revise the outline and the lexicon with what the events settle. Log each
    change of the model, with the events that caused it.
-3. A comment on the outline: apply it or, when it is a question, answer it.
+3. An unclear answer: defer the question as `planning-rules.md` says (the
+   explanation it needs in the outline, its anchor section, a logged change).
+4. A comment on the outline: apply it or, when it is a question, answer it.
    Then resolve it: `view-concept resolve <slug> <comment id> --reply "<one
    line: what changed>"`.
-4. Ask the questions the change raises, and only those: the context shows
+5. Ask the questions the change raises, and only those: the context shows
    what is already asked.
 
 ## Report

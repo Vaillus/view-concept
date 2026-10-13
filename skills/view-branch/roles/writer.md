@@ -27,7 +27,8 @@ and your questions.
 
 ## Writing a section
 
-Each section goes to `sections/<id>.md`: Markdown, no heading of its own (the
+Each section goes to `sections/<id>.md` (Markdown) or `sections/<id>.html`
+(an HTML section, see **The visual rule**), with no heading of its own (the
 page renders the title). Before writing one, run
 `view-concept status <slug> writing --section <id>`.
 
@@ -38,12 +39,19 @@ page renders the title). Before writing one, run
   to judge the model: a threshold, a format, a name the branch changes. Most
   sections cite no line. Still check every claim against the code before
   writing it: an unchecked claim is cut, cited or not.
+- **One point, got quickly.** Each section makes one point, and the reader
+  should get it quickly: the fewest words that carry it, and a visual wherever
+  the point can be shown (see **The visual rule**). When a section has to
+  carry more than one point, or its visual has to hold several ideas at once
+  to fit, split it into sections, one point each, rather than condensing:
+  place each new section where it belongs in the outline, and say so.
 - **A short first draft.** The first draft (« Write model ») is read to
   discuss the concepts, not to check them: each section gives its core in
-  three to eight lines of prose, a table or a diagram (a ```` ```mermaid ````
-  block) where it replaces prose. After writing it, count the lines of prose
-  of every section (tables, code blocks and diagrams don't count) and cut any
-  over eight.
+  three to eight lines of prose, with an HTML section where it has something
+  to show (see **The visual rule**), a table or a diagram where it replaces
+  prose. After writing it, count the lines of prose of every section
+  (tables, code blocks, diagrams and the visuals of an HTML section don't
+  count) and cut any over eight.
 - **Develop when asked.** The limit binds the first draft only. When a
   comment asks to develop, expand or detail a section, or says the user does
   not understand it, write as much as the point needs, still in the order the
@@ -56,34 +64,44 @@ page renders the title). Before writing one, run
 
 ## How the prose explains
 
-The reader owns the repository and wants the model, not a tour. In a first
-draft each rule below is a sentence or a clause inside the eight lines; in a
-section the user asked to develop, each takes the room it needs.
+The reader owns the repository, asked for the branch, and wants the model,
+not a tour. In a first draft each rule below is a sentence or a clause inside
+the eight lines; in a section the user asked to develop, each takes the room
+it needs.
 
+- **Never tell the user back what they told you.** What is known (the
+  initial request, their answers, comments and terminal messages, see **The
+  reader** in `planning-rules.md`) is referred to in a few words, never
+  explained. A sentence the user could have written themselves before the
+  review is cut. What stays is what is new to them: what the code does, the
+  decisions made for them, the consequences they did not state. Lead each
+  section with that point, in its first sentence.
 - **Honour the lexicon.** Each term gets its definition in its home section
   and is used freely after. No technical term appears that is not in the
   lexicon: add it, or cut the sentence.
-- **Mechanism before abstraction.** Show the concept on the real example the
-  first sections set up (a real file, a command and its output, a trace of
-  three steps) before stating it in general. Never let a metaphor stand in for
-  a mechanism you can show.
+- **Mechanism before abstraction.** Show the point on the real example the
+  model sheet set up (a real file, a command and its output, a trace of three
+  steps) before stating it in general. Never let a metaphor stand in for a
+  mechanism you can show.
 - **Say why the concept earns its name**: what it lets the user see, predict
-  or decide that they could not before. One sentence.
+  or decide that they could not before. One sentence, and none for a concept
+  the user asked for: they know why they wanted it.
 - **Say what it is not**, when a neighbouring concept or an existing name
   could be mistaken for it. One clause; skip it when nothing is close.
 - **A diagram** (a Mermaid block) when the structure is a sequence, a
   containment or a before/after that prose serialises badly; never one that
   re-renders a list.
-- **A skipped question** left a default in the model: say in the section it
-  touches which default you took, so the user can correct it.
+- **A skipped question** left a default in the model: say which default you
+  took in one line at the end of the section it touches (« Default taken: … »),
+  so the user can correct it.
 - Write in the language of the initial request, technical terms as the code
   names them.
 - Name a section to the user by its number in words (« section 6 »), never
   by its id.
-- **Open on the subject.** A section starts with what it is about, never
-  with a question id, a side thread or a marker (« (q2) », « Asked for by
-  the user (q8) », « Proposed. »). Credit a decision to its question in the
-  middle of the text, where the decision is stated.
+- **No provenance in the prose.** A section is about the model, never about
+  how the model was decided: no question id, side thread or marker (« (q2) »,
+  « Asked for by the user (q8) », « Proposed. ») anywhere in its text. The
+  change history records which event caused each change (`--cause`).
 
 ## The visual rule: Markdown or HTML
 
@@ -94,12 +112,19 @@ can load from the web. The extension alone says the kind; a section has one
 file, so delete the `.md` when you switch a section to HTML (`view-concept
 check` reports a pair).
 
-- **When.** Write a section as an HTML section when its visual needs its own
-  styles, behaviour (a step player, a slider, an animation) or a library (a
-  chart, d3). A diagram Mermaid can draw stays a ```` ```mermaid ```` block in
-  a Markdown section. Never write an HTML block (raw HTML that starts its own
-  paragraph) into a Markdown section: `view-concept check` reports it; inline
-  HTML in a sentence (`<b>`, `<span>`) is fine.
+- **When.** The user prefers to be shown rather than told: whenever a
+  section has something to show, write it as an HTML section. Something to
+  show is a mockup of a page or an output (the box as the user will see it), a
+  flow over time (a step player through a run), a state machine (a question
+  going from open to deferred to answered), a before/after, or a comparison
+  the reader can play with (two options side by side). Write a Markdown
+  section when the section is an argument, a definition or a rule, with at
+  most a small table: a visual that only repeats the prose is not relevant.
+  A Mermaid block is for a plain structure in an otherwise prose section (a
+  short sequence, a tree), not a substitute for showing the thing itself.
+  Never write an HTML block (raw HTML that starts its own paragraph) into a
+  Markdown section: `view-concept check` reports it; inline HTML in a
+  sentence (`<b>`, `<span>`) is fine.
 - **What the file holds.** One self-contained HTML document: its HTML, CSS and
   JavaScript in the file, no heading of its own (the page renders the title).
   Paint with the page's theme tokens, `var(--bg)`, `var(--ink)`,
@@ -128,32 +153,86 @@ check` reports a pair).
 
 ## « Write model »
 
-Write every section of the modeling part, in outline order. Then audit
-what you wrote:
+Write the modeling part section by section, in outline order, and stop at a
+**pause**: after a section that has questions to ask.
 
-1. Run `view-concept check <slug>` and fix each forward reference and early
-   use it lists by the precedence rule: reorder the outline or say the idea in
-   plain words.
-   It also prints the section problems, which it does not write to
-   `audit.json`: an HTML block in a Markdown section (move it into an HTML
-   section), two files for one section, an HTML section over 2 MB. Fix each
-   one.
-2. Re-read every section for the words that slipped past the lexicon, and add
-   each one to `audit.json` (`[{"term", "section", "issue", "note"}]`, keeping
-   the entries `check` wrote), with one of these issues:
-   - `undefined`: a domain term absent from the lexicon, which a reader
-     outside the branch would need defined;
-   - `metaphor`: a word such as « bridge » or « funnel » that names an
-     intuition instead of the mechanism;
-   - `ambiguous`: an overloaded word (« session », « state », « context »)
-     whose meaning here depends on context the reader may not share;
-   - `assumes-context`: a bare reference (« the config », « the pipeline »)
-     to something the text has not introduced.
+1. First check the deferred questions the context lists. Each has an anchor
+   section (the planner set it; set one with `view-concept anchor` where it
+   is missing), and the anchor section's prerequisites come before it. Move
+   sections when they do not, and log the move. Then run `view-concept check
+   <slug>` once: a `stale-anchor` line names a waiting question (deferred, or
+   open with an anchor section) whose anchor section left the outline in
+   scoping; re-anchor it with `view-concept anchor` to the section that now
+   explains what it needs.
+2. Write the next unwritten section. Then look at what it opens:
+   - a deferred question anchored to it: ask it again, under the same id,
+     with `view-concept reask <slug> <qid>`, which removes its scoping
+     background;
+   - a decision the section makes answerable that nobody asked yet: ask it as
+     a section question (`view-concept question … --section <id>`), without
+     a background;
+   - a section question still open and anchored to it (the planner asked it
+     in scoping, and « Write model » kept it open): ask nothing, the page now
+     shows it at the end of the section.
 
-   Do not fix these yourself: the page underlines each one, and the user
-   answers by commenting on it. Fix the ones the user agrees on, in a later
-   run, by the precise term, an inline definition or a disambiguating clause,
-   and update the lexicon to match.
+   A question asked at the end of a section carries no background: the
+   section is its explanation. So the section states each option's cost,
+   including those the scoping background listed.
+
+   When the section opened a question, or has one still open, stop: write nothing further, and
+   report the pause (« paused after section 4, 2 questions »). Otherwise
+   write the next section, until none is left.
+3. When every section is written, audit what you wrote:
+
+   1. Run `view-concept check <slug>` and fix each forward reference and
+      early use it lists by the precedence rule: reorder the outline or say
+      the idea in plain words.
+      It also prints the section problems, which it does not write to
+      `audit.json`: an HTML block in a Markdown section (move it into an HTML
+      section), two files for one section, an HTML section over 2 MB, a
+      waiting question anchored to a section the outline no longer has
+      (re-anchor it with `view-concept anchor`). Fix each one.
+   2. Re-read every section for the words that slipped past the lexicon, and
+      add each one to `audit.json` (`[{"term", "section", "issue", "note"}]`,
+      keeping the entries `check` wrote), with one of these issues:
+      - `undefined`: a domain term absent from the lexicon that the user
+        did not introduce themselves (in the request, an answer, a
+        comment);
+      - `metaphor`: a word such as « bridge » or « funnel » that names an
+        intuition instead of the mechanism;
+      - `ambiguous`: an overloaded word (« session », « state », « context »)
+        whose meaning here depends on context the reader may not share;
+      - `assumes-context`: a bare reference (« the config », « the
+        pipeline ») to something the text has not introduced.
+
+      Do not fix these yourself: the page underlines each one, and the user
+      answers by commenting on it. Fix the ones the user agrees on, in a
+      later run, by the precise term, an inline definition or a
+      disambiguating clause, and update the lexicon to match.
+
+## After a pause
+
+A run whose trigger holds answers to the questions of a pause (or comments
+on the sections written so far):
+
+- **An answer** settles its decision. When it contradicts a section already
+  written, rewrite that section in the same run, and log the change of the
+  model. Then go on writing from the next unwritten section, with the same
+  pauses, as « Write model » says.
+- **An unclear answer** to a question asked again: the anchor section did not
+  explain enough. Develop it once (its « develop when asked » rule), with what
+  the note says is missing, and ask the question again. A second unclear
+  answer after that takes the recommended answer: say so in the section's
+  « Default taken » line, and go on.
+- **A skip** takes the recommended answer, the same way.
+- A pause question left open does not block the next sections when the user
+  sends comments only: answer the comments, and go on writing only when the
+  trigger answers, skips or defers every question of the pause, or holds
+  « Go on » (`action: go-on`, or `go on` from the terminal).
+- **« Go on »** ends the pause without answering: write the next sections,
+  with the same pauses. The pause's questions stay open; write the sections
+  after them on their recommended answer, and rewrite what an answer, when it
+  comes, contradicts.
 
 ## A later run
 
@@ -174,12 +253,16 @@ The trigger holds comments, answers, terminal messages, or « Rewrite model »
   (« added as section 5 »).
 - After any change to the structure or the lexicon, run `view-concept check
   <slug>` again and fix what it lists, including in sections nobody
-  commented on.
+  commented on: re-anchor a question whose anchor section you removed or
+  merged to the section that now explains what it needs.
 - Log each change of the model, with the events that caused it.
 - Resolve each comment you handled:
   `view-concept resolve <slug> <ids> --reply "<one line: what changed>"`.
   Leave a comment open while its discussion is still going.
 - Ask the questions a change raises, as `planning-rules.md` says.
+- **An unclear answer** to a question asked after the model is written:
+  develop the section it is about (or add the section it needs) and ask it
+  again, as after a pause.
 
 ## Report
 

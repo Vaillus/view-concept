@@ -8,8 +8,8 @@ events that started this run).
 
 The files keep everything; the context loads only the recent part of each log, the
 CONTEXT_RECENT most recent entries. Three parts are always loaded in full: the initial
-request, the open questions and the trigger's events, however old. An older closed
-question still shows as one line (no answer), so a settled question is not asked again.
+request, the open and deferred questions and the trigger's events, however old. An older
+closed question still shows as one line (no answer), so a settled question is not asked again.
 The context names the folder, so an agent that needs an older entry opens the file.
 
 Roles:
@@ -202,14 +202,23 @@ def _message_line(m: dict[str, Any]) -> str:
 def _question_line(q: dict[str, Any], full: bool) -> str:
     text = " ".join(q.get("text", "").split())
     line = f"- {q['id']} [{q['status']}] {text}"
-    if q["status"] == "open":
+    waiting = q["status"] in ("open", "deferred")
+    if waiting:
         if q.get("options"):
             line += f" (options: {' / '.join(q['options'])})"
         if q.get("recommended"):
             line += f" (recommended: {q['recommended']})"
-    elif full and q["status"] == "skipped":
+    if q.get("section"):
+        line += f" (anchor section: {q['section']})"
+    if waiting or full:
+        # Each « I don't understand », with what the user said was missing.
+        for u in q.get("unclear", []):
+            line += f" → unclear{': ' + u['note'] if u.get('note') else ''}"
+    if waiting or not full:
+        return line
+    if q["status"] == "skipped":
         line += " → skipped: the default was taken"
-    elif full:
+    else:
         a = q.get("answer") or {}
         answer = " — ".join(p for p in [", ".join(a.get("choices", [])), a.get("text", "")] if p)
         line += f" → {answer or '(empty answer)'}"
@@ -222,10 +231,17 @@ def _questions(questions: list[dict[str, Any]]) -> list[str]:
     if not questions:
         return ["## Questions", "(none)"]
     open_ = [q for q in questions if q["status"] == "open"]
-    closed = [q for q in questions if q["status"] != "open"]
+    deferred = [q for q in questions if q["status"] == "deferred"]
+    closed = [q for q in questions if q["status"] not in ("open", "deferred")]
     recent, older = closed[-CONTEXT_RECENT:], closed[:-CONTEXT_RECENT]
     lines = ["## Questions"]
     lines += ["Open:", *(_question_line(q, True) for q in open_)] if open_ else ["Open: none"]
+    if deferred:
+        lines += [
+            "Deferred (the user didn't understand them: ask each again with `reask` once its "
+            "anchor section is written):",
+            *(_question_line(q, True) for q in deferred),
+        ]
     if recent:
         lines += ["Answered or skipped:", *(_question_line(q, True) for q in recent)]
     if older:

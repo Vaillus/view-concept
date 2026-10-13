@@ -242,6 +242,11 @@ a.cite:hover code { text-decoration: underline; }
 .q-options label { display: flex; gap: 6px; align-items: baseline; cursor: pointer; }
 .q-options label .badge, .q-suggested .badge { margin-left: 0; }
 .q-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.q-background summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.q-background .q-text { color: var(--ink-dim); margin-top: 4px; }
+.sec-questions { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.sec-questions .go-on { align-self: flex-start; }
+#scope-questions .questions-waiting { width: 100%; }
 #scope-answered { margin-top: 8px; }
 #scope-answered summary { cursor: pointer; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; padding: 4px 0; }
 #scope-answered summary:hover { color: var(--ink); }
