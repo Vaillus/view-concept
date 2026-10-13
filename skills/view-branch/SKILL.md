@@ -201,10 +201,29 @@ change, and nothing beyond it. Nothing else from this conversation: what the
 agents need is in the folder. When the run ends, give its one-line report in the
 terminal.
 
-Only you start agents, with one exception: the implementer may start helper
-agents for the code, each in its own git worktree (its role file says how).
-No other agent starts one. A harness without subagents runs each run itself,
-one after the other, from the same context output and role files.
+You start the role agents. A role agent may in turn start **helper agents**,
+one per part of its run, so the parts are done at once; its role file says
+when and how:
+
+| Role | A helper's part |
+|---|---|
+| writer | one section of a **wave**: the sections from the next unwritten one up to the next section with a known waiting question |
+| reviewer | one item, or a few small items grouped |
+| implementer | a set of files no other part touches, in its own git worktree, when at least two such sets are each more than a small fix |
+
+The planner starts none, and a helper never starts one itself. Every helper
+obeys the **owner rule**: it writes only its own section file (or, for the
+implementer, its own code files), and returns everything else (lexicon terms
+and tips, outline moves, changes of the model, item fields, questions, what
+moved in the code) to the role agent that started it, which writes them
+alone, after its helpers end. The shared session files (`plan.json`, the
+change history, the questions) are rewritten whole by each command that
+writes them, with no lock, so two helpers writing them would lose each
+other's work.
+
+A harness without subagents runs each run itself, one after the other, from
+the same context command and role files, and a role agent's helpers the same
+way.
 
 ### Routing the events
 
