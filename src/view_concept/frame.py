@@ -17,8 +17,12 @@ theme: Catppuccin Latte in light mode, Tokyo Night in dark mode. frame.js also t
 page the height of the section's content, which the frame takes, and brings passages
 back across the separation: the reader's selection goes to the page, which comments or
 asks on it as on a passage of a Markdown section; the page sends the passages its
-comments and side threads quote, which frame.js highlights, and a passage to reveal.
-Term underlines and change highlights stay outside the frame. The published page and
+comments and side threads quote, which frame.js highlights, and a passage to reveal; a
+click on a side thread's passage goes to the page, which opens that thread. The page
+also sends the words added since the highlight baseline, found by comparing the file's
+visible text now and then, and the lexicon terms and audited words, which frame.js
+underlines by painting over the words, never wrapping them; the term under the pointer
+goes back to the page, which shows its tip. The published page and
 the vault note add the same head. Kept apart from the server so publishing and exporting
 do not import FastAPI.
 """

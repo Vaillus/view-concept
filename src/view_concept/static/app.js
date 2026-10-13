@@ -376,6 +376,7 @@ function renderDoc() {
     annotateLexicon(view);
   }
   placeFrames();
+  frames.forEach((f, id) => postTerms(id, f));
   applyHighlights();
   renderThreadChips();
   positionPopover();
@@ -733,9 +734,11 @@ function annotateLexicon(doc) {
    session changes: before a render the frames are parked, after it each one is moved
    into its section's slot. moveBefore keeps a moved frame running; a browser without it
    reloads the frame. The frame takes the height its content posts (static/frame.js).
-   Comments and side threads reach a passage inside it through frame messages: the frame
-   posts the reader's selection, the page posts the passages to highlight and the one to
-   reveal. Term underlines and change highlights stop at the frame. */
+   The page's tools reach a passage inside it through frame messages (static/frame.js):
+   the frame posts the reader's selection, a click on a side thread's passage and the
+   underlined term under the pointer; the page posts the passages to highlight (anchors),
+   the one to reveal, the words added since the highlight baseline (changes) and the
+   terms to underline (terms), which the frame paints over the words. */
 
 // As frame.SANDBOX: scripts run, and no allow-same-origin, so the frame cannot reach the page.
 const SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms";
@@ -762,7 +765,7 @@ function placeFrames() {
       if (f) f.remove();
       f = el("iframe", { class: "frame", sandbox: SANDBOX, allow: "fullscreen", title: titleOf(id),
                          "data-version": version, src: `/s/${SLUG}/sections/${encodeURIComponent(id)}.html?v=${version}` });
-      f.addEventListener("load", () => { postTheme(f); postAnchors(id, f); });
+      f.addEventListener("load", () => { postTheme(f); postAnchors(id, f); postChanges(id, f); postTerms(id, f); });
       frames.set(id, f);
     }
     moveInto(slot, f);
@@ -779,8 +782,9 @@ function postTheme(f) {
 new MutationObserver(() => frames.forEach(postTheme))
   .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
-/* The frame messages a frame posts: its height, the reader's selection inside it, and
-   where a revealed passage sits (static/frame.js). */
+/* The frame messages a frame posts: its height, the reader's selection inside it, where
+   a revealed passage sits, the side thread whose passage was clicked, and the term under
+   the pointer (static/frame.js). */
 const revealing = new Map(); // section id -> the comment whose passage its frame looks for
 
 window.addEventListener("message", (e) => {
@@ -792,13 +796,16 @@ window.addEventListener("message", (e) => {
   if (d.viewConcept === "height") f.style.height = `${d.height}px`;
   else if (d.viewConcept === "selection") frameSelection(id, f, d);
   else if (d.viewConcept === "revealed") frameRevealed(id, f, d);
+  else if (d.viewConcept === "thread-click") frameThreadClick(id, f, d);
+  else if (d.viewConcept === "term-hover") frameTermHover(f, d);
 });
 
 /* A rect of the frame's viewport, in the page's viewport. */
 function pageRect(f, r) {
   const b = f.getBoundingClientRect();
   const x = b.left + f.clientLeft, y = b.top + f.clientTop;
-  return { left: x + r.left, right: x + r.right, top: y + r.top, bottom: y + r.bottom };
+  return { left: x + r.left, right: x + r.right, top: y + r.top, bottom: y + r.bottom,
+           width: r.right - r.left, height: r.bottom - r.top };
 }
 
 /* The selection message: a passage selected in an HTML section gets the box a passage of
@@ -821,7 +828,8 @@ function frameSelection(id, f, d) {
 const quotesIn = (id, list) => list.filter((c) => c.section === id && c.quote && !c.quote.startsWith("plan · "));
 function postAnchors(id, f = frames.get(id)) {
   if (!f || !f.contentWindow || !state) return;
-  const anchor = (kind) => ({ quote, prefix }) => ({ kind, quote, prefix: prefix || "" });
+  const anchor = (kind) => ({ id: thread, quote, prefix }) =>
+    ({ kind, quote, prefix: prefix || "", ...(kind === "thread" ? { thread } : {}) });
   const sent = state.comments.batches.flatMap((b) => b.comments).filter((c) => c.status === "sent");
   const anchors = [
     ...quotesIn(id, drafts).map(anchor("draft")),
@@ -829,6 +837,93 @@ function postAnchors(id, f = frames.get(id)) {
     ...quotesIn(id, threadsState.threads).map(anchor("thread")),
   ];
   f.contentWindow.postMessage({ viewConcept: "anchors", anchors }, "*");
+}
+
+/* The thread click message: the reader clicked a passage the frame highlights for a side
+   thread. Its thread opens on it, as on a passage of a Markdown section; the popover sits
+   under the passage (frameThreads), and follows it when the view scrolls. */
+const frameThreads = new Map(); // thread id -> { f, rect }: its passage, in its frame's viewport
+function frameThreadClick(id, f, d) {
+  const t = threadOf(String(d.thread));
+  if (!t || t.section !== id || !d.rect) return;
+  frameThreads.set(t.id, { f, rect: d.rect });
+  openPopover(t.id);
+}
+
+/* The changes message: the words added to an HTML section since its highlight baseline.
+   The page compares the visible text of the file now with the baseline file, word by
+   word (the text frame.js indexes: the body's text outside its scripts and styles,
+   whitespace collapsed, a space between two blocks), and posts each run of added words
+   as a passage. The file is parsed, not run: its scripts do not run here. */
+const HIDDEN_TAGS = "script, style, noscript, template";
+// As frame.js: the elements whose text is not run on with the text around them.
+const FRAME_BLOCKS = "address, article, aside, blockquote, dd, details, div, dl, dt, figcaption, figure, footer, " +
+  "form, h1, h2, h3, h4, h5, h6, header, hr, li, main, nav, ol, p, pre, section, summary, table, td, th, tr, ul, " +
+  "button, caption, label, option, text, tspan, br";
+function visibleText(html) {
+  const body = new DOMParser().parseFromString(html || "", "text/html").body;
+  if (!body) return "";
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentElement.closest(HIDDEN_TAGS) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  let text = "", block = null;
+  while (walker.nextNode()) {
+    const n = walker.currentNode, b = n.parentElement.closest(FRAME_BLOCKS);
+    if (b !== block) text += " ";
+    block = b;
+    text += n.data;
+  }
+  return collapse(text);
+}
+function addedPassages(sec) {
+  if (!sec.updated) return [];
+  const now = visibleText(sec.md);
+  const spans = [];
+  for (const m of now.matchAll(/\S+/g)) spans.push([m.index, m.index + m[0].length, m[0]]);
+  const { inserted } = diffWords(visibleText(sec.seen).split(" ").filter(Boolean), spans.map((w) => w[2]));
+  const out = [];
+  let run = null;
+  spans.forEach(([a, b], k) => {
+    if (!inserted.has(k)) { run = null; return; }
+    if (run) run.end = b;
+    else out.push(run = { start: a, end: b });
+  });
+  return out.map(({ start, end }) => ({ quote: now.slice(start, end), prefix: now.slice(Math.max(0, start - 32), start) }));
+}
+function postChanges(id, f = frames.get(id)) {
+  const sec = state && state.sections[id];
+  if (!f || !f.contentWindow || !sec) return;
+  f.contentWindow.postMessage({ viewConcept: "changes", changes: addedPassages(sec) }, "*");
+}
+
+/* The terms message: what the page underlines in a Markdown section, for the frame to
+   paint over the words: the audit's entries on this section (one per term, their notes
+   joined, as annotateAudit does), the term this section is the home of, and every
+   lexicon term. Each carries the key its term hover message gives back. */
+function postTerms(id, f = frames.get(id)) {
+  if (!f || !f.contentWindow || !state) return;
+  const audit = new Map();
+  for (const a of state.audit || []) {
+    if ((a.section || "") !== id || !a.term) continue;
+    const k = a.term.toLowerCase();
+    if (!audit.has(k)) audit.set(k, { term: a.term, notes: [] });
+    audit.get(k).notes.push(`audit · ${a.issue || "flagged"}${a.note ? " — " + a.note : ""}`);
+  }
+  const terms = [...audit.values()].map((a) => ({ term: a.term, kind: "audit", key: { tip: a.notes.join(" ; ") } }));
+  state.plan.lexicon.forEach((t, i) => {
+    if (t.section === id) terms.push({ term: t.term, kind: "def", key: { term: i } });
+    terms.push({ term: t.term, kind: "term", key: { term: i } });
+  });
+  f.contentWindow.postMessage({ viewConcept: "terms", terms }, "*");
+}
+
+/* The term hover message: the tip of the term under the pointer, under the word, as over
+   a Markdown section; nothing once the pointer leaves it. */
+function frameTermHover(f, d) {
+  const key = d.key || {};
+  if (!d.rect || (!Number.isInteger(key.term) && typeof key.tip !== "string")) { $("#tip").hidden = true; return; }
+  if (Number.isInteger(key.term) && !state.plan.lexicon[key.term]) return;
+  showTip(key.tip ?? null, key.term ?? null, pageRect(f, d.rect));
 }
 
 /* The reveal message: the frame finds the passage and answers where it sits; the frame
@@ -983,7 +1078,8 @@ function markUpdates() {
   for (const [id, sec] of Object.entries(state.sections)) {
     const body = sec.updated && document.querySelector(`#sec-${CSS.escape(id)} .body`);
     if (!body) continue;
-    // A section frame is out of the page's reach: an HTML section is marked changed as a whole.
+    // A section frame is out of the page's reach: its rectangle gets the change bar (it also
+    // marks words only removed), and the changes message has the frame highlight the words added.
     if (sec.kind === "html") { body.querySelectorAll(".frame-slot").forEach((n) => n.classList.add("changed")); continue; }
     const before = document.createElement("div");
     before.innerHTML = sec.seen_html || "";
@@ -1003,6 +1099,7 @@ function markUpdates() {
     });
   }
   if (window.CSS && CSS.highlights) CSS.highlights.set("ev-updated", new Highlight(...ranges));
+  frames.forEach((f, id) => postChanges(id, f));
 }
 
 async function markSeen(ids) {
@@ -1503,6 +1600,8 @@ function threadAt(x, y) {
 function anchorRect(id) {
   const hit = threadRanges.find(([t]) => t.id === id);
   if (hit) return hit[1].getBoundingClientRect();
+  const inFrame = frameThreads.get(id);
+  if (inFrame && inFrame.f.isConnected) return pageRect(inFrame.f, inFrame.rect);
   const chip = document.querySelector(`.t-chip[data-thread="${CSS.escape(id)}"]`);
   return chip ? chip.getBoundingClientRect() : null;
 }
@@ -1519,6 +1618,7 @@ function openPopover(id) {
 }
 
 function closePopover() {
+  if (popThread) frameThreads.delete(popThread);
   popThread = null;
   $("#thread-pop").hidden = true;
 }
@@ -1747,22 +1847,26 @@ $("#unpublish").addEventListener("click", async () => {
   }
 });
 
-document.addEventListener("mouseover", (e) => {
-  const t = e.target.closest("[data-tip], [data-term]");
+/* The tip under a word: a lexicon entry's (`term`, its index) or a plain text (`text`). */
+function showTip(text, term, r) {
   const tip = $("#tip");
-  if (!t) { tip.hidden = true; return; }
-  if (t.dataset.term !== undefined) {
-    const entry = state.plan.lexicon[Number(t.dataset.term)];
+  if (term !== null) {
+    const entry = state.plan.lexicon[term];
     tip.replaceChildren(el("div", { class: "tip-term", text: entry.term }));
     const body = el("div", { class: "tip-body" });
     body.innerHTML = entry.tip_html;
     tip.append(body);
     typesetMath(tip);
-  } else tip.textContent = t.dataset.tip;
+  } else tip.textContent = text;
   tip.hidden = false;
-  const r = t.getBoundingClientRect();
   tip.style.top = `${window.scrollY + r.bottom + 4}px`;
   tip.style.left = `${Math.min(r.left, innerWidth - 360)}px`;
+}
+
+document.addEventListener("mouseover", (e) => {
+  const t = e.target.closest("[data-tip], [data-term]");
+  if (!t) { $("#tip").hidden = true; return; }
+  showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect());
 });
 
 // ?static skips the live stream (headless rendering never finishes while it is open).

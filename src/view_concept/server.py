@@ -125,10 +125,15 @@ def section_view(text: str, seen: str, html: bool = False) -> dict[str, Any]:
 
     An HTML section is drawn in a section frame, which loads its file from the server
     (`section_document`): its view carries no rendered HTML but `version`, a hash of its
-    text, so the page reloads the frame only when the file changed."""
+    text, so the page reloads the frame only when the file changed. An updated one
+    carries its baseline file as `seen`: the page compares the visible text of both and
+    sends the frame the passages added (the changes frame message)."""
     if html:
         version = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
-        return {"md": text, "kind": "html", "version": version, "updated": text != seen}
+        view = {"md": text, "kind": "html", "version": version, "updated": text != seen}
+        if view["updated"]:
+            view["seen"] = seen
+        return view
     view: dict[str, Any] = {"md": text, "html": md.render(text), "updated": text != seen}
     if view["updated"]:
         view["seen_html"] = md.render(seen)

@@ -256,6 +256,16 @@ def test_an_html_section_is_drawn_in_a_frame(client, session):
     assert client.get("/s/kv-cache/sections/s1.html").status_code == 404
 
 
+def test_an_updated_html_section_carries_its_baseline_file(client, session):
+    (session.sections_dir / "s3.html").write_text("<p>Fig</p>")
+    view = client.get("/api/s/kv-cache").json()["sections"]["s3"]
+    assert view["updated"] is False and "seen" not in view  # a first write is read
+    (session.sections_dir / "s3.html").write_text("<p>Fig, reef</p>")
+    view = client.get("/api/s/kv-cache").json()["sections"]["s3"]
+    # The page compares the visible text of both files for the changes frame message.
+    assert view["updated"] and view["seen"] == "<p>Fig</p>"
+
+
 @pytest.mark.parametrize(
     ("document", "framed"),
     [
