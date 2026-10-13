@@ -166,9 +166,12 @@ Write the modeling part section by section, in outline order, and stop at a
      background now pointing to what the section explains;
    - a decision the section makes answerable that nobody asked yet: ask it as
      a section question (`view-concept question … --section <id>`), with its
-     background.
+     background;
+   - a section question still open and anchored to it (the planner asked it
+     in scoping, and « Write model » kept it open): ask nothing, the page now
+     shows it at the end of the section.
 
-   When the section opened a question, stop: write nothing further, and
+   When the section opened a question, or has one still open, stop: write nothing further, and
    report the pause (« paused after section 4, 2 questions »). Otherwise
    write the next section, until none is left.
 3. When every section is written, audit what you wrote:

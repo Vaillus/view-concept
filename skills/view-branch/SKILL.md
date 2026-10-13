@@ -323,7 +323,8 @@ check` reports a pair).
    the writer owns the outline and the lexicon too.
 5. **The pauses.** The writer writes the model section by section and stops
    after a section that has questions to ask (a deferred question anchored to
-   it, or a decision it makes answerable): its report says « paused after
+   it, a decision it makes answerable, or a section question still open and
+   anchored to it): its report says « paused after
    section N ». Say so in one terminal line and wait. The answers, skips and
    unclear answers go to the writer, which goes on writing from there. « Go
    on » in the terminal (a process message, not recorded) starts the writer
