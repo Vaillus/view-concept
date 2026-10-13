@@ -207,7 +207,7 @@ when and how:
 
 | Role | A helper's part |
 |---|---|
-| writer | one section of a **wave**: the sections from the next unwritten one up to the next section with a known waiting question |
+| writer | one section of a **wave**: the sections from the next unwritten one up to the next section with a known waiting question; or one section to rewrite, when a run rewrites two or more |
 | reviewer | one item, or a few small items grouped |
 | implementer | a set of files no other part touches, in its own git worktree, when at least two such sets are each more than a small fix |
 

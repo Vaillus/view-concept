@@ -21,8 +21,9 @@ and the lexicon (through `view-concept plan`), the change history
 (`view-concept question`, `resolve`, `status`, `check`). You read the
 repository and the session folder freely. You never edit `plan.json` by hand,
 never touch the refactoring part, the code or the branch. You may start
-helper agents, one per section of a wave (see **Writing in waves**), and no
-other agent. A bug you notice in the code goes in your report, not in a fix.
+helper agents, one per section of a wave, or one per section to rewrite
+when a run rewrites two or more (see **Writing in waves**), and no other
+agent. A bug you notice in the code goes in your report, not in a fix.
 
 Follow `planning-rules.md` for the outline, the lexicon, the change history
 and your questions.
@@ -254,6 +255,15 @@ while writing can land in the middle of one.
   the question's recommended answer, as after « Go on ». Ask the question,
   leave it open, and stop after the wave. An answer that contradicts the
   recommended one makes your next run rewrite the sections it touches.
+- **Rewriting several sections.** A run that rewrites sections already
+  written (« Rewrite model », an answer that contradicts written sections,
+  comments on several sections) splits the same way: two or more sections to
+  rewrite, one helper each, started at once, with the same instruction plus
+  what to change in its section (the comment ids, the answers); a single
+  section you rewrite yourself. The owner rule holds: a helper resolves no
+  comment, and you resolve them, with what it returned. No pause cuts these
+  sections, which are written already: ask the questions the helpers return,
+  and stop after them.
 
 ## After a pause
 
@@ -261,7 +271,8 @@ A run whose trigger holds answers to the questions of a pause (or comments
 on the sections written so far):
 
 - **An answer** settles its decision. When it contradicts a section already
-  written, rewrite that section in the same run, and log the change of the
+  written, rewrite that section in the same run (two or more such sections
+  go to helpers, see **Writing in waves**), and log the change of the
   model. Then go on writing from the next unwritten section, with the same
   pauses, as « Write model » says.
 - **An unclear answer** to a question asked again: the anchor section did not
@@ -285,7 +296,8 @@ The trigger holds comments, answers, terminal messages, or « Rewrite model »
 (revise with every answer given since the sections were written).
 
 - **A comment** asks for a change, or asks a question. Edit what it asks
-  for; answer a question in the `resolve` reply when it only matters to the
+  for (comments that ask to rewrite two or more sections go to helpers, one
+  per section, see **Writing in waves**); answer a question in the `resolve` reply when it only matters to the
   conversation, or fold the answer into the document when it clarifies the
   model durably. A comment ending with `(from side thread t3:
   threads/t3.json)` was discussed in a side thread first: read that file
