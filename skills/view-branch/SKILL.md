@@ -74,7 +74,7 @@ kebab-case name of the branch):
 ```bash
 view-concept new "<title>" --slug <slug> --initial-request "<the message>" \
     --kind code --repo <repo root> --base <base branch> --workflow view-branch
-view-concept open <slug>          # starts the server if needed, opens the browser
+view-concept open <slug>          # starts the server if needed, shows the page
 ```
 
 The page runs side threads on the agent you are. Claude Code and Codex are

@@ -116,9 +116,20 @@ def cmd_open(a: argparse.Namespace) -> None:
     bind_agent(s, a)
     ensure_server()
     url = f"{_base_url()}/s/{a.slug}"
-    if not a.no_browser:
+    if not a.no_browser and not focus_page(a.slug):
         webbrowser.open(url)
     print(url)
+
+
+def focus_page(slug: str) -> bool:
+    """Show the session in a page already open in the browser, instead of a new tab.
+    False when no page is open."""
+    req = urllib.request.Request(f"{_base_url()}/api/focus/{slug}", method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=2) as r:
+            return json.loads(r.read()).get("pages", 0) > 0
+    except OSError:
+        return False
 
 
 def cmd_serve(a: argparse.Namespace) -> None:

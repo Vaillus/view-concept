@@ -12,6 +12,7 @@
 </head>
 <body>
 <header class="top">
+  <button id="sidebar-toggle" class="sb-toggle" title="Show or hide the sessions">☰</button>
   <a class="brand" href="/">view-concept</a>
   <span id="title" class="title"></span>
   <span id="phase" class="phase" hidden></span>
@@ -24,6 +25,8 @@
   <button id="unpublish" class="btn" hidden>Unpublish</button>
 </header>
 
+<div class="shell">
+<nav id="sidebar" class="sidebar"></nav>
 <main class="layout">
   <section class="workspace">
     <nav class="tabs">
@@ -70,6 +73,7 @@
     <button id="send" class="btn primary" disabled>Send</button>
   </aside>
 </main>
+</div>
 
 <div id="sel-actions" class="floating" hidden>
   <button class="btn primary comment">+ comment</button>
@@ -92,5 +96,6 @@
 
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
 <script defer src="/static/app.js"></script>
+<script defer src="/static/sidebar.js"></script>
 </body>
 </html>

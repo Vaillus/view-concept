@@ -10,6 +10,7 @@ from view_concept.store import (
     format_batch,
     format_changes,
     list_sessions,
+    project_of,
 )
 
 
@@ -713,3 +714,20 @@ def test_the_visible_text_of_an_html_section_counts_for_the_precedence_check(ord
              if p["issue"] == "early"}  # fmt: skip
     assert ("convex problem", "a") in early
     assert ordered.read_prose()["a"] == "a convex problem"
+
+
+def test_project_of_groups_worktrees_under_their_main_checkout(tmp_path):
+    import subprocess
+
+    main = tmp_path / "repo"
+    main.mkdir()
+    git = ["git", "-C", str(main), "-c", "user.email=a@b", "-c", "user.name=a"]
+    subprocess.run([*git, "init", "-q"], check=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "init"], check=True)
+    tree = main / ".claude" / "worktrees" / "feat"
+    subprocess.run([*git, "worktree", "add", "-q", str(tree)], check=True)
+    assert project_of(str(main.resolve())) == str(main.resolve())
+    assert project_of(str(tree.resolve())) == str(main.resolve())
+    # a removed worktree is cut at its worktrees folder
+    assert project_of("/gone/repo/.claude/worktrees/x") == "/gone/repo"
+    assert project_of("") == ""

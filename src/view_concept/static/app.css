@@ -307,8 +307,42 @@ a.cite:hover code { text-decoration: underline; }
 .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--raised);
          border: 1px solid var(--accent); padding: 6px 14px; z-index: 20; }
 
-/* ---- home page: the session list ---- */
-.home { max-width: 90ch; margin: 24px auto; padding: 0 16px; width: 100%; }
-.home a { display: flex; gap: 16px; padding: 6px 8px; text-decoration: none; color: var(--ink); border-bottom: 1px solid var(--line); }
-.home a:hover { background: var(--hover); }
-.home .t { flex: 1; }
+/* ---- sidebar: the sessions by project (sidebar.js), on every page ---- */
+.shell { flex: 1; display: flex; min-height: 0; }
+.shell > main { flex: 1; min-width: 0; }
+.sidebar { width: 260px; flex: none; border-right: 1px solid var(--line); overflow-y: auto; padding: 0 8px 16px; }
+body.sb-collapsed .sidebar { display: none; }
+.sb-toggle { background: none; border: 0; padding: 0 4px; color: var(--muted); }
+.sb-toggle:hover { color: var(--ink); }
+.sb-head { display: flex; align-items: baseline; justify-content: space-between; position: sticky; top: 0; background: var(--bg); z-index: 1; }
+.sb-head .pane-head { border: 0; margin: 0; }
+.sb-project { display: flex; align-items: center; margin-top: 14px; padding: 2px 4px; color: var(--muted); font-size: 11px;
+              text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid var(--line); }
+.sb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-add { background: none; border: 0; padding: 0 4px; color: var(--muted); font-size: 14px; }
+.sb-add:hover { color: var(--accent); }
+.sb-item { display: flex; align-items: baseline; gap: 6px; padding: 3px 4px; text-decoration: none; color: var(--ink-dim); font-size: 13px; }
+.sb-item:hover { background: var(--hover); color: var(--ink); }
+.sb-item.current { background: var(--accentbg); color: var(--accent); }
+.sb-item .badge { margin-left: 0; }
+.sb-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-when { font-size: 11px; flex: none; }
+.sb-dot::before { content: "○"; font-size: 9px; color: var(--dim); }
+.sb-dot.on::before { content: "●"; color: var(--ok); }
+.sb-empty { padding: 8px 4px; }
+
+/* the new-feature dialog */
+.launcher { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-start; justify-content: center;
+            padding: 12vh 16px 0; background: color-mix(in srgb, var(--bg) 60%, transparent); }
+.launcher-box { width: min(560px, 100%); background: var(--bg); border: 1px solid var(--accent); padding: 0 12px 12px;
+                display: flex; flex-direction: column; gap: 4px; }
+.launcher label { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.launcher label.check { display: flex; gap: 6px; align-items: center; color: var(--ink-dim); }
+.field { font: inherit; color: var(--ink); background: var(--raised); border: 1px solid var(--line); padding: 4px 8px; width: 100%; }
+.field:focus { outline: none; border-color: var(--accent); }
+.field:disabled { opacity: .45; }
+.launcher .error { margin: 6px 0 0; font-size: 12px; }
+.launcher .composer-actions { margin-top: 10px; }
+
+/* ---- home page: no session open ---- */
+.home { display: flex; align-items: center; justify-content: center; }

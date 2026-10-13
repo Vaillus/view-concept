@@ -141,9 +141,11 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import unicodedata
 from datetime import UTC, date, datetime
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -1391,10 +1393,39 @@ def list_sessions(root: Path | None = None) -> list[dict[str, Any]]:
                 "updated": datetime.fromtimestamp(mtime / 1e9, UTC).isoformat(timespec="seconds"),
                 "pending": pending,
                 "kind": plan.get("kind", "explanation"),
+                "workflow": plan.get("workflow", ""),
                 "repo": plan.get("repo", ""),
+                "project": project_of(plan.get("repo", "")),
+                "listening": s.is_listening(),
             }
         )
     return sorted(out, key=lambda r: r["updated"], reverse=True)
+
+
+# Where Claude Code puts the worktrees it creates (`claude -w`), under the main checkout.
+WORKTREES_DIR = "/.claude/worktrees/"
+
+
+@cache
+def project_of(repo: str) -> str:
+    """The project a session's repo belongs to: the main checkout of its git repository,
+    so the sessions of every worktree of a repository group together. "" for a session
+    with no repo (an explanation). A repo that no longer exists (a removed worktree) is
+    cut at its worktrees folder, else kept as is."""
+    if not repo:
+        return ""
+    try:
+        common = subprocess.run(
+            ["git", "-C", repo, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        common = ""
+    if common.endswith("/.git"):
+        return common.removesuffix("/.git")
+    return repo.split(WORKTREES_DIR, 1)[0]
 
 
 def _stat_signature(paths: list[Path]) -> tuple:
