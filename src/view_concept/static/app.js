@@ -1343,18 +1343,20 @@ function questionCard(q) {
   return card;
 }
 
-/* A pause: in a branch review, the writer stops after a section whose questions are open
-   (a box shows at the end of a written section) while sections of the modeling part are
-   left to write. « Go on » ends it without answering: a batch whose action is "go-on",
-   after which the writer writes the next sections and the pause's questions stay open.
+/* A pause: in a branch review, the writer stops after a section that opened questions while
+   sections of the modeling part are left to write, and the coordinator sets the phase
+   awaiting-answer. The page reads the pause from that phase, not from the open questions: a
+   question left open by an earlier « Go on » still sits at the end of a written section
+   while the writer writes on. « Go on » ends the pause without answering: a batch whose
+   action is "go-on", after which the writer writes the next sections and the pause's
+   questions stay open; the writer's next status ends the phase, and the button with it.
    It shows under the paused section's boxes and in the scope block, in place of
    « Rewrite model » (which would skip those questions and start a rewrite). Once every
    section is written there is no pause: a question still open holds back « Approve model »,
    as any open question does. */
 function paused() {
-  if (state.workflow !== "view-branch" || goOnPending()) return false;
-  const left = (state.plan.outline || []).some((s) => !isRefactorSection(s) && !(s.id in state.sections));
-  return left && openQuestions().some(atSection);
+  if (state.workflow !== "view-branch" || state.status.phase !== "awaiting-answer" || goOnPending()) return false;
+  return (state.plan.outline || []).some((s) => !isRefactorSection(s) && !(s.id in state.sections));
 }
 
 // A « go-on » batch sent since the status last moved: the writer is going on.
