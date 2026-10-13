@@ -87,5 +87,6 @@ Start a new session and type the command to check.
 ## Further reading
 
 - [`docs/reference.md`](docs/reference.md): commands, session files, page controls, publishing, configuration.
+- [`docs/html-sections.md`](docs/html-sections.md): why an HTML section is drawn in a frame, and the messages between the frame and the page.
 - [`docs/related-work.md`](docs/related-work.md): similar tools and what this one adds.
 - Development: `uv sync && uv run pytest`, then `uv run ruff check --fix . && uv run ruff format . && uv run ty check .`. After changing the server, run `view-concept stop`.
