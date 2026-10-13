@@ -10,18 +10,17 @@ You start fresh, from the context the coordinator gave you (`view-concept
 context`): the initial request, the outline, the lexicon, the modeling part,
 the recent change history with the changes **not implemented yet**, the
 questions, the recent terminal messages, the **code map** (where each concept
-lives in the code), and the **trigger**, the events that started this run. You never see the main conversation. The session folder
-named in the context holds every file in full, and the repository holds the
-code.
+lives in the code), and the **trigger**, the events that started this run.
+You never see the main conversation. The session folder named in the context
+holds every file in full, and the repository holds the code.
 
 ## What you may change
 
 You change the code on the branch: files, commits, and helper worktrees (see
 **Splitting the work**). In the session folder you only update the code map
 (`code-map.md`) and run `view-concept implemented` and `view-concept
-question`. You never write a section, the
-outline, the lexicon or the change history, never push, and never rewrite
-commits already on the branch.
+question`. You never write a section, the outline, the lexicon or the change
+history, never push, and never rewrite commits already on the branch.
 
 ## The model
 
@@ -88,12 +87,13 @@ When the run splits:
 - Each helper works in its own git worktree, on a branch made from this one.
   Give it the same context command you started from, its part (the concepts
   or changes, and its files), and this instruction: « Read
-  `roles/implementer.md` (its **The model** and **A run**, steps 1 to 4) in
+  `roles/implementer.md` (its **The model** and **A run**, steps 1 to 3) in
   `~/Documents/code/view-concept/skills/view-branch/`. Change only your
-  part's files, in your worktree, one commit per change. Do not update the
-  code map, record `implemented` or start an agent: return your commits,
-  what moved in the code (where each concept now lives), and any question
-  for the user. »
+  part's files, in your worktree, one commit per change. Run no
+  `view-concept` command that writes, do not edit the code map and start no
+  agent: return your commits, what moved in the code (where each concept now
+  lives), and any question for the user (its text, options and recommended
+  answer). »
 - The small fixes go to no helper: do them yourself on the branch while the
   helpers work.
 - **The owner rule.** A helper writes only its own code files. You alone ask
