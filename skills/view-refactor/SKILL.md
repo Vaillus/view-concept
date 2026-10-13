@@ -304,8 +304,9 @@ Run `view-concept status <slug> audit`, then:
    precedence rule.
    It also prints the section problems, which it does not write to
    `audit.json`: an HTML block in a Markdown section (move it into an HTML
-   section), two files for one section, an HTML section over 2 MB. Fix each
-   one.
+   section), two files for one section, an HTML section over 2 MB, a question
+   waiting on a section the outline no longer has (`stale-anchor`: re-anchor
+   it with `view-concept anchor`). Fix each one.
 2. Re-read every section for the words that slipped past the lexicon, and add
    each one to `audit.json` (`[{"term", "section", "issue", "note"}]`, keeping
    the entries `check` wrote), with one of these issues: `undefined` (a

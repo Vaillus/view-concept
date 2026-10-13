@@ -110,7 +110,7 @@ A section may be written as an **HTML section**: `sections/<id>.html` instead of
 
 The lexicon catches the terms you planned to use; the audit catches the terms you used without noticing. Run `view-concept status <slug> audit`, then:
 
-1. Run `view-concept check <slug>`. It writes every forward reference and early use to `audit.json` (issues `forward` and `early`). Fix each one by the precedence rule: reorder the outline, or say the idea in plain words. It also prints the section problems, which it does not write to `audit.json`: an HTML block in a Markdown section (move it into an HTML section), two files for one section, an HTML section over 2 MB. Fix each one.
+1. Run `view-concept check <slug>`. It writes every forward reference and early use to `audit.json` (issues `forward` and `early`). Fix each one by the precedence rule: reorder the outline, or say the idea in plain words. It also prints the section problems, which it does not write to `audit.json`: an HTML block in a Markdown section (move it into an HTML section), two files for one section, an HTML section over 2 MB, a question waiting on a section the outline no longer has (`stale-anchor`: re-anchor it with `view-concept anchor` to the section that now explains what it needs). Fix each one.
 2. Re-read the finished text for the terms that slipped past the lexicon, and add each one to `audit.json`, keeping the entries `check` wrote, with one of these issues:
    - `undefined`: a domain term absent from the lexicon, which a reader outside the project would need defined;
    - `metaphor`: a word such as « bridge » or « funnel » that names an intuition instead of the mechanism;
