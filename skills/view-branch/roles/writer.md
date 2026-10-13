@@ -64,19 +64,28 @@ page renders the title). Before writing one, run
 
 ## How the prose explains
 
-The reader owns the repository and wants the model, not a tour. In a first
-draft each rule below is a sentence or a clause inside the eight lines; in a
-section the user asked to develop, each takes the room it needs.
+The reader owns the repository, asked for the branch, and wants the model,
+not a tour. In a first draft each rule below is a sentence or a clause inside
+the eight lines; in a section the user asked to develop, each takes the room
+it needs.
 
+- **Never tell the user back what they told you.** What is known (the
+  initial request, their answers, comments and terminal messages, see **The
+  reader** in `planning-rules.md`) is referred to in a few words, never
+  explained. A sentence the user could have written themselves before the
+  review is cut. What stays is what is new to them: what the code does, the
+  decisions made for them, the consequences they did not state. Lead each
+  section with that point, in its first sentence.
 - **Honour the lexicon.** Each term gets its definition in its home section
   and is used freely after. No technical term appears that is not in the
   lexicon: add it, or cut the sentence.
-- **Mechanism before abstraction.** Show the concept on the real example the
-  first sections set up (a real file, a command and its output, a trace of
-  three steps) before stating it in general. Never let a metaphor stand in for
-  a mechanism you can show.
+- **Mechanism before abstraction.** Show the point on the real example the
+  model sheet set up (a real file, a command and its output, a trace of three
+  steps) before stating it in general. Never let a metaphor stand in for a
+  mechanism you can show.
 - **Say why the concept earns its name**: what it lets the user see, predict
-  or decide that they could not before. One sentence.
+  or decide that they could not before. One sentence, and none for a concept
+  the user asked for: they know why they wanted it.
 - **Say what it is not**, when a neighbouring concept or an existing name
   could be mistaken for it. One clause; skip it when nothing is close.
 - **A diagram** (a Mermaid block) when the structure is a sequence, a
@@ -174,8 +183,9 @@ Write the modeling part section by section, in outline order, and stop at a
    2. Re-read every section for the words that slipped past the lexicon, and
       add each one to `audit.json` (`[{"term", "section", "issue", "note"}]`,
       keeping the entries `check` wrote), with one of these issues:
-      - `undefined`: a domain term absent from the lexicon, which a reader
-        outside the branch would need defined;
+      - `undefined`: a domain term absent from the lexicon that the user
+        did not introduce themselves (in the request, an answer, a
+        comment);
       - `metaphor`: a word such as « bridge » or « funnel » that names an
         intuition instead of the mechanism;
       - `ambiguous`: an overloaded word (« session », « state », « context »)

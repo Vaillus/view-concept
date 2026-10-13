@@ -37,6 +37,12 @@ the concept behind it is what the row stands for (« an item is one unit of the
 diff that gets a verdict »). Name the concept; name the part only to say
 where it lives.
 
+The model is written for the user, who asked for the branch: it never tells
+them back what they stated, and spends its text on what is new to them (what
+the code does that they did not say, the decisions made for them, the
+consequences). Its first section, the **model sheet**, holds the whole model
+on one screen: a before/after and a table of the concepts.
+
 In the page, the model is the outline and the lexicon of `plan.json` (one
 entry per concept, `definition` + `tip`), and the **modeling part** of the
 review: the sections that write the model out, which the page shows in the

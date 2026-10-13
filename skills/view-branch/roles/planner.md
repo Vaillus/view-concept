@@ -39,12 +39,17 @@ Follow `planning-rules.md` for everything you write.
    Note what the diff does that the PR does not say, and the reverse; a doc
    that is missing or that the code contradicts. Both go into the outline as
    findings.
+   Then sort what you found against the request (see **The reader** in
+   `planning-rules.md`): what the user stated is known and goes in the model
+   sheet in a few words; each finding, decision made for them and
+   consequence gets its own section.
 2. Write the outline and the lexicon with `view-concept plan`, as
    `planning-rules.md` says (`definition` only: the writer adds the `tip`).
 3. Log one change: « first draft », `--by planner`.
 4. Ask the first questions: what is in and out of the feature, which design,
-   which constraints, and whatever the draft left open. Each design question
-   carries its background, as `planning-rules.md` says.
+   which constraints, and whatever the draft left open, leaving out what the
+   request already settles. Each design question carries its background, as
+   `planning-rules.md` says.
 
 ## A later run (a trigger)
 

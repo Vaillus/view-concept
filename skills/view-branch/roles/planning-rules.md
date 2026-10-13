@@ -17,10 +17,28 @@ The model starts from the concepts the repo's docs already define; the
 modeling part covers only what the branch adds or changes.
 
 A branch with no diff yet (the design comes first, the code after) still gets
-a model: the proposed one. Say so in the proposal section, and mark each
-concept you propose yourself, as opposed to one the user asked for, so the
-user reads the modeling part as a proposal to approve, not a description to
-check.
+a model: the proposed one. Say so in the model sheet, and mark each concept
+you propose yourself, as opposed to one the user asked for, so the user reads
+the modeling part as a proposal to approve, not a description to check.
+
+## The reader
+
+The reader is the user, who asked for the branch. What they stated is
+**known**: the initial request, their answers, their comments, the terminal
+messages. Never explain back what is known: refer to it in a few words
+(« the deferred status you asked for ») and spend the text on what is
+**new to the user**:
+
+- a **finding**: the code does something the user did not say, or does not
+  do what they said; a doc that is missing or that the code contradicts;
+- a **decision made for them**: a choice the request left open that the
+  branch or an agent settled, a default taken on a skipped question;
+- a **consequence**: what the change does to a concept that existed before,
+  an edge case, an interaction between two concepts, a name that clashes.
+
+When the request says little (« review my branch »), the branch itself is
+what is new: the concepts are, but the problems the user gave as the reason
+for the branch still are not.
 
 ## Writing the outline and the lexicon
 
@@ -43,28 +61,30 @@ a lexicon entry whose section is not in the outline.
 The outline (`outline` in `plan.json`, one entry `{"id", "title", "earns"}`
 per section, `earns` saying what the section gives the reader: one point,
 which the reader should get quickly; an `earns` that names two points is two
-sections) follows this fixed skeleton:
+sections) follows this skeleton:
 
-1. **Today.** What the user works with before the branch, shown on a real
-   example: an existing session, a real file, a command and its output. No
-   new concept yet; only the vocabulary the code already has.
-2. **What goes wrong.** The problems the example shows, in the user's terms:
-   what they cannot do, what breaks, what is confusing. Each concept later
-   answers one of them; a concept that answers none is a finding.
-3. **The proposal.** What the branch changes, shown on the same example after
-   the change: a mockup of the page or the output, or a before/after Mermaid
-   diagram. Say what the branch does not do. When the branch has no diff yet,
-   say here that the model is a proposal.
-4. **One section per concept** it introduces or changes: what it is, its
-   rules, where it is implemented. Concepts in the order they depend on each
-   other, starting from the one the others are defined by. Names that clash
-   with existing ones are said here.
-5. **Further directions.** The last section: about three ways to push the
+1. **The model sheet.** The whole model on one screen, the section the user
+   keeps in mind while the code changes: one line on what the branch is for
+   (a reference to the request, not a retelling), a before/after of the
+   example the request is about (a mockup of the page or the output, or a
+   Mermaid diagram), and a table of the concepts, one row each: the concept,
+   its rule, its relation to what existed before, and whether it is new or
+   changed. Say what the branch does not do. When the branch has no diff
+   yet, say here that the model is a proposal.
+2. **One section per point new to the user** (see **The reader**): a
+   finding, a decision made for them, a consequence. Its title states the
+   point (« Write model drops a section question before its section
+   exists »), not the topic. Order them by the concepts they touch, in the
+   order of the table.
+3. **A section per concept only when the table cannot carry it**: its rules
+   do not fit a row, and the user did not state them. A concept the user
+   named and described gets none: its row is enough.
+4. **Further directions.** The last section: about three ways to push the
    concepts further, each marked « fits this PR » or « follow-up ».
 
-The order is fixed: the user reads the concepts after seeing what they are
-for. A concept-first modeling part, with no picture of the result, was too
-abstract to discuss.
+A « Today » or « What goes wrong » section is written only when the request
+does not state them, and then before the model sheet: the user does not need
+their own problem told back to them.
 
 Section ids are stable: when you reorder, keep each section's id and change
 its position. The page anchors the user's comments to ids.
@@ -76,7 +96,9 @@ One entry per concept in `lexicon` of `plan.json`:
 **home section**, the one that introduces it. The `definition` is one line;
 the `tip` (written with the section's prose, by the writer) is the hover text.
 Write both for someone who has read the sections in order up to the home
-section and nothing after.
+section and nothing after. The home section of a concept in the table is the
+model sheet; a term the user introduced keeps its definition to one line in
+their own words.
 
 **The precedence rule.** Every text about a term (its introducing prose, its
 `definition`, its `tip`) uses only terms whose home section is at or before
@@ -123,7 +145,7 @@ prerequisite. Ask every question you judge
 relevant, the frontier first (those whose answer depends on no other open
 question), each with `--recommended` when you have a suggestion. A question
 the code, the session files or a command can answer is not a question for the
-user: look it up. Never ask again a question the context lists, open,
+user: look it up, and so is one the request already settles. Never ask again a question the context lists, open,
 deferred, answered or skipped. A skipped question means: use your default.
 
 **A design question carries its background.** A design question chooses
