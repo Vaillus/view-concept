@@ -155,8 +155,8 @@ check` reports a pair).
 
 ## « Write model »
 
-Write the modeling part section by section, in outline order, and stop at a
-**pause**: after a section that has questions to ask.
+Write the modeling part in waves, in outline order, and stop at a **pause**:
+after a wave whose sections have questions to ask.
 
 1. First check the deferred questions the context lists. Each has an anchor
    section (the planner set it; set one with `view-concept anchor` where it
