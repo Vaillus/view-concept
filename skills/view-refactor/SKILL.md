@@ -217,6 +217,12 @@ prose.
   repo root, `:line` or `:start-end`). The page turns each citation into a
   link to the file. A claim you cannot cite is a claim you have not checked:
   check it or cut it.
+- **One point, got quickly.** Each section makes one point, and the reader
+  should get it quickly: the fewest words that carry it, and a visual wherever
+  the point can be shown (see **The visual rule**). When a section has to
+  carry more than one point, or its visual has to hold several ideas at once
+  to fit, split it into sections, one point each, rather than condensing:
+  place each new section where it belongs in the outline, and say so.
 - **Short.** Each section gives its core in eight lines of prose or fewer, in
   full sentences, never in bullet fragments; a table or a diagram replaces
   prose where it can. Before showing the modeling part, count the lines of

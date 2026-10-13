@@ -39,6 +39,12 @@ page renders the title). Before writing one, run
   to judge the model: a threshold, a format, a name the branch changes. Most
   sections cite no line. Still check every claim against the code before
   writing it: an unchecked claim is cut, cited or not.
+- **One point, got quickly.** Each section makes one point, and the reader
+  should get it quickly: the fewest words that carry it, and a visual wherever
+  the point can be shown (see **The visual rule**). When a section has to
+  carry more than one point, or its visual has to hold several ideas at once
+  to fit, split it into sections, one point each, rather than condensing:
+  place each new section where it belongs in the outline, and say so.
 - **A short first draft.** The first draft (« Write model ») is read to
   discuss the concepts, not to check them: each section gives its core in
   three to eight lines of prose, with an HTML section where it has something

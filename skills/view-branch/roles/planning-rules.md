@@ -41,8 +41,9 @@ a lexicon entry whose section is not in the outline.
 ## The outline
 
 The outline (`outline` in `plan.json`, one entry `{"id", "title", "earns"}`
-per section, `earns` saying what the section gives the reader) follows this
-fixed skeleton:
+per section, `earns` saying what the section gives the reader: one point,
+which the reader should get quickly; an `earns` that names two points is two
+sections) follows this fixed skeleton:
 
 1. **Today.** What the user works with before the branch, shown on a real
    example: an existing session, a real file, a command and its output. No

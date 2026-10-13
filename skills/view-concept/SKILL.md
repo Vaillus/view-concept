@@ -83,6 +83,7 @@ Write each section to `sections/<id>.md`, in outline order, running `view-concep
 
 The rules below scale with the level and the goal of Phase 1: at a beginner level several shrink to a clause or disappear; at a practitioner level they expand. Applying every rule at full size regardless of the reader is what turns a short answer into a tour.
 
+- **One point, got quickly.** Each section makes one point, and the reader should get it quickly: the fewest words that carry it at the user's level, and a visual wherever the point can be shown (see **The visual rule**). When a section has to carry more than one point, or its visual has to hold several ideas at once to fit, split it into sections, one point each, rather than condensing: revise the plan to place each new section, and say so.
 - **Honour the lexicon.** Each term gets its definition at its declared section and is used freely after. No technical term appears that is not in the lexicon.
 - **Respect the level.** Below the depth the user needs, name the concept and move on.
 - **Mechanism over analogy**, where the mechanism can be shown: a worked three-step trace of an actual process beats « think of it like a conveyor belt ». Use an analogy only when the mechanism cannot be inspected.
