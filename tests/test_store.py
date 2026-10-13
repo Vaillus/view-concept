@@ -378,6 +378,50 @@ def test_question_with_a_recommended_answer(session):
     assert session.read_questions()[1]["recommended"] == "a PR"
 
 
+def test_unclear_defers_a_question_until_it_is_asked_again(session):
+    session.add_question("PR or merge?", ["a PR", "a merge"], recommended="a PR")
+    b = session.unclear_question("q1", " what is a merge here? ")
+    assert b["action"] == "answer"
+    assert b["answers"] == [{"question": "q1", "unclear": True, "note": "what is a merge here?"}]
+    (q,) = session.read_questions()
+    assert q["status"] == "deferred" and q["unclear"] == [
+        {"note": "what is a merge here?", "at": b["sent"]}
+    ]
+    with pytest.raises(SessionError, match="already deferred"):
+        session.answer_question("q1", ["a PR"])
+    session.add_batch([], action="plan")  # « Write model » leaves a deferred question alone
+    assert session.read_questions()[0]["status"] == "deferred"
+    session.anchor_question("q1", "s2")
+    with pytest.raises(SessionError, match="no section"):
+        session.anchor_question("q1", "s9")
+    session.write_status("writing", "s2")
+    q = session.reask_question("q1", background="A merge is …")
+    assert q["status"] == "open" and q["section"] == "s2" and q["background"] == "A merge is …"
+    assert q["text"] == "PR or merge?" and session.read_status()["phase"] == "awaiting-answer"
+    with pytest.raises(SessionError, match="not deferred"):
+        session.reask_question("q1")
+    session.answer_question("q1", ["a merge"])
+    assert session.read_questions()[0]["status"] == "answered"
+
+
+def test_a_question_may_carry_a_background_and_an_anchor_section(session):
+    q = session.add_question("Which?", background=" today: … ", section="s1")
+    assert q["background"] == "today: …" and q["section"] == "s1"
+    with pytest.raises(SessionError, match="no section"):
+        session.add_question("Which?", section="s9")
+
+
+def test_format_batch_says_an_unclear_answer(session):
+    session.add_question("PR or merge?")
+    b = session.unclear_question("q1", "what is a merge?")
+    text = format_batch("kv-cache", b, session.read_plan()["outline"], session.read_questions())
+    assert "action: answer (the user did not understand agent question q1 from the page)" in text
+    assert (
+        "q1 unclear « PR or merge? » (the user doesn't understand it yet: explain what it "
+        "needs, then ask it again): what is a merge?"
+    ) in text
+
+
 def test_skip_is_sent_as_a_batch(session):
     session.add_question("PR or merge?", ["a PR", "a merge"])
     b = session.skip_question("q1")

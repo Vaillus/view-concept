@@ -73,13 +73,21 @@ means no watch runs. The margin covers the seconds between a Monitor expiry and 
 An agent question is a question the agent puts to the user in the page rather than in the
 terminal: {id: q1…, text, options, multi (several options may be picked), recommended?
 (the answer the agent suggests: an option, which the page preselects, or a text it
-pre-fills), status: "open" | "answered" | "skipped", asked, answer?: {choices, text, at,
-from?}, skipped? (when)}. Asking one sets the phase "awaiting-answer", except during
-scoping: in the phase "scoping" the agent keeps asking without waiting, so the phase
-stays. The page shows each open one in the scope block at the top of the Plan tab. The
-user's answer reaches the session as a batch whose action is "answer", carrying
-`answers: [{question, choices, text}]`. A skipped question (the user leaves it to the
-agent's default) is sent the same way, its entry `{question, skipped: true}`. When the
+pre-fills), background? (what the user needs to know to answer: the mechanism as it is
+today, the trade-offs of each option; the page shows it folded under the question),
+section? (its anchor section: the section after which it is asked), status: "open" |
+"answered" | "skipped" | "deferred", asked, answer?: {choices, text, at, from?}, skipped?
+(when), unclear?: [{note, at}] (each « I don't understand »)}. Asking one sets the phase
+"awaiting-answer", except during scoping: in the phase "scoping" the agent keeps asking
+without waiting, so the phase stays. The page shows each open one in the scope block at
+the top of the Plan tab, or, when it has an anchor section that is written, at the end of
+that section. The user's answer reaches the session as a batch whose action is "answer",
+carrying `answers: [{question, choices, text}]`. A skipped question (the user leaves it to
+the agent's default) is sent the same way, its entry `{question, skipped: true}`. An
+unclear answer (« I don't understand »: the user cannot answer before the model explains
+what the question needs) too, its entry `{question, unclear: true, note}`: the question
+becomes "deferred", the agent anchors it to the section that will explain what it needs
+(`anchor`), and asks it again once that section is written (`reask`: deferred → open). When the
 user answers in the terminal instead, the agent runs `answered`: the question is marked
 answered with `from: "terminal"`, empty choices and the user's words as text, and no
 batch is sent, since the agent already has the answer; the phase is left to the agent.
@@ -87,7 +95,8 @@ batch is sent, since the agent already has the answer; the phase is left to the 
 Scoping ends when the user clicks « Write plan » (« Write model » in a branch review or
 a refactor): a batch whose action is "plan", after which
 every question still open is marked skipped (the agent treats them as skipped and writes
-the plan, or the model in a branch review). « Grill me » sends a batch whose action is
+the plan, or the model in a branch review). A deferred question stays deferred: it is asked
+again after its anchor section. « Grill me » sends a batch whose action is
 "grill" (the agent asks every open design decision as a question with a recommended
 answer, until none is left) and « Stop grill » one whose action is "stop-grill". A grill
 runs while the latest "grill" batch is not resolved (the agent resolves it with a reply
@@ -651,12 +660,17 @@ class Session:
         options: list[str] | None = None,
         multi: bool = False,
         recommended: str = "",
+        background: str = "",
+        section: str = "",
     ) -> dict[str, Any]:
         """Put an agent question to the user, and wait for the answer: the phase becomes
         "awaiting-answer". During scoping nothing waits: the phase stays "scoping".
-        `recommended` is the answer the agent suggests."""
+        `recommended` is the answer the agent suggests, `background` what the user needs to
+        know to answer, `section` the anchor section the page shows it after."""
         if not text.strip():
             raise SessionError("empty question")
+        if section:
+            self._check_section(section)
         questions = self.read_questions()
         q = {
             "id": f"q{len(questions) + 1}",
@@ -668,20 +682,33 @@ class Session:
         }
         if recommended.strip():
             q["recommended"] = recommended.strip()
+        if background.strip():
+            q["background"] = background.strip()
+        if section:
+            q["section"] = section
         questions.append(q)
         _write_json(self.questions_path, questions)
         if self.read_status().get("phase") != "scoping":
             self.write_status("awaiting-answer")
         return q
 
-    def _open_question(self, questions: list[dict[str, Any]], qid: str) -> dict[str, Any]:
-        """The open agent question `qid` of `questions`."""
+    def _question(self, questions: list[dict[str, Any]], qid: str) -> dict[str, Any]:
+        """The agent question `qid` of `questions`."""
         q = next((q for q in questions if q["id"] == qid), None)
         if q is None:
             raise SessionError(f"no question {qid!r}")
+        return q
+
+    def _open_question(self, questions: list[dict[str, Any]], qid: str) -> dict[str, Any]:
+        """The open agent question `qid` of `questions`."""
+        q = self._question(questions, qid)
         if q["status"] != "open":
             raise SessionError(f"{qid} is already {q['status']}")
         return q
+
+    def _check_section(self, section: str) -> None:
+        if section not in {s["id"] for s in self.read_plan().get("outline", [])}:
+            raise SessionError(f"no section {section!r} in the outline")
 
     def answer_question(self, qid: str, choices: list[str], text: str = "") -> dict[str, Any]:
         """Record the user's answer to an open agent question and send it at once, as a
@@ -727,6 +754,58 @@ class Session:
         q["skipped"] = batch["sent"]
         _write_json(self.questions_path, questions)
         return batch
+
+    def unclear_question(self, qid: str, note: str = "") -> dict[str, Any]:
+        """The user cannot answer an open agent question yet (« I don't understand »): the
+        model has to explain what it needs first. Sent at once, as an answer batch whose
+        entry is `{question, unclear: true, note}`; the question becomes "deferred" until
+        the agent asks it again (`reask`). Returns the batch."""
+        questions = self.read_questions()
+        q = self._open_question(questions, qid)
+        note = note.strip()
+        batch = self.add_batch(
+            [], action="answer", answers=[{"question": qid, "unclear": True, "note": note}]
+        )
+        q["status"] = "deferred"
+        q.setdefault("unclear", []).append({"note": note, "at": batch["sent"]})
+        _write_json(self.questions_path, questions)
+        return batch
+
+    def anchor_question(self, qid: str, section: str) -> dict[str, Any]:
+        """Set the anchor section of an open or deferred agent question: the section after
+        which it is asked. Returns the question."""
+        questions = self.read_questions()
+        q = self._question(questions, qid)
+        if q["status"] not in ("open", "deferred"):
+            raise SessionError(f"{qid} is already {q['status']}")
+        self._check_section(section)
+        q["section"] = section
+        _write_json(self.questions_path, questions)
+        return q
+
+    def reask_question(
+        self, qid: str, text: str = "", background: str = "", recommended: str = ""
+    ) -> dict[str, Any]:
+        """Ask a deferred agent question again, under the same id, once the model explains
+        what it needs: it is open again, with a new text, background or recommended answer
+        when given. The phase becomes "awaiting-answer", as when a question is asked.
+        Returns the question."""
+        questions = self.read_questions()
+        q = self._question(questions, qid)
+        if q["status"] != "deferred":
+            raise SessionError(f"{qid} is {q['status']}, not deferred")
+        q["status"] = "open"
+        if text.strip():
+            q["text"] = text.strip()
+        if background.strip():
+            q["background"] = background.strip()
+        if recommended.strip():
+            q["recommended"] = recommended.strip()
+        q["reasked"] = now_iso()
+        _write_json(self.questions_path, questions)
+        if self.read_status().get("phase") != "scoping":
+            self.write_status("awaiting-answer")
+        return q
 
     def read_seen(self, sections: dict[str, str]) -> dict[str, str]:
         """The highlight baseline of each section, recording the current text of any
@@ -894,10 +973,11 @@ class Session:
         approved the plan from the page, "approve-model" that they approved the model of a
         branch review (so the implementation starts), "create-pr" that they asked the agent to
         open the branch's PR once the refactoring is written, with the comments as last
-        corrections, "answer" that they answered or skipped agent questions (`answers`, see
-        `answer_question` and `skip_question`), "plan" that they ended scoping (every open
-        question is then marked skipped), "grill" that they started a grill and
-        "stop-grill" that they stopped it."""
+        corrections, "answer" that they answered, skipped or did not understand agent
+        questions (`answers`, see `answer_question`, `skip_question` and
+        `unclear_question`), "plan" that they ended scoping (every open question is then
+        marked skipped), "grill" that they started a grill and "stop-grill" that they
+        stopped it."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         if (action == "answer") != bool(answers):
@@ -943,7 +1023,8 @@ class Session:
         return batch
 
     def _skip_open_questions(self, at: str) -> None:
-        """Mark every open agent question skipped: scoping ended without their answers."""
+        """Mark every open agent question skipped: scoping ended without their answers. A
+        deferred question stays deferred: it is asked again after its anchor section."""
         questions = self.read_questions()
         open_ = [q for q in questions if q["status"] == "open"]
         for q in open_:
@@ -1336,13 +1417,26 @@ def format_batch(
         asked = {q["id"]: q["text"] for q in questions or []}
         answers = batch.get("answers", [])
         ids = ", ".join(a["question"] for a in answers)
-        verb = "skipped" if all(a.get("skipped") for a in answers) else "answered"
+        verb = (
+            "skipped"
+            if all(a.get("skipped") for a in answers)
+            else "did not understand"
+            if all(a.get("unclear") for a in answers)
+            else "answered"
+        )
         lines.append(f"action: answer (the user {verb} agent question {ids} from the page)")
         for a in answers:
             text = " ".join(asked.get(a["question"], "").split())
             quoted = f" « {text} »" if text else ""
             if a.get("skipped"):
                 lines.append(f"{a['question']} skipped{quoted} (no answer: use your default)")
+                continue
+            if a.get("unclear"):
+                note = f": {a['note']}" if a.get("note") else ""
+                lines.append(
+                    f"{a['question']} unclear{quoted} (the user doesn't understand it yet: "
+                    f"explain what it needs, then ask it again){note}"
+                )
                 continue
             parts = [", ".join(a.get("choices", [])), a.get("text", "")]
             answer = " — ".join(p for p in parts if p)

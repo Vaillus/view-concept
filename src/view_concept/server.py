@@ -264,6 +264,21 @@ def skip_question(slug: str, qid: str) -> dict[str, Any]:
         raise HTTPException(400, str(e)) from e
 
 
+class UnclearIn(BaseModel):
+    note: str = ""
+
+
+@app.post("/api/s/{slug}/questions/{qid}/unclear")
+def unclear_question(slug: str, qid: str, body: UnclearIn) -> dict[str, Any]:
+    """« I don't understand » an agent question: sent to the session at once, as an answer
+    batch; the question is deferred until the agent asks it again."""
+    s = get_session(slug)
+    try:
+        return s.unclear_question(qid, body.note)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 class ThreadIn(BaseModel):
     section: str = ""
     quote: str = ""

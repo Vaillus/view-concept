@@ -63,6 +63,16 @@ def test_api_skips_a_claude_question(client, session):
     assert client.post("/api/s/kv-cache/questions/q9/skip").status_code == 400
 
 
+def test_api_defers_an_unclear_question(client, session):
+    session.add_question("PR or merge?", ["PR", "merge"], recommended="PR")
+    url = "/api/s/kv-cache/questions/q1/unclear"
+    r = client.post(url, json={"note": "what is a merge?"})
+    assert r.status_code == 200
+    assert r.json()["answers"] == [{"question": "q1", "unclear": True, "note": "what is a merge?"}]
+    assert client.get("/api/s/kv-cache").json()["questions"][0]["status"] == "deferred"
+    assert client.post(url, json={}).status_code == 400
+
+
 def test_api_says_whether_a_grill_runs(client, session):
     assert client.get("/api/s/kv-cache").json()["grilling"] is False
     assert client.post("/api/s/kv-cache/batch", json={"action": "grill"}).status_code == 200

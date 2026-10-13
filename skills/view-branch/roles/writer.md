@@ -74,16 +74,17 @@ section the user asked to develop, each takes the room it needs.
 - **A diagram** (a Mermaid block) when the structure is a sequence, a
   containment or a before/after that prose serialises badly; never one that
   re-renders a list.
-- **A skipped question** left a default in the model: say in the section it
-  touches which default you took, so the user can correct it.
+- **A skipped question** left a default in the model: say which default you
+  took in one line at the end of the section it touches (« Default taken: … »),
+  so the user can correct it.
 - Write in the language of the initial request, technical terms as the code
   names them.
 - Name a section to the user by its number in words (« section 6 »), never
   by its id.
-- **Open on the subject.** A section starts with what it is about, never
-  with a question id, a side thread or a marker (« (q2) », « Asked for by
-  the user (q8) », « Proposed. »). Credit a decision to its question in the
-  middle of the text, where the decision is stated.
+- **No provenance in the prose.** A section is about the model, never about
+  how the model was decided: no question id, side thread or marker (« (q2) »,
+  « Asked for by the user (q8) », « Proposed. ») anywhere in its text. The
+  change history records which event caused each change (`--cause`).
 
 ## The visual rule: Markdown or HTML
 
@@ -128,32 +129,69 @@ check` reports a pair).
 
 ## « Write model »
 
-Write every section of the modeling part, in outline order. Then audit
-what you wrote:
+Write the modeling part section by section, in outline order, and stop at a
+**pause**: after a section that has questions to ask.
 
-1. Run `view-concept check <slug>` and fix each forward reference and early
-   use it lists by the precedence rule: reorder the outline or say the idea in
-   plain words.
-   It also prints the section problems, which it does not write to
-   `audit.json`: an HTML block in a Markdown section (move it into an HTML
-   section), two files for one section, an HTML section over 2 MB. Fix each
-   one.
-2. Re-read every section for the words that slipped past the lexicon, and add
-   each one to `audit.json` (`[{"term", "section", "issue", "note"}]`, keeping
-   the entries `check` wrote), with one of these issues:
-   - `undefined`: a domain term absent from the lexicon, which a reader
-     outside the branch would need defined;
-   - `metaphor`: a word such as « bridge » or « funnel » that names an
-     intuition instead of the mechanism;
-   - `ambiguous`: an overloaded word (« session », « state », « context »)
-     whose meaning here depends on context the reader may not share;
-   - `assumes-context`: a bare reference (« the config », « the pipeline »)
-     to something the text has not introduced.
+1. First check the deferred questions the context lists. Each has an anchor
+   section (the planner set it; set one with `view-concept anchor` where it
+   is missing), and the anchor section's prerequisites come before it. Move
+   sections when they do not, and log the move.
+2. Write the next unwritten section. Then look at what it opens:
+   - a deferred question anchored to it: ask it again, under the same id,
+     with `view-concept reask <slug> <qid> --background "<…>"`, the
+     background now pointing to what the section explains;
+   - a decision the section makes answerable that nobody asked yet: ask it as
+     a section question (`view-concept question … --section <id>`), with its
+     background.
 
-   Do not fix these yourself: the page underlines each one, and the user
-   answers by commenting on it. Fix the ones the user agrees on, in a later
-   run, by the precise term, an inline definition or a disambiguating clause,
-   and update the lexicon to match.
+   When the section opened a question, stop: write nothing further, and
+   report the pause (« paused after section 4, 2 questions »). Otherwise
+   write the next section, until none is left.
+3. When every section is written, audit what you wrote:
+
+   1. Run `view-concept check <slug>` and fix each forward reference and
+      early use it lists by the precedence rule: reorder the outline or say
+      the idea in plain words.
+      It also prints the section problems, which it does not write to
+      `audit.json`: an HTML block in a Markdown section (move it into an HTML
+      section), two files for one section, an HTML section over 2 MB. Fix
+      each one.
+   2. Re-read every section for the words that slipped past the lexicon, and
+      add each one to `audit.json` (`[{"term", "section", "issue", "note"}]`,
+      keeping the entries `check` wrote), with one of these issues:
+      - `undefined`: a domain term absent from the lexicon, which a reader
+        outside the branch would need defined;
+      - `metaphor`: a word such as « bridge » or « funnel » that names an
+        intuition instead of the mechanism;
+      - `ambiguous`: an overloaded word (« session », « state », « context »)
+        whose meaning here depends on context the reader may not share;
+      - `assumes-context`: a bare reference (« the config », « the
+        pipeline ») to something the text has not introduced.
+
+      Do not fix these yourself: the page underlines each one, and the user
+      answers by commenting on it. Fix the ones the user agrees on, in a
+      later run, by the precise term, an inline definition or a
+      disambiguating clause, and update the lexicon to match.
+
+## After a pause
+
+A run whose trigger holds answers to the questions of a pause (or comments
+on the sections written so far):
+
+- **An answer** settles its decision. When it contradicts a section already
+  written, rewrite that section in the same run, and log the change of the
+  model. Then go on writing from the next unwritten section, with the same
+  pauses, as « Write model » says.
+- **An unclear answer** to a question asked again: the anchor section did not
+  explain enough. Develop it once (its « develop when asked » rule), with what
+  the note says is missing, and ask the question again. A second unclear
+  answer after that takes the recommended answer: say so in the section's
+  « Default taken » line, and go on.
+- **A skip** takes the recommended answer, the same way.
+- A pause question left open does not block the next sections when the user
+  sends comments only: answer the comments, and go on writing only when the
+  trigger answers, skips or defers every question of the pause, or the user
+  says to go on.
 
 ## A later run
 
@@ -180,6 +218,9 @@ The trigger holds comments, answers, terminal messages, or « Rewrite model »
   `view-concept resolve <slug> <ids> --reply "<one line: what changed>"`.
   Leave a comment open while its discussion is still going.
 - Ask the questions a change raises, as `planning-rules.md` says.
+- **An unclear answer** to a question asked after the model is written:
+  develop the section it is about (or add the section it needs) and ask it
+  again, as after a pause.
 
 ## Report
 

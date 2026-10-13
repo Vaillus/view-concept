@@ -58,6 +58,8 @@ fixed skeleton:
    rules, where it is implemented. Concepts in the order they depend on each
    other, starting from the one the others are defined by. Names that clash
    with existing ones are said here.
+5. **Further directions.** The last section: about three ways to push the
+   concepts further, each marked « fits this PR » or « follow-up ».
 
 The order is fixed: the user reads the concepts after seeing what they are
 for. A concept-first modeling part, with no picture of the result, was too
@@ -109,7 +111,8 @@ change you make on your own judgment.
 Every question you put to the user goes to the page:
 
 ```bash
-view-concept question <slug> "<question>" [--option "<choice>" ...] [--multi] [--recommended "<answer>"]
+view-concept question <slug> "<question>" [--option "<choice>" ...] [--multi] \
+    [--recommended "<answer>"] [--background "<text>"] [--section <id>]
 ```
 
 Never ask in the terminal: you do not have one. The user owns the
@@ -119,9 +122,55 @@ prerequisite. Ask every question you judge
 relevant, the frontier first (those whose answer depends on no other open
 question), each with `--recommended` when you have a suggestion. A question
 the code, the session files or a command can answer is not a question for the
-user: look it up. Never ask again a question the context lists, open, answered
-or skipped. A skipped question means: use your default.
+user: look it up. Never ask again a question the context lists, open,
+deferred, answered or skipped. A skipped question means: use your default.
+
+**A design question carries its background.** A design question chooses
+between designs, as opposed to a fact you can look up. The user can only
+choose when they know the mechanism the choice changes and everything each
+option costs, so give both in `--background`, which the page shows folded
+under the question:
+
+- **Today**: the existing mechanism the question is about, in two or three
+  sentences, on a real example (a real session, a real file, a command and
+  its output). Never ask about a mechanism you have not described.
+- **Per option, what it keeps and what it loses.** When the choice touches an
+  area (of a page, a file format, a command), list every capability of that
+  area first, and say per option whether it is kept, lost, or could be
+  brought back and how. List them all in this one question: a cost that comes
+  out later turns one decision into several.
+
+The question's text stays one or two lines; the background holds the rest.
+
+**An unclear answer.** The user answers « I don't understand » when they
+cannot choose before the model explains what the question needs. It arrives
+as `q3 unclear « … » (…): <note>`, the note saying what is missing (it may be
+empty), and the question is now **deferred**. Do not ask it again during
+scoping. Instead:
+
+1. Make sure the outline explains what the note (or, without one, the
+   question's background) says is missing: extend the section that should
+   hold it, or add one where it belongs.
+2. Anchor the question to that section, the one after which it can be
+   answered: `view-concept anchor <slug> <qid> <section id>`. The
+   prerequisites of the anchor section come before it, by the precedence
+   rule.
+3. Log the change of the model, with the question as its cause.
+
+The writer asks it again after writing the anchor section.
+
+**A section question.** A decision only the model's explanation makes
+answerable may be asked at the end of the section that explains it: ask it
+with `--section <id>`. The page shows it at the end of that section once the
+section is written, and in the scope block until then. Ask a decision the
+user can answer from its background in scoping, without `--section`: an
+answer given early shapes the whole model.
+
+**Provenance stays out of the prose.** Which question or comment a decision
+came from is logged in the change history (`--cause`), not written into a
+section. A section never cites a question id.
 
 During a grill (the context says « A grill is running »), work the outline as
 a design tree: ask every decision whose prerequisites are settled, each with
-its recommended answer. When no decision is left, say so in your report.
+its recommended answer and its background. An unclear answer during a grill
+is deferred as in scoping. When no decision is left, say so in your report.

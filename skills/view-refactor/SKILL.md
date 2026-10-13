@@ -234,10 +234,10 @@ prose.
 - Write in the language of the initial request, technical terms as the code
   names them. Name a section to the user by its number in words
   (« section 6 »), never by its id (`s6`, `applied`) or `§6`.
-- **Open on the subject.** A section starts with what it is about, never
-  with a question id, a side thread or a marker (« (q2) », « Asked for by
-  the user (q8) », « Proposed. »). Credit a decision to its question in the
-  middle of the text, where the decision is stated.
+- **No provenance in the prose.** A section is about the code and its
+  verdict, never about how they were decided: no question id, side thread or
+  marker (« (q2) », « Asked for by the user (q8) », « Proposed. ») anywhere
+  in its text.
 
 ### The visual rule: Markdown or HTML
 
@@ -469,8 +469,10 @@ asks for what its name says and nothing else:
   then write the sections in the same turn.
 - **`answer`** is the user's answer to that agent question (`answer to q1
   « … »: <choices> — <text>`), or a skip (`q3 skipped « … » (no answer: use
-  your default)`): take your default and say which one in the section it
-  touches.
+  your default)`): take your default and say which one in one line at the
+  end of the section it touches. An unclear answer (`q4 unclear « … »
+  (…): <note>`) means the user cannot answer before the review explains what
+  the question needs: see **Agent questions**.
 - **`plan`** ends scoping (« Write model »). Once the outline exists, the
   button reads « Rewrite model » and the line says rewrite: revise the model
   with the answers given since, log each change of it, rewrite the sections
@@ -503,8 +505,21 @@ conversation stays in the terminal.
 Every question you put to the user once the session exists goes to the page:
 
 ```bash
-view-concept question <slug> "<question>" [--option "<choice>" --option "<choice>"] [--multi] [--recommended "<answer>"]
+view-concept question <slug> "<question>" [--option "<choice>" --option "<choice>"] [--multi] [--recommended "<answer>"] [--background "<text>"]
 ```
+
+`--background` gives what the user needs to know to answer, shown folded
+under the question: the code the question is about, as it is today, in two or
+three sentences on a real example, and, for a choice, what each option keeps
+and loses. Never ask about code the review has not described without it.
+
+The page adds « I don't understand » next to « Skip ». An unclear answer
+defers the question: do not ask it again now. Make sure a section explains
+what the note says is missing, anchor the question to it (`view-concept
+anchor <slug> <qid> <section id>`), and once that section is written, ask it
+again under the same id: `view-concept reask <slug> <qid> [--background
+"<…>"]`. The page then shows it at the end of that section. A second unclear
+answer takes your recommended answer, said at the end of the section.
 
 `--option` gives the choices (`--multi` lets the user pick several); the page
 always adds a free-text field. `--recommended` gives the answer you would

@@ -114,3 +114,15 @@ def test_an_html_section_is_given_by_its_visible_text(branch):
     text = build(branch, "writer")
     assert "### 2. The gate (s2) · HTML section, its visible text (sections/s2.html)" in text
     assert "The gate, drawn." in text and "<p>" not in text
+
+
+def test_deferred_questions_are_listed_with_their_note_and_anchor(session):
+    session.add_question("PR or merge?", ["PR", "merge"], recommended="PR")
+    session.unclear_question("q1", "what is a merge?")
+    session.anchor_question("q1", "s2")
+    text = build(session, "writer")
+    assert "Open: none" in text
+    assert (
+        "- q1 [deferred] PR or merge? (options: PR / merge) (recommended: PR) "
+        "(anchor section: s2) → unclear: what is a merge?"
+    ) in text
