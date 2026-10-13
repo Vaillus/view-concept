@@ -234,6 +234,10 @@ prose.
 - Write in the language of the initial request, technical terms as the code
   names them. Name a section to the user by its number in words
   (« section 6 »), never by its id (`s6`, `applied`) or `§6`.
+- **Open on the subject.** A section starts with what it is about, never
+  with a question id, a side thread or a marker (« (q2) », « Asked for by
+  the user (q8) », « Proposed. »). Credit a decision to its question in the
+  middle of the text, where the decision is stated.
 
 ### The visual rule: Markdown or HTML
 

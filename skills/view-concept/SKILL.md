@@ -91,6 +91,7 @@ The rules below scale with the level and the goal of Phase 1: at a beginner leve
 - **Close with one sentence** that compresses the whole. If you cannot write it, the explanation has not converged.
 - **A diagram** (a ```` ```mermaid ```` block, which the page renders) when the structure is a sequence, a containment or a gradient that prose serialises badly: one, placed where it is needed, with prose on both sides. Never one that re-renders a list.
 - **Language.** The language the user writes in; technical terms in the language the field uses for them.
+- **Open on the subject.** A section starts with what it is about, never with a question id, a side thread or a marker (« (q2) », « Asked for by the user (q8) », « Proposed. »). Credit a decision to its question in the middle of the text, where the decision is stated.
 
 Write each term's `tip` with the section that introduces it (see **Files you write**).
 
