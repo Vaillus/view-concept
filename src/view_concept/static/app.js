@@ -399,7 +399,7 @@ function sectionBlock(s, { bare = false } = {}) {
   if (written && state.sections[s.id].kind === "html") body.append(el("div", { class: "frame-slot", "data-frame": s.id }));
   else if (written) body.innerHTML = state.sections[s.id].html;
   else if (writingId() === s.id) body.append(el("p", { class: "writing-line", text: "writing" }));
-  const cls = ["sec", written ? "" : "unwritten", isUpdated(s.id) ? "updated" : "", bare ? "bare" : ""].join(" ");
+  const cls = ["sec", written ? "" : "unwritten", written && state.sections[s.id].kind === "html" ? "html" : "", isUpdated(s.id) ? "updated" : "", bare ? "bare" : ""].join(" ");
   return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
     el("h2", {},
       ...(bare ? [] : [el("span", { class: "num", text: numberOf(s.id) }), " ", s.title]),

@@ -96,8 +96,9 @@ def build(s: Session, folder: Path, published: date | None = None) -> None:
     blocks = []
     for sec in sections:
         body = _frame(s, sec, folder) if sec["html"] else assets.rewrite(md.render(sec["markdown"]))
+        cls = "sec html" if sec["html"] else "sec"
         blocks.append(
-            f'<section class="sec" id="sec-{html.escape(sec["id"])}">\n'
+            f'<section class="{cls}" id="sec-{html.escape(sec["id"])}">\n'
             f'<h2><span class="num">{sec["number"]}</span> {html.escape(sec["title"])}</h2>\n'
             f'<div class="body">\n{body}</div>\n</section>'
         )

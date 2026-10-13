@@ -324,6 +324,15 @@ check` reports a pair).
   `var(--info)`, `var(--alt)` and `var(--mono)` for the font: the frame
   receives them and follows the page's light or dark theme, so never hard-code
   a palette.
+- **Width.** The frame is wider than the text column of a Markdown section:
+  up to 120 characters of the page's font (about 1000px), narrower in a small
+  window. Lay figures out to use that width (two panels side by side, a long
+  timeline) and let them shrink with the frame. Prose keeps the page's text
+  width, and the frame sets it: write a paragraph, list or quote as `<p>`,
+  `<ul>`, `<ol>` or `<blockquote>` straight in the `<body>`, and a caption as
+  a `<figcaption>` (inside the `<figure>` it captions); the frame caps each at
+  78 characters and centres it, as in a Markdown section. Text in a `<div>` of
+  your own runs the frame's full width.
 - **Size.** Under 2 MB, embedded media included. Never write a large image or
   video into the file as a data URI: load it from the web or, when you
   produced it yourself (a manim render, a GIF), put it in the section's media

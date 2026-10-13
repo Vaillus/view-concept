@@ -6,25 +6,26 @@ an artifact. Its scripts run there, its styles apply only there, and neither it 
 page can reach into the other. The separation is between the section and the page only:
 the section may load from any site.
 
-The page does not serve the section's file as it is: it adds a short head, which
-defines the theme tokens (`tokens_css`) and loads static/frame.js. The theme tokens are
-the named colours of the page (--bg, --ink, --accent, --flag… of terminal.css) and its
-light or dark mode: a frame is a separate web page, where the page's names would mean
-nothing, so the head brings them, and the page tells the frame which theme it is in, at
-load and at every change of theme. A section paints with var(--ink) and matches the page
-without copying its palette. Where no page tells it, the section takes the page's default
-theme: Catppuccin Latte in light mode, Tokyo Night in dark mode. frame.js also tells the
-page the height of the section's content, which the frame takes, and brings passages
-back across the separation: the reader's selection goes to the page, which comments or
-asks on it as on a passage of a Markdown section; the page sends the passages its
-comments and side threads quote, which frame.js highlights, and a passage to reveal; a
-click on a side thread's passage goes to the page, which opens that thread. The page
-also sends the words added since the highlight baseline, found by comparing the file's
-visible text now and then, and the lexicon terms and audited words, which frame.js
-underlines by painting over the words, never wrapping them; the term under the pointer
-goes back to the page, which shows its tip. The published page and
-the vault note add the same head. Kept apart from the server so publishing and exporting
-do not import FastAPI.
+The page does not serve the section's file as it is: it adds a short head, which defines
+the theme tokens (`tokens_css`), keeps the prose written straight in the body and the
+figure captions to the page's text width, centred, and loads static/frame.js. The theme
+tokens are the named colours of the page (--bg, --ink, --accent, --flag… of
+terminal.css) and its light or dark mode: a frame is a separate web page, where the
+page's names would mean nothing, so the head brings them, and the page tells the frame
+which theme it is in, at load and at every change of theme. A section paints with
+var(--ink) and matches the page without copying its palette. Where no page tells it, the
+section takes the page's default theme: Catppuccin Latte in light mode, Tokyo Night in
+dark mode. frame.js also tells the page the height of the section's content, which the
+frame takes, and brings passages back across the separation: the reader's selection goes
+to the page, which comments or asks on it as on a passage of a Markdown section; the
+page sends the passages its comments and side threads quote, which frame.js highlights,
+and a passage to reveal; a click on a side thread's passage goes to the page, which
+opens that thread. The page also sends the words added since the highlight baseline,
+found by comparing the file's visible text now and then, and the lexicon terms and
+audited words, which frame.js underlines by painting over the words, never wrapping
+them; the term under the pointer goes back to the page, which shows its tip. The
+published page and the vault note add the same head. Kept apart from the server so
+publishing and exporting do not import FastAPI.
 """
 
 from __future__ import annotations
@@ -46,15 +47,27 @@ _DOCTYPE = re.compile(r"^\s*<!doctype\b[^>]*>", re.I)
 # The semantic layer of the omarchy skin: the first :root block of terminal.css.
 _TOKENS_BLOCK = re.compile(r"^:root \{.*?^\}", re.M | re.S)
 
+# The frame is wider than the page's text column, for the figures; the prose written
+# straight in the body, and every figure caption, keeps that column's width and is
+# centred on it, as the prose of a Markdown section. The centring is !important, since a
+# section's own `p { margin: … }` would undo it; the width has no weight (:where()), so a
+# section may widen its prose.
+_PROSE_CSS = (
+    "body > :where(p, ul, ol, blockquote, h3, h4), :where(figcaption) "
+    "{ max-width: 78ch; margin-left: auto !important; margin-right: auto !important; }\n"
+)
+
 
 def tokens_css() -> str:
     """The theme tokens: every theme's palette (themes.css) and the semantic names bound
-    onto it (the :root block of terminal.css), without the skin's styles."""
+    onto it (the :root block of terminal.css), without the skin's styles; and the width
+    of the section's prose."""
     terminal = (STATIC / "terminal.css").read_text(encoding="utf-8")
     m = _TOKENS_BLOCK.search(terminal)
     if not m:
         raise RuntimeError("terminal.css has no :root block of theme tokens")
-    return (STATIC / "themes.css").read_text(encoding="utf-8") + "\n" + m.group(0) + "\n"
+    themes = (STATIC / "themes.css").read_text(encoding="utf-8")
+    return themes + "\n" + m.group(0) + "\n" + _PROSE_CSS
 
 
 def frame_js() -> str:
