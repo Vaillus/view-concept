@@ -258,12 +258,19 @@ can load from the web. The extension alone says the kind; a section has one
 file, so delete the `.md` when you switch a section to HTML (`view-concept
 check` reports a pair).
 
-- **When.** Write a section as an HTML section when its visual needs its own
-  styles, behaviour (a step player, a slider, an animation) or a library (a
-  chart, d3). A diagram Mermaid can draw stays a ```` ```mermaid ```` block in
-  a Markdown section. Never write an HTML block (raw HTML that starts its own
-  paragraph) into a Markdown section: `view-concept check` reports it; inline
-  HTML in a sentence (`<b>`, `<span>`) is fine.
+- **When.** The user prefers to be shown rather than told: whenever a
+  section has something to show, write it as an HTML section. Something to
+  show is a mockup of a page or an output (the box as the user will see it), a
+  flow over time (a step player through a run), a state machine (a question
+  going from open to deferred to answered), a before/after, or a comparison
+  the reader can play with (two options side by side). Write a Markdown
+  section when the section is an argument, a definition or a rule, with at
+  most a small table: a visual that only repeats the prose is not relevant.
+  A Mermaid block is for a plain structure in an otherwise prose section (a
+  short sequence, a tree), not a substitute for showing the thing itself.
+  Never write an HTML block (raw HTML that starts its own paragraph) into a
+  Markdown section: `view-concept check` reports it; inline HTML in a
+  sentence (`<b>`, `<span>`) is fine.
 - **What the file holds.** One self-contained HTML document: its HTML, CSS and
   JavaScript in the file, no heading of its own (the page renders the title).
   Paint with the page's theme tokens, `var(--bg)`, `var(--ink)`,
