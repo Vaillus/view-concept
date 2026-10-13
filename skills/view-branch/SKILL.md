@@ -237,10 +237,11 @@ see a grill in their context.
 Keep the page's status true: `view-concept status <slug> scoping` from Setup
 to « Write model », and after each writer run `view-concept status <slug>
 awaiting-model` when no question it asked is open and every section of the
-modeling part is written (a writer paused on its questions leaves the phase
-`awaiting-answer`, and so does a question « Go on » left open, still open
-once every section is written: « Approve model » waits until each is
-answered, skipped or deferred). After « Approve model »,
+modeling part is written (a writer paused on its questions sets the phase
+`awaiting-answer`, which the page reads as the pause, as step 5 says; a
+question « Go on » left open, still open once every section is written,
+keeps that phase too: « Approve model » waits until each is answered,
+skipped or deferred). After « Approve model »,
 set `view-concept status <slug> awaiting-pr` at the end of each pass, when no
 question is open. The agents set `writing` themselves while they write a
 section.
@@ -329,7 +330,9 @@ check` reports a pair).
    after a section that has questions to ask (a deferred question anchored to
    it, a decision it makes answerable, or a section question still open and
    anchored to it): its report says « paused after
-   section N ». Say so in one terminal line and wait. The answers, skips and
+   section N ». Run `view-concept status <slug> awaiting-answer`, the phase
+   the page reads as the pause (it shows « Go on » only then), say so in one
+   terminal line and wait. The answers, skips and
    unclear answers go to the writer, which goes on writing from there. « Go
    on » ends a pause without answering: from the page (a batch with `action:
    go-on`, shown under the paused section's questions and in the scope block
