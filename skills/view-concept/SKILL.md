@@ -129,7 +129,7 @@ Run it before the first question, even when the request is already scoped: the s
 ```bash
 view-concept new "<title>" --slug <slug> --initial-request "<the user's request, verbatim>" \
     [--kind code --repo <repo root>]
-view-concept open <slug>          # starts the server if needed, opens the browser
+view-concept open <slug>          # starts the server if needed, shows the page
 ```
 
 The page runs side threads on the agent you are. Claude Code and Codex are detected; any other agent (Jazz, …) adds `--agent jazz --agent-name <your own agent name>` to `new` and to every later `open`.

@@ -59,7 +59,7 @@ The slug is a short kebab-case name of the scope.
 ```bash
 view-concept new "<title>" --slug <slug> --initial-request "<the user's request, verbatim>" \
     --kind code --repo <repo root> --workflow view-refactor
-view-concept open <slug>          # starts the server if needed, opens the browser
+view-concept open <slug>          # starts the server if needed, shows the page
 ```
 
 The workflow makes the page use view-refactor's verdicts. The page runs side

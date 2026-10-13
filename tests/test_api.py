@@ -301,3 +301,19 @@ def test_the_page_serves_an_html_sections_media_folder(client, session):
     (session.sections_dir / "s1").mkdir()
     (session.sections_dir / "s1" / "a.png").write_bytes(b"png")
     assert client.get("/s/kv-cache/sections/s1/a.png").status_code == 404  # not an HTML section
+
+
+def test_focus_counts_the_open_pages(client):
+    assert client.post("/api/focus/kv-cache").json() == {"pages": 0}
+    assert client.post("/api/focus/missing").status_code == 404
+
+
+def test_launch_opens_a_terminal_in_the_project(client, tmp_path, monkeypatch):
+    opened = []
+    monkeypatch.setattr(server.launch, "open_terminal", lambda *a: opened.append(a))
+    body = {"project": str(tmp_path), "request": "add a sidebar", "worktree": "Session sidebar"}
+    r = client.post("/api/launch", json=body)
+    assert r.json()["command"] == "claude -w session-sidebar '/view-branch add a sidebar'"
+    assert opened == [(str(tmp_path), r.json()["command"])]
+    r = client.post("/api/launch", json={**body, "skill": "explain"})
+    assert r.status_code == 400 and len(opened) == 1

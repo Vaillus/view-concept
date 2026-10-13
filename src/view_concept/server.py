@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import frame, publish, threads
+from . import frame, launch, publish, threads
 from .render import md
 from .store import Session, SessionError, list_sessions
 
@@ -61,6 +61,72 @@ def session_page(slug: str) -> FileResponse:
 @app.get("/api/sessions")
 def sessions() -> list[dict[str, Any]]:
     return list_sessions()
+
+
+# The open pages listening to the global event stream: one queue each, where `focus`
+# puts the session to show.
+_pages: set[asyncio.Queue[str]] = set()
+
+
+@app.get("/api/events")
+async def global_events(request: Request) -> StreamingResponse:
+    """What every open page hears, whatever session it shows: `sessions` when the session
+    list changed (the sidebar reloads it) and `focus` when a session should be shown."""
+    queue: asyncio.Queue[str] = asyncio.Queue()
+    _pages.add(queue)
+
+    async def stream():
+        try:
+            last = await asyncio.to_thread(list_sessions)
+            yield "event: hello\ndata: {}\n\n"
+            while not await request.is_disconnected():
+                try:
+                    slug = await asyncio.wait_for(queue.get(), 2)
+                    yield f"event: focus\ndata: {json.dumps({'slug': slug})}\n\n"
+                except TimeoutError:
+                    rows = await asyncio.to_thread(list_sessions)
+                    yield "event: sessions\ndata: {}\n\n" if rows != last else ": ping\n\n"
+                    last = rows
+        finally:
+            _pages.discard(queue)
+
+    return StreamingResponse(
+        stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"}
+    )
+
+
+@app.post("/api/focus/{slug}")
+async def focus(slug: str) -> dict[str, int]:
+    """Show session `slug` in the open pages (the last one the user was on takes it).
+    `pages` is how many were told: with none, `view-concept open` opens the browser."""
+    get_session(slug)
+    for queue in _pages:
+        queue.put_nowait(slug)
+    return {"pages": len(_pages)}
+
+
+class LaunchIn(BaseModel):
+    project: str
+    request: str
+    skill: str = launch.SKILLS[0]
+    worktree: str = ""
+
+
+@app.get("/api/skills")
+def skills() -> list[str]:
+    return list(launch.SKILLS)
+
+
+@app.post("/api/launch")
+def launch_session(body: LaunchIn) -> dict[str, str]:
+    """Start a new agent session in a project: a terminal window opens there and starts
+    Claude Code on the skill; the session shows in the page once the agent opens it."""
+    try:
+        line = launch.command(body.skill, body.request, body.worktree)
+        launch.open_terminal(body.project, line)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"command": line}
 
 
 @app.get("/api/s/{slug}")
