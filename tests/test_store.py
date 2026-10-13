@@ -171,14 +171,29 @@ def test_plan_batch_skips_the_open_questions(session):
     # The session already has a plan: the button asked for a rewrite.
     assert b["rewrite"] is True
     assert (
-        "action: plan (the user asked to rewrite the plan from the page: treat open "
-        "questions as skipped and revise the plan with the answers, or the model in a "
-        "branch review)"
+        "action: plan (the user asked to rewrite the plan from the page: open questions "
+        "are marked skipped, but a section question whose section is not written yet; "
+        "revise the plan with the answers, or the model in a branch review)"
     ) in format_batch("kv-cache", b, [])
     assert (
-        "action: plan (the user ended scoping from the page: treat open questions as "
-        "skipped and write the plan, or the model in a branch review)"
+        "action: plan (the user ended scoping from the page: open questions are marked "
+        "skipped, but a section question whose section is not written yet; write the "
+        "plan, or the model in a branch review)"
     ) in format_batch("kv-cache", {**b, "rewrite": False}, [])
+
+
+def test_plan_batch_keeps_a_section_question_open_until_its_section_is_written(session):
+    plan = session.read_plan()
+    plan["outline"].append({"id": "s3", "title": "Eviction"})
+    session.plan_path.write_text(json.dumps(plan))
+    session.write_status("scoping")
+    session.add_question("Evict what?", section="s3")
+    session.add_question("Cache what?", section="s2")
+    session.add_question("Level?")
+    session.add_batch([], action="plan")
+    q1, q2, q3 = session.read_questions()
+    assert q1["status"] == "open"  # s3 is not written yet: asked at its end once it is
+    assert q2["status"] == "skipped" and q3["status"] == "skipped"
 
 
 def test_a_branch_review_rewrites_once_its_sections_exist(tmp_path):

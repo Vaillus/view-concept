@@ -95,7 +95,9 @@ batch is sent, since the agent already has the answer; the phase is left to the 
 Scoping ends when the user clicks « Write plan » (« Write model » in a branch review or
 a refactor): a batch whose action is "plan", after which
 every question still open is marked skipped (the agent treats them as skipped and writes
-the plan, or the model in a branch review). A deferred question stays deferred: it is asked
+the plan, or the model in a branch review), except a section question (one with an anchor
+section) whose section is not written yet: it stays open, and the page shows it at the end
+of its section once written. A deferred question stays deferred: it is asked
 again after its anchor section. « Grill me » sends a batch whose action is
 "grill" (the agent asks every open design decision as a question with a recommended
 answer, until none is left) and « Stop grill » one whose action is "stop-grill". A grill
@@ -976,8 +978,8 @@ class Session:
         corrections, "answer" that they answered, skipped or did not understand agent
         questions (`answers`, see `answer_question`, `skip_question` and
         `unclear_question`), "plan" that they ended scoping (every open question is then
-        marked skipped), "grill" that they started a grill and "stop-grill" that they
-        stopped it."""
+        marked skipped, but a section question whose section is not written yet), "grill"
+        that they started a grill and "stop-grill" that they stopped it."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         if (action == "answer") != bool(answers):
@@ -1023,10 +1025,17 @@ class Session:
         return batch
 
     def _skip_open_questions(self, at: str) -> None:
-        """Mark every open agent question skipped: scoping ended without their answers. A
-        deferred question stays deferred: it is asked again after its anchor section."""
+        """Mark the open agent questions skipped: scoping ended without their answers. A
+        section question whose anchor section is not written yet stays open, to be asked at
+        the end of that section once it is; a deferred question stays deferred: it is asked
+        again after its anchor section."""
         questions = self.read_questions()
-        open_ = [q for q in questions if q["status"] == "open"]
+        written = self.section_files()
+        open_ = [
+            q
+            for q in questions
+            if q["status"] == "open" and (not q.get("section") or q["section"] in written)
+        ]
         for q in open_:
             q["status"] = "skipped"
             q["skipped"] = at
@@ -1397,14 +1406,15 @@ def format_batch(
     if batch.get("action") == "plan" and batch.get("rewrite", bool(outline)):
         # What the button writes exists already: the answers given since may change it.
         lines.append(
-            "action: plan (the user asked to rewrite the plan from the page: treat open "
-            "questions as skipped and revise the plan with the answers, or the model in a "
-            "branch review)"
+            "action: plan (the user asked to rewrite the plan from the page: open questions "
+            "are marked skipped, but a section question whose section is not written yet; "
+            "revise the plan with the answers, or the model in a branch review)"
         )
     elif batch.get("action") == "plan":
         lines.append(
-            "action: plan (the user ended scoping from the page: treat open questions as "
-            "skipped and write the plan, or the model in a branch review)"
+            "action: plan (the user ended scoping from the page: open questions are marked "
+            "skipped, but a section question whose section is not written yet; write the "
+            "plan, or the model in a branch review)"
         )
     if batch.get("action") == "grill":
         lines.append(

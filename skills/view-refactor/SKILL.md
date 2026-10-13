@@ -134,7 +134,9 @@ as it arrives: ask the questions it opens.
 **End of scoping.** Scoping ends when the user ends it, never when you judge
 you have enough: a batch with `action: plan` (« Write model » in the scope
 block), or « go ahead » in the terminal. Treat every question still open as
-skipped (after « Write model », the page has already marked them so), and
+skipped (after « Write model », the page has already marked them so), except
+a section question whose section is not written yet: it stays open, to be
+answered at the end of its section once written. Then
 write the outline and the lexicon in the same turn. When every question is
 answered and you have none left to ask, say so in one terminal line and wait
 for the user to end scoping.

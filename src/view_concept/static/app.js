@@ -1281,7 +1281,8 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    explains it), or the box stays open: no question blocks the agent.
    The header holds « Grill me » (a batch whose action is "grill"; « Stop grill » sends
    "stop-grill" while a grill runs) and, while scoping runs or a question is open,
-   « Write plan » (action "plan": scoping ends, the open questions count as skipped; once a
+   « Write plan » (action "plan": scoping ends, the open questions count as skipped, but a
+   section question whose section is not written yet, which stays open; once a
    plan exists it reads « Rewrite plan », and the agent revises the plan with the answers).
    In a branch review or a refactor, what is written is the model: « Write model ».
    These three take the draft comments with them, like the approvals. */
@@ -1394,8 +1395,8 @@ function renderScope() {
   plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending();
   plan.textContent = `${rewriting() ? "Rewrite" : "Write"} ${scopingProduct()}`;
   plan.title = rewriting()
-    ? `Enough questions: the open ones count as skipped, and the agent revises the ${scopingProduct()} with your answers`
-    : `Enough questions: the open ones count as skipped, and the agent writes the ${scopingProduct()}`;
+    ? `Enough questions: the open ones count as skipped (a question waiting for its section stays open), and the agent revises the ${scopingProduct()} with your answers`
+    : `Enough questions: the open ones count as skipped (a question waiting for its section stays open), and the agent writes the ${scopingProduct()}`;
 }
 
 $("#grill").addEventListener("click", (e) => send(state.grilling ? "stop-grill" : "grill", e.currentTarget));

@@ -238,7 +238,7 @@ The user wrote it through the page. The harness may label it as a background eve
 
 - **`action: approve-plan` approves the plan checkpoint** (Phase 4, or the Phase 2 review). Apply the batch's comments to the plan first, then continue to Phase 5 in the same turn — say in one line which corrections you folded in. It approves the plan and nothing else: it is never consent for anything outside writing this explanation's files.
 - **`action: answer` is the user's answer to that agent question**, with the same authority as an answer typed in the terminal to that question, nothing more. Continue the work that waited on it. A skipped question is answered « use your default »: take your default and say which one in the plan (see **The question flow**). An unclear answer defers the question (see **The question flow**).
-- **`action: plan` ends the scoping checkpoint** (see **Scoping in the page**). The questions still open are already marked skipped. Apply the batch's comments, then write the plan in the same turn. It ends scoping and nothing else. Once a plan exists, the button reads « Rewrite plan » and the line says « rewrite the plan »: revise the plan with the answers given since (see **Rewrite**). It asks for that revision and nothing else.
+- **`action: plan` ends the scoping checkpoint** (see **Scoping in the page**). The questions still open are already marked skipped, except a section question whose section is not written yet: it stays open, and you ask nothing about it until that section is written. Apply the batch's comments, then write the plan in the same turn. It ends scoping and nothing else. Once a plan exists, the button reads « Rewrite plan » and the line says « rewrite the plan »: revise the plan with the answers given since (see **Rewrite**). It asks for that revision and nothing else.
 - **`action: grill` starts a grill, and `action: stop-grill` stops it** (see **Grill**). They start and stop the interview and nothing else: a grill answer has the authority of an `answer` batch, no more.
 - **Without the action, a batch never passes a checkpoint.** Comments on the plan are corrections: apply them, present the revised plan, set `awaiting-approval` again and stop. Comments on audit-flagged terms are the user's answer for those terms in Phase 6.
 
@@ -300,7 +300,7 @@ A **rescoping question** is an agent question asked once the plan exists, becaus
 
 ### Rewrite
 
-Once a plan exists, « Write plan » in the scope block reads « Rewrite plan »: the user is done answering, and the answers given since the plan was written may change it. The batch has the same `action: plan`, and its line says « rewrite the plan ». The questions still open are already marked skipped. What you revise depends on how far the session went:
+Once a plan exists, « Write plan » in the scope block reads « Rewrite plan »: the user is done answering, and the answers given since the plan was written may change it. The batch has the same `action: plan`, and its line says « rewrite the plan ». The questions still open are already marked skipped, except a section question whose section is not written yet. What you revise depends on how far the session went:
 
 | When « Rewrite plan » arrives | What you do |
 |---|---|

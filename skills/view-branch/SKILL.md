@@ -121,7 +121,8 @@ skipped, or not understood: `answer to q1 « … »: …`, `q3 skipped « … »
 `q4 unclear « … » (…): <what is missing>`; an unclear question is
 **deferred** until an agent asks it again), `plan` (« Write
 model », or « Rewrite model » when the line says rewrite; the page has
-already marked the open questions skipped), `grill` and `stop-grill`,
+already marked the open questions skipped, except a section question whose
+section is not written yet, which stays open), `grill` and `stop-grill`,
 `approve-model`, `create-pr`. A batch without an action carries comments
 only. **Routing the events** says who takes each one.
 
@@ -315,7 +316,8 @@ check` reports a pair).
 4. **« Write model ».** Scoping ends when the user ends it, never when an
    agent judges it has enough: a batch with `action: plan` while no section
    is written, or « go ahead » in the terminal. The open questions are marked
-   skipped; the deferred ones stay deferred, to be asked again after their
+   skipped, except the section questions, which stay open until their section
+   is written; the deferred ones stay deferred, to be asked again after their
    anchor section. Let the planner run first if events are still queued, then start
    the writer with the trigger `"« Write model »"` and the batch id. From here
    the writer owns the outline and the lexicon too.
