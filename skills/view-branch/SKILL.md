@@ -359,11 +359,11 @@ check` reports a pair).
    anchor section. Let the planner run first if events are still queued, then start
    the writer with the trigger `"« Write model »"` and the batch id. From here
    the writer owns the outline and the lexicon too.
-5. **The pauses.** The writer writes the model section by section and stops
-   after a section that has questions to ask (a deferred question anchored to
-   it, a decision it makes answerable, or a section question still open and
-   anchored to it): its report says « paused after
-   section N ». Run `view-concept status <slug> awaiting-answer`, the phase
+5. **The pauses.** The writer writes the model in waves, each wave's
+   sections at once, and stops after a wave whose sections have questions to
+   ask (a deferred question anchored to one, a decision one makes answerable,
+   or a section question still open and anchored to one): its report says
+   « paused after section N ». Run `view-concept status <slug> awaiting-answer`, the phase
    the page reads as the pause (it shows « Go on » only then), say so in one
    terminal line and wait. The answers, skips and
    unclear answers go to the writer, which goes on writing from there. « Go

@@ -20,8 +20,9 @@ and the lexicon (through `view-concept plan`), the change history
 (`view-concept change`), and the page's questions and comments
 (`view-concept question`, `resolve`, `status`, `check`). You read the
 repository and the session folder freely. You never edit `plan.json` by hand,
-never touch the refactoring part, the code or the branch, and start no agent.
-A bug you notice in the code goes in your report, not in a fix.
+never touch the refactoring part, the code or the branch. You may start
+helper agents, one per section of a wave (see **Writing in waves**), and no
+other agent. A bug you notice in the code goes in your report, not in a fix.
 
 Follow `planning-rules.md` for the outline, the lexicon, the change history
 and your questions.
@@ -165,7 +166,11 @@ Write the modeling part section by section, in outline order, and stop at a
    open with an anchor section) whose anchor section left the outline in
    scoping; re-anchor it with `view-concept anchor` to the section that now
    explains what it needs.
-2. Write the next unwritten section. Then look at what it opens:
+2. Write the next **wave** (see **Writing in waves**): the sections from the
+   next unwritten one up to the next section with a known waiting question
+   (a deferred question anchored to it, or a section question still open and
+   anchored to it), that section included. Then look at what each section of
+   the wave opens:
    - a deferred question anchored to it: ask it again, under the same id,
      with `view-concept reask <slug> <qid>`, which removes its scoping
      background;
@@ -180,9 +185,10 @@ Write the modeling part section by section, in outline order, and stop at a
    section is its explanation. So the section states each option's cost,
    including those the scoping background listed.
 
-   When the section opened a question, or has one still open, stop: write nothing further, and
-   report the pause (« paused after section 4, 2 questions »). Otherwise
-   write the next section, until none is left.
+   When a section of the wave opened a question, or has one still open,
+   stop after the wave: write nothing further, and report the pause
+   (« paused after section 4, 2 questions »), naming the last section of the
+   wave. Otherwise write the next wave, until no section is left.
 3. When every section is written, audit what you wrote:
 
    1. Run `view-concept check <slug>` and fix each forward reference and
@@ -211,6 +217,44 @@ Write the modeling part section by section, in outline order, and stop at a
       later run, by the precise term, an inline definition or a
       disambiguating clause, and update the lexicon to match.
 
+## Writing in waves
+
+A **wave** is the sections you write at once: from the next unwritten section
+up to the next section with a known waiting question. Only a question found
+while writing can land in the middle of one.
+
+- **A wave of one section** you write yourself: a helper would only add its
+  warmup.
+- **A longer wave** goes to **helper agents**, one per section, started at
+  once. Give each one the same context command you started from, its section
+  id, and this instruction: « Read `roles/writer.md` (its **Writing a
+  section**, **How the prose explains** and **The visual rule**) and
+  `roles/planning-rules.md` in
+  `~/Documents/code/view-concept/skills/view-branch/`. Write only
+  `sections/<id>.md` or `sections/<id>.html`, and run no `view-concept`
+  command that writes: return the lexicon terms and tips your section
+  introduces, any move of the outline it needs, any change of the model, and
+  any question it makes answerable (its text, options and recommended
+  answer), and a one-line summary. » Set `view-concept status <slug> writing
+  --section <id>` yourself, on the first section of the wave.
+- **The owner rule.** A helper writes only its own section file. The shared
+  files (`plan.json`, the change history, the questions) are rewritten whole
+  by each command, with no lock, so two helpers writing them would lose each
+  other's work. You write what the helpers return, alone, once they have all
+  ended: the lexicon terms and tips and the outline moves in one
+  `view-concept plan` call, the changes with `view-concept change`, the
+  questions with `view-concept question … --section <id>`.
+- **Each helper starts from the outline and the lexicon as they stand before
+  the wave**, so it cannot see the terms another helper of the same wave
+  introduces. After writing what they returned, run `view-concept check
+  <slug>`, which lists a term used before its home section, and fix what it
+  lists.
+- **A question found mid-wave** does not cancel the sections after it, which
+  other helpers wrote at the same time: they are kept and shown, written on
+  the question's recommended answer, as after « Go on ». Ask the question,
+  leave it open, and stop after the wave. An answer that contradicts the
+  recommended one makes your next run rewrite the sections it touches.
+
 ## After a pause
 
 A run whose trigger holds answers to the questions of a pause (or comments
@@ -230,7 +274,7 @@ on the sections written so far):
   sends comments only: answer the comments, and go on writing only when the
   trigger answers, skips or defers every question of the pause, or holds
   « Go on » (`action: go-on`, or `go on` from the terminal).
-- **« Go on »** ends the pause without answering: write the next sections,
+- **« Go on »** ends the pause without answering: write the next waves,
   with the same pauses. The pause's questions stay open; write the sections
   after them on their recommended answer, and rewrite what an answer, when it
   comes, contradicts.
