@@ -184,10 +184,18 @@ lexicon, the code map, the recent change history, the questions, the recent
 terminal messages, and the sections the role needs) and the **trigger**: the events
 that started this run, in full. Once the model is approved, it also says up
 to which change of the model the code is implemented, and lists the changes
-**not implemented yet**. Pass that output to a new subagent with this
-instruction: « Read `<role file>` (and `roles/planning-rules.md` for the
-planner and the writer) in `~/Documents/code/view-concept/skills/view-branch/`,
-then do your run. » Start it as an agent that can write files and run
+**not implemented yet**.
+
+Hand the context over **by command**: give the new subagent the command, never
+its output, and let it run the command itself. Its prompt is: « Run
+`view-concept context <slug> --role <role> --trigger <ids or words>` and treat
+its output as your context. Then read `<role file>` (and
+`roles/planning-rules.md` for the planner and the writer) in
+`~/Documents/code/view-concept/skills/view-branch/`, and do your run. » Do not
+run the command yourself first, save its output to a file, or paste it into
+the prompt: the context grows with the session (a writer's holds every
+section), and it would go through your own conversation, where it stays, and
+be typed out again. Start it as an agent that can write files and run
 commands, never a read-only type: each role file says what that agent may
 change, and nothing beyond it. Nothing else from this conversation: what the
 agents need is in the folder. When the run ends, give its one-line report in the
