@@ -1,53 +1,48 @@
 # HTML sections: the section frame
 
-For whoever changes the code. What an HTML section is, and what a user sees of it, is in [`reference.md`](reference.md#html-sections). This document says why an HTML section is drawn in a **section frame** (a sandboxed `<iframe>` with an origin of its own), and how the page and the frame talk across it. The code is `src/view_concept/frame.py` (the frame's head, the sandbox flags, the visible text), `static/frame.js` (the frame's end of every message), `static/app.js` (the page's end), `static/reader.js` (the published page's end) and `static/vault-section.js` (the vault note's).
+For whoever changes the code. What a user sees of an HTML section is in [`reference.md`](reference.md#html-sections).
 
 ## Why a frame
 
-An HTML section is code the agent writes as for an artifact on claude.ai: its own styles, its own scripts, often a library. The question is where the wall between that code and the page's own code sits, which decides what each side can break and what the page can still do inside the section. Five ways were weighed.
+An HTML section is code written as for an artifact: its own styles and scripts. Options considered:
 
-- **Pasted in, scripts dropped.** How raw HTML in a Markdown section renders. Nothing to build, and every tool of the page reaches inside; but the section's `<style>` restyles the whole page, and none of its scripts run, so behaviour gets squeezed into `on*` attributes.
-- **Pasted in, scripts run.** No wall at all. The page reads selections and paints underlines directly, with no message to design. In exchange, a style meant for one figure restyles every section, and a script shares the page's document and globals: a `let state` stops with « already declared », a `function render()` replaces the page's own, a `document.querySelector("h2")` renames the first section's title. The other way round, the page rebuilds every section's elements at each redraw, which throws away what the script built, and wraps lexicon terms in `<span>`s inside text the script controls. The only defence is a rule in the skills that every agent follows, and `view-concept check` can test a style, not what a script does when it runs.
-- **A shadow root.** A part of the page whose styles stay inside it, while its scripts still run in the page. It walls off styles, not scripts, so the script problems above remain; and code written as for an artifact breaks, since `document.querySelector` or `d3.select("body")` reach the page instead of the shadow root. Reading a selection through a shadow root is also uneven across browsers.
-- **The section frame.** The section is a document of its own, walled off both ways by the browser, as claude.ai draws an artifact. Code written as for an artifact runs unchanged, and the page keeps the frame across its redraws and never touches what is inside. What the page did by reaching inside, it does through frame messages, written once in `frame.js`.
-- **The whole explanation in one frame.** One wall around every section instead of one per HTML section. It does not remove the messages: the comment box, the side threads and the highlights belong to the page, outside the frame, so every selection and highlight still crosses by message, now for every section. Inside, the sections share one document again, so their styles and scripts meet as when pasted in; and every section pays the frame's costs (visible text for the check and the agents' context, links in the vault note).
+| Option | Problem |
+|---|---|
+| Paste it into the page, scripts dropped | its styles restyle the page; no behaviour |
+| Paste it in, scripts run | its scripts and the page's share one document and break each other |
+| A shadow root | walls off styles, not scripts; artifact code reaching `document` hits the page |
+| One frame for the whole explanation | sections still share one document; every section pays the frame's costs |
+| **One frame per HTML section** | the page loses direct access, so it talks to the frame by messages |
 
-The frame was chosen because it pays once, in fixed code (`frame.js` and its messages), where pasting in or a shadow root pay in every section, through a rule each agent has to follow and no check can verify for scripts. The one thing it leaves out of reach is text a script paints into a `<canvas>`, which is pixels.
+The frame pays once, in `frame.js`. The other options pay in every section, through a rule no check can enforce on scripts.
 
-Two choices keep the frame from bringing back what pasting in costs.
+Two choices keep the frame from touching the section's own elements:
 
-**A term is underlined by painting over the word, never by wrapping it.** In a Markdown section the page wraps each term in a `<span>`. Done inside a frame, that would change the section's own elements: a script that updates a label through its text node would find a `<span>` where it wrote text. `frame.js` instead lays a CSS highlight (`CSS.highlights`, one `Highlight` per kind) over a range of text, as it does for the anchors; no element changes, so the section's scripts find their text as they wrote it. A CSS highlight may set colours and decorations but not the font's weight, so the first occurrence of a term in its home section is underlined solid but not bold inside a frame.
+- **Terms are underlined with CSS highlights, never wrapped in a `<span>`**, so a script finds its text as it wrote it. A highlight cannot set font weight, so a term in its home section is not bold inside a frame.
+- **Changed words come from the file, not the live frame.** The page compares the file's visible text (outside `<script>` and `<style>`) with the baseline, so a script redrawing its own text is never counted as a change.
 
-**Changed words are found by comparing the file's visible text with the baseline, not what a script draws.** Comparing the frame's live text now with its text at the last batch would count a script's own redrawing as a change: a step player at « step 1 » when the batch is sent, clicked to « step 2 », would report « 2 » as added by the agent. The page compares the visible text of the section's file now with the visible text of its baseline file, with the word comparison it already has for Markdown sections, and sends the frame the runs of added words. Only words an agent wrote into the file count.
+## Frame messages
 
-## The frame messages
+`postMessage` objects named by `viewConcept`. Frame side: `static/frame.js`. Page side: `static/app.js` (`reader.js` in the published page).
 
-The page cannot read the frame, nor the frame the page: they talk with `postMessage`, each message an object whose `viewConcept` names it. The section's own scripts take no part. `frame.js` accepts a message only from its parent; the page accepts one only from one of its frames, which tells it which section the message is about. Both post to `"*"`, since the frame's origin is opaque.
+| Message | Direction | What it does |
+|---|---|---|
+| `height` | frame → page | sizes the iframe to its content |
+| `theme` | page → frame | applies the page's theme |
+| `selection` | frame → page | opens the comment / ask box on the selected passage |
+| `anchors` | page → frame | highlights the passages comments and threads quote |
+| `placed` | frame → page | answers `anchors`: the threads whose passage was found, so their heading chip hides |
+| `reveal` | page → frame | flashes a comment's passage |
+| `revealed` | frame → page | answers `reveal` with its position; the page scrolls there |
+| `thread-click` | frame → page | a click on a thread's passage opens the thread |
+| `changes` | page → frame | highlights the words added since the last read |
+| `terms` | page → frame | underlines lexicon terms and audit words |
+| `term-hover` | frame → page | the term under the pointer; the page shows its tip |
 
-| Message (`viewConcept`) | Direction | Payload | Sent by | Handled by |
-|---|---|---|---|---|
-| `height` | frame → page | `height`: the content's height in px | `postHeight` (frame.js), on load and from a `ResizeObserver` on `<html>`, only when it changed | the message listeners of app.js and reader.js, and vault-section.js: set the iframe's height |
-| `theme` | page → frame | `theme`: the page's `data-theme` | `postTheme` (app.js, reader.js), at frame load and from a `MutationObserver` on the page's `data-theme` | the message listener of frame.js: sets `data-theme` on the frame's `<html>` |
-| `selection` | frame → page | `quote`, `prefix` (the 32 characters before it), `rect` in the frame's viewport; `quote: ""` once the selection is gone | the `mouseup` listener of frame.js, through `selection()` | `frameSelection` (app.js): opens the « + comment » / « ask » box, anchored by section id, quote and prefix |
-| `anchors` | page → frame | `anchors`: `{kind, quote, prefix, thread?}`, `kind` being `draft`, `sent` or `thread` | `postAnchors` (app.js) | `highlight(true)` (frame.js): highlights each passage it finds, then answers `placed` |
-| `placed` | frame → page | `threads`: the ids of the side threads whose passage it found | `postPlaced` (frame.js), after every `anchors`, and after a redraw only when the list changed; an empty list where the browser has no CSS highlights | `framePlaced` (app.js): stores the ids on the frame and redraws the chips, so a heading shows a chip only for the threads not placed |
-| `reveal` | page → frame | `quote`, `prefix` of a comment's passage | `revealQuote` (app.js), on a click on a comment's quote | `reveal` (frame.js): highlights the passage for 1.5 s, then answers `revealed` |
-| `revealed` | frame → page | `found`; when found, `top` and `bottom` in the frame's document | `reveal` (frame.js) | `frameRevealed` (app.js): scrolls the view to the passage, or to the section when not found |
-| `thread-click` | frame → page | `thread`: the side thread's id; `rect` of the clicked passage | `threadClick` (frame.js), on a `mouseup` with nothing selected that lands on a thread's passage | `frameThreadClick` (app.js): opens that thread's popover under the passage |
-| `changes` | page → frame | `changes`: `{quote, prefix}` per run of words added since the baseline | `postChanges` (app.js), from `addedPassages` | `highlight` (frame.js): highlights them as `ev-updated` |
-| `terms` | page → frame | `terms`: `{term, kind, key}`, `kind` being `audit` (the audit's entries on the section, `key: {tip}`), `def` (the term the section is the home of) or `term` (every lexicon term), `key: {term: <lexicon index>}` | `postTerms` (app.js; reader.js sends `def` and `term` only) | the message listener of frame.js: drops the hover, then `highlight` underlines each occurrence through `underline` |
-| `term-hover` | frame → page | `key` (as given in `terms`) and `rect` of the word; `key: null` once the pointer leaves it | `hover` (frame.js), from `mousemove`, `mouseleave` and `scroll` | `frameTermHover` (app.js, reader.js): shows the term's tip, or the audit's notes, under the word |
+When a script rewrites the section's text, `frame.js` repaints every highlight from what it already holds. The page sends nothing.
 
-The page posts `theme`, `anchors`, `changes` and `terms` at each load of a frame, and `terms`, `anchors` and `changes` to every frame again each time it redraws its sections and paints its own highlights (`renderDoc`, `applyHighlights`, `markUpdates`).
+## Where things live
 
-**Repainting after a redraw.** When a script of the section rewrites its text, the ranges of the old text nodes are gone. A `MutationObserver` on the frame's `<html>` schedules `highlight` for the next animation frame, which finds the anchors, the changes, the revealed passage and the terms again in the new text, from what `frame.js` already holds; the page sends nothing. `underline` paints the audit's words first, then the home section's first occurrence of its term, then every other occurrence, skipping a word already underlined, as the page does in a Markdown section. On the page's side, `placeFrames` keeps each frame across the page's redraws (parked, then moved back into its slot) and reloads it only when its `version`, a hash of the file's text, changes.
-
-**The visible text and the change baseline.** The visible text of an HTML section is the words written in its file outside `<script>` and `<style>`. `frame.visible_text` computes it in Python for the precedence check and the agents' context, which run without a browser. For the changes, the server gives an updated HTML section its baseline file as `seen` (`section_view` in server.py, the text kept in `seen.json`); `addedPassages` parses both files with `DOMParser`, so their scripts do not run, takes their visible text with the same block rule as `textIndex` in frame.js (a space between two block elements, whitespace collapsed), compares them word by word with `diffWords`, and posts each run of inserted words with the 32 characters before it as prefix. `frame.js` then finds those quotes in its live text as it finds an anchor.
-
-**The frame's head and the theme tokens.** No file is served as it is: `frame.inject` writes the frame's head at the start of the section's `<head>` (after `<head>`, else `<html>`, else the doctype, else at the very start), so the section's own head comes after it and can override it. The head is two things: the **theme tokens** (`frame.tokens_css`: every palette of `themes.css` and the semantic names of the first `:root` block of `terminal.css`, `--bg`, `--ink`, `--accent`, `--flag`…), which a section paints with, and `frame.js`. `frame.js` sets the default theme (Catppuccin Latte in light mode, Tokyo Night in dark mode) only when `<html>` has no `data-theme` yet, and adds the `::highlight(ev-…)` styles its highlights use.
-
-**The sandbox header.** The iframe's `sandbox` is `frame.SANDBOX` (`allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms`, without `allow-same-origin`; app.js keeps a copy). The server also sends those flags as a `Content-Security-Policy: sandbox …` header (`FRAME_SANDBOX_HEADER`) on the section route, `/s/<slug>/sections/<id>.html` (`section_document`), and the media route, `/s/<slug>/sections/<id>/<file>` (`section_media`), so the browser gives them an origin of their own wherever they are opened, a tab of their own included.
-
-**The published page.** `publish._frame` writes the section's file, with a head pointing at `../frame/tokens.css` and `../frame/frame.js`, to `<slug>/sections/<id>.html`, copies its media folder next to it and the two files to `<slug>/frame/`, and draws it in an iframe with the same sandbox. `reader.js` posts `theme` and `terms` and handles `height` and `term-hover`; with no comments, threads or highlights there, it sends no `anchors`, `reveal` or `changes`.
-
-**The vault export.** `store._export_html_section` writes the file, with a head pointing at `frame.css` and `frame.js`, its media folder, those two files and `section.js` (a copy of `static/vault-section.js`) into `explanations/<slug>/`, and the note draws it with `dv.view`. `vault-section.js` replaces the two links by the files' text, so the frame does not load them through Obsidian's `app://` address, and loads the section through `srcdoc`, after a `<base>` that resolves its media folder and a script that sets the default theme for Obsidian's mode, since no page posts one. It handles `height` only.
+- `frame.py`: injects the frame's head (theme tokens and `frame.js`) into the section's file, the sandbox flags, and the visible text that `check` and the agents' context read.
+- `server.py`: serves the section and its media folder with a `Content-Security-Policy: sandbox` header, so they stay isolated even when opened in their own tab.
+- `publish.py` and `store.py` (vault export): copy the file, its media and the frame's files. In Obsidian, `vault-section.js` handles `height` only.
