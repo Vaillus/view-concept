@@ -77,13 +77,14 @@ An HTML section's **media folder**, `sections/<id>/`, holds the media files the 
 
 The **visual rule**, written into each of the three skills, tells the agent when to write a section as HTML rather than Markdown (a visual that needs its own styles, behaviour or a library; a diagram Mermaid can draw stays Markdown), and what an HTML section contains: under 2 MB, embedded media included, a larger image or video loaded from the web or from the media folder; libraries from cdnjs, jsdelivr or unpkg, any other site when needed; as much prose as the agent chooses, knowing its cost there.
 
-`view-concept check` reports three **section problems** besides the precedence problems. They are about how a section is written, not about a word, so they are only printed, for the agent, and never written to `audit.json`, whose entries the page draws as an underline on their term:
+`view-concept check` reports four **section problems** besides the precedence problems. They are about how a section is written, not about a word, so they are only printed, for the agent, and never written to `audit.json`, whose entries the page draws as an underline on their term:
 
 | Issue | Reported when |
 |---|---|
 | `html-block` | a Markdown section holds an HTML block (inline HTML is not reported): « move this HTML block into an HTML section » |
 | `two-files` | a section has both `<id>.md` and `<id>.html`: it names the `.md` file the page ignores |
 | `too-large` | an HTML section file is over 2 MB, its media folder apart: « move its media to the media folder or the web » |
+| `stale-anchor` | a **waiting question** (a deferred question, or an open one with an anchor section) is anchored to a section the outline no longer has, so it would never be asked again: « re-anchor it with view-concept anchor » |
 
 Every session is checked the same way, older ones included; a report changes nothing in how a section renders.
 

@@ -532,6 +532,9 @@ class Session:
           reads it: inline HTML, and tags in a code block or a Mermaid diagram, are not.
         - two-files: a section with both <id>.md and <id>.html; the .md file is ignored.
         - too-large: an HTML section file over HTML_SECTION_LIMIT, its media folder apart.
+        - stale-anchor: a waiting question (a deferred question, or an open one with an
+          anchor section) anchored to a section the outline no longer has: it would never
+          be asked again. The agent re-anchors it with `anchor`.
 
         Returns {issue, section, at (its position in the outline, "·" outside it), note},
         in outline order."""
@@ -561,6 +564,12 @@ class Session:
         for sid in self.two_file_sections():
             add("two-files", sid, f"{sid}.md and {sid}.html both present: the page shows "
                 f"{sid}.html, {sid}.md is ignored")  # fmt: skip
+        for q in self.read_questions():
+            waiting = q["status"] == "deferred" or q["status"] == "open" and q.get("section")
+            if waiting and q.get("section") and q["section"] not in pos:
+                add("stale-anchor", q["section"], f"{q['id']} ({q['status']}) waits on it, a "
+                    "section the outline no longer has: re-anchor it with view-concept "
+                    "anchor")  # fmt: skip
         # In outline order; a section outside the outline last.
         return sorted(problems, key=lambda p: p["at"] if isinstance(p["at"], int) else len(pos) + 1)
 

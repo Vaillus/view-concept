@@ -315,7 +315,8 @@ def cmd_check(a: argparse.Namespace) -> None:
     """The precedence check: list forward references and early uses, write them to
     audit.json (replacing the previous ones, keeping the agent's own entries). Then the
     section problems (an HTML block in a Markdown section, two files for one section, an
-    HTML section file over the limit), printed only: they name no word to underline."""
+    HTML section file over the limit, a waiting question anchored to a section the outline
+    no longer has), printed only: they name no word to underline."""
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")

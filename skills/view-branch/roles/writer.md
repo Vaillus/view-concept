@@ -159,7 +159,11 @@ Write the modeling part section by section, in outline order, and stop at a
 1. First check the deferred questions the context lists. Each has an anchor
    section (the planner set it; set one with `view-concept anchor` where it
    is missing), and the anchor section's prerequisites come before it. Move
-   sections when they do not, and log the move.
+   sections when they do not, and log the move. Then run `view-concept check
+   <slug>` once: a `stale-anchor` line names a waiting question (deferred, or
+   open with an anchor section) whose anchor section left the outline in
+   scoping; re-anchor it with `view-concept anchor` to the section that now
+   explains what it needs.
 2. Write the next unwritten section. Then look at what it opens:
    - a deferred question anchored to it: ask it again, under the same id,
      with `view-concept reask <slug> <qid>`, which removes its scoping
@@ -185,8 +189,9 @@ Write the modeling part section by section, in outline order, and stop at a
       the idea in plain words.
       It also prints the section problems, which it does not write to
       `audit.json`: an HTML block in a Markdown section (move it into an HTML
-      section), two files for one section, an HTML section over 2 MB. Fix
-      each one.
+      section), two files for one section, an HTML section over 2 MB, a
+      waiting question anchored to a section the outline no longer has
+      (re-anchor it with `view-concept anchor`). Fix each one.
    2. Re-read every section for the words that slipped past the lexicon, and
       add each one to `audit.json` (`[{"term", "section", "issue", "note"}]`,
       keeping the entries `check` wrote), with one of these issues:
@@ -248,7 +253,8 @@ The trigger holds comments, answers, terminal messages, or « Rewrite model »
   (« added as section 5 »).
 - After any change to the structure or the lexicon, run `view-concept check
   <slug>` again and fix what it lists, including in sections nobody
-  commented on.
+  commented on: re-anchor a question whose anchor section you removed or
+  merged to the section that now explains what it needs.
 - Log each change of the model, with the events that caused it.
 - Resolve each comment you handled:
   `view-concept resolve <slug> <ids> --reply "<one line: what changed>"`.

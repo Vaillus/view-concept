@@ -554,6 +554,23 @@ def test_check_matches_whole_words_only(ordered):
     assert early == {("rule", "b"), ("KKT conditions", "a")}
 
 
+def test_check_reports_a_waiting_question_whose_anchor_left_the_outline(session):
+    session.add_question("Evict what?", section="s2")
+    session.add_question("Cache what?", section="s2")
+    session.add_question("Level?", section="s2")
+    session.unclear_question("q2")
+    session.answer_question("q3", [], "low")
+    plan = session.read_plan()
+    plan["outline"] = [s for s in plan["outline"] if s["id"] != "s2"]
+    session.plan_path.write_text(json.dumps(plan))
+    problems = [p for p in session.check_sections() if p["issue"] == "stale-anchor"]
+    gone = "a section the outline no longer has: re-anchor it with view-concept anchor"
+    assert [(p["section"], p["at"], p["note"]) for p in problems] == [
+        ("s2", "·", f"q1 (open) waits on it, {gone}"),
+        ("s2", "·", f"q2 (deferred) waits on it, {gone}"),
+    ]
+
+
 def test_check_skips_entries_outside_the_outline(ordered):
     assert all(p["term"] != "ghost" for p in ordered.check_precedence(write=False))
 
