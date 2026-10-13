@@ -21,7 +21,7 @@ const end = at ? at.index + at[0].length : 0;
 const frame = dv.container.createEl("iframe", {
   attr: { sandbox: "{SANDBOX}", allow: "fullscreen", srcdoc: doc.slice(0, end) + head + doc.slice(end) },
 });
-frame.style.cssText = "display: block; width: 100%; height: 150px; border: 1px solid var(--background-modifier-border);";
+frame.style.cssText = "display: block; box-sizing: content-box; width: calc(100% - 2px); height: 150px; border: 1px solid var(--background-modifier-border);";
 window.addEventListener("message", (e) => {
   if (e.source === frame.contentWindow && e.data && e.data.viewConcept === "height") frame.style.height = `${e.data.height}px`;
 });

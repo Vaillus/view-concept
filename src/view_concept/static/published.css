@@ -16,7 +16,14 @@
 .sec h2 .num { min-width: 1.5em; flex: none; }
 .body { font-size: 14px; line-height: 23px; overflow-wrap: break-word; }
 /* A section frame: an HTML section, a separate web page inside a rectangle of the page. */
-.frame { display: block; width: 100%; height: 150px; border: 1px solid var(--line); background: var(--bg); }
+/* content-box: the height the frame posts is its content's, so the border adds to it
+   instead of taking 2px off the frame's viewport (which would scroll). */
+.frame { display: block; box-sizing: content-box; width: calc(100% - 2px); height: 150px; border: 1px solid var(--line); background: var(--bg); }
+/* An HTML section draws wider than the text column, so its figures get the room; its
+   heading stays on the column, over its prose (which frame.py centres there too). The
+   column is 78ch of the 14px text: the heading's ch, at 15px, is 15/14 wider. */
+.doc > .sec.html { max-width: 120ch; }
+.sec.html > h2 { max-width: calc(78ch * 14 / 15); margin-left: auto; margin-right: auto; }
 .body h3, .body h4 { font-size: 14px; color: var(--ink-dim); }
 .body code { background: var(--raised); padding: 0 3px; }
 .body pre { background: var(--raised); padding: 8px 12px; overflow-x: auto; }
