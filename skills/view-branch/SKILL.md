@@ -396,8 +396,9 @@ those with nothing to do:
    - the items the reviewer judged `diverges` or `move` in its last report;
    - the comment ids that ask for a code change.
 
-   It starts one run for all of it; it decides itself whether to split the
-   work. At the end it records the last change of the model it took into
+   It starts one run for all of it; it splits the work across helpers when
+   at least two parts with disjoint files are each more than a small fix, as
+   its role file says. At the end it records the last change of the model it took into
    account.
 3. **The reviewer**, after an implementer run (its trigger is the
    implementer's report, in words) or on comments about the refactoring

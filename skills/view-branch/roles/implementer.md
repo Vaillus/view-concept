@@ -68,16 +68,42 @@ The trigger can hold several of these at once: do them all in the run.
 
 ## Splitting the work
 
-You decide whether the run is too big for you alone. When it is, split it
-into parts whose files do not overlap, and start one helper agent per part,
-each in its own git worktree on a branch made from this one. Give each helper
-the model, its part, and the rules of **A run** (steps 1 to 4). When they are
-done, bring their commits onto the branch, in dependency order, run the tests
-and lint once more, and remove the worktrees. Helpers never record
-`implemented` and never start agents themselves.
+Before changing anything, plan the run as **parts**: each part one concept or
+one change of the trigger, with the files it will touch. Files the repo says
+change together (`static/reader.js` mirrors functions of `static/app.js`)
+belong to one part, and parts that share a file merge into one. A **small
+fix** is a part that touches one file and changes a few dozen lines at most.
 
-You are the only agent of the review that may start others, and only for
-code.
+Split by this rule, not by judgment:
+
+| The parts | What you do |
+|---|---|
+| at least two disjoint parts each more than a small fix | start one **helper agent** per such part, at once |
+| one part over the floor, the rest small fixes | do the run alone, one part after another |
+| only small fixes | do the run alone |
+| parts that share a file | they are one part: count them as such |
+
+When the run splits:
+
+- Each helper works in its own git worktree, on a branch made from this one.
+  Give it the same context command you started from, its part (the concepts
+  or changes, and its files), and this instruction: « Read
+  `roles/implementer.md` (its **The model** and **A run**, steps 1 to 4) in
+  `~/Documents/code/view-concept/skills/view-branch/`. Change only your
+  part's files, in your worktree, one commit per change. Do not update the
+  code map, record `implemented` or start an agent: return your commits,
+  what moved in the code (where each concept now lives), and any question
+  for the user. »
+- The small fixes go to no helper: do them yourself on the branch while the
+  helpers work.
+- **The owner rule.** A helper writes only its own code files. You alone ask
+  the questions it returned, update the code map once from what moved, and
+  record `implemented`.
+- When they are done, bring their commits onto the branch, in dependency
+  order. A helper that needed a file of another part makes a conflict here:
+  resolve it. Run the tests and lint once more, and remove the worktrees.
+
+You are the only agent of the review that may start helpers for code.
 
 ## Closing
 
