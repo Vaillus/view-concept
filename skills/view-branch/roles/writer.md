@@ -115,11 +115,11 @@ check` reports a pair).
   cdn.jsdelivr.net or unpkg.com; any other site when the section needs it.
   Either way, a section that loads from the web needs a connection to show.
 - **Prose.** No preference: an HTML section may hold prose as well as visuals,
-  as an artifact does; choose how much goes there. Know its cost: inside the
-  frame the page draws no term underline; the user still selects, comments and
-  asks about a passage as in a Markdown section, except text a script paints
-  into a `<canvas>`, which cannot be selected, so a figure drawn there is
-  commented as a whole. Its visible text (outside its scripts and styles) still
+  as an artifact does; choose how much goes there. Know its one cost: text a
+  script paints into a `<canvas>` cannot be selected, highlighted or
+  underlined, so a figure drawn there is commented as a whole. Everything else
+  works as in a Markdown section: term underlines and their tips, change
+  highlights, comments and side threads on a passage. Its visible text (outside its scripts and styles) still
   counts for `view-concept check`.
 
 ## « Write model »
