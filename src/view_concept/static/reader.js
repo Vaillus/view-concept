@@ -96,37 +96,64 @@ function annotateLexicon(doc) {
   });
 }
 
-/* A tap on a phone fires mouseover too, so the tip shows there as well. */
-document.addEventListener("mouseover", (e) => {
-  const t = e.target.closest("[data-term]");
+/* The tip of lexicon entry `i` under the rectangle `r` (in the viewport). */
+function showTip(i, r) {
+  const entry = LEXICON[i];
   const tip = document.getElementById("tip");
-  if (!t) { tip.hidden = true; return; }
-  const entry = LEXICON[Number(t.dataset.term)];
   tip.replaceChildren(el("div", { class: "tip-term", text: entry.term }));
   const body = el("div", { class: "tip-body" });
   body.innerHTML = entry.tip_html;
   tip.append(body);
   typesetMath(tip);
   tip.hidden = false;
-  const r = t.getBoundingClientRect();
   tip.style.top = `${window.scrollY + r.bottom + 4}px`;
   tip.style.left = `${window.scrollX + Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8))}px`;
+}
+
+/* A tap on a phone fires mouseover too, so the tip shows there as well. */
+document.addEventListener("mouseover", (e) => {
+  const t = e.target.closest("[data-term]");
+  if (!t) { document.getElementById("tip").hidden = true; return; }
+  showTip(Number(t.dataset.term), t.getBoundingClientRect());
 });
 
 /* Section frames (an HTML section, see frame.py): each takes the height its content posts,
-   and is told the page's theme at load and whenever it changes. Mirrors the section
-   frames of app.js. */
+   and is told the page's theme at load and whenever it changes. The terms message gives
+   it the lexicon terms to underline (the term its section is the home of, then every
+   term), each keyed by its lexicon index; the term hover message it posts back shows that
+   term's tip under the word. Mirrors the section frames of app.js, without the audit
+   entries, the anchors and the changes. */
 function postTheme(f) {
   if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "theme", theme: document.documentElement.dataset.theme }, "*");
 }
+function postTerms(f) {
+  if (!f.contentWindow) return;
+  const terms = [];
+  LEXICON.forEach((t, i) => {
+    if (t.section && t.section === f.dataset.section) terms.push({ term: t.term, kind: "def", key: { term: i } });
+    terms.push({ term: t.term, kind: "term", key: { term: i } });
+  });
+  f.contentWindow.postMessage({ viewConcept: "terms", terms }, "*");
+}
+function frameTermHover(f, d) {
+  const i = d.key && d.key.term;
+  if (!d.rect || !Number.isInteger(i) || !LEXICON[i]) { document.getElementById("tip").hidden = true; return; }
+  const b = f.getBoundingClientRect();
+  const x = b.left + f.clientLeft, y = b.top + f.clientTop;
+  showTip(i, { left: x + d.rect.left, bottom: y + d.rect.bottom });
+}
 window.addEventListener("message", (e) => {
   const d = e.data;
-  if (!d || d.viewConcept !== "height") return;
-  for (const f of document.querySelectorAll("iframe.frame")) if (f.contentWindow === e.source) f.style.height = `${d.height}px`;
+  if (!d) return;
+  const f = [...document.querySelectorAll("iframe.frame")].find((n) => n.contentWindow === e.source);
+  if (!f) return;
+  if (d.viewConcept === "height") f.style.height = `${d.height}px`;
+  else if (d.viewConcept === "term-hover") frameTermHover(f, d);
 });
 document.querySelectorAll("iframe.frame").forEach((f) => {
-  f.addEventListener("load", () => postTheme(f));
+  f.addEventListener("load", () => { postTheme(f); postTerms(f); });
   postTheme(f);
+  postTerms(f);
 });
 new MutationObserver(() => document.querySelectorAll("iframe.frame").forEach(postTheme))
   .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });

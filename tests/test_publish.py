@@ -227,6 +227,7 @@ def test_build_draws_an_html_section_in_a_frame(session, tmp_path):
     page = (out / "index.html").read_text()
     assert '<iframe class="frame" sandbox="allow-scripts ' in page
     assert 'src="sections/s2.html"' in page and "<video" not in page
+    assert 'data-section="s2"' in page
     framed = (out / "sections" / "s2.html").read_text()
     assert framed.startswith(f"<head>{pub.FRAME_HEAD}</head>")
     assert (out / "sections" / "s2" / "a.mp4").read_bytes() == b"mp4"

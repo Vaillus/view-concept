@@ -9,7 +9,8 @@ omarchy skin); only KaTeX and Mermaid load from the web, as in the page. An imag
 section takes from this machine is copied into `<slug>/assets/`. An HTML section is drawn
 in a section frame, as in the page (frame.py): its file is written to
 `<slug>/sections/<id>.html` with the frame's head, its media folder copied next to it, and
-the theme tokens and frame.js to `<slug>/frame/`; the page posts its theme to the frame.
+the theme tokens and frame.js to `<slug>/frame/`; the page posts its theme and the lexicon
+terms to the frame, and shows the tip of the term the frame says is under the pointer.
 It leaves out the plan, comments, threads, highlights and audit underlines.
 
 The pages repo is a public GitHub repository whose GitHub Pages site serves its `main`
@@ -145,7 +146,8 @@ def _frame(s: Session, sec: dict[str, Any], folder: Path) -> str:
     src = html.escape(f"sections/{sid}.html")
     return (
         f'<iframe class="frame" sandbox="{frame.SANDBOX}" allow="fullscreen" '
-        f'title="{html.escape(sec["title"])}" src="{src}"></iframe>\n'
+        f'data-section="{html.escape(sid)}" title="{html.escape(sec["title"])}" '
+        f'src="{src}"></iframe>\n'
     )
 
 
