@@ -130,6 +130,36 @@ def test_check_prints_and_writes_problems(tmp_path):
     assert view_concept(tmp_path, "check", "nope").returncode != 0
 
 
+def test_check_prints_section_problems_only(tmp_path):
+    assert view_concept(tmp_path, "new", "Coraux").returncode == 0
+    d = tmp_path / "sessions" / "coraux"
+    plan = json.loads((d / "plan.json").read_text())
+    plan["outline"] = [{"id": "s1", "title": "Gènes"}, {"id": "adn", "title": "ADN"}]
+    (d / "plan.json").write_text(json.dumps(plan))
+    (d / "sections" / "s1.md").write_text(
+        "Le <b>seuil</b> est bas.\n\n"
+        '<div class="cf"><svg></svg>\n</div>\n\n'
+        "<!-- a note -->\n\n"
+        '```mermaid\nflowchart LR\n  A["a<br/>b"]\n```\n\n'
+        "```html\n<div>code</div>\n```\n"
+    )
+    (d / "sections" / "adn.md").write_text("Old.")
+    (d / "sections" / "adn.html").write_text("<p>" + "x" * (2 * 2**20) + "</p>")
+    r = view_concept(tmp_path, "check", "coraux")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.splitlines() == [
+        "0 problems written to audit.json",
+        'html-block §1 (s1)  s1.md:3 <div class="cf"><svg></svg>  move this HTML block into an'
+        " HTML section",
+        "too-large  §2 (adn)  adn.html is 2.0 MB, over 2 MB: move its media to the media"
+        " folder sections/adn/ or the web",
+        "two-files  §2 (adn)  adn.md and adn.html both present: the page shows adn.html, adn.md"
+        " is ignored",
+        "3 section problems, printed only (not in audit.json)",
+    ]
+    assert json.loads((d / "audit.json").read_text()) == []
+
+
 def start_wait(home, slug, *flags):
     env = {**os.environ, "VIEW_CONCEPT_HOME": str(home)}
     cmd = [sys.executable, "-m", "view_concept.cli", "wait", slug, *flags]

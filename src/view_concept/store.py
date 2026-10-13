@@ -7,6 +7,8 @@ reach the agent session through the inbox.
     <home>/sessions/<slug>/
         plan.json       title, initial_request, kind, workflow, repo, base, outline, lexicon
         sections/<id>.md  the prose of one outline section         (written by the agent)
+        sections/<id>.html  an HTML section instead: a self-contained HTML document
+        sections/<id>/  its media folder: media files the agent produced for it
         audit.json      vocabulary-audit findings       (written by the agent and `check`)
         status.json     what the agent is doing now: phase, section    (written by `status`)
         change-history.json  every change of the model, oldest first     (written by `change`)
@@ -23,7 +25,15 @@ reach the agent session through the inbox.
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
 
-A section is one element of the `outline` list in plan.json: {id, title, earns}. An
+A section is one element of the `outline` list in plan.json: {id, title, earns}. Its text
+is one file of sections/, whose extension alone says which kind of section it is: Markdown
+in <id>.md, or an HTML section in <id>.html, a self-contained HTML document (its HTML, CSS
+and JavaScript) which may hold prose and visuals alike, as an artifact does. A section has
+one file; when both exist (an agent switched the kind and left the old file), every
+reader takes the .html file, and `check` reports the pair. An HTML section's media folder,
+sections/<id>/, holds the media files the agent produced for it (a manim render, a GIF),
+which have no web address: the section loads them by a relative address (<id>/<file>),
+the page serves them, and the published page and the vault export copy them along. An
 answer to a comment that belongs in the explanation amends a section or adds one at its
 place in the outline; a `kind: "question"` left by an older session is ignored, and the
 section reads as any other. A refactor section, marked `part: "refactoring"`, belongs
@@ -108,11 +118,15 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import tempfile
 import unicodedata
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+
+from . import frame
+from .render import md
 
 HOME = Path(os.environ.get("VIEW_CONCEPT_HOME", Path.home() / ".view-concept"))
 SESSIONS = HOME / "sessions"
@@ -160,6 +174,9 @@ DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 HEARTBEAT_EVERY = 2.5  # seconds between two heartbeats of a running watch
 LISTENING_FOR = 15.0  # seconds a heartbeat proves a watch runs
+# The size an HTML section file stays under, embedded media included (the visual rule of the
+# skills); its media folder does not count. `check` reports a file over it.
+HTML_SECTION_LIMIT = 2 * 2**20
 
 
 class SessionError(Exception):
@@ -218,6 +235,11 @@ def precedence_audit_entry(p: dict[str, Any]) -> dict[str, Any]:
     else:
         note = f"introduced in section {p['home']}"
     return {"term": p["term"], "section": p["section"], "issue": p["issue"], "note": note}
+
+
+def format_section_problem(p: dict[str, Any]) -> str:
+    """One terminal line for a section problem of the check."""
+    return f"{p['issue']:10} §{p['at']} ({p['section']})  {p['note']}"
 
 
 def format_precedence(p: dict[str, Any]) -> str:
@@ -311,6 +333,12 @@ class Session:
     def published_path(self) -> Path:
         return self.dir / "published.json"
 
+    def media_folder(self, sid: str) -> Path:
+        """The media folder of section `sid`: sections/<sid>/."""
+        if not sid or "/" in sid or sid in (".", ".."):
+            raise SessionError(f"invalid section id {sid!r}")
+        return self.sections_dir / sid
+
     def thread_path(self, tid: str) -> Path:
         if not THREAD_ID_RE.match(tid):
             raise SessionError(f"invalid thread id {tid!r}")
@@ -395,12 +423,39 @@ class Session:
         _write_json(self.plan_path, plan)
         return plan
 
-    def read_sections(self) -> dict[str, str]:
+    def section_files(self) -> dict[str, Path]:
+        """Each written section's file, by id in id order: <id>.html for an HTML section,
+        else <id>.md. When both exist, the .html file."""
         if not self.sections_dir.is_dir():
             return {}
+        files = {p.stem: p for p in self.sections_dir.glob("*.md") if p.is_file()}
+        files.update({p.stem: p for p in self.sections_dir.glob("*.html") if p.is_file()})
+        return dict(sorted(files.items()))
+
+    def read_sections(self) -> dict[str, str]:
+        """Each written section's text: the Markdown of a Markdown section, the HTML
+        document of an HTML section."""
+        return {sid: p.read_text(encoding="utf-8") for sid, p in self.section_files().items()}
+
+    def read_prose(self) -> dict[str, str]:
+        """Each written section's words, as the precedence check reads them: a Markdown
+        section without its code, diagrams and maths; an HTML section's visible text."""
+        html = self.html_sections()
         return {
-            p.stem: p.read_text(encoding="utf-8") for p in sorted(self.sections_dir.glob("*.md"))
+            sid: frame.visible_text(text) if sid in html else _strip_unmarked(text)
+            for sid, text in self.read_sections().items()
         }
+
+    def html_sections(self) -> set[str]:
+        """The ids of the HTML sections."""
+        return {sid for sid, p in self.section_files().items() if p.suffix == ".html"}
+
+    def two_file_sections(self) -> list[str]:
+        """The ids of the sections with both an <id>.md and an <id>.html file: the .md file
+        is ignored."""
+        return sorted(
+            sid for sid in self.html_sections() if (self.sections_dir / f"{sid}.md").is_file()
+        )
 
     def read_audit(self) -> list[dict[str, Any]]:
         return _read_json(self.audit_path, [])
@@ -423,7 +478,7 @@ class Session:
         entries = [
             e for e in plan["lexicon"] if e.get("term", "").strip() and e.get("section") in pos
         ]
-        prose = {sid: _strip_unmarked(text) for sid, text in self.read_sections().items()}
+        prose = self.read_prose()
         problems: list[dict[str, Any]] = []
         for e in entries:
             home = pos[e["section"]]
@@ -448,6 +503,48 @@ class Session:
             kept = [a for a in self.read_audit() if a.get("issue") not in ("forward", "early")]
             _write_json(self.audit_path, kept + [precedence_audit_entry(p) for p in problems])
         return problems
+
+    def check_sections(self) -> list[dict[str, Any]]:
+        """The section problems of the check: how a section is written, not a term. Never
+        written to audit.json, whose entries the page draws as an underline on their term:
+        these name no word, so `check` only prints them, for the agent.
+
+        - html-block: an HTML block in a Markdown section, raw HTML that starts its own
+          paragraph (a line beginning with a tag, up to the next blank line), as Markdown
+          reads it: inline HTML, and tags in a code block or a Mermaid diagram, are not.
+        - two-files: a section with both <id>.md and <id>.html; the .md file is ignored.
+        - too-large: an HTML section file over HTML_SECTION_LIMIT, its media folder apart.
+
+        Returns {issue, section, at (its position in the outline, "·" outside it), note},
+        in outline order."""
+        pos = {sec["id"]: i + 1 for i, sec in enumerate(self.read_plan()["outline"])}
+        files = self.section_files()
+        problems: list[dict[str, Any]] = []
+
+        def add(issue: str, sid: str, note: str) -> None:
+            problems.append({"issue": issue, "section": sid, "at": pos.get(sid, "·"), "note": note})
+
+        for sid, path in files.items():
+            if path.suffix == ".html":
+                size = path.stat().st_size
+                if size > HTML_SECTION_LIMIT:
+                    add("too-large", sid, f"{path.name} is {size / 2**20:.1f} MB, over "
+                        f"{HTML_SECTION_LIMIT // 2**20} MB: move its media to the media folder "
+                        f"sections/{sid}/ or the web")  # fmt: skip
+                continue
+            for token in md.parse(path.read_text(encoding="utf-8")):
+                head = token.content.strip().splitlines()[0] if token.content.strip() else ""
+                if token.type != "html_block" or not head or head.startswith("<!--"):
+                    continue
+                line = token.map[0] + 1 if token.map else 0
+                head = head if len(head) <= 60 else head[:57] + "..."
+                add("html-block", sid, f"{path.name}:{line} {head}  move this HTML block "
+                    "into an HTML section")  # fmt: skip
+        for sid in self.two_file_sections():
+            add("two-files", sid, f"{sid}.md and {sid}.html both present: the page shows "
+                f"{sid}.html, {sid}.md is ignored")  # fmt: skip
+        # In outline order; a section outside the outline last.
+        return sorted(problems, key=lambda p: p["at"] if isinstance(p["at"], int) else len(pos) + 1)
 
     def read_comments(self) -> dict[str, Any]:
         return _read_json(self.comments_path, {"batches": []})
@@ -685,7 +782,7 @@ class Session:
             self.published_path,
         ]
         if self.sections_dir.is_dir():
-            paths += sorted(self.sections_dir.glob("*.md"))
+            paths += sorted([*self.sections_dir.glob("*.md"), *self.sections_dir.glob("*.html")])
         return _stat_signature(paths)
 
     def thread_signature(self) -> tuple:
@@ -897,12 +994,14 @@ class Session:
     def published_sections(self, plan: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """What a published page shows of the prose: every explanation section (no
         `"part": 2`) that is written, in outline order, as {id, number (its position in
-        the outline, as the page numbers it), title, markdown}."""
+        the outline, as the page numbers it), title, markdown (the file's text: the HTML
+        document of an HTML section), html (whether it is an HTML section)}."""
         plan = plan or self.read_plan()
         sections = self.read_sections()
+        html = self.html_sections()
         return [
             {"id": s["id"], "number": i + 1, "title": s.get("title", s["id"]),
-             "markdown": sections[s["id"]]}
+             "markdown": sections[s["id"]], "html": s["id"] in html}
             for i, s in enumerate(plan["outline"])
             if s.get("part") != 2 and s["id"] in sections
         ]  # fmt: skip
@@ -953,8 +1052,11 @@ class Session:
         path = vault_dir / f"{base}.md"
         if path.exists() and f"view-concept: {self.slug}\n" not in path.read_text(encoding="utf-8"):
             path = vault_dir / f"{base} ({self.slug}).md"
+        html = self.html_sections()
         sections = {
-            sid: _externalize(text, vault_dir, self.slug)
+            sid: _export_html_section(self, sid, text, vault_dir)
+            if sid in html
+            else _externalize(text, vault_dir, self.slug)
             for sid, text in self.read_sections().items()
         }
         path.write_text(self.render_markdown(plan, sections), encoding="utf-8")
@@ -1011,12 +1113,13 @@ class Session:
 
 
 # ---- export: media out of the note ----
-# Sections embed their visuals as base64 data URIs, and their widgets (step players, sliders)
-# as HTML whose behaviour sits in inline on* attributes. Obsidian slows down on a note of
-# several MB and does not run inline handlers, so the export moves both out of the note:
-# each data URI becomes a file in <slug>/assets/, each widget a file in <slug>/widgets/
-# rendered by a dataviewjs block (Dataview plugin, JavaScript queries enabled) through
-# <slug>/widget.js, which turns the on* attributes back into event listeners.
+# Markdown sections embed their visuals as base64 data URIs, and their widgets (step
+# players, sliders) as raw HTML whose behaviour sits in inline on* attributes. Obsidian
+# slows down on a note of several MB and does not run inline handlers, so the export moves
+# both out of the note: each data URI becomes a file in <slug>/assets/, each widget a file
+# in <slug>/widgets/ rendered by a dataviewjs block (Dataview plugin, JavaScript queries
+# enabled) through <slug>/widget.js, which turns the on* attributes back into event
+# listeners.
 
 DATA_URI = re.compile(r"data:([a-z0-9.+/-]+);base64,([A-Za-z0-9+/=]+)")
 MD_IMAGE = re.compile(r"!\[([^\]]*)\]\(" + DATA_URI.pattern + r"\)")
@@ -1054,6 +1157,41 @@ for (const el of box.querySelectorAll("*")) {
   }
 }
 """
+
+
+# An HTML section needs no guessing: its file is copied into <slug>/ with the frame's
+# head written in (VAULT_FRAME_HEAD), with its media folder, and the note holds, under
+# the section's title, a link to the file (it opens the section in the browser, as a page
+# of its own, in the page's default theme) and a dataviewjs block that draws the section
+# in a section frame inside the note, as the page does (frame.py), through
+# <slug>/section.js, a copy of static/vault-section.js. The note does not hold the
+# section's prose, so Obsidian's search does not find it.
+
+# The head an exported HTML section gets: the theme tokens and frame.js, written next to
+# it in <slug>/. section.js replaces these two links by the files' text (see there).
+VAULT_FRAME_HEAD = '<link rel="stylesheet" href="frame.css"><script src="frame.js"></script>'
+
+
+def _export_html_section(s: Session, sid: str, text: str, vault_dir: Path) -> str:
+    """Copy an HTML section's file, with the frame's head, and its media folder into
+    vault_dir/<slug>/, and return what the note holds in its place: a link to the file
+    and the dataviewjs block that draws it."""
+    media = vault_dir / s.slug
+    rel = media.resolve().relative_to(_vault_root(vault_dir.resolve())).as_posix()
+    media.mkdir(parents=True, exist_ok=True)
+    (media / f"{sid}.html").write_text(frame.inject(text, VAULT_FRAME_HEAD), encoding="utf-8")
+    if s.media_folder(sid).is_dir():
+        shutil.copytree(s.media_folder(sid), media / sid, dirs_exist_ok=True)
+    (media / "frame.css").write_text(frame.tokens_css(), encoding="utf-8")
+    (media / "frame.js").write_text(frame.frame_js(), encoding="utf-8")
+    view = (frame.STATIC / "vault-section.js").read_text(encoding="utf-8")
+    view = view.replace("{SANDBOX}", frame.SANDBOX).replace("{HEAD}", json.dumps(VAULT_FRAME_HEAD))
+    (media / "section.js").write_text(view, "utf-8")
+    args = json.dumps({"file": f"{rel}/{sid}.html", "root": rel}, ensure_ascii=False)
+    return (
+        f"[Open this section in the browser]({s.slug}/{sid}.html)\n\n"
+        f'```dataviewjs\nawait dv.view("{rel}/section", {args})\n```'
+    )
 
 
 def _vault_root(path: Path) -> Path:

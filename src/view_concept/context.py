@@ -24,6 +24,9 @@ Roles:
 - `thread`: a side thread, read-only. Gets the section its passage belongs to; it reads
   the others on demand.
 
+An HTML section is loaded by its visible text, the words a reader sees in it, not its HTML
+source; its heading names its file, for an agent that needs the source.
+
 Once the model is approved, every role also sees which changes of the model the code does
 not carry yet, in full however old: the implementer acts on them, the others must know the
 code lags behind them.
@@ -73,16 +76,18 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     out += ["", *_change_history(s)]
     out += ["", *_questions(questions)]
     out += ["", *_recent("Terminal messages", s.read_terminal_messages(), _message_line)]
-    sections = s.read_sections()
+    html = s.html_sections()
+    # An HTML section is read by its visible text, not its HTML source.
+    sections = {**s.read_sections(), **{k: v for k, v in s.read_prose().items() if k in html}}
     if role in ("writer", "reviewer"):
-        out += ["", "## Sections", *_sections(outline, sections, None)]
+        out += ["", "## Sections", *_sections(outline, sections, None, html=html)]
     elif role == "implementer":
         named = set(trigger or [])
         wanted = {sec["id"] for sec in outline if not _refactoring(sec) or sec["id"] in named}
         out += ["", "## Sections (the modeling part, and the sections the trigger names)"]
-        out += _sections(outline, sections, None, wanted)
+        out += _sections(outline, sections, None, wanted, html)
     elif role == "thread" and section:
-        out += ["", "## Section of the passage", *_sections(outline, sections, section)]
+        out += ["", "## Section of the passage", *_sections(outline, sections, section, html=html)]
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -233,6 +238,7 @@ def _sections(
     sections: dict[str, str],
     only: str | None,
     among: set[str] | None = None,
+    html: set[str] | None = None,
 ) -> list[str]:
     number = _number(outline)
     ids = [
@@ -247,5 +253,8 @@ def _sections(
     titles = {sec["id"]: sec.get("title", sec["id"]) for sec in outline}
     lines = []
     for sid in ids:
-        lines += [f"### {number[sid]}. {titles[sid]} ({sid})", sections[sid].strip(), ""]
+        kind = ""
+        if sid in (html or ()):
+            kind = f" · HTML section, its visible text (sections/{sid}.html)"
+        lines += [f"### {number[sid]}. {titles[sid]} ({sid}){kind}", sections[sid].strip(), ""]
     return lines

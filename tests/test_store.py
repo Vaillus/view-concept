@@ -92,6 +92,31 @@ def test_export_moves_media_out_of_the_note(session, tmp_path):
     assert (media / "widget.js").exists()
 
 
+def test_export_links_an_html_section_and_frames_it(session, tmp_path):
+    vault = tmp_path / "vault"
+    (vault / ".obsidian").mkdir(parents=True)
+    document = '<p>Une figure.</p><video src="s2/a.mp4"></video>'
+    (session.sections_dir / "s2.html").write_text(document)
+    (session.sections_dir / "s2").mkdir()
+    (session.sections_dir / "s2" / "a.mp4").write_bytes(b"mp4")
+    note = session.export(vault / "explanations").read_text()
+    media = vault / "explanations" / "kv-cache"
+    # copied with the frame's head, so the link shows the page's default theme
+    exported = (media / "s2.html").read_text()
+    assert exported.startswith(
+        '<link rel="stylesheet" href="frame.css"><script src="frame.js"></script>'
+    )
+    assert exported.endswith(document)
+    assert (media / "s2" / "a.mp4").read_bytes() == b"mp4"
+    assert "## Cache\n\n[Open this section in the browser](kv-cache/s2.html)" in note
+    assert 'dv.view("explanations/kv-cache/section", ' in note and "Une figure" not in note
+    view = (media / "section.js").read_text()
+    assert 'sandbox: "allow-scripts ' in view
+    # the view drops the file's two links and writes the two files' text in their place
+    assert 'html.split("<link rel=\\"stylesheet\\" href=\\"frame.css\\">' in view
+    assert (media / "frame.css").exists() and (media / "frame.js").exists()
+
+
 def test_list_sessions(session, tmp_path):
     session.add_batch([{"text": "a"}])
     rows = list_sessions(tmp_path)
@@ -569,3 +594,34 @@ def test_an_explanation_has_no_unimplemented_changes(session):
     session.add_change("renamed")
     session.add_batch([], action="approve-model")
     assert session.unimplemented_changes() == []
+
+
+def test_an_html_section_is_read_from_its_html_file(session):
+    (session.sections_dir / "s3.html").write_text("<p>Une figure.</p>")
+    assert session.read_sections()["s3"] == "<p>Une figure.</p>"
+    assert session.html_sections() == {"s3"}
+    assert session.two_file_sections() == []
+
+
+def test_the_html_file_wins_over_the_md_file(session):
+    (session.sections_dir / "s1.html").write_text("<p>Réécrite en HTML.</p>")
+    assert session.read_sections()["s1"] == "<p>Réécrite en HTML.</p>"
+    assert session.two_file_sections() == ["s1"]
+
+
+def test_an_html_section_changes_the_signature(session):
+    before = session.signature()
+    (session.sections_dir / "s3.html").write_text("<p>x</p>")
+    assert session.signature() != before
+
+
+def test_the_visible_text_of_an_html_section_counts_for_the_precedence_check(ordered):
+    (ordered.sections_dir / "a.md").unlink()
+    (ordered.sections_dir / "a.html").write_text(
+        "<style>.convex-problem{}</style><svg><text>a convex problem</text></svg>"
+        "<script>label('rule')</script>"
+    )
+    early = {(p["term"], p["section"]) for p in ordered.check_precedence(write=False)
+             if p["issue"] == "early"}  # fmt: skip
+    assert ("convex problem", "a") in early
+    assert ordered.read_prose()["a"] == "a convex problem"

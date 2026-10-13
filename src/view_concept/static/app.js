@@ -364,6 +364,7 @@ function renderDoc() {
     $("#refactor").replaceChildren();
     return;
   }
+  parkFrames();
   doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map((s) => sectionBlock(s)), docButton);
   $("#refactor").replaceChildren(...[lagLine()].filter(Boolean),
     ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), prButton);
@@ -374,6 +375,8 @@ function renderDoc() {
     annotateAudit(view);
     annotateLexicon(view);
   }
+  placeFrames();
+  frames.forEach((f, id) => postTerms(id, f));
   applyHighlights();
   renderThreadChips();
   positionPopover();
@@ -384,7 +387,8 @@ function renderDoc() {
 function sectionBlock(s, { bare = false } = {}) {
   const body = el("div", { class: "body" });
   const written = s.id in state.sections;
-  if (written) body.innerHTML = state.sections[s.id].html;
+  if (written && state.sections[s.id].kind === "html") body.append(el("div", { class: "frame-slot", "data-frame": s.id }));
+  else if (written) body.innerHTML = state.sections[s.id].html;
   else if (writingId() === s.id) body.append(el("p", { class: "writing-line", text: "writing" }));
   const cls = ["sec", written ? "" : "unwritten", isUpdated(s.id) ? "updated" : "", bare ? "bare" : ""].join(" ");
   return el("section", { class: cls, id: `sec-${s.id}`, "data-id": s.id },
@@ -722,6 +726,227 @@ function annotateLexicon(doc) {
   });
 }
 
+/* ---------------- section frames ----------------
+   An HTML section is drawn in a section frame (frame.py): an <iframe> that loads the
+   section's file from the server, sandboxed so it runs as a separate web page. Its block
+   holds a slot where the frame goes. A frame is kept across re-renders while its file is
+   unchanged (same version), so a figure does not reload whenever another file of the
+   session changes: before a render the frames are parked, after it each one is moved
+   into its section's slot. moveBefore keeps a moved frame running; a browser without it
+   reloads the frame. The frame takes the height its content posts (static/frame.js).
+   The page's tools reach a passage inside it through frame messages (static/frame.js):
+   the frame posts the reader's selection, a click on a side thread's passage and the
+   underlined term under the pointer; the page posts the passages to highlight (anchors),
+   the one to reveal, the words added since the highlight baseline (changes) and the
+   terms to underline (terms), which the frame paints over the words. */
+
+// As frame.SANDBOX: scripts run, and no allow-same-origin, so the frame cannot reach the page.
+const SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms";
+const frames = new Map(); // section id -> its frame
+
+function moveInto(parent, node, before = null) {
+  if (parent.moveBefore && node.isConnected) parent.moveBefore(node, before);
+  else parent.insertBefore(node, before);
+}
+
+function parkFrames() {
+  const park = $("#frame-park");
+  for (const f of frames.values()) if (f.isConnected && f.parentElement !== park) moveInto(park, f);
+}
+
+function placeFrames() {
+  const placed = new Set();
+  document.querySelectorAll(".frame-slot[data-frame]").forEach((slot) => {
+    const id = slot.dataset.frame;
+    if (placed.has(id)) return;
+    const { version } = state.sections[id];
+    let f = frames.get(id);
+    if (!f || f.dataset.version !== version) {
+      if (f) f.remove();
+      f = el("iframe", { class: "frame", sandbox: SANDBOX, allow: "fullscreen", title: titleOf(id),
+                         "data-version": version, src: `/s/${SLUG}/sections/${encodeURIComponent(id)}.html?v=${version}` });
+      f.addEventListener("load", () => { postTheme(f); postAnchors(id, f); postChanges(id, f); postTerms(id, f); });
+      frames.set(id, f);
+    }
+    moveInto(slot, f);
+    placed.add(id);
+  });
+  for (const [id, f] of frames) if (!placed.has(id)) { f.remove(); frames.delete(id); }
+}
+
+/* The theme tokens: the frame defines every theme; the page tells it which one it is in,
+   at load and at every change of the page's theme. */
+function postTheme(f) {
+  if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "theme", theme: document.documentElement.dataset.theme }, "*");
+}
+new MutationObserver(() => frames.forEach(postTheme))
+  .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+/* The frame messages a frame posts: its height, the reader's selection inside it, where
+   a revealed passage sits, the side threads whose passage it found (placed), the side
+   thread whose passage was clicked, and the term under the pointer (static/frame.js). */
+const revealing = new Map(); // section id -> the comment whose passage its frame looks for
+
+window.addEventListener("message", (e) => {
+  const d = e.data;
+  if (!d || typeof d.viewConcept !== "string") return;
+  const hit = [...frames].find(([, f]) => f.contentWindow === e.source);
+  if (!hit) return;
+  const [id, f] = hit;
+  if (d.viewConcept === "height") f.style.height = `${d.height}px`;
+  else if (d.viewConcept === "selection") frameSelection(id, f, d);
+  else if (d.viewConcept === "revealed") frameRevealed(id, f, d);
+  else if (d.viewConcept === "placed") framePlaced(f, d);
+  else if (d.viewConcept === "thread-click") frameThreadClick(id, f, d);
+  else if (d.viewConcept === "term-hover") frameTermHover(f, d);
+});
+
+/* A rect of the frame's viewport, in the page's viewport. */
+function pageRect(f, r) {
+  const b = f.getBoundingClientRect();
+  const x = b.left + f.clientLeft, y = b.top + f.clientTop;
+  return { left: x + r.left, right: x + r.right, top: y + r.top, bottom: y + r.bottom,
+           width: r.right - r.left, height: r.bottom - r.top };
+}
+
+/* The selection message: a passage selected in an HTML section gets the box a passage of
+   a Markdown section gets, anchored the same way (section id, quote, prefix). */
+function frameSelection(id, f, d) {
+  const btn = $("#sel-actions");
+  if (!d.quote || !d.rect) {
+    if (pendingSelection && pendingSelection.section === id) { btn.hidden = true; pendingSelection = null; }
+    return;
+  }
+  const rect = pageRect(f, d.rect);
+  pendingSelection = { section: id, quote: collapse(String(d.quote)), prefix: collapse(String(d.prefix || "")), rect };
+  btn.hidden = false;
+  btn.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  btn.style.left = `${Math.max(8, rect.left)}px`;
+}
+
+/* The anchors message: the passages the drafts, the sent comments and the side threads
+   quote in an HTML section, which its frame highlights. */
+const quotesIn = (id, list) => list.filter((c) => c.section === id && c.quote && !c.quote.startsWith("plan · "));
+function postAnchors(id, f = frames.get(id)) {
+  if (!f || !f.contentWindow || !state) return;
+  const anchor = (kind) => ({ id: thread, quote, prefix }) =>
+    ({ kind, quote, prefix: prefix || "", ...(kind === "thread" ? { thread } : {}) });
+  const sent = state.comments.batches.flatMap((b) => b.comments).filter((c) => c.status === "sent");
+  const anchors = [
+    ...quotesIn(id, drafts).map(anchor("draft")),
+    ...quotesIn(id, sent).map(anchor("sent")),
+    ...quotesIn(id, threadsState.threads).map(anchor("thread")),
+  ];
+  f.contentWindow.postMessage({ viewConcept: "anchors", anchors }, "*");
+}
+
+/* The answer « placed » to the anchors: the side threads whose passage the frame found
+   (f.placed), which get no chip in the section's heading, as a Markdown passage. */
+function framePlaced(f, d) {
+  if (!Array.isArray(d.threads)) return;
+  f.placed = new Set(d.threads.map(String));
+  if (state) renderThreadChips();
+}
+
+/* The thread click message: the reader clicked a passage the frame highlights for a side
+   thread. Its thread opens on it, as on a passage of a Markdown section; the popover sits
+   under the passage (frameThreads), and follows it when the view scrolls. */
+const frameThreads = new Map(); // thread id -> { f, rect }: its passage, in its frame's viewport
+function frameThreadClick(id, f, d) {
+  const t = threadOf(String(d.thread));
+  if (!t || t.section !== id || !d.rect) return;
+  frameThreads.set(t.id, { f, rect: d.rect });
+  openPopover(t.id);
+}
+
+/* The changes message: the words added to an HTML section since its highlight baseline.
+   The page compares the visible text of the file now with the baseline file, word by
+   word (the text frame.js indexes: the body's text outside its scripts and styles,
+   whitespace collapsed, a space between two blocks), and posts each run of added words
+   as a passage. The file is parsed, not run: its scripts do not run here. */
+const HIDDEN_TAGS = "script, style, noscript, template";
+// As frame.js: the elements whose text is not run on with the text around them.
+const FRAME_BLOCKS = "address, article, aside, blockquote, dd, details, div, dl, dt, figcaption, figure, footer, " +
+  "form, h1, h2, h3, h4, h5, h6, header, hr, li, main, nav, ol, p, pre, section, summary, table, td, th, tr, ul, " +
+  "button, caption, label, option, text, tspan, br";
+function visibleText(html) {
+  const body = new DOMParser().parseFromString(html || "", "text/html").body;
+  if (!body) return "";
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentElement.closest(HIDDEN_TAGS) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  let text = "", block = null;
+  while (walker.nextNode()) {
+    const n = walker.currentNode, b = n.parentElement.closest(FRAME_BLOCKS);
+    if (b !== block) text += " ";
+    block = b;
+    text += n.data;
+  }
+  return collapse(text);
+}
+function addedPassages(sec) {
+  if (!sec.updated) return [];
+  const now = visibleText(sec.md);
+  const spans = [];
+  for (const m of now.matchAll(/\S+/g)) spans.push([m.index, m.index + m[0].length, m[0]]);
+  const { inserted } = diffWords(visibleText(sec.seen).split(" ").filter(Boolean), spans.map((w) => w[2]));
+  const out = [];
+  let run = null;
+  spans.forEach(([a, b], k) => {
+    if (!inserted.has(k)) { run = null; return; }
+    if (run) run.end = b;
+    else out.push(run = { start: a, end: b });
+  });
+  return out.map(({ start, end }) => ({ quote: now.slice(start, end), prefix: now.slice(Math.max(0, start - 32), start) }));
+}
+function postChanges(id, f = frames.get(id)) {
+  const sec = state && state.sections[id];
+  if (!f || !f.contentWindow || !sec) return;
+  f.contentWindow.postMessage({ viewConcept: "changes", changes: addedPassages(sec) }, "*");
+}
+
+/* The terms message: what the page underlines in a Markdown section, for the frame to
+   paint over the words: the audit's entries on this section (one per term, their notes
+   joined, as annotateAudit does), the term this section is the home of, and every
+   lexicon term. Each carries the key its term hover message gives back. */
+function postTerms(id, f = frames.get(id)) {
+  if (!f || !f.contentWindow || !state) return;
+  const audit = new Map();
+  for (const a of state.audit || []) {
+    if ((a.section || "") !== id || !a.term) continue;
+    const k = a.term.toLowerCase();
+    if (!audit.has(k)) audit.set(k, { term: a.term, notes: [] });
+    audit.get(k).notes.push(`audit · ${a.issue || "flagged"}${a.note ? " — " + a.note : ""}`);
+  }
+  const terms = [...audit.values()].map((a) => ({ term: a.term, kind: "audit", key: { tip: a.notes.join(" ; ") } }));
+  state.plan.lexicon.forEach((t, i) => {
+    if (t.section === id) terms.push({ term: t.term, kind: "def", key: { term: i } });
+    terms.push({ term: t.term, kind: "term", key: { term: i } });
+  });
+  f.contentWindow.postMessage({ viewConcept: "terms", terms }, "*");
+}
+
+/* The term hover message: the tip of the term under the pointer, under the word, as over
+   a Markdown section; nothing once the pointer leaves it. */
+function frameTermHover(f, d) {
+  const key = d.key || {};
+  if (!d.rect || (!Number.isInteger(key.term) && typeof key.tip !== "string")) { $("#tip").hidden = true; return; }
+  if (Number.isInteger(key.term) && !state.plan.lexicon[key.term]) return;
+  showTip(key.tip ?? null, key.term ?? null, pageRect(f, d.rect));
+}
+
+/* The reveal message: the frame finds the passage and answers where it sits; the frame
+   takes the height of its content, so the page does the scrolling. */
+function frameRevealed(id, f, d) {
+  if (!revealing.delete(id)) return;
+  if (!d.found) { scrollToSection(id); return; }
+  const r = pageRect(f, { left: 0, right: 0, top: d.top, bottom: d.bottom });
+  const view = f.closest(".view");
+  if (!view) return;
+  const v = view.getBoundingClientRect();
+  view.scrollBy({ top: (r.top + r.bottom) / 2 - (v.top + view.clientHeight / 2), behavior: "smooth" });
+}
+
 /* ---------------- quotes <-> ranges ---------------- */
 
 /* Text of a section body with whitespace collapsed, plus the DOM position of every
@@ -771,6 +996,7 @@ function applyHighlights() {
   CSS.highlights.set("ev-draft", new Highlight(...draftRanges));
   CSS.highlights.set("ev-sent", new Highlight(...sentRanges));
   CSS.highlights.set("ev-thread", new Highlight(...threadRanges.map(([, r]) => r)));
+  frames.forEach((f, id) => postAnchors(id, f));
   markUpdates();
 }
 
@@ -861,6 +1087,9 @@ function markUpdates() {
   for (const [id, sec] of Object.entries(state.sections)) {
     const body = sec.updated && document.querySelector(`#sec-${CSS.escape(id)} .body`);
     if (!body) continue;
+    // A section frame is out of the page's reach: its rectangle gets the change bar (it also
+    // marks words only removed), and the changes message has the frame highlight the words added.
+    if (sec.kind === "html") { body.querySelectorAll(".frame-slot").forEach((n) => n.classList.add("changed")); continue; }
     const before = document.createElement("div");
     before.innerHTML = sec.seen_html || "";
     const now = words(body);
@@ -879,6 +1108,7 @@ function markUpdates() {
     });
   }
   if (window.CSS && CSS.highlights) CSS.highlights.set("ev-updated", new Highlight(...ranges));
+  frames.forEach((f, id) => postChanges(id, f));
 }
 
 async function markSeen(ids) {
@@ -893,6 +1123,12 @@ function revealQuote(c) {
   if (c.quote.startsWith("plan · ")) { setTab("plan"); return; }
   setTab(tabOf(c.section));
   openItemOf(c.section);
+  const f = c.quote && (state.sections[c.section] || {}).kind === "html" && frames.get(c.section);
+  if (f && f.contentWindow) {
+    revealing.set(c.section, c);
+    f.contentWindow.postMessage({ viewConcept: "reveal", quote: c.quote, prefix: c.prefix || "" }, "*");
+    return;
+  }
   const r = findQuote(c.section, c.quote, c.prefix);
   if (r) {
     r.startContainer.parentElement.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -1346,7 +1582,8 @@ $("#new-thread").addEventListener("click", (e) =>
 const threadOf = (id) => threadsState.threads.find((t) => t.id === id);
 const sentThreads = () => new Set((state ? state.comments.batches : []).flatMap((b) => b.comments).map((c) => c.thread).filter(Boolean));
 
-/* The threads without a passage on the page, as chips. */
+/* The threads without a passage on the page, as chips: a passage of a Markdown section
+   (threadRanges) or one a frame found (placed) takes the chip away. */
 function renderThreadChips() {
   const placed = new Set(threadRanges.map(([t]) => t.id));
   const chip = (t) => el("button", {
@@ -1356,7 +1593,8 @@ function renderThreadChips() {
   });
   document.querySelectorAll(".t-chips[data-section]").forEach((box) =>
     box.replaceChildren(...threadsState.threads
-      .filter((t) => t.section === box.dataset.section && !placed.has(t.id)).map(chip)));
+      .filter((t) => t.section === box.dataset.section && !placed.has(t.id)
+        && !frames.get(t.section)?.placed?.has(t.id)).map(chip)));
   $("#general-threads").replaceChildren(...threadsState.threads.filter((t) => !t.section).map(chip));
 }
 
@@ -1373,6 +1611,8 @@ function threadAt(x, y) {
 function anchorRect(id) {
   const hit = threadRanges.find(([t]) => t.id === id);
   if (hit) return hit[1].getBoundingClientRect();
+  const inFrame = frameThreads.get(id);
+  if (inFrame && inFrame.f.isConnected) return pageRect(inFrame.f, inFrame.rect);
   const chip = document.querySelector(`.t-chip[data-thread="${CSS.escape(id)}"]`);
   return chip ? chip.getBoundingClientRect() : null;
 }
@@ -1389,6 +1629,7 @@ function openPopover(id) {
 }
 
 function closePopover() {
+  if (popThread) frameThreads.delete(popThread);
   popThread = null;
   $("#thread-pop").hidden = true;
 }
@@ -1617,22 +1858,26 @@ $("#unpublish").addEventListener("click", async () => {
   }
 });
 
-document.addEventListener("mouseover", (e) => {
-  const t = e.target.closest("[data-tip], [data-term]");
+/* The tip under a word: a lexicon entry's (`term`, its index) or a plain text (`text`). */
+function showTip(text, term, r) {
   const tip = $("#tip");
-  if (!t) { tip.hidden = true; return; }
-  if (t.dataset.term !== undefined) {
-    const entry = state.plan.lexicon[Number(t.dataset.term)];
+  if (term !== null) {
+    const entry = state.plan.lexicon[term];
     tip.replaceChildren(el("div", { class: "tip-term", text: entry.term }));
     const body = el("div", { class: "tip-body" });
     body.innerHTML = entry.tip_html;
     tip.append(body);
     typesetMath(tip);
-  } else tip.textContent = t.dataset.tip;
+  } else tip.textContent = text;
   tip.hidden = false;
-  const r = t.getBoundingClientRect();
   tip.style.top = `${window.scrollY + r.bottom + 4}px`;
   tip.style.left = `${Math.min(r.left, innerWidth - 360)}px`;
+}
+
+document.addEventListener("mouseover", (e) => {
+  const t = e.target.closest("[data-tip], [data-term]");
+  if (!t) { $("#tip").hidden = true; return; }
+  showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect());
 });
 
 // ?static skips the live stream (headless rendering never finishes while it is open).

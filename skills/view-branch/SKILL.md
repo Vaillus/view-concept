@@ -244,6 +244,47 @@ Model tab (the page's name for the Explanation tab in a branch review). The
 `"part": "refactoring"` belongs to it, and is a **refactor section**: the
 page shows it in the refactor tab.
 
+### The visual rule: Markdown or HTML
+
+A section may be written as an **HTML section**: `sections/<id>.html` instead
+of `sections/<id>.md`. The page draws it in a frame of its own, as claude.ai
+draws an artifact: its scripts run, its styles stay inside the frame, and it
+can load from the web. The extension alone says the kind; a section has one
+file, so delete the `.md` when you switch a section to HTML (`view-concept
+check` reports a pair).
+
+- **When.** Write a section as an HTML section when its visual needs its own
+  styles, behaviour (a step player, a slider, an animation) or a library (a
+  chart, d3). A diagram Mermaid can draw stays a ```` ```mermaid ```` block in
+  a Markdown section. Never write an HTML block (raw HTML that starts its own
+  paragraph) into a Markdown section: `view-concept check` reports it; inline
+  HTML in a sentence (`<b>`, `<span>`) is fine.
+- **What the file holds.** One self-contained HTML document: its HTML, CSS and
+  JavaScript in the file, no heading of its own (the page renders the title).
+  Paint with the page's theme tokens, `var(--bg)`, `var(--ink)`,
+  `var(--ink-dim)`, `var(--muted)`, `var(--line)`, `var(--raised)`,
+  `var(--accent)`, `var(--ok)`, `var(--warn)`, `var(--flag)`, `var(--danger)`,
+  `var(--info)`, `var(--alt)` and `var(--mono)` for the font: the frame
+  receives them and follows the page's light or dark theme, so never hard-code
+  a palette.
+- **Size.** Under 2 MB, embedded media included. Never write a large image or
+  video into the file as a data URI: load it from the web or, when you
+  produced it yourself (a manim render, a GIF), put it in the section's media
+  folder, `sections/<id>/`, and load it by a relative address (`<video
+  src="<id>/step-1.mp4">`). The page serves the folder, and the published page
+  and the vault export copy it along. `view-concept check` reports a file over
+  the limit.
+- **Loading from the web.** Libraries from cdnjs.cloudflare.com,
+  cdn.jsdelivr.net or unpkg.com; any other site when the section needs it.
+  Either way, a section that loads from the web needs a connection to show.
+- **Prose.** No preference: an HTML section may hold prose as well as visuals,
+  as an artifact does; choose how much goes there. Know its one cost: text a
+  script paints into a `<canvas>` cannot be selected, highlighted or
+  underlined, so a figure drawn there is commented as a whole. Everything else
+  works as in a Markdown section: term underlines and their tips, change
+  highlights, comments and side threads on a passage. Its visible text (outside its scripts and styles) still
+  counts for `view-concept check`.
+
 ### Model consolidation — the modeling part
 
 1. **Setup.** Run **Setup**, arm the comment channel, and set `status <slug>

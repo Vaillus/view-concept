@@ -4,17 +4,18 @@ runs side threads."""
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import publish, threads
+from . import frame, publish, threads
 from .render import md
 from .store import Session, SessionError, list_sessions
 
@@ -68,6 +69,7 @@ def state(slug: str) -> dict[str, Any]:
     try:
         plan = s.read_plan()
         sections = s.read_sections()
+        html_sections = s.html_sections()
         audit = s.read_audit()
         comments = s.read_comments()
         status = s.read_status()
@@ -90,7 +92,9 @@ def state(slug: str) -> dict[str, Any]:
         "listening": s.is_listening(),
         "workflow": plan.get("workflow", ""),
         "status": status,
-        "sections": {k: section_view(v, seen[k]) for k, v in sections.items()},
+        "sections": {
+            k: section_view(v, seen[k], html=k in html_sections) for k, v in sections.items()
+        },
         "audit": audit,
         "comments": comments,
         "changes": changes,
@@ -114,14 +118,59 @@ def published_view(s: Session) -> dict[str, Any] | None:
     return {"url": record.get("url"), "at": record.get("at"), "out_of_date": s.is_out_of_date()}
 
 
-def section_view(text: str, seen: str) -> dict[str, Any]:
+def section_view(text: str, seen: str, html: bool = False) -> dict[str, Any]:
     """A section as the page renders it. An updated section (its text differs from its
     highlight baseline, the text at the last batch or « mark read ») also carries the
-    HTML of the baseline, which the page diffs against to highlight what changed."""
+    HTML of the baseline, which the page diffs against to highlight what changed.
+
+    An HTML section is drawn in a section frame, which loads its file from the server
+    (`section_document`): its view carries no rendered HTML but `version`, a hash of its
+    text, so the page reloads the frame only when the file changed. An updated one
+    carries its baseline file as `seen`: the page compares the visible text of both and
+    sends the frame the passages added (the changes frame message)."""
+    if html:
+        version = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+        view = {"md": text, "kind": "html", "version": version, "updated": text != seen}
+        if view["updated"]:
+            view["seen"] = seen
+        return view
     view: dict[str, Any] = {"md": text, "html": md.render(text), "updated": text != seen}
     if view["updated"]:
         view["seen_html"] = md.render(seen)
     return view
+
+
+# The head the page writes into an HTML section: its theme tokens, then frame.js.
+FRAME_HEAD = (
+    '<link rel="stylesheet" href="/frame/tokens.css"><script src="/static/frame.js"></script>'
+)
+
+
+# Sent with a section frame's document and its media files: the frame's sandbox flags as
+# a header, so the browser gives them an origin of their own wherever they are opened
+# (a new tab, their address), not only inside the page's <iframe>.
+FRAME_SANDBOX_HEADER = {"Content-Security-Policy": f"sandbox {frame.SANDBOX}"}
+
+
+@app.get("/frame/tokens.css")
+def frame_tokens() -> Response:
+    """The theme tokens of a section frame (frame.py)."""
+    return Response(frame.tokens_css(), media_type="text/css")
+
+
+@app.get("/s/{slug}/sections/{name}")
+def section_document(slug: str, name: str) -> HTMLResponse:
+    """The document a section frame loads: the HTML section's file, with the frame's head
+    (frame.py) written in. Its relative addresses resolve against /s/<slug>/sections/."""
+    s = get_session(slug)
+    sid = name.removesuffix(".html")
+    if not name.endswith(".html") or sid not in s.html_sections():
+        raise HTTPException(404, f"no HTML section {name!r}")
+    text = s.section_files()[sid].read_text(encoding="utf-8")
+    return HTMLResponse(
+        frame.inject(text, FRAME_HEAD),
+        headers={"Cache-Control": "no-store", **FRAME_SANDBOX_HEADER},
+    )
 
 
 class SeenIn(BaseModel):
@@ -279,6 +328,18 @@ def thread_delete(slug: str, tid: str) -> dict[str, bool]:
 def thread_stop(slug: str, tid: str) -> dict[str, bool]:
     threads.stop(get_session(slug), tid)
     return {"ok": True}
+
+
+@app.get("/s/{slug}/sections/{sid}/{path:path}")
+def section_media(slug: str, sid: str, path: str) -> FileResponse:
+    """A file of an HTML section's media folder, sections/<id>/: the media the agent
+    produced for it, which the section loads by a relative address."""
+    s = get_session(slug)
+    folder = s.media_folder(sid).resolve()
+    file = (folder / path).resolve()
+    if sid not in s.html_sections() or not file.is_relative_to(folder) or not file.is_file():
+        raise HTTPException(404, f"no media file {sid}/{path}")
+    return FileResponse(file, headers=FRAME_SANDBOX_HEADER)
 
 
 @app.post("/api/s/{slug}/export")
