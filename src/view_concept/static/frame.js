@@ -15,9 +15,12 @@
      quoted text and the few characters before it (the anchor a passage of a Markdown
      section gets), with where the selection sits in the frame; an empty quote when the
      selection is gone. The page opens the same box to comment or to ask on it.
-   - The anchors (page -> frame): the passages the page's drafts, sent comments and side
-     threads quote in this section. Each is highlighted, and highlighted again when a
-     script of the section redraws its text.
+   - The anchors (page -> frame), answered by "placed" (frame -> page): the passages the
+     page's drafts, sent comments and side threads quote in this section. Each is
+     highlighted, and highlighted again when a script of the section redraws its text.
+     The frame answers with the side threads whose passage it found, and posts that list
+     again when a redraw changes it, so the page shows a chip in the section's heading
+     only for the others, as in a Markdown section.
    - The reveal (page -> frame), answered by "revealed" (frame -> page): a passage to
      show. The frame highlights it for a moment and answers with where it sits, so the
      page scrolls to it; the frame takes the height of its content, so the scrolling is
@@ -146,6 +149,7 @@
   var terms = [];   // { term, kind: term | def | audit, key }
   var focus = null; // { quote, prefix } of the passage being revealed
   var threadRanges = [], termRanges = []; // [anchor, range], [term, range] as last painted
+  var placed = null; // the side threads' ids last posted as "placed", joined
   var KINDS = ["draft", "sent", "thread", "focus", "updated", "term", "def", "audit"];
   var marks = document.createElement("style");
   marks.textContent =
@@ -197,8 +201,18 @@
     return out;
   }
 
-  function highlight() {
-    if (!window.CSS || !CSS.highlights) return;
+  // The answer to the anchors: posted after each anchors message (answer set), and
+  // after a redraw only when the list of side threads found changed.
+  function postPlaced(answer) {
+    var ids = threadRanges.map(function (tr) { return String(tr[0].thread); });
+    var key = ids.join("\n");
+    if (!answer && key === placed) return;
+    placed = key;
+    post({ viewConcept: "placed", threads: ids });
+  }
+
+  function highlight(answer) {
+    if (!window.CSS || !CSS.highlights) { if (answer) post({ viewConcept: "placed", threads: [] }); return; }
     var index = textIndex(), ranges = {};
     KINDS.forEach(function (k) { ranges[k] = []; });
     threadRanges = [];
@@ -219,6 +233,7 @@
     KINDS.forEach(function (k) {
       CSS.highlights.set("ev-" + k, new (Function.prototype.bind.apply(Highlight, [null].concat(ranges[k])))());
     });
+    postPlaced(answer);
   }
 
   // A script that redraws the section's text drops the ranges with the old nodes: find
@@ -279,7 +294,7 @@
     var d = e.data;
     if (e.source !== parent || !d) return;
     if (d.viewConcept === "theme" && d.theme) root.setAttribute("data-theme", d.theme);
-    else if (d.viewConcept === "anchors" && Array.isArray(d.anchors)) { anchors = d.anchors; highlight(); }
+    else if (d.viewConcept === "anchors" && Array.isArray(d.anchors)) { anchors = d.anchors; highlight(true); }
     else if (d.viewConcept === "changes" && Array.isArray(d.changes)) { changes = d.changes; highlight(); }
     else if (d.viewConcept === "terms" && Array.isArray(d.terms)) { terms = d.terms; hover(null); highlight(); }
     else if (d.viewConcept === "reveal") reveal(d.quote, d.prefix);

@@ -783,8 +783,8 @@ new MutationObserver(() => frames.forEach(postTheme))
   .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
 /* The frame messages a frame posts: its height, the reader's selection inside it, where
-   a revealed passage sits, the side thread whose passage was clicked, and the term under
-   the pointer (static/frame.js). */
+   a revealed passage sits, the side threads whose passage it found (placed), the side
+   thread whose passage was clicked, and the term under the pointer (static/frame.js). */
 const revealing = new Map(); // section id -> the comment whose passage its frame looks for
 
 window.addEventListener("message", (e) => {
@@ -796,6 +796,7 @@ window.addEventListener("message", (e) => {
   if (d.viewConcept === "height") f.style.height = `${d.height}px`;
   else if (d.viewConcept === "selection") frameSelection(id, f, d);
   else if (d.viewConcept === "revealed") frameRevealed(id, f, d);
+  else if (d.viewConcept === "placed") framePlaced(f, d);
   else if (d.viewConcept === "thread-click") frameThreadClick(id, f, d);
   else if (d.viewConcept === "term-hover") frameTermHover(f, d);
 });
@@ -837,6 +838,14 @@ function postAnchors(id, f = frames.get(id)) {
     ...quotesIn(id, threadsState.threads).map(anchor("thread")),
   ];
   f.contentWindow.postMessage({ viewConcept: "anchors", anchors }, "*");
+}
+
+/* The answer « placed » to the anchors: the side threads whose passage the frame found
+   (f.placed), which get no chip in the section's heading, as a Markdown passage. */
+function framePlaced(f, d) {
+  if (!Array.isArray(d.threads)) return;
+  f.placed = new Set(d.threads.map(String));
+  if (state) renderThreadChips();
 }
 
 /* The thread click message: the reader clicked a passage the frame highlights for a side
@@ -1573,7 +1582,8 @@ $("#new-thread").addEventListener("click", (e) =>
 const threadOf = (id) => threadsState.threads.find((t) => t.id === id);
 const sentThreads = () => new Set((state ? state.comments.batches : []).flatMap((b) => b.comments).map((c) => c.thread).filter(Boolean));
 
-/* The threads without a passage on the page, as chips. */
+/* The threads without a passage on the page, as chips: a passage of a Markdown section
+   (threadRanges) or one a frame found (placed) takes the chip away. */
 function renderThreadChips() {
   const placed = new Set(threadRanges.map(([t]) => t.id));
   const chip = (t) => el("button", {
@@ -1583,7 +1593,8 @@ function renderThreadChips() {
   });
   document.querySelectorAll(".t-chips[data-section]").forEach((box) =>
     box.replaceChildren(...threadsState.threads
-      .filter((t) => t.section === box.dataset.section && !placed.has(t.id)).map(chip)));
+      .filter((t) => t.section === box.dataset.section && !placed.has(t.id)
+        && !frames.get(t.section)?.placed?.has(t.id)).map(chip)));
   $("#general-threads").replaceChildren(...threadsState.threads.filter((t) => !t.section).map(chip));
 }
 
