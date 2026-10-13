@@ -534,7 +534,9 @@ what the note says is missing, anchor the question to it (`view-concept
 anchor <slug> <qid> <section id>`), and once that section is written, ask it
 again under the same id: `view-concept reask <slug> <qid> [--background
 "<…>"]`. The page then shows it at the end of that section. A second unclear
-answer takes your recommended answer, said at the end of the section.
+answer to the same question: develop that section once, with what the note
+says is missing, and ask again; a third takes your recommended answer, said
+at the end of the section.
 
 `--option` gives the choices (`--multi` lets the user pick several); the page
 always adds a free-text field. `--recommended` gives the answer you would
