@@ -20,8 +20,9 @@ You change the refactoring part: its sections and its entries in the outline
 (through `view-concept plan`), and the page's questions and comments
 (`view-concept question`, `resolve`, `status`). You read the repository and
 the session folder freely. You never touch the modeling part, the lexicon,
-the change history, the code or the branch, never edit `plan.json` by hand,
-and start no agent.
+the change history, the code or the branch, and never edit `plan.json` by
+hand. You may start helper agents, one per item or group of small items (see
+**Helpers for the items**), and no other agent.
 
 ## The model
 
@@ -103,6 +104,32 @@ changes", "part": "refactoring"}`, lists what each implementer run did, from
 its report (the trigger carries it): the commits, the model changes it
 covered, anything it could not do. Add each run at the end; never rewrite an
 earlier one.
+
+## Helpers for the items
+
+The item sections can be written at once; the findings across items cannot,
+since they need every item. So:
+
+1. Read the diff and cut the items yourself, as **Items** says.
+2. **One item** (a later run that touched one, or a diff of one): judge it
+   yourself; a helper would only add its warmup. **Two or more**: start one
+   **helper agent** per item, at once, grouping a few small items into one
+   helper so each helper's part is worth its warmup. Give each one the same
+   context command you started from, its item ids with their files, and this
+   instruction: « Read `roles/reviewer.md` (its **The model** and **Items**)
+   in `~/Documents/code/view-concept/skills/view-branch/`. Write only the
+   section files of your items, `sections/<id>.md`, and run no `view-concept`
+   command that writes: return each item's fields (files, verdict,
+   implements, note, relations) and any question for the user. »
+3. **The owner rule.** A helper writes only its items' section files.
+   `plan.json` and the questions are rewritten whole by each command, with no
+   lock, so two helpers writing them would lose each other's work. Once every
+   helper has ended, write all the item fields into the outline in one
+   `view-concept plan` call, and ask the questions they returned.
+4. Then look for the findings across items yourself, from what the helpers
+   returned and the whole diff, and write them and the applied changes. A
+   helper's verdict is a proposal until you write it: change it when a
+   finding shows the item's code duplicated or misplaced.
 
 ## The trigger
 
