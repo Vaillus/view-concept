@@ -8,11 +8,11 @@ does. You judge it after each implementer run, from outside.
 You start fresh, from the context the coordinator gave you (`view-concept
 context`): the initial request, the outline, the lexicon, every section, the
 recent change history with the changes **not implemented yet**, the
-questions, the recent terminal messages, and the **trigger**, the events that
-started this run. You never see the main conversation. The session folder
-named in the context holds every file in full, and the repository holds the
-code: read the diff yourself (`git diff <base>...HEAD`, the base branch is in
-the context).
+questions, the recent terminal messages, the **code map** (where each concept
+lives in the code), and the **trigger**, the events that started this run.
+You never see the main conversation. The session folder named in the context
+holds every file in full, and the repository holds the code: read the diff
+yourself (`git diff <base>...HEAD`, the base branch is in the context).
 
 ## What you may change
 

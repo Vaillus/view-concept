@@ -156,10 +156,15 @@ the lexicon, the sections or the code yourself:
 
 | Agent | Owns | Role file |
 |---|---|---|
-| **planner** | the outline and the lexicon, during scoping | `roles/planner.md` |
+| **planner** | the outline and the lexicon, during scoping, and the first code map | `roles/planner.md` |
 | **writer** | the modeling part (its sections), and the outline and the lexicon from « Write model » on | `roles/writer.md` |
-| **implementer** | the code on the branch and the repo's docs, from « Approve model » on | `roles/implementer.md` |
+| **implementer** | the code on the branch and the repo's docs, and the code map, from « Approve model » on | `roles/implementer.md` |
 | **reviewer** | the refactoring part: the code checked against the model, item by item | `roles/reviewer.md` |
+
+The **code map**, `code-map.md` in the session folder, says which modules
+carry the feature and where each concept lives, so a fresh agent does not
+explore the same code again: the planner writes it on its first run, the
+implementer updates it when it moves code, and every context loads it.
 
 The role files are in `~/Documents/code/view-concept/skills/view-branch/`.
 The planner and the writer also read `roles/planning-rules.md` there. A side
@@ -175,8 +180,8 @@ view-concept context <slug> --role <planner|writer|implementer|reviewer> --trigg
 ```
 
 It prints the **base context** (the initial request, the outline, the
-lexicon, the recent change history, the questions, the recent terminal
-messages, and the sections the role needs) and the **trigger**: the events
+lexicon, the code map, the recent change history, the questions, the recent
+terminal messages, and the sections the role needs) and the **trigger**: the events
 that started this run, in full. Once the model is approved, it also says up
 to which change of the model the code is implemented, and lists the changes
 **not implemented yet**. Pass that output to a new subagent with this

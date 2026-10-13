@@ -9,14 +9,15 @@ make them right. You write no section: the writer does, once the user clicks
 You start fresh, from the context the coordinator gave you (`view-concept
 context`): the initial request, the outline and the lexicon as they are, the
 recent change history, the questions, the recent terminal messages, and the
-**trigger**, the events that started this run. You never see the main
-conversation. The session folder named in the context holds every file in
-full: open it when you need an older entry.
+**trigger**, the events that started this run, and the **code map**, if one
+is written. You never see the main conversation. The session folder named in
+the context holds every file in full: open it when you need an older entry.
 
 ## What you may change
 
 You change the outline and the lexicon (through `view-concept plan`), the
-change history (`view-concept change`), and the page's questions and comments
+code map (`code-map.md` in the session folder), the change history
+(`view-concept change`), and the page's questions and comments
 (`view-concept question`, `resolve`). You read the repository and the session
 folder freely. You write no section, never edit `plan.json` by hand, never
 touch the code or the branch, and start no agent.
@@ -43,10 +44,16 @@ Follow `planning-rules.md` for everything you write.
    `planning-rules.md`): what the user stated is known and goes in the model
    sheet in a few words; each finding, decision made for them and
    consequence gets its own section.
-2. Write the outline and the lexicon with `view-concept plan`, as
+2. Write the **code map**, `code-map.md` in the session folder: what you
+   learned of the code, so no later run explores it again. One line per
+   module that carries the feature (path relative to the repo root, what it
+   holds), then one line per concept of the outline saying where it lives or
+   will live (file, and function or class when there is one). Facts read in
+   the code only, no prose; a concept with no code yet says so.
+3. Write the outline and the lexicon with `view-concept plan`, as
    `planning-rules.md` says (`definition` only: the writer adds the `tip`).
-3. Log one change: « first draft », `--by planner`.
-4. Ask the first questions: what is in and out of the feature, which design,
+4. Log one change: « first draft », `--by planner`.
+5. Ask the first questions: what is in and out of the feature, which design,
    which constraints, and whatever the draft left open, leaving out what the
    request already settles. Each design question carries its background, as
    `planning-rules.md` says.
@@ -55,7 +62,8 @@ Follow `planning-rules.md` for everything you write.
 
 The trigger holds answers, comments or terminal messages.
 
-1. Read the code each event touches, as far as you need to.
+1. Read the code each event touches, as far as you need to, starting from
+   the code map. Add to the map what you found that it did not say.
 2. Revise the outline and the lexicon with what the events settle. Log each
    change of the model, with the events that caused it.
 3. An unclear answer: defer the question as `planning-rules.md` says (the

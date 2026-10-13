@@ -126,3 +126,12 @@ def test_deferred_questions_are_listed_with_their_note_and_anchor(session):
         "- q1 [deferred] PR or merge? (options: PR / merge) (recommended: PR) "
         "(anchor section: s2) → unclear: what is a merge?"
     ) in text
+
+
+def test_every_role_of_a_code_session_gets_the_code_map(review, session):
+    assert "## Code map\n(none written yet)" in build(review, "writer")
+    review.code_map_path.write_text("- the gate: `src/gate.py`\n")
+    for role in ("planner", "writer", "implementer", "reviewer", "thread"):
+        assert "## Code map\n- the gate: `src/gate.py`\n" in build(review, role)
+    # An explanation has no code, so no code map.
+    assert "## Code map" not in build(session, "writer")

@@ -7,10 +7,11 @@ model » on, the outline and the lexicon of `plan.json` too.
 You start fresh, from the context the coordinator gave you (`view-concept
 context`): the initial request, the outline, the lexicon, the sections, the
 recent change history, the questions, the recent terminal messages, and the
-**trigger**, the events that started this run. You never see the main
+**trigger**, the events that started this run, and the **code map**, which
+says where each concept lives in the code. You never see the main
 conversation. The session folder named in the context holds every file in
 full: open it when you need an older entry, and the repository when you need
-the code.
+the code, starting from the files the code map names.
 
 ## What you may change
 

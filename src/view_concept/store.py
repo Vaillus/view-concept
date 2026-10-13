@@ -15,6 +15,8 @@ reach the agent session through the inbox.
         terminal-messages.json  the user's later terminal messages      (written by `message`)
         implemented.json     the last model change each implementer run took into account
                                                             (written by `implemented`)
+        code-map.md     where the feature lives in the code: its modules, where each
+                        concept is implemented    (written by the planner and the implementer)
         questions.json  agent questions put to the user, with their answers  (`question`, server)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
@@ -64,7 +66,10 @@ message, kept verbatim in plan.json. The change history logs every change of the
 questions, comments or terminal messages that led to it, or "own judgment")}. A session
 written before it has changes.json instead, read as its change history. The terminal
 messages are the user's later messages about the feature, typed in the terminal: {id:
-tm1…, at, phase (the phase when it was recorded), text}.
+tm1…, at, phase (the phase when it was recorded), text}. The code map is free Markdown
+that says which modules carry the feature and where each concept lives, so a fresh agent
+does not explore the same code again: the planner writes it in scoping, the implementer
+updates it when it moves code, and every context loads it.
 
 The agent is "listening" while a watch runs for the session: the watch rewrites watch.json
 every HEARTBEAT_EVERY seconds, and a heartbeat older than LISTENING_FOR seconds (or none)
@@ -313,6 +318,10 @@ class Session:
     @property
     def implemented_path(self) -> Path:
         return self.dir / "implemented.json"
+
+    @property
+    def code_map_path(self) -> Path:
+        return self.dir / "code-map.md"
 
     @property
     def questions_path(self) -> Path:
@@ -652,6 +661,14 @@ class Session:
 
     def read_terminal_messages(self) -> list[dict[str, Any]]:
         return _read_json(self.terminal_messages_path, [])
+
+    def read_code_map(self) -> str:
+        """The code map: which modules carry the feature and where each concept lives, as
+        the planner wrote it and the implementer keeps it. Empty when none is written."""
+        try:
+            return self.code_map_path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            return ""
 
     def add_terminal_message(self, text: str) -> dict[str, Any]:
         """Record a terminal message of the user about the feature, so the subagents,
