@@ -148,11 +148,11 @@ the code, the session files or a command can answer is not a question for the
 user: look it up, and so is one the request already settles. Never ask again a question the context lists, open,
 deferred, answered or skipped. A skipped question means: use your default.
 
-**A design question carries its background.** A design question chooses
-between designs, as opposed to a fact you can look up. The user can only
-choose when they know the mechanism the choice changes and everything each
-option costs, so give both in `--background`, which the page shows folded
-under the question:
+**A design question asked in scoping carries its background.** A design
+question chooses between designs, as opposed to a fact you can look up. The
+user can only choose when they know the mechanism the choice changes and
+everything each option costs, so give both in `--background`, which the page
+shows folded under the question:
 
 - **Today**: the existing mechanism the question is about, in two or three
   sentences, on a real example (a real session, a real file, a command and
@@ -164,6 +164,10 @@ under the question:
   out later turns one decision into several.
 
 The question's text stays one or two lines; the background holds the rest.
+The background serves the user in scoping, before the model exists, and no
+agent reads it. A question asked at the end of a section (a section question,
+a deferred question asked again) carries none: the section explains it, and
+states each option's cost.
 
 **An unclear answer.** The user answers « I don't understand » when they
 cannot choose before the model explains what the question needs. It arrives
@@ -171,9 +175,9 @@ as `q3 unclear « … » (…): <note>`, the note saying what is missing (it may
 empty), and the question is now **deferred**. Do not ask it again during
 scoping. Instead:
 
-1. Make sure the outline explains what the note (or, without one, the
-   question's background) says is missing: extend the section that should
-   hold it, or add one where it belongs.
+1. Make sure the outline explains what the note says is missing (without a
+   note, the mechanism the question's text and options are about): extend
+   the section that should hold it, or add one where it belongs.
 2. Anchor the question to that section, the one after which it can be
    answered: `view-concept anchor <slug> <qid> <section id>`. The
    prerequisites of the anchor section come before it, by the precedence
@@ -195,5 +199,5 @@ section. A section never cites a question id.
 
 During a grill (the context says « A grill is running »), work the outline as
 a design tree: ask every decision whose prerequisites are settled, each with
-its recommended answer and its background. An unclear answer during a grill
+its recommended answer and, in scoping, its background. An unclear answer during a grill
 is deferred as in scoping. When no decision is left, say so in your report.

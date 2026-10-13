@@ -73,8 +73,10 @@ means no watch runs. The margin covers the seconds between a Monitor expiry and 
 An agent question is a question the agent puts to the user in the page rather than in the
 terminal: {id: q1…, text, options, multi (several options may be picked), recommended?
 (the answer the agent suggests: an option, which the page preselects, or a text it
-pre-fills), background? (what the user needs to know to answer: the mechanism as it is
-today, the trade-offs of each option; the page shows it folded under the question),
+pre-fills), background? (what the user needs to know to answer in scoping, before the model
+exists: the mechanism as it is today, the trade-offs of each option; the page shows it
+folded under the question, and no agent reads it; a question asked at the end of a section
+carries none, and `reask` removes it),
 section? (its anchor section: the section after which it is asked), status: "open" |
 "answered" | "skipped" | "deferred", asked, answer?: {choices, text, at, from?}, skipped?
 (when), unclear?: [{note, at}] (each « I don't understand »)}. Asking one sets the phase
@@ -790,13 +792,12 @@ class Session:
         _write_json(self.questions_path, questions)
         return q
 
-    def reask_question(
-        self, qid: str, text: str = "", background: str = "", recommended: str = ""
-    ) -> dict[str, Any]:
+    def reask_question(self, qid: str, text: str = "", recommended: str = "") -> dict[str, Any]:
         """Ask a deferred agent question again, under the same id, once the model explains
-        what it needs: it is open again, with a new text, background or recommended answer
-        when given. The phase becomes "awaiting-answer", as when a question is asked.
-        Returns the question."""
+        what it needs: it is open again, with a new text or recommended answer when given.
+        Its background is removed: the background serves the user in scoping only, and
+        the question is now asked at the end of the section that explains it. The phase
+        becomes "awaiting-answer", as when a question is asked. Returns the question."""
         questions = self.read_questions()
         q = self._question(questions, qid)
         if q["status"] != "deferred":
@@ -804,8 +805,7 @@ class Session:
         q["status"] = "open"
         if text.strip():
             q["text"] = text.strip()
-        if background.strip():
-            q["background"] = background.strip()
+        q.pop("background", None)
         if recommended.strip():
             q["recommended"] = recommended.strip()
         q["reasked"] = now_iso()

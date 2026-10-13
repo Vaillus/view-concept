@@ -162,14 +162,18 @@ Write the modeling part section by section, in outline order, and stop at a
    sections when they do not, and log the move.
 2. Write the next unwritten section. Then look at what it opens:
    - a deferred question anchored to it: ask it again, under the same id,
-     with `view-concept reask <slug> <qid> --background "<…>"`, the
-     background now pointing to what the section explains;
-   - a decision the section makes answerable that nobody asked yet: ask it as
-     a section question (`view-concept question … --section <id>`), with its
+     with `view-concept reask <slug> <qid>`, which removes its scoping
      background;
+   - a decision the section makes answerable that nobody asked yet: ask it as
+     a section question (`view-concept question … --section <id>`), without
+     a background;
    - a section question still open and anchored to it (the planner asked it
      in scoping, and « Write model » kept it open): ask nothing, the page now
      shows it at the end of the section.
+
+   A question asked at the end of a section carries no background: the
+   section is its explanation. So the section states each option's cost,
+   including those the scoping background listed.
 
    When the section opened a question, or has one still open, stop: write nothing further, and
    report the pause (« paused after section 4, 2 questions »). Otherwise

@@ -404,7 +404,9 @@ def test_question_with_a_recommended_answer(session):
 
 
 def test_unclear_defers_a_question_until_it_is_asked_again(session):
-    session.add_question("PR or merge?", ["a PR", "a merge"], recommended="a PR")
+    session.add_question(
+        "PR or merge?", ["a PR", "a merge"], recommended="a PR", background="Today: …"
+    )
     b = session.unclear_question("q1", " what is a merge here? ")
     assert b["action"] == "answer"
     assert b["answers"] == [{"question": "q1", "unclear": True, "note": "what is a merge here?"}]
@@ -420,8 +422,8 @@ def test_unclear_defers_a_question_until_it_is_asked_again(session):
     with pytest.raises(SessionError, match="no section"):
         session.anchor_question("q1", "s9")
     session.write_status("writing", "s2")
-    q = session.reask_question("q1", background="A merge is …")
-    assert q["status"] == "open" and q["section"] == "s2" and q["background"] == "A merge is …"
+    q = session.reask_question("q1")
+    assert q["status"] == "open" and q["section"] == "s2" and "background" not in q
     assert q["text"] == "PR or merge?" and session.read_status()["phase"] == "awaiting-answer"
     with pytest.raises(SessionError, match="not deferred"):
         session.reask_question("q1")

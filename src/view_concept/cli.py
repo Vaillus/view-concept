@@ -243,7 +243,7 @@ def cmd_reask(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
-    q = s.reask_question(a.qid, a.text or "", a.background or "", a.recommended or "")
+    q = s.reask_question(a.qid, a.text or "", a.recommended or "")
     print(f"{q['id']} open")
     if not s.is_listening():
         print(
@@ -458,7 +458,6 @@ def main() -> None:
     q.add_argument("slug")
     q.add_argument("qid", help="the question id, e.g. q1")
     q.add_argument("--text", help="a new wording of the question")
-    q.add_argument("--background", help="a new background")
     q.add_argument("--recommended", help="a new recommended answer")
     q.set_defaults(fn=cmd_reask)
 

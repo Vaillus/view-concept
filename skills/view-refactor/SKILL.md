@@ -532,8 +532,9 @@ The page adds « I don't understand » next to « Skip ». An unclear answer
 defers the question: do not ask it again now. Make sure a section explains
 what the note says is missing, anchor the question to it (`view-concept
 anchor <slug> <qid> <section id>`), and once that section is written, ask it
-again under the same id: `view-concept reask <slug> <qid> [--background
-"<…>"]`. The page then shows it at the end of that section. A second unclear
+again under the same id: `view-concept reask <slug> <qid>`. The reask removes
+its background: the section above it explains it now, so put each option's
+cost in that section. The page then shows it at the end of that section. A second unclear
 answer to the same question: develop that section once, with what the note
 says is missing, and ask again; a third takes your recommended answer, said
 at the end of the section.
