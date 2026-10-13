@@ -145,14 +145,25 @@ for the user to end scoping.
 
 ### Outline and lexicon
 
-Run `view-concept status <slug> planning`. The outline starts with this fixed
-skeleton, in this order:
+Run `view-concept status <slug> planning`.
+
+**The reader** is the user, who asked for the triage. What they stated is
+**known**: the initial request, their answers, their comments, the terminal
+messages. Never explain back what is known: refer to it in a few words and
+spend the text on what is new to them, which here is mostly the code itself
+(what it does, what reads what, what nothing reads), since the scope was
+written quickly and its author has forgotten how it works. The problems they
+gave as the reason for the triage are known; the problems the code shows
+that they did not name are not.
+
+The outline starts with this skeleton, in this order:
 
 1. **Today.** The scope on one real example: a script run with its output, a
    file it writes, a chain of imports. Only the vocabulary the code has.
 2. **What goes wrong.** The problems the example shows, in the user's terms:
    duplicated logic, a file doing several jobs, code nothing reads, a module
-   in the wrong place.
+   in the wrong place. The problems the request already names get one line
+   each; the section spends its text on the ones it does not.
 3. **The proposal.** A mockup of the triage (the review table with a few of
    the real items, their verdicts and, in the big case, their batch) and a
    Mermaid diagram of the flow. Give the scope's boundary sentence here.
@@ -230,12 +241,17 @@ prose.
   prose where it can. Before showing the modeling part, count the lines of
   prose of every section (tables, code blocks and diagrams don't count) and
   cut any over eight.
+- **Never tell the user back what they told you.** What is known (see **The
+  reader**) is referred to in a few words, never explained. A sentence the
+  user could have written themselves before the triage is cut. Lead each
+  section with what is new to them, in its first sentence.
 - **Honour the lexicon**, and write each term's `tip` with its home section.
 - **Mechanism before abstraction.** Show a concept on the real example of the
   first sections before stating it in general. Never let a metaphor stand in
   for a mechanism you can show.
 - **Say why the concept earns its name**: what it lets the user see, predict
-  or decide. One sentence. **Say what it is not**, in a clause, when a
+  or decide. One sentence, and none for a concept the user named
+  themselves. **Say what it is not**, in a clause, when a
   neighbouring concept could be mistaken for it.
 - **A diagram** when the structure is a sequence or a containment that prose
   serialises badly; never one that re-renders a list.

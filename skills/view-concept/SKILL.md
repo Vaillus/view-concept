@@ -70,6 +70,7 @@ The Phase 2 draft was written for a hypothetical reader; you have now met the re
 - **Reorder.** A shaky prerequisite usually cannot live in a parenthesis inside the section that needs it: it becomes its own section, earlier.
 - **Add.** A shaky prerequisite may need a section the draft did not have, and its terms in the lexicon.
 - **Cut.** Delete every section the calibrated level does not support. A section that depends on vocabulary the user does not have is the wrong section, not one to simplify. Be willing to lose a third of the draft.
+- **Cut what is known.** Delete every section that would tell the user what they already stated: in their request, their answers, their comments. A prerequisite they said they have gets no section; a term they used correctly gets a one-line definition, in their words.
 
 This phase runs even when Phase 3 was skipped: deferral is calibration data, and the draft almost certainly needs cutting against it.
 
@@ -84,6 +85,7 @@ Write each section to `sections/<id>.md`, in outline order, running `view-concep
 The rules below scale with the level and the goal of Phase 1: at a beginner level several shrink to a clause or disappear; at a practitioner level they expand. Applying every rule at full size regardless of the reader is what turns a short answer into a tour.
 
 - **One point, got quickly.** Each section makes one point, and the reader should get it quickly: the fewest words that carry it at the user's level, and a visual wherever the point can be shown (see **The visual rule**). When a section has to carry more than one point, or its visual has to hold several ideas at once to fit, split it into sections, one point each, rather than condensing: revise the plan to place each new section, and say so.
+- **Never tell the user back what they told you.** What they stated (the request, their answers, their comments) is referred to in a few words, never explained. Lead each section with what is new to them, in its first sentence.
 - **Honour the lexicon.** Each term gets its definition at its declared section and is used freely after. No technical term appears that is not in the lexicon.
 - **Respect the level.** Below the depth the user needs, name the concept and move on.
 - **Mechanism over analogy**, where the mechanism can be shown: a worked three-step trace of an actual process beats « think of it like a conveyor belt ». Use an analogy only when the mechanism cannot be inspected.

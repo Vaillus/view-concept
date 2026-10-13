@@ -70,12 +70,17 @@ sections) follows this skeleton:
    Mermaid diagram), and a table of the concepts, one row each: the concept,
    its rule, its relation to what existed before, and whether it is new or
    changed. Say what the branch does not do. When the branch has no diff
-   yet, say here that the model is a proposal.
+   yet, say here that the model is a proposal. End with a **to-do list**:
+   one line per piece of work that changes no concept (see point 2).
 2. **One section per point new to the user** (see **The reader**): a
    finding, a decision made for them, a consequence. Its title states the
    point (« Write model drops a section question before its section
    exists »), not the topic. Order them by the concepts they touch, in the
-   order of the table.
+   order of the table. A finding that changes no concept (a doc that is out
+   of date, which source a part of the branch came from, a missing test) gets
+   no section: it is a line of the sheet's to-do list. The test: after
+   reading the section, does the user think differently about a concept? If
+   not, it is a line.
 3. **A section per concept only when the table cannot carry it**: its rules
    do not fit a row, and the user did not state them. A concept the user
    named and described gets none: its row is enough.

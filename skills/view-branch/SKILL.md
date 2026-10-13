@@ -41,7 +41,8 @@ The model is written for the user, who asked for the branch: it never tells
 them back what they stated, and spends its text on what is new to them (what
 the code does that they did not say, the decisions made for them, the
 consequences). Its first section, the **model sheet**, holds the whole model
-on one screen: a before/after and a table of the concepts.
+on one screen: a before/after, a table of the concepts, and a to-do list of
+the work that changes no concept.
 
 In the page, the model is the outline and the lexicon of `plan.json` (one
 entry per concept, `definition` + `tip`), and the **modeling part** of the
