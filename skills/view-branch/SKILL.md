@@ -492,5 +492,7 @@ history as its Decisions (`view-concept changes <slug>` prints it as
 bullets; keep the changes the user asked for or agreed to, and merge the
 ones a later change undid). Push the branch and open the PR with
 `gh pr create --body-file <file>`, or, when the branch already has one,
-update it with `gh pr edit <n> --body-file <file>`. Give the PR link in the
-terminal: the user reviews it in VS Code. No vault export.
+update it with `gh pr edit <n> --body-file <file>`. Record its link with
+`view-concept pr <slug> <url>`: the page links it in its top bar and at the
+end of the refactor tab. Give the PR link in the terminal too: the user
+reviews it in VS Code. No vault export.

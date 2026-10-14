@@ -303,6 +303,13 @@ def cmd_message(a: argparse.Namespace) -> None:
     print(f"{s.add_terminal_message(a.text)['id']} recorded")
 
 
+def cmd_pr(a: argparse.Namespace) -> None:
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    print(f"PR recorded: {s.set_pr(a.url)['url']}")
+
+
 def cmd_context(a: argparse.Namespace) -> None:
     print(build(Session(a.slug), a.role, a.trigger, a.section or ""), end="")
 
@@ -512,6 +519,11 @@ def main() -> None:
     q.add_argument("slug")
     q.add_argument("text", help="the message, as the user wrote it")
     q.set_defaults(fn=cmd_message)
+
+    q = sub.add_parser("pr", help="record the session's PR link, for the page to show")
+    q.add_argument("slug")
+    q.add_argument("url", help="the PR's link, as gh pr create prints it")
+    q.set_defaults(fn=cmd_pr)
 
     q = sub.add_parser("context", help="print the context a subagent or a side thread starts from")
     q.add_argument("slug")

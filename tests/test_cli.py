@@ -272,3 +272,17 @@ def test_implemented_records_and_reports_what_the_code_carries(tmp_path):
     ]
     r = view_concept(tmp_path, "implemented", "gate", "m9")
     assert r.returncode != 0 and "no change 'm9'" in r.stderr
+
+
+def test_pr_records_the_link_in_the_plan(tmp_path):
+    r = view_concept(
+        tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path),
+        "--workflow", "view-branch",
+    )  # fmt: skip
+    assert r.returncode == 0, r.stderr
+    url = "https://github.com/o/r/pull/42"
+    assert view_concept(tmp_path, "pr", "gate", url).stdout.strip() == f"PR recorded: {url}"
+    plan = Session("gate", tmp_path / "sessions").read_plan()
+    assert plan["pr"]["url"] == url and plan["pr"]["at"] and plan["title"] == "Gate"
+    r = view_concept(tmp_path, "pr", "gate", "42")
+    assert r.returncode != 0 and "not a link" in r.stderr

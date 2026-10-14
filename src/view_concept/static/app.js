@@ -127,6 +127,7 @@ function render() {
   $("#title").textContent = plan.title;
   renderListening();
   renderPublish();
+  renderPr();
   renderStatus();
   followSession();
   renderPlan();
@@ -219,6 +220,21 @@ const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "a
    switch tabs for them. */
 const docButton = el("button", { id: "doc-approve", class: "btn primary approve doc-approve", hidden: true });
 const prButton = el("button", { id: "pr-create", class: "btn primary approve doc-approve", hidden: true });
+// Once the agent opened the PR (plan.json's `pr`), the page links it in the top bar and at
+// the end of the refactor tab, under « Create PR » (« Update PR » from then on).
+const prEnd = el("a", { id: "pr-end", class: "btn doc-approve", target: "_blank", rel: "noopener", hidden: true });
+const prLabel = (url) => { const m = /\/pull\/(\d+)/.exec(url); return m ? `PR #${m[1]}` : "PR"; };
+
+function renderPr() {
+  const pr = state.plan.pr;
+  for (const a of [$("#pr-link"), prEnd]) {
+    a.hidden = !pr;
+    if (!pr) continue;
+    a.href = pr.url;
+    a.title = pr.url;
+    a.textContent = a === prEnd ? `Open ${prLabel(pr.url)} ↗` : `${prLabel(pr.url)} ↗`;
+  }
+}
 const APPROVALS = {
   "awaiting-approval": { action: "approve-plan", label: "Approve plan", toast: "Plan approved",
                          ready: "plan ready · waiting for your approval", sent: "plan approved · the agent is starting" },
@@ -229,6 +245,8 @@ const APPROVALS = {
                    sent: "PR requested · the agent is opening it" },
 };
 const buttonOf = (approval) => approval.button || $("#approve");
+
+const lastBatchOf = (action) => state.comments.batches.filter((b) => b.action === action).pop() || {};
 
 function approvalPending() {
   const approval = APPROVALS[state.status.phase];
@@ -241,6 +259,9 @@ function renderStatus() {
   const { phase, section, message } = state.status;
   const approval = APPROVALS[phase];
   const asking = ["scoping", "awaiting-answer"].includes(phase) && openQuestions().length > 0 && !goOnPending();
+  // The PR recorded after the last « Create PR »: the agent opened (or updated) it.
+  const prReady = phase === "awaiting-pr" && approvalPending() && !!state.plan.pr &&
+                  state.plan.pr.at >= lastBatchOf("create-pr").sent;
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Write plan » ends it.
     scoping: asking ? "scoping · questions waiting for you"
@@ -248,6 +269,7 @@ function renderStatus() {
            : "scoping the question",
     planning: "drafting the plan",
     ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
+    ...(prReady ? { [phase]: `${prLabel(state.plan.pr.url)} ready · open it from the top bar` } : {}),
     "awaiting-answer": goOnPending() ? "going on · the writer is writing the next sections"
                      : openQuestions().length ? QUESTION_LABELS.ready : QUESTION_LABELS.sent,
     writing: section ? `writing §${numberOf(section)} ${titleOf(section)}` : "writing",
@@ -255,7 +277,7 @@ function renderStatus() {
     revising: "revising",
   };
   const active = (phase === "scoping" && !asking) || ["planning", "writing", "audit", "revising"].includes(phase) ||
-                 (approval && approvalPending()) || (phase === "awaiting-answer" && !asking);
+                 (approval && approvalPending() && !prReady) || (phase === "awaiting-answer" && !asking);
   const p = $("#phase");
   p.hidden = !labels[phase];
   p.className = `phase ${active ? "active" : ""} ${(approval && !approvalPending()) || asking ? "ask" : ""}`;
@@ -265,8 +287,9 @@ function renderStatus() {
   if (!approval) return;
   const btn = buttonOf(approval);
   btn.hidden = approvalPending();
+  const label = phase === "awaiting-pr" && state.plan.pr ? "Update PR" : approval.label;
   const n = drafts.filter(ready).length;
-  btn.textContent = n ? `${approval.label} + send ${n} comment${n > 1 ? "s" : ""}` : approval.label;
+  btn.textContent = n ? `${label} + send ${n} comment${n > 1 ? "s" : ""}` : label;
 }
 
 for (const b of [$("#approve"), docButton, prButton]) b.addEventListener("click", () => {
@@ -448,7 +471,7 @@ function renderDoc() {
     ? [active, active.selectionStart, active.selectionEnd] : null;
   doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map((s) => sectionBlock(s)), docButton);
   $("#refactor").replaceChildren(...[lagLine()].filter(Boolean),
-    ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), prButton);
+    ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), prButton, prEnd);
   for (const view of docViews()) {
     typesetMath(view);
     linkCitations(view);
