@@ -54,7 +54,8 @@ where the file is `{"outline": [...], "lexicon": [...]}`, either key alone
 when only one changes. Each key replaces the whole list: start from the
 current one (`plan.json`, or the context) and change what you mean to. The
 command refuses an outline entry without an id or a title, a repeated id, and
-a lexicon entry whose section is not in the outline.
+a lexicon entry whose section is not in the outline or whose `kind` is
+neither `core` nor `peripheral`.
 
 ## The outline
 
@@ -109,14 +110,29 @@ its position. The page anchors the user's comments to ids.
 
 ## The lexicon
 
-One entry per concept in `lexicon` of `plan.json`:
-`{"term", "section", "definition", "tip"}`, where `section` is the term's
-**home section**, the one that introduces it. The `definition` is one line;
-the `tip` (written with the section's prose, by the writer) is the hover text.
-Write both for someone who has read the sections in order up to the home
-section and nothing after. The home section of a concept in the table is the
-model sheet; a term the user introduced keeps its definition to one line in
-their own words.
+Every term that is not plain language gets an entry in `lexicon` of
+`plan.json`: `{"term", "section", "kind", "definition", "tip"}`, where
+`section` is the term's **home section**, the one that introduces it, and
+`kind` its **term kind**:
+
+- `core`, a **core concept**: a term the model introduces or changes. The
+  prose of its home section defines it. An entry without `kind` is one.
+- `peripheral`, a **peripheral concept**: a term that is not plain language
+  and that the model does not change (« FSRS », « rslib »). It gets its hover
+  tip only: no sentence of a section's body defines it. Its home section is
+  the first section that uses it.
+
+Only the agents see the kind: the page underlines both the same way. **Plain
+language** is the everyday words a reader understands with no knowledge of
+the project or its field; the writer judges it while writing, with no list
+to check against. A word the user uses every day is not plain language for
+that reason: « FSRS » still gets its tip.
+
+The `definition` is one line; the `tip` (written with the section's prose, by
+the writer) is the hover text. Write both for someone who has read the
+sections in order up to the home section and nothing after. The home section
+of a concept in the table is the model sheet; a term the user introduced
+keeps its definition to one line in their own words.
 
 **The precedence rule.** Every text about a term (its introducing prose, its
 `definition`, its `tip`) uses only terms whose home section is at or before

@@ -206,6 +206,12 @@ DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
+# The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
+# introduces or changes, defined in its home section's prose; a peripheral concept is any
+# other term that is not plain language, which gets a tip only. Without one, core. Only
+# the agents see it (the page draws every entry the same way). Not to be confused with an
+# outline entry's `"kind": "finding"`.
+TERM_KINDS = ("core", "peripheral")
 HEARTBEAT_EVERY = 2.5  # seconds between two heartbeats of a running watch
 LISTENING_FOR = 15.0  # seconds a heartbeat proves a watch runs
 # The size an HTML section file stays under, embedded media included (the visual rule of the
@@ -459,6 +465,11 @@ class Session:
         if lexicon is not None:
             if any(not t.get("term") or not t.get("section") for t in lexicon):
                 raise SessionError("every lexicon entry needs a term and a section")
+            odd = [t["term"] for t in lexicon if t.get("kind", "core") not in TERM_KINDS]
+            if odd:
+                raise SessionError(
+                    f"unknown term kind for {', '.join(odd)}; one of {', '.join(TERM_KINDS)}"
+                )
             plan["lexicon"] = lexicon
         known = {sec["id"] for sec in plan["outline"]}
         unknown = sorted({t["section"] for t in plan["lexicon"]} - known)

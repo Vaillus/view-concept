@@ -45,7 +45,9 @@ on one screen: a before/after, a table of the concepts, and a to-do list of
 the work that changes no concept.
 
 In the page, the model is the outline and the lexicon of `plan.json` (one
-entry per concept, `definition` + `tip`), and the **modeling part** of the
+entry per term that is not plain language, `kind` + `definition` + `tip`: a
+**core concept** the model introduces or changes, or a **peripheral
+concept**, any other term, which gets its tip only), and the **modeling part** of the
 review: the sections that write the model out, which the page shows in the
 Model tab. Every change of the model is logged in the **change history**
 (`change-history.json`), one entry each: a concept added, removed, renamed,

@@ -660,6 +660,11 @@ def test_write_plan_keeps_the_other_fields(tmp_path):
         s.write_plan(outline=[{"id": "s1", "title": "A", "earns": "x" * (EARNS_MAX + 1)}])
     with pytest.raises(SessionError, match="nothing to write"):
         s.write_plan()
+    with pytest.raises(SessionError, match="unknown term kind for x"):
+        s.write_plan(lexicon=[{"term": "x", "section": "s1", "kind": "borrowed"}])
+    s.write_plan(lexicon=[{"term": "gate", "section": "s1", "kind": "peripheral"}])
+    assert s.read_plan()["lexicon"][0]["kind"] == "peripheral"
+    s.write_plan(lexicon=[{"term": "gate", "section": "s1", "definition": "d"}])
     assert s.read_plan()["lexicon"][0]["term"] == "gate"  # a refused write changes nothing
 
 

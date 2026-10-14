@@ -16,7 +16,7 @@ def test_planner_context_holds_the_folder_and_no_sections(session):
     text = build(session, "planner")
     assert "## Initial request\nexplique le KV cache" in text
     assert "## Trigger\nnone: the first run of this role" in text
-    assert "1. Attention (s1)" in text and "- clé | key (section 1): vecteur" in text
+    assert "1. Attention (s1)" in text and "- clé | key (section 1, core): vecteur" in text
     assert "Open:\n- q1 [open] Level?" in text
     assert "## Sections" not in text and "L'attention." not in text
 
@@ -107,6 +107,18 @@ def test_changes_not_implemented_yet_are_shown_once_the_model_is_approved(branch
     assert "Not implemented yet: m2, m3," in text and text.count("- m2: change 1") == 2
     branch.mark_implemented(f"m{CONTEXT_RECENT + 2}")
     assert "Every change of the model is implemented." in build(branch, "reviewer")
+
+
+def test_the_lexicon_gives_each_term_its_kind(branch):
+    branch.write_plan(
+        lexicon=[
+            {"term": "gate", "section": "s2", "definition": "drops a segment"},
+            {"term": "FSRS", "section": "s1", "definition": "a scheduler", "kind": "peripheral"},
+        ]
+    )
+    text = build(branch, "writer")
+    assert "- gate (section 2, core): drops a segment" in text
+    assert "- FSRS (section 1, peripheral): a scheduler" in text
 
 
 def test_the_outline_gives_each_section_its_brief(branch):

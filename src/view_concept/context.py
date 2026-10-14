@@ -176,12 +176,13 @@ def _outline(outline: list[dict[str, Any]]) -> list[str]:
 
 
 def _lexicon(lexicon: list[dict[str, Any]], outline: list[dict[str, Any]]) -> list[str]:
+    """One line per term, with its home section and its term kind (core without one)."""
     if not lexicon:
         return ["(empty)"]
     number = _number(outline)
     return [
-        f"- {t.get('term', '')} (section {number.get(t.get('section', ''), '?')}):"
-        f" {t.get('definition', '')}"
+        f"- {t.get('term', '')} (section {number.get(t.get('section', ''), '?')},"
+        f" {t.get('kind') or 'core'}): {t.get('definition', '')}"
         for t in lexicon
     ]
 

@@ -86,9 +86,10 @@ it needs.
   review is cut. What stays is what is new to them: what the code does, the
   decisions made for them, the consequences they did not state. Lead each
   section with that point, in its first sentence.
-- **Honour the lexicon.** Each term gets its definition in its home section
-  and is used freely after. No technical term appears that is not in the
-  lexicon: add it, or cut the sentence.
+- **Honour the lexicon.** A core concept gets its definition in its home
+  section and is used freely after; a peripheral concept gets its tip and no
+  definition in the body. No term that is not plain language appears without
+  a lexicon entry: add it, or cut the sentence.
 - **Mechanism before abstraction.** Show the point on the real example the
   model sheet set up (a real file, a command and its output, a trace of three
   steps) before stating it in general. Never let a metaphor stand in for a
@@ -273,9 +274,10 @@ after a wave whose sections have questions to ask.
    2. Re-read every section for the words that slipped past the lexicon, and
       add each one to `audit.json` (`[{"term", "section", "issue", "note"}]`,
       keeping the entries `check` wrote), with one of these issues:
-      - `undefined`: a domain term absent from the lexicon that the user
-        did not introduce themselves (in the request, an answer, a
-        comment);
+      - `undefined`: a term absent from the lexicon that is not plain
+        language (everyday words a reader understands with no knowledge of
+        the project or its field, as you judge them; a word the user uses
+        every day is not plain language for that reason);
       - `metaphor`: a word such as « bridge » or « funnel » that names an
         intuition instead of the mechanism;
       - `ambiguous`: an overloaded word (« session », « state », « context »)
@@ -303,8 +305,8 @@ while writing can land in the middle of one.
   `roles/planning-rules.md` in
   `~/Documents/code/view-concept/skills/view-branch/`. Write only
   `sections/<id>.md` or `sections/<id>.html`, and run no `view-concept`
-  command that writes: return the lexicon terms and tips your section
-  introduces, any move of the outline it needs, any change of the model, and
+  command that writes: return the lexicon terms your section
+  introduces, each with its kind and tip, any move of the outline it needs, any change of the model, and
   any question it makes answerable (its text, options and recommended
   answer), and a one-line summary. » Set `view-concept status <slug> writing
   --section <id>` yourself, on the first section of the wave.
@@ -312,7 +314,7 @@ while writing can land in the middle of one.
   files (`plan.json`, the change history, the questions) are rewritten whole
   by each command, with no lock, so two helpers writing them would lose each
   other's work. You write what the helpers return, alone, once they have all
-  ended: the lexicon terms and tips and the outline moves in one
+  ended: the lexicon terms, kinds and tips and the outline moves in one
   `view-concept plan` call, the changes with `view-concept change`, the
   questions with `view-concept question … --section <id>`.
 - **Each helper starts from the outline and the lexicon as they stand before
