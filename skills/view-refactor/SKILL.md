@@ -296,24 +296,24 @@ check` reports a pair).
   `var(--info)`, `var(--alt)` and `var(--mono)` for the font: the frame
   receives them and follows the page's light or dark theme, so never hard-code
   a palette.
-- **Width.** The frame is wider than the text column of a Markdown section:
-  up to 120 characters of the page's font (about 1000px), narrower in a small
-  window, about 340px on the published page's phone layout. Lay figures out
-  to use that width (two panels side by side, a long timeline), and make the
+- **Width.** The frame is wider than the text column of a Markdown section: up
+  to 120 characters of the page's font (about 1000px), narrower in a small
+  window, about 340px on the published page's phone layout. Lay figures out to
+  use that width (two panels side by side, a long timeline), and make the
   section read in a 340px frame too, with nothing cut off and no sideways
   scroll but a table's own: a row of panels sets a minimum width per column
   (`repeat(auto-fit, minmax(min(100%, 16rem), 1fr))`), never a column count.
-  Prose keeps the page's text width, and the frame sets it: write a paragraph, list or quote as `<p>`,
-  `<ul>`, `<ol>` or `<blockquote>` straight in the `<body>`, and a caption as
-  a `<figcaption>` (inside the `<figure>` it captions); the frame caps each at
-  78 characters and centres it, as in a Markdown section. Text in a `<div>` of
-  your own runs the frame's full width.
+  Prose keeps the page's text width, and the frame sets it: write a paragraph,
+  list or quote as `<p>`, `<ul>`, `<ol>` or `<blockquote>` straight in the
+  `<body>`, and a caption as a `<figcaption>` (inside the `<figure>` it
+  captions); the frame caps each at 78 characters and centres it, as in a
+  Markdown section. Text in a `<div>` of your own runs the frame's full width.
 - **Base style.** The frame gives every section the Markdown section's font
-  (`var(--mono)`), size and line height, three named sizes,
-  `var(--fs-body)` (14px), `var(--fs-small)` (12px) and `var(--fs-label)`
-  (11px), and the table look to every table (borders, a header fill, small text, a sideways scroll when
-  wider than the frame). Set no body size or table style of your own; a rule
-  you write still wins over the base style, property by property.
+  (`var(--mono)`), size and line height, three named sizes, `var(--fs-body)`
+  (14px), `var(--fs-small)` (12px) and `var(--fs-label)` (11px), and the table
+  look to every table (borders, a header fill, small text, a sideways scroll
+  when wider than the frame). Set no body size or table style of your own; a
+  rule you write still wins over the base style, property by property.
 - **Component kit.** The base style defines these classes in every frame:
   reuse them instead of inventing your own, so repeated siblings share one
   class.
