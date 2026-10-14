@@ -58,10 +58,23 @@ a lexicon entry whose section is not in the outline.
 
 ## The outline
 
-The outline (`outline` in `plan.json`, one entry `{"id", "title", "earns"}`
-per section, `earns` saying what the section gives the reader: one point,
-which the reader should get quickly; an `earns` that names two points is two
-sections) follows this skeleton:
+The outline (`outline` in `plan.json`, one entry `{"id", "title", "earns",
+"brief"}` per section) follows the skeleton below. The two texts of an entry
+have two readers:
+
+- `earns` is for the user, who reads it under the title in the page's
+  outline to judge the order and the cut: one sentence saying what the
+  section gives them, one point they should get quickly. An `earns` that
+  names two points is two sections. `view-concept plan` refuses one over 200
+  characters.
+- `brief` (optional) is for the writer, who never saw your run: what the
+  section must carry that the title and `earns` do not say, such as the
+  decisions taken and their defaults, the rows of the model sheet's table,
+  the lines of its to-do list, the example to show. The context shows it;
+  the page does not. Write it as notes, not as the section's prose, and leave
+  it out when the title and `earns` are enough.
+
+The skeleton:
 
 1. **The model sheet.** The whole model on one screen, the section the user
    keeps in mind while the code changes: one line on what the branch is for

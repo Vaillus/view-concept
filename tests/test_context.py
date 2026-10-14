@@ -76,7 +76,7 @@ def branch(tmp_path):
     s.write_plan(
         outline=[
             {"id": "s1", "title": "Today"},
-            {"id": "s2", "title": "The gate"},
+            {"id": "s2", "title": "The gate", "earns": "what it refuses", "brief": "no flag"},
             {"id": "i1", "title": "cli", "part": "refactoring", "item": {"verdict": "diverges"}},
             {"id": "i2", "title": "store", "part": "refactoring", "item": {"verdict": "conforms"}},
         ]
@@ -107,6 +107,11 @@ def test_changes_not_implemented_yet_are_shown_once_the_model_is_approved(branch
     assert "Not implemented yet: m2, m3," in text and text.count("- m2: change 1") == 2
     branch.mark_implemented(f"m{CONTEXT_RECENT + 2}")
     assert "Every change of the model is implemented." in build(branch, "reviewer")
+
+
+def test_the_outline_gives_each_section_its_brief(branch):
+    text = build(branch, "writer")
+    assert "2. The gate (s2): what it refuses\n   Brief: no flag\n" in text
 
 
 def test_an_html_section_is_given_by_its_visible_text(branch):

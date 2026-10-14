@@ -27,7 +27,11 @@ reach the agent session through the inbox.
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
 
-A section is one element of the `outline` list in plan.json: {id, title, earns}. Its text
+A section is one element of the `outline` list in plan.json: {id, title, earns, brief}:
+`earns` is the one sentence the user reads under the title (what the section gives them,
+at most EARNS_MAX characters), and the optional `brief` is what the agent that writes the
+section must carry into it (the decisions taken, the defaults, the lines of a table),
+which the agents' context shows and the page does not. Its text
 is one file of sections/, whose extension alone says which kind of section it is: Markdown
 in <id>.md, or an HTML section in <id>.html, a self-contained HTML document (its HTML, CSS
 and JavaScript) which may hold prose and visuals alike, as an artifact does. A section has
@@ -197,6 +201,8 @@ WORKFLOWS = ("view-concept", "view-branch", "view-refactor")
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
+# The longest `earns` an outline entry may have: one sentence, read in the page's outline.
+EARNS_MAX = 200
 HEARTBEAT_EVERY = 2.5  # seconds between two heartbeats of a running watch
 LISTENING_FOR = 15.0  # seconds a heartbeat proves a watch runs
 # The size an HTML section file stays under, embedded media included (the visual rule of the
@@ -440,6 +446,12 @@ class Session:
                 raise SessionError("every outline entry needs an id and a title")
             if len(set(ids)) != len(ids):
                 raise SessionError("outline ids must be unique")
+            long = [sec["id"] for sec in outline if len(str(sec.get("earns", ""))) > EARNS_MAX]
+            if long:
+                raise SessionError(
+                    f"earns over {EARNS_MAX} characters: {', '.join(long)}. It is one "
+                    "sentence for the user; put what the writer needs in brief"
+                )
             plan["outline"] = outline
         if lexicon is not None:
             if any(not t.get("term") or not t.get("section") for t in lexicon):

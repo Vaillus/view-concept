@@ -28,6 +28,13 @@ agent. A bug you notice in the code goes in your report, not in a fix.
 Follow `planning-rules.md` for the outline, the lexicon, the change history
 and your questions.
 
+Write each section from its outline entry: its `earns` is the point the
+section makes, and its `brief`, when it has one, is what the planner
+settled for it (decisions, defaults, table rows, to-do lines). Carry every
+line of the brief into the section or, when the model has moved past it,
+update the brief with the outline. When you change what a section says,
+keep its `earns` true to it.
+
 ## Writing a section
 
 Each section goes to `sections/<id>.md` (Markdown) or `sections/<id>.html`
