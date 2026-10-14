@@ -100,7 +100,8 @@ A **finding across items** is a problem between items: the same logic in two
 files, an import across directories, a module in the wrong place judged from
 its relations, code no concept describes. Write each one as a refactor
 section with `"kind": "finding"` and `"items": [<item section ids>]` in the
-outline, and one sentence of prose.
+outline, and one sentence of prose. (A lexicon entry's `kind`, core or
+peripheral, shares the key name only.)
 
 The page draws the review table and the structure view from these fields: do
 not write a summary table of items and verdicts.

@@ -125,7 +125,8 @@ Every term that is not plain language gets an entry in `lexicon` of
   tip only: no sentence of a section's body defines it. Its home section is
   the first section that uses it.
 
-Only the agents see the kind: the page underlines both the same way. **Plain
+Only the agents see the kind: the page underlines both the same way. (A
+refactor section's `"kind": "finding"` shares the key name only.) **Plain
 language** is the everyday words a reader understands with no knowledge of
 the project or its field; the writer judges it while writing, with no list
 to check against. A word the user uses every day is not plain language for
