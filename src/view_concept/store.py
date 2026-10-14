@@ -17,6 +17,8 @@ reach the agent session through the inbox.
                                                             (written by `implemented`)
         code-map.md     where the feature lives in the code: its modules, where each
                         concept is implemented    (written by the planner and the implementer)
+        request.md      the request transcript: the conversation that led to a review,
+                        one `## User` or `## Agent` heading per message  (written by `request`)
         questions.json  agent questions put to the user, with their answers  (`question`, server)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
@@ -27,30 +29,30 @@ reach the agent session through the inbox.
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
 
-A section is one element of the `outline` list in plan.json: {id, title, earns, brief}:
-`earns` is the one sentence the user reads under the title (what the section gives them,
-at most EARNS_MAX characters), and the optional `brief` is what the agent that writes the
-section must carry into it (the decisions taken, the defaults, the lines of a table),
-which the agents' context shows and the page does not. Its text
-is one file of sections/, whose extension alone says which kind of section it is: Markdown
-in <id>.md, or an HTML section in <id>.html, a self-contained HTML document (its HTML, CSS
-and JavaScript) which may hold prose and visuals alike, as an artifact does. A section has
-one file; when both exist (an agent switched the kind and left the old file), every
-reader takes the .html file, and `check` reports the pair. An HTML section's media folder,
-sections/<id>/, holds the media files the agent produced for it (a manim render, a GIF),
-which have no web address: the section loads them by a relative address (<id>/<file>),
-the page serves them, and the published page and the vault export copy them along. An
-answer to a comment that belongs in the explanation amends a section or adds one at its
-place in the outline; a `kind: "question"` left by an older session is ignored, and the
-section reads as any other. A refactor section, marked `part: "refactoring"`, belongs
-to the refactoring part of a branch review or a refactor and is shown in the refactor
-tab; every other section is an explanation section, shown in the Explanation tab. A
-refactor section about one item of the diff carries its item fields under `item`:
-{files, verdict (one of the keys of the session workflow's list in verdicts.yaml, next
-to this module), batch? (a short label or number), implements, note, relations: [{to,
-kind, from?}]}, where the optional `from` names which of the item's files a relation
-starts from (by default the first).
-One with `kind: "finding"` and `items: [<section ids>]` is a finding across items.
+A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
+is the one sentence the user reads under the title (what the section gives them, at most
+EARNS_MAX characters). An optional `"overview": true` marks an overview section, which
+names terms the sections after it introduce: the precedence check reports no early use
+in it. A `brief` left in an older session's entry stays in the file, and
+nothing reads it. Its text is one file of sections/, whose extension alone says which
+kind of section it is: Markdown in <id>.md, or an HTML section in <id>.html, a
+self-contained HTML document (its HTML, CSS and JavaScript) which may hold prose and
+visuals alike, as an artifact does. A section has one file; when both exist (an agent
+switched the kind and left the old file), every reader takes the .html file, and `check`
+reports the pair. An HTML section's media folder, sections/<id>/, holds the media files
+the agent produced for it (a manim render, a GIF), which have no web address: the
+section loads them by a relative address (<id>/<file>), the page serves them, and the
+published page and the vault export copy them along. An answer to a comment that belongs
+in the explanation amends a section or adds one at its place in the outline; a `kind:
+"question"` left by an older session is ignored, and the section reads as any other. A
+refactor section, marked `part: "refactoring"`, belongs to the refactoring part of a
+branch review or a refactor and is shown in the refactor tab; every other section is an
+explanation section, shown in the Explanation tab. A refactor section about one item of
+the diff carries its item fields under `item`: {files, verdict (one of the keys of the
+session workflow's list in verdicts.yaml, next to this module), batch? (a short label or
+number), implements, note, relations: [{to, kind, from?}]}, where the optional `from`
+names which of the item's files a relation starts from (by default the first). One with
+`kind: "finding"` and `items: [<section ids>]` is a finding across items.
 
 The session workflow, `workflow` in plan.json, is the skill that drives the session:
 view-concept, view-branch or view-refactor (a triage of existing code). It picks the
@@ -65,15 +67,19 @@ reaches the main session.
 A coordinated session (the view-branch workflow) is driven by a main session that only
 coordinates: subagents do the work, each started from the session folder as
 `view-concept context` prints it (context.py). The initial request is the user's first
-message, kept verbatim in plan.json. The change history logs every change of the model:
-{id: m1…, at, by (planner or writer), change (a few words), cause (the ids of the
-questions, comments or terminal messages that led to it, or "own judgment")}. A session
-written before it has changes.json instead, read as its change history. The terminal
-messages are the user's later messages about the feature, typed in the terminal: {id:
-tm1…, at, phase (the phase when it was recorded), text}. The code map is free Markdown
-that says which modules carry the feature and where each concept lives, so a fresh agent
-does not explore the same code again: the planner writes it in scoping, the implementer
-updates it when it moves code, and every context loads it.
+message, kept verbatim in plan.json. When the review follows a conversation about the
+feature, request.md, the request transcript, holds all of it: every message from the
+first one about the feature, the user's and the agent's, verbatim and in order, under a
+`## User` or `## Agent` heading each; messages only, no tool call or tool output. The
+change history logs every change of the model: {id: m1…, at, by (planner or writer),
+change (a few words), cause (the ids of the questions, comments or terminal messages
+that led to it, or "own judgment")}. A session written before it has changes.json
+instead, read as its change history. The terminal messages are the user's later messages
+about the feature, typed in the terminal: {id: tm1…, at, phase (the phase when it was
+recorded), text}. The code map is free Markdown that says which modules carry the
+feature and where each concept lives, so a fresh agent does not explore the same code
+again: the planner writes it in scoping, the implementer updates it when it moves code,
+and every context loads it.
 
 The agent is "listening" while a watch runs for the session: the watch rewrites watch.json
 every HEARTBEAT_EVERY seconds, and a heartbeat older than LISTENING_FOR seconds (or none)
@@ -206,6 +212,12 @@ DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
+# The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
+# introduces or changes, defined in its home section's prose; a peripheral concept is any
+# other term that is not plain language, which gets a tip only. Without one, core. Only
+# the agents see it (the page draws every entry the same way). Not to be confused with an
+# outline entry's `"kind": "finding"`.
+TERM_KINDS = ("core", "peripheral")
 HEARTBEAT_EVERY = 2.5  # seconds between two heartbeats of a running watch
 LISTENING_FOR = 15.0  # seconds a heartbeat proves a watch runs
 # The size an HTML section file stays under, embedded media included (the visual rule of the
@@ -335,6 +347,10 @@ class Session:
         return self.dir / "code-map.md"
 
     @property
+    def request_path(self) -> Path:
+        return self.dir / "request.md"
+
+    @property
     def questions_path(self) -> Path:
         return self.dir / "questions.json"
 
@@ -453,12 +469,20 @@ class Session:
             if long:
                 raise SessionError(
                     f"earns over {EARNS_MAX} characters: {', '.join(long)}. It is one "
-                    "sentence for the user; put what the writer needs in brief"
+                    "sentence for the user"
                 )
+            odd = [sec["id"] for sec in outline if sec.get("overview", False) not in (True, False)]
+            if odd:
+                raise SessionError(f"overview is true or false: {', '.join(odd)}")
             plan["outline"] = outline
         if lexicon is not None:
             if any(not t.get("term") or not t.get("section") for t in lexicon):
                 raise SessionError("every lexicon entry needs a term and a section")
+            odd = [t["term"] for t in lexicon if t.get("kind", "core") not in TERM_KINDS]
+            if odd:
+                raise SessionError(
+                    f"unknown term kind for {', '.join(odd)}; one of {', '.join(TERM_KINDS)}"
+                )
             plan["lexicon"] = lexicon
         known = {sec["id"] for sec in plan["outline"]}
         unknown = sorted({t["section"] for t in plan["lexicon"]} - known)
@@ -520,14 +544,16 @@ class Session:
         whose section is not in the outline is skipped. A forward reference is an
         entry's definition or tip using another term whose home section comes later;
         an early use is a term found in the prose of a section before its home
-        section. Returns one problem per finding: {issue, term, section (the id the
-        audit entry points at), home (1-based position of the term's home section),
-        at (position of the later home section, or of the early section), field,
-        other}. With `write`, replaces the forward and early entries of audit.json
-        and keeps every other entry, so a rerun is idempotent."""
+        section, other than an overview section (`"overview": true`). Returns one
+        problem per finding: {issue, term, section (the id the audit entry points at),
+        home (1-based position of the term's home section), at (position of the later
+        home section, or of the early section), field, other}. With `write`, replaces
+        the forward and early entries of audit.json and keeps every other entry, so a
+        rerun is idempotent."""
         plan = self.read_plan()
         pos = {sec["id"]: i + 1 for i, sec in enumerate(plan["outline"])}
         order = [sec["id"] for sec in plan["outline"]]
+        overviews = {sec["id"] for sec in plan["outline"] if sec.get("overview") is True}
         entries = [
             e for e in plan["lexicon"] if e.get("term", "").strip() and e.get("section") in pos
         ]
@@ -547,7 +573,7 @@ class Session:
                         "other": f["term"],
                     })  # fmt: skip
             for sid in order[: home - 1]:
-                if _uses(prose.get(sid, ""), e["term"]):
+                if sid not in overviews and _uses(prose.get(sid, ""), e["term"]):
                     problems.append({
                         "issue": "early", "term": e["term"], "section": sid,
                         "home": home, "at": pos[sid], "field": "", "other": "",
@@ -695,6 +721,20 @@ class Session:
             return self.code_map_path.read_text(encoding="utf-8").strip()
         except FileNotFoundError:
             return ""
+
+    def read_request(self) -> str:
+        """The request transcript: the whole conversation that led to the review. Empty
+        when none is written (the review started from a single message)."""
+        try:
+            return self.request_path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            return ""
+
+    def write_request(self, text: str) -> None:
+        """Write the request transcript, replacing any previous one."""
+        if not text.strip():
+            raise SessionError("empty request transcript")
+        self.request_path.write_text(text.strip() + "\n", encoding="utf-8")
 
     def add_terminal_message(self, text: str) -> dict[str, Any]:
         """Record a terminal message of the user about the feature, so the subagents,

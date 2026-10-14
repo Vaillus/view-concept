@@ -286,3 +286,19 @@ def test_pr_records_the_link_in_the_plan(tmp_path):
     assert plan["pr"]["url"] == url and plan["pr"]["at"] and plan["title"] == "Gate"
     r = view_concept(tmp_path, "pr", "gate", "42")
     assert r.returncode != 0 and "not a link" in r.stderr
+
+
+def test_request_writes_the_transcript_from_a_file_or_stdin(tmp_path):
+    assert view_concept(tmp_path, "new", "Gate").returncode == 0
+    source = tmp_path / "transcript.md"
+    source.write_text("## User\nrework the gate\n")
+    r = view_concept(tmp_path, "request", "gate", str(source))
+    assert r.returncode == 0, r.stderr
+    request = tmp_path / "sessions" / "gate" / "request.md"
+    assert request.read_text() == "## User\nrework the gate\n"
+    env = {**os.environ, "VIEW_CONCEPT_HOME": str(tmp_path)}
+    cmd = [sys.executable, "-m", "view_concept.cli", "request", "gate", "-"]
+    r = subprocess.run(cmd, env=env, input="## Agent\nreplaced\n", capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert request.read_text() == "## Agent\nreplaced\n"
+    assert view_concept(tmp_path, "request", "nope", str(source)).returncode != 0

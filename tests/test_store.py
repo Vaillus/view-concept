@@ -296,6 +296,16 @@ def test_terminal_messages(session):
         session.add_terminal_message(" ")
 
 
+def test_the_request_transcript_is_written_and_replaced(session):
+    assert session.read_request() == ""
+    session.write_request("## User\nfirst\n")
+    session.write_request("## User\nfirst\n\n## Agent\nsecond\n")
+    assert session.read_request() == "## User\nfirst\n\n## Agent\nsecond"
+    assert session.request_path.name == "request.md"
+    with pytest.raises(SessionError):
+        session.write_request("  \n")
+
+
 def test_a_branch_review_records_its_base(tmp_path):
     s = Session("x", tmp_path)
     s.create("X", "rework the gate", kind="code", repo=str(tmp_path), base="main")
@@ -556,6 +566,21 @@ def test_check_matches_whole_words_only(ordered):
     assert early == {("rule", "b"), ("KKT conditions", "a")}
 
 
+def test_check_reports_no_early_use_in_an_overview_section(ordered):
+    # Section 1 names « KKT conditions », whose home is section 2: an overview may.
+    plan = ordered.read_plan()
+    plan["outline"][0]["overview"] = True
+    ordered.plan_path.write_text(json.dumps(plan))
+    issues = {(p["issue"], p["term"]) for p in ordered.check_precedence(write=False)}
+    assert ("early", "KKT conditions") not in issues
+    assert ("forward", "rule") in issues
+
+
+def test_plan_refuses_an_overview_that_is_not_a_boolean(session):
+    with pytest.raises(SessionError, match="overview"):
+        session.write_plan(outline=[{"id": "a", "title": "A", "overview": "yes"}])
+
+
 def test_check_reports_a_waiting_question_whose_anchor_left_the_outline(session):
     session.add_question("Evict what?", section="s2")
     session.add_question("Cache what?", section="s2")
@@ -660,7 +685,12 @@ def test_write_plan_keeps_the_other_fields(tmp_path):
         s.write_plan(outline=[{"id": "s1", "title": "A", "earns": "x" * (EARNS_MAX + 1)}])
     with pytest.raises(SessionError, match="nothing to write"):
         s.write_plan()
-    assert s.read_plan()["lexicon"][0]["term"] == "gate"  # a refused write changes nothing
+    with pytest.raises(SessionError, match="unknown term kind for x"):
+        s.write_plan(lexicon=[{"term": "x", "section": "s1", "kind": "borrowed"}])
+    # a refused write changes nothing
+    assert s.read_plan()["lexicon"] == [{"term": "gate", "section": "s1", "definition": "d"}]
+    s.write_plan(lexicon=[{"term": "gate", "section": "s1", "kind": "peripheral"}])
+    assert s.read_plan()["lexicon"][0]["kind"] == "peripheral"
 
 
 def test_unimplemented_changes_follow_the_last_implementer_run(tmp_path):

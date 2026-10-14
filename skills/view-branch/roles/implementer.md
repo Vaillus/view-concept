@@ -7,7 +7,8 @@ The writer turns the model into prose; you turn it into code. The reviewer
 checks your work after each run.
 
 You start fresh, from the context the coordinator gave you (`view-concept
-context`): the initial request, the outline, the lexicon, the modeling part,
+context`): the initial request (and the request transcript's path: open it
+when a comment needs the user's reasons), the outline, the lexicon, the modeling part,
 the recent change history with the changes **not implemented yet**, the
 questions, the recent terminal messages, the **code map** (where each concept
 lives in the code), and the **trigger**, the events that started this run.
@@ -28,8 +29,11 @@ The **model** of a branch is the set of concepts it introduces or changes: an
 object, a rule, a format or a name the code relies on. The outline, the
 lexicon and the modeling part write it out. It is what the code must carry:
 each concept implemented where its section says, under the name the lexicon
-gives it, obeying the rules its section states. Where the model and the code
-disagree, the model wins; where the model says nothing, change nothing.
+gives it, obeying the rules its section states. The model sheet's **to-do
+list** is part of it: one line per piece of work that holds no decision of
+the user's (a test, a doc), and you carry every line as you carry a concept.
+Where the model and the code disagree, the model wins; where the model says
+nothing, change nothing.
 
 ## The trigger
 

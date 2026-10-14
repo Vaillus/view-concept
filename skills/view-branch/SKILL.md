@@ -40,12 +40,21 @@ where it lives.
 The model is written for the user, who asked for the branch: it never tells
 them back what they stated, and spends its text on what is new to them (what
 the code does that they did not say, the decisions made for them, the
-consequences). Its first section, the **model sheet**, holds the whole model
-on one screen: a before/after, a table of the concepts, and a to-do list of
-the work that changes no concept.
+consequences). Its first section, the **model sheet**, gives an intuitive
+view of the change, graphical where it can be, that lays out the subjects of
+the sections after it, then a to-do list of the work that fails the
+**section test**. Each default taken for the user, a skipped question's or a
+listed default (a decision that changes nothing they see, do or risk, which
+no question asks), is one « Default taken » line at the end of the section
+it touches, never a list on the model sheet. A section stays in the model
+only when it holds a decision the user makes or must make, or a consequence
+they will notice; anything else is one line of the to-do list, which the
+implementer carries and the reviewer checks.
 
 In the page, the model is the outline and the lexicon of `plan.json` (one
-entry per concept, `definition` + `tip`), and the **modeling part** of the
+entry per term that is not plain language, `kind` + `definition` + `tip`: a
+**core concept** the model introduces or changes, or a **peripheral
+concept**, any other term, which gets its tip only), and the **modeling part** of the
 review: the sections that write the model out, which the page shows in the
 Model tab. Every change of the model is logged in the **change history**
 (`change-history.json`), one entry each: a concept added, removed, renamed,
@@ -67,15 +76,27 @@ requires approval for commands).
 
 ### Setup
 
-A code session opened on the branch, with the user's message verbatim as the
-initial request and the branch it is compared with (the slug is a short
-kebab-case name of the branch):
+A code session opened on the branch, with the user's first message verbatim
+as the initial request and the branch it is compared with (the slug is a
+short kebab-case name of the branch):
 
 ```bash
 view-concept new "<title>" --slug <slug> --initial-request "<the message>" \
     --kind code --repo <repo root> --base <base branch> --workflow view-branch
+view-concept request <slug> <file>   # when the review follows a conversation
 view-concept open <slug>          # starts the server if needed, shows the page
 ```
+
+When the review follows a conversation about the feature, write its
+**request transcript** right after `new`: every message of it, the user's and
+yours, word for word and in order, from the first message about the feature
+(leave out earlier messages on another subject), each under a `## User` or
+`## Agent` heading, messages only (no tool call, no tool output). The
+command writes it to `request.md` in the session folder, and replaces it
+when run again. The planner and the writer read it whole; the implementer,
+the reviewer and a side thread get its path and open it when a comment needs
+the user's reasons. A review started with a single message has no
+transcript: that message is its whole request.
 
 The page runs side threads on the agent you are. Claude Code and Codex are
 detected; any other agent (Jazz, …) adds `--agent jazz --agent-name <your own
@@ -179,7 +200,8 @@ Each run starts from the output of
 view-concept context <slug> --role <planner|writer|implementer|reviewer> --trigger <ids or words>
 ```
 
-It prints the **base context** (the initial request, the outline, the
+It prints the **base context** (the initial request, or the request
+transcript for the planner and the writer, the outline, the
 lexicon, the code map, the recent change history, the questions, the recent
 terminal messages, and the sections the role needs) and the **trigger**: the events
 that started this run, in full. Once the model is approved, it also says up
@@ -269,15 +291,24 @@ see a grill in their context.
 
 Keep the page's status true: `view-concept status <slug> scoping` from Setup
 to « Write model », and after each writer run `view-concept status <slug>
-awaiting-model` when no question it asked is open and every section of the
-modeling part is written (a writer paused on its questions sets the phase
+awaiting-model` when no question it asked is open, every section of the
+modeling part is written, and `audit.json` holds no entry with `"issue":
+"undefined"`. A writer paused on its questions sets the phase
 `awaiting-answer`, which the page reads as the pause, as step 5 says; a
 question « Go on » left open, still open once every section is written,
 keeps that phase too: « Approve model » waits until each is answered,
-skipped or deferred). After « Approve model »,
-set `view-concept status <slug> awaiting-pr` at the end of each pass, when no
-question is open. The agents set `writing` themselves while they write a
-section.
+skipped or deferred.
+
+The third condition is the **undefined gate**: the writer clears every audit
+underline itself, so « Approve model » never shows with an « audit ·
+undefined » underline on the page. When one is left, start the writer again
+with the trigger `"audit: undefined entries left"` before setting the phase.
+The gate is a rule you and the writer follow: `view-concept status` itself
+refuses nothing.
+
+After « Approve model », set `view-concept status <slug> awaiting-pr` at the
+end of each pass, when no question is open. The agents set `writing`
+themselves while they write a section.
 
 ## The flow
 
@@ -292,10 +323,10 @@ parts. The **modeling part** writes the model out; the page shows it in the
 Model tab (the page's name for the Explanation tab in a branch review). The
 **refactoring part** checks the code against the model; a section with
 `"part": "refactoring"` belongs to it, and is a **refactor section**: the
-page shows it in the refactor tab. An outline entry's `earns` is the one
-sentence the user reads under its title in the page (at most 200
-characters), and its optional `brief` the notes the agent that writes the
-section works from, which the context shows and the page does not.
+page shows it in the refactor tab. An outline entry holds a short,
+high-level title (the subject or the point) and its `earns`, the one
+sentence the user reads under the title in the page (at most 200
+characters): no notes for the writer, who works from the same outline.
 
 ### The visual rule: Markdown or HTML
 
@@ -398,7 +429,10 @@ check` reports a pair).
   cdn.jsdelivr.net or unpkg.com; any other site when the section needs it.
   Either way, a section that loads from the web needs a connection to show.
 - **Prose.** No preference: an HTML section may hold prose as well as visuals,
-  as an artifact does; choose how much goes there. Know its one cost: text a
+  as an artifact does; choose how much goes there. A **visual-carried
+  section** is one whose interactive visual makes its point alone (a hover
+  demo, a step player, a before/after to click through): its prose shrinks
+  to what the visual cannot show, often a sentence or two. Know its one cost: text a
   script paints into a `<canvas>` cannot be selected, highlighted or
   underlined, so a figure drawn there is commented as a whole. Everything else
   works as in a Markdown section: term underlines and their tips, change

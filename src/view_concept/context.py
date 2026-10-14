@@ -7,10 +7,16 @@ None of them sees the main conversation, so each one starts from the session fol
 events that started this run).
 
 The files keep everything; the context loads only the recent part of each log, the
-CONTEXT_RECENT most recent entries. Three parts are always loaded in full: the initial
-request, the open and deferred questions and the trigger's events, however old. An older
+CONTEXT_RECENT most recent entries. Three parts are always loaded in full: the request
+(below), the open and deferred questions and the trigger's events, however old. An older
 closed question still shows as one line (no answer), so a settled question is not asked again.
 The context names the folder, so an agent that needs an older entry opens the file.
+
+The request part is the initial request (the user's first message), or, when the review
+follows a conversation (request.md, the request transcript), that whole conversation for
+the planner and the writer, the roles that shape the model; the implementer, the reviewer
+and a side thread get the initial request and the transcript's path, and open it when a
+comment needs the user's reasons.
 
 Roles:
 
@@ -45,6 +51,7 @@ from .store import Session, SessionError, format_batch, format_comment
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
 ROLES = ("planner", "writer", "implementer", "reviewer", "thread")
+TRANSCRIPT_ROLES = ("planner", "writer")  # the roles that read the request transcript whole
 
 QUESTION_ID = re.compile(r"^q\d+$")
 COMMENT_ID = re.compile(r"^c\d+$")
@@ -71,7 +78,7 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     if plan.get("repo"):
         base = f" · base branch: {plan['base']}" if plan.get("base") else ""
         out.append(f"Repository: {plan['repo']}{base}. Read the code there.")
-    out += ["", "## Initial request", str(request).strip() or "(none recorded)"]
+    out += ["", *_request(s, role, str(request).strip())]
     out += ["", "## Trigger", *_trigger(s, trigger or [], outline, questions)]
     if s.is_grilling():
         out.append("A grill is running: ask every open decision, each with its recommended answer.")
@@ -95,6 +102,27 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     elif role == "thread" and section:
         out += ["", "## Section of the passage", *_sections(outline, sections, section, html=html)]
     return "\n".join(out).rstrip() + "\n"
+
+
+def _request(s: Session, role: str, initial: str) -> list[str]:
+    """The request transcript whole to the roles that shape the model; the initial request
+    and the transcript's path to the others, or the initial request alone without one."""
+    transcript = s.read_request()
+    if transcript and role in TRANSCRIPT_ROLES:
+        return [
+            "## Request transcript",
+            "The conversation that led to this review, every message verbatim and in order."
+            " The agent's messages are proposals, not decisions.",
+            "",
+            transcript,
+        ]
+    lines = ["## Initial request", initial or "(none recorded)"]
+    if transcript:
+        lines.append(
+            f"The whole conversation that led to this review is in {s.request_path}:"
+            " open it when a comment needs the user's reasons."
+        )
+    return lines
 
 
 def _number(outline: list[dict[str, Any]]) -> dict[str, int]:
@@ -168,20 +196,20 @@ def _outline(outline: list[dict[str, Any]]) -> list[str]:
     lines = []
     for i, sec in enumerate(outline, 1):
         part = " [refactoring part]" if _refactoring(sec) else ""
+        part += " [overview]" if sec.get("overview") is True else ""
         earns = f": {sec['earns']}" if sec.get("earns") else ""
         lines.append(f"{i}. {sec.get('title', sec['id'])} ({sec['id']}){part}{earns}")
-        if sec.get("brief"):
-            lines.append(f"   Brief: {sec['brief']}")
     return lines
 
 
 def _lexicon(lexicon: list[dict[str, Any]], outline: list[dict[str, Any]]) -> list[str]:
+    """One line per term, with its home section and its term kind (core without one)."""
     if not lexicon:
         return ["(empty)"]
     number = _number(outline)
     return [
-        f"- {t.get('term', '')} (section {number.get(t.get('section', ''), '?')}):"
-        f" {t.get('definition', '')}"
+        f"- {t.get('term', '')} (section {number.get(t.get('section', ''), '?')},"
+        f" {t.get('kind') or 'core'}): {t.get('definition', '')}"
         for t in lexicon
     ]
 

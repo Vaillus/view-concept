@@ -16,7 +16,7 @@ def test_planner_context_holds_the_folder_and_no_sections(session):
     text = build(session, "planner")
     assert "## Initial request\nexplique le KV cache" in text
     assert "## Trigger\nnone: the first run of this role" in text
-    assert "1. Attention (s1)" in text and "- clé | key (section 1): vecteur" in text
+    assert "1. Attention (s1)" in text and "- clé | key (section 1, core): vecteur" in text
     assert "Open:\n- q1 [open] Level?" in text
     assert "## Sections" not in text and "L'attention." not in text
 
@@ -109,9 +109,25 @@ def test_changes_not_implemented_yet_are_shown_once_the_model_is_approved(branch
     assert "Every change of the model is implemented." in build(branch, "reviewer")
 
 
-def test_the_outline_gives_each_section_its_brief(branch):
+def test_the_lexicon_gives_each_term_its_kind(branch):
+    branch.write_plan(
+        lexicon=[
+            {"term": "gate", "section": "s2", "definition": "drops a segment"},
+            {"term": "FSRS", "section": "s1", "definition": "a scheduler", "kind": "peripheral"},
+        ]
+    )
     text = build(branch, "writer")
-    assert "2. The gate (s2): what it refuses\n   Brief: no flag\n" in text
+    assert "- gate (section 2, core): drops a segment" in text
+    assert "- FSRS (section 1, peripheral): a scheduler" in text
+
+
+def test_the_outline_leaves_out_a_brief_left_in_an_older_plan(branch):
+    # An older session's outline entry may still hold a brief: it stays in plan.json,
+    # and the context no longer prints it.
+    assert branch.read_plan()["outline"][1]["brief"] == "no flag"
+    text = build(branch, "writer")
+    assert "2. The gate (s2): what it refuses\n3. cli (i1)" in text
+    assert "Brief" not in text and "no flag" not in text
 
 
 def test_an_html_section_is_given_by_its_visible_text(branch):
@@ -140,3 +156,30 @@ def test_every_role_of_a_code_session_gets_the_code_map(review, session):
         assert "## Code map\n- the gate: `src/gate.py`\n" in build(review, role)
     # An explanation has no code, so no code map.
     assert "## Code map" not in build(session, "writer")
+
+
+TRANSCRIPT = "## User\nrework the gate, as we said\n\n## Agent\nA flag, or a rule?"
+
+
+def test_without_a_transcript_every_role_gets_the_initial_request(branch):
+    for role in ("planner", "writer", "implementer", "reviewer", "thread"):
+        text = build(branch, role)
+        assert "## Initial request\nrework the gate\n" in text
+        assert "Request transcript" not in text and "request.md" not in text
+
+
+def test_the_planner_and_the_writer_read_the_transcript_whole(branch):
+    branch.write_request(TRANSCRIPT)
+    for role in ("planner", "writer"):
+        text = build(branch, role)
+        assert "## Request transcript\n" in text and TRANSCRIPT in text
+        assert "## Initial request" not in text
+
+
+def test_the_other_roles_get_the_initial_request_and_the_transcript_path(branch):
+    branch.write_request(TRANSCRIPT)
+    for role in ("implementer", "reviewer", "thread"):
+        text = build(branch, role)
+        assert "## Initial request\nrework the gate\n" in text
+        assert f"{branch.request_path}: open it when a comment needs" in text
+        assert "A flag, or a rule?" not in text

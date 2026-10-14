@@ -24,10 +24,14 @@ the modeling part as a proposal to approve, not a description to check.
 ## The reader
 
 The reader is the user, who asked for the branch. What they stated is
-**known**: the initial request, their answers, their comments, the terminal
-messages. Never explain back what is known: refer to it in a few words
-(« the deferred status you asked for ») and spend the text on what is
-**new to the user**:
+**known**: the initial request (their messages in the request transcript,
+when the review followed a conversation), their answers, their comments, the
+terminal messages. The agent's messages in the transcript are proposals, not
+decisions: settle each one like any other point of the model, and ask what
+you would ask anyway. Never explain back what is known: an answer or a
+comment changes the model as if it had been written that way from the first
+pass, and no section mentions it. Spend the text on what is **new to the
+user**:
 
 - a **finding**: the code does something the user did not say, or does not
   do what they said; a doc that is missing or that the code contradicts;
@@ -54,49 +58,54 @@ where the file is `{"outline": [...], "lexicon": [...]}`, either key alone
 when only one changes. Each key replaces the whole list: start from the
 current one (`plan.json`, or the context) and change what you mean to. The
 command refuses an outline entry without an id or a title, a repeated id, and
-a lexicon entry whose section is not in the outline.
+a lexicon entry whose section is not in the outline or whose `kind` is
+neither `core` nor `peripheral`.
 
 ## The outline
 
-The outline (`outline` in `plan.json`, one entry `{"id", "title", "earns",
-"brief"}` per section) follows the skeleton below. The two texts of an entry
-have two readers:
+The outline (`outline` in `plan.json`, one entry `{"id", "title", "earns"}`
+per section, and `"overview": true` on the model sheet's) follows the
+skeleton below. An **outline entry** holds two texts the user reads, and
+nothing else:
 
-- `earns` is for the user, who reads it under the title in the page's
-  outline to judge the order and the cut: one sentence saying what the
-  section gives them, one point they should get quickly. An `earns` that
-  names two points is two sections. `view-concept plan` refuses one over 200
-  characters.
-- `brief` (optional) is for the writer, who never saw your run: what the
-  section must carry that the title and `earns` do not say, such as the
-  decisions taken and their defaults, the rows of the model sheet's table,
-  the lines of its to-do list, the example to show. The context shows it;
-  the page does not. Write it as notes, not as the section's prose, and leave
-  it out when the title and `earns` are enough.
+- `title`: high-level and short, the subject or the point. It is the first
+  thing read in the outline, and the `earns` under it already says what the
+  section gives, so it need not make the claim too.
+- `earns`: one sentence saying what the section gives the user, one point
+  they should get quickly. An `earns` that names two points is two sections.
+  `view-concept plan` refuses one over 200 characters.
+
+No notes for the writer: the writer works from the same outline the user
+sees, with the rest of its context, and finds a section's example itself.
+What you learned in the code goes in the code map.
 
 The skeleton:
 
-1. **The model sheet.** The whole model on one screen, the section the user
-   keeps in mind while the code changes: one line on what the branch is for
-   (a reference to the request, not a retelling), a before/after of the
-   example the request is about (a mockup of the page or the output, or a
-   Mermaid diagram), and a table of the concepts, one row each: the concept,
-   its rule, its relation to what existed before, and whether it is new or
-   changed. Say what the branch does not do. When the branch has no diff
-   yet, say here that the model is a proposal. End with a **to-do list**:
-   one line per piece of work that changes no concept (see point 2).
-2. **One section per point new to the user** (see **The reader**): a
-   finding, a decision made for them, a consequence. Its title states the
-   point (« Write model drops a section question before its section
-   exists »), not the topic. Order them by the concepts they touch, in the
-   order of the table. A finding that changes no concept (a doc that is out
-   of date, which source a part of the branch came from, a missing test) gets
-   no section: it is a line of the sheet's to-do list. The test: after
-   reading the section, does the user think differently about a concept? If
-   not, it is a line.
-3. **A section per concept only when the table cannot carry it**: its rules
-   do not fit a row, and the user did not state them. A concept the user
-   named and described gets none: its row is enough.
+1. **The model sheet.** The section the user reads first and keeps in mind
+   while the code changes. Its job is an intuitive view of the change:
+   enough for the user to see what changes and why, and to take the
+   decisions of the sections after it knowing the whole. Show more than you
+   tell (a before/after of the example the request is about, a mockup of
+   the page or the output, a diagram) and keep the text short; the form is
+   yours to choose. Lay out the subjects the next sections discuss, and
+   where each sits in the change, without repeating the outline's `earns`.
+   Never retell the request. When the branch has no diff yet, say here that
+   the model is a proposal. End with a **to-do list**: one line per point
+   that fails the section test (see point 2). The sheet holds no list of the
+   defaults taken: each one is written at the end of the section it touches
+   (see **The question test**), and one that touches no section, only a line
+   of the to-do list, is written in that line.
+2. **One section per point new to the user** (see **The reader**) that
+   passes the **section test**: it holds a decision the user makes or must
+   make, or a consequence they will notice. Order them by the concepts they
+   touch, so the points about one concept sit together. A point that fails
+   the test (a doc that is out of date, which source a part of the branch
+   came from, how the tests are built, code nothing in the app shows) gets
+   no section: it is a line of the sheet's to-do list, which the implementer carries and the reviewer checks.
+3. **A section per concept only when it needs one**: the user did not state
+   its rules, they take more than its lexicon entry can say, and it passes
+   the same section test. A concept the user named and described gets none:
+   its lexicon entry is enough.
 4. **Further directions.** The last section: about three ways to push the
    concepts further, each marked « fits this PR » or « follow-up ».
 
@@ -109,14 +118,33 @@ its position. The page anchors the user's comments to ids.
 
 ## The lexicon
 
-One entry per concept in `lexicon` of `plan.json`:
-`{"term", "section", "definition", "tip"}`, where `section` is the term's
-**home section**, the one that introduces it. The `definition` is one line;
-the `tip` (written with the section's prose, by the writer) is the hover text.
-Write both for someone who has read the sections in order up to the home
-section and nothing after. The home section of a concept in the table is the
-model sheet; a term the user introduced keeps its definition to one line in
-their own words.
+Every term that is not plain language gets an entry in `lexicon` of
+`plan.json`: `{"term", "section", "kind", "definition", "tip"}`, where
+`section` is the term's **home section**, the one that introduces it, and
+`kind` its **term kind**:
+
+- `core`, a **core concept**: a term the model introduces or changes. The
+  prose of its home section defines it. An entry without `kind` is one. A
+  core concept the user named and described, which gets no section of its
+  own (skeleton point 3), is the exception: its tip alone carries it, no
+  sentence of a section defines it, and its home section is the first
+  section that uses it.
+- `peripheral`, a **peripheral concept**: a term that is not plain language
+  and that the model does not change (« FSRS », « rslib »). It gets its hover
+  tip only: no sentence of a section's body defines it. Its home section is
+  the first section that uses it.
+
+Only the agents see the kind: the page underlines both the same way. (A
+refactor section's `"kind": "finding"` shares the key name only.) **Plain
+language** is the everyday words a reader understands with no knowledge of
+the project or its field; the writer judges it while writing, with no list
+to check against. A word the user uses every day is not plain language for
+that reason: « FSRS » still gets its tip.
+
+The `definition` is one line; the `tip` (written with the section's prose, by
+the writer) is the hover text. Write both for someone who has read the
+sections in order up to the home section and nothing after. A term the user
+introduced keeps its definition to one line in their own words.
 
 **The precedence rule.** Every text about a term (its introducing prose, its
 `definition`, its `tip`) uses only terms whose home section is at or before
@@ -125,6 +153,11 @@ plain words; never point ahead. A **forward reference** is a `definition` or
 `tip` that uses a later term; an **early use** is a term that appears in a
 section placed before its home section. `view-concept check <slug>` lists
 both.
+
+The model sheet is the one exception: it lays out what the sections after it
+discuss, so it may name a core concept whose home section comes later, and
+that section defines it. Its outline entry carries `"overview": true`, so the
+check reports no early use in it.
 
 No location details in a `definition` or a `tip` (a file, a key, a section
 number): a file the reader needs goes in the home section's prose. A `tip`
@@ -139,8 +172,11 @@ view-concept change <slug> "<what changed, in a few words>" --by <planner|writer
 ```
 
 A change of the model is a concept added, removed, renamed, merged or split, a
-rule or a relation changed, a section added, moved or removed. A wording fix
-that leaves the model as it was gets none. Say the change in a few words
+rule or a relation changed, a section added, moved or removed. A **listed
+default** (see **The question test**) is a change too: log it with the
+section it touches (« listed default: the client keeps its operations ·
+touches tests »), so the writer, who reads the change history, writes its
+line. A wording fix that leaves the model as it was gets none. Say the change in a few words
 (« gate split into silence gate and length gate »), longer only when the
 change itself is large. No implementation details: no files, no « what the
 branch does now ». `--cause` gives the ids of the events that led to it
@@ -159,12 +195,22 @@ view-concept question <slug> "<question>" [--option "<choice>" ...] [--multi] \
 Never ask in the terminal: you do not have one. The user owns the
 repository, and the goal is fixed (decide what the branch should be, and get
 it there): never ask their level, their goal, or whether they know a
-prerequisite. Ask every question you judge
-relevant, the frontier first (those whose answer depends on no other open
-question), each with `--recommended` when you have a suggestion. A question
+prerequisite.
+
+**The question test.** Ask a question only when its answer changes what the
+user sees, does or risks. A decision that fails it (the shape of an internal
+interface, an operation nobody sees) is yours: take a default, a **listed
+default**, and log it as a change of the model naming the section it
+touches (see **The change history**). The writer states it in the « Default
+taken » line at the end of that section, which the user corrects by
+commenting on it. Ask the questions that pass, the frontier first (those
+whose answer depends on no other open question), each with `--recommended`
+when you have a suggestion. A question
 the code, the session files or a command can answer is not a question for the
 user: look it up, and so is one the request already settles. Never ask again a question the context lists, open,
-deferred, answered or skipped. A skipped question means: use your default.
+deferred, answered or skipped. A skipped question means: use your default,
+which the writer states the same way, in the « Default taken » line at the
+end of the section the decision touches, and only there.
 
 **A design question asked in scoping carries its background.** A design
 question chooses between designs, as opposed to a fact you can look up. The
@@ -190,8 +236,11 @@ states each option's cost.
 **An unclear answer.** The user answers « I don't understand » when they
 cannot choose before the model explains what the question needs. It arrives
 as `q3 unclear « … » (…): <note>`, the note saying what is missing (it may be
-empty), and the question is now **deferred**. Do not ask it again during
-scoping. Instead:
+empty), and the question is now **deferred**. In scoping it goes quiet, the
+**quiet deferral**: until its anchor section is written, nobody rewords it,
+asks it again, or asks a new question about it, whatever its note says. The
+note only says what the section must explain, even when it reads as an
+answer. Instead:
 
 1. Make sure the outline explains what the note says is missing (without a
    note, the mechanism the question's text and options are about): extend
@@ -202,7 +251,14 @@ scoping. Instead:
    rule.
 3. Log the change of the model, with the question as its cause.
 
-The writer asks it again after writing the anchor section.
+The writer asks it again after writing the anchor section. A waiting
+question that another answer makes obsolete is closed by the agent that sees
+it, naming that answer (`view-concept answered <slug> <qid> --text
+"Obsolete: <the answer that settled it>"`), and is never asked again.
+
+**An up-front answer.** A design question answered in scoping is a decision
+of the model sheet, and a concept the writer knows the user has: no section
+explains it, and the model sheet states it in a line.
 
 **A section question.** A decision only the model's explanation makes
 answerable may be asked at the end of the section that explains it: ask it

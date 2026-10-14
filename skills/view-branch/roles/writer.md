@@ -5,7 +5,8 @@ the modeling part, the sections that write the model out, and from « Write
 model » on, the outline and the lexicon of `plan.json` too.
 
 You start fresh, from the context the coordinator gave you (`view-concept
-context`): the initial request, the outline, the lexicon, the sections, the
+context`): the initial request (the whole request transcript when the
+review followed a conversation), the outline, the lexicon, the sections, the
 recent change history, the questions, the recent terminal messages, and the
 **trigger**, the events that started this run, and the **code map**, which
 says where each concept lives in the code. You never see the main
@@ -28,12 +29,10 @@ agent. A bug you notice in the code goes in your report, not in a fix.
 Follow `planning-rules.md` for the outline, the lexicon, the change history
 and your questions.
 
-Write each section from its outline entry: its `earns` is the point the
-section makes, and its `brief`, when it has one, is what the planner
-settled for it (decisions, defaults, table rows, to-do lines). Carry every
-line of the brief into the section or, when the model has moved past it,
-update the brief with the outline. When you change what a section says,
-keep its `earns` true to it.
+Write each section from its outline entry, its title and its `earns` (the
+point the section makes), and the rest of your context: find the example
+that carries the point yourself. When you change what a section says, keep
+its title and `earns` true to it.
 
 ## Writing a section
 
@@ -42,68 +41,51 @@ Each section goes to `sections/<id>.md` (Markdown) or `sections/<id>.html`
 page renders the title). Before writing one, run
 `view-concept status <slug> writing --section <id>`.
 
-- **Few citations.** The reader wants the concepts, not a map of the code.
-  When a concept first comes up, name the file or script it lives in, as
-  inline code (`` `src/pkg/store.py` ``, path relative to the repo root). Cite
-  a line (`` `src/pkg/store.py:118` ``) only where the user must see the code
-  to judge the model: a threshold, a format, a name the branch changes. Most
-  sections cite no line. Still check every claim against the code before
-  writing it: an unchecked claim is cut, cited or not.
+- **No citations in the prose.** The reader wants the concepts, not a map of
+  the code: no file, script or line in a section. The code map gives the
+  implementer each location. Still check every claim against the code before
+  writing it: an unchecked claim is cut.
 - **One point, got quickly.** Each section makes one point, and the reader
   should get it quickly: the fewest words that carry it, and a visual wherever
-  the point can be shown (see **The visual rule**). When a section has to
-  carry more than one point, or its visual has to hold several ideas at once
-  to fit, split it into sections, one point each, rather than condensing:
-  place each new section where it belongs in the outline, and say so.
-- **A short first draft.** The first draft (« Write model ») is read to
-  discuss the concepts, not to check them: each section gives its core in
-  three to eight lines of prose, with an HTML section where it has something
-  to show (see **The visual rule**), a table or a diagram where it replaces
-  prose. After writing it, count the lines of prose of every section
-  (tables, code blocks, diagrams and the visuals of an HTML section don't
-  count) and cut any over eight.
-- **Develop when asked.** The limit binds the first draft only. When a
-  comment asks to develop, expand or detail a section, or says the user does
-  not understand it, write as much as the point needs, still in the order the
-  outline sets up; a reordering or a diagram is often worth trying first, but
-  when the user wants more, more prose is the answer. Over-concision makes a
-  worse explanation than length. A section the user asked to develop is never
-  cut back to eight lines in a later run, a « Rewrite model » included.
+  the point can be shown (see **The visual rule**). Split a section whenever
+  that makes it clearer, in particular one that edits have grown until it
+  holds barely related concepts: place each new section where it belongs in
+  the outline, and say so.
 - **The lexicon tips.** Write each term's `tip` with the section that
   introduces it, through `view-concept plan` like any lexicon change.
 
 ## How the prose explains
 
 The reader owns the repository, asked for the branch, and wants the model,
-not a tour. In a first draft each rule below is a sentence or a clause inside
-the eight lines; in a section the user asked to develop, each takes the room
-it needs.
+not a tour.
 
-- **Never tell the user back what they told you.** What is known (the
-  initial request, their answers, comments and terminal messages, see **The
-  reader** in `planning-rules.md`) is referred to in a few words, never
-  explained. A sentence the user could have written themselves before the
-  review is cut. What stays is what is new to them: what the code does, the
-  decisions made for them, the consequences they did not state. Lead each
-  section with that point, in its first sentence.
-- **Honour the lexicon.** Each term gets its definition in its home section
-  and is used freely after. No technical term appears that is not in the
-  lexicon: add it, or cut the sentence.
-- **Mechanism before abstraction.** Show the point on the real example the
-  model sheet set up (a real file, a command and its output, a trace of three
-  steps) before stating it in general. Never let a metaphor stand in for a
-  mechanism you can show.
-- **Say why the concept earns its name**: what it lets the user see, predict
-  or decide that they could not before. One sentence, and none for a concept
-  the user asked for: they know why they wanted it.
-- **Say what it is not**, when a neighbouring concept or an existing name
-  could be mistaken for it. One clause; skip it when nothing is close.
-- **A diagram** (a Mermaid block) when the structure is a sequence, a
-  containment or a before/after that prose serialises badly; never one that
-  re-renders a list.
-- **A skipped question** left a default in the model: say which default you
-  took in one line at the end of the section it touches (« Default taken: … »),
-  so the user can correct it.
+- **Never tell the user back what they told you.** A comment or an answer
+  changes the model as if it had been written that way from the first pass:
+  no section mentions it, nor what the section said before. The initial
+  request is never retold. From its first lines the reader knows what the
+  section is about; no first sentence is prescribed.
+- **Honour the lexicon.** Use each defined term by its name, never a
+  paraphrase of it. A core concept gets its definition in its home section
+  and is used freely after; a peripheral concept gets its tip and no
+  definition in the body, and so does a core concept the user named and
+  described that has no section of its own: the user already knows it. No term that is not plain language appears without
+  a lexicon entry: add it as you write, or cut the sentence.
+- **Show rather than tell.** No long text where an example (a real file, a
+  command and its output, a trace of three steps) or a visual makes the
+  point. Never let a metaphor stand in for a mechanism you can show. A
+  Mermaid block is one more way to show, where it helps.
+- **No part written because a rule lists it.** Why a concept earns its name,
+  what it is not, and the earlier decision a section follows from are said
+  where the section needs them, in passing, never as a part of their own.
+- **A default taken** for the user, by a skipped question or as a listed
+  default (a decision nobody asked, which the change history logs with the
+  section it touches): say it in one line at the end of the section it
+  touches (« Default taken: … »), so the user can correct it. Write the line
+  always, and nowhere else: the model sheet holds no list of the defaults. A
+  listed default that touches no section, only a line of the to-do list, is
+  written in that line. Your context holds only the recent changes: read
+  every listed default in `change-history.json` in the session folder, and
+  give each helper those that touch its section.
 - Write in the language of the initial request, technical terms as the code
   names them.
 - Name a section to the user by its number in words (« section 6 »), never
@@ -217,7 +199,10 @@ check` reports a pair).
   cdn.jsdelivr.net or unpkg.com; any other site when the section needs it.
   Either way, a section that loads from the web needs a connection to show.
 - **Prose.** No preference: an HTML section may hold prose as well as visuals,
-  as an artifact does; choose how much goes there. Know its one cost: text a
+  as an artifact does; choose how much goes there. A **visual-carried
+  section** is one whose interactive visual makes its point alone (a hover
+  demo, a step player, a before/after to click through): its prose shrinks
+  to what the visual cannot show, often a sentence or two. Know its one cost: text a
   script paints into a `<canvas>` cannot be selected, highlighted or
   underlined, so a figure drawn there is commented as a whole. Everything else
   works as in a Markdown section: term underlines and their tips, change
@@ -260,7 +245,11 @@ after a wave whose sections have questions to ask.
    stop after the wave: write nothing further, and report the pause
    (« paused after section 4, 2 questions »), naming the last section of the
    wave. Otherwise write the next wave, until no section is left.
-3. When every section is written, audit what you wrote:
+3. When every section is written, run the **writer-run audit**: you clear
+   every audit underline yourself, and none is left for the user to answer.
+   As you write, every term is already plain language or a lexicon entry
+   (a core concept or a peripheral concept, with its tip); this step catches
+   what slipped past.
 
    1. Run `view-concept check <slug>` and fix each forward reference and
       early use it lists by the precedence rule: reorder the outline or say
@@ -270,23 +259,22 @@ after a wave whose sections have questions to ask.
       section), two files for one section, an HTML section over 2 MB, a
       waiting question anchored to a section the outline no longer has
       (re-anchor it with `view-concept anchor`). Fix each one.
-   2. Re-read every section for the words that slipped past the lexicon, and
-      add each one to `audit.json` (`[{"term", "section", "issue", "note"}]`,
-      keeping the entries `check` wrote), with one of these issues:
-      - `undefined`: a domain term absent from the lexicon that the user
-        did not introduce themselves (in the request, an answer, a
-        comment);
-      - `metaphor`: a word such as « bridge » or « funnel » that names an
-        intuition instead of the mechanism;
-      - `ambiguous`: an overloaded word (« session », « state », « context »)
-        whose meaning here depends on context the reader may not share;
-      - `assumes-context`: a bare reference (« the config », « the
-        pipeline ») to something the text has not introduced.
+   2. Re-read every section for the words that slipped past the lexicon,
+      each with one of these issues, and fix each one yourself:
 
-      Do not fix these yourself: the page underlines each one, and the user
-      answers by commenting on it. Fix the ones the user agrees on, in a
-      later run, by the precise term, an inline definition or a
-      disambiguating clause, and update the lexicon to match.
+      | Issue | The word | Your fix |
+      |---|---|---|
+      | `undefined` | a term absent from the lexicon that is not plain language (everyday words a reader understands with no knowledge of the project or its field, as you judge them; a word the user uses every day is not plain language for that reason) | a lexicon entry: a peripheral concept with its tip, or a core concept defined in its home section's prose |
+      | `metaphor` | a word such as « bridge » or « funnel » that names an intuition instead of the mechanism | the name of the mechanism it stood for |
+      | `ambiguous` | an overloaded word (« session », « state », « context ») whose meaning here depends on context the reader may not share | the precise term, or a clause that says which meaning |
+      | `assumes-context` | a bare reference (« the config », « the pipeline ») to something the text has not introduced | name the thing, or say it in plain words |
+
+   3. Run `view-concept check <slug>` again, and leave in `audit.json`
+      (`[{"term", "section", "issue", "note"}]`) no entry you fixed: `check`
+      replaces its own entries, so remove any other one by editing the file.
+      The **undefined gate**: « Approve model » appears only when no entry
+      with `"issue": "undefined"` is left, so your report says what you
+      cleared, and names any entry you could not.
 
 ## Writing in waves
 
@@ -298,13 +286,13 @@ while writing can land in the middle of one.
   warmup.
 - **A longer wave** goes to **helper agents**, one per section, started at
   once. Give each one the same context command you started from, its section
-  id, and this instruction: « Read `roles/writer.md` (its **Writing a
+  id, the listed defaults that touch its section, and this instruction: « Read `roles/writer.md` (its **Writing a
   section**, **How the prose explains** and **The visual rule**) and
   `roles/planning-rules.md` in
   `~/Documents/code/view-concept/skills/view-branch/`. Write only
   `sections/<id>.md` or `sections/<id>.html`, and run no `view-concept`
-  command that writes: return the lexicon terms and tips your section
-  introduces, any move of the outline it needs, any change of the model, and
+  command that writes: return the lexicon terms your section
+  introduces, each with its kind and tip, any move of the outline it needs, any change of the model, and
   any question it makes answerable (its text, options and recommended
   answer), and a one-line summary. » Set `view-concept status <slug> writing
   --section <id>` yourself, on the first section of the wave.
@@ -312,7 +300,7 @@ while writing can land in the middle of one.
   files (`plan.json`, the change history, the questions) are rewritten whole
   by each command, with no lock, so two helpers writing them would lose each
   other's work. You write what the helpers return, alone, once they have all
-  ended: the lexicon terms and tips and the outline moves in one
+  ended: the lexicon terms, kinds and tips and the outline moves in one
   `view-concept plan` call, the changes with `view-concept change`, the
   questions with `view-concept question … --section <id>`.
 - **Each helper starts from the outline and the lexicon as they stand before
@@ -346,11 +334,12 @@ on the sections written so far):
   model. Then go on writing from the next unwritten section, with the same
   pauses, as « Write model » says.
 - **An unclear answer** to a question asked again: the anchor section did not
-  explain enough. Develop it once (its « develop when asked » rule), with what
-  the note says is missing, and ask the question again. A second unclear
+  explain enough. Develop it once, with what the note says is missing, as
+  much as the point needs, and ask the question again. A second unclear
   answer after that takes the recommended answer: say so in the section's
   « Default taken » line, and go on.
-- **A skip** takes the recommended answer, the same way.
+- **A skip** takes the recommended answer, the same way: its « Default
+  taken » line at the end of the section the decision touches.
 - A pause question left open does not block the next sections when the user
   sends comments only: answer the comments, and go on writing only when the
   trigger answers, skips or defers every question of the pause, or holds
@@ -382,6 +371,8 @@ The trigger holds comments, answers, terminal messages, or « Rewrite model »
   <slug>` again and fix what it lists, including in sections nobody
   commented on: re-anchor a question whose anchor section you removed or
   merged to the section that now explains what it needs.
+- Audit what you wrote in the run as « Write model » step 3 says, so no
+  audit underline is left after it.
 - Log each change of the model, with the events that caused it.
 - Resolve each comment you handled:
   `view-concept resolve <slug> <ids> --reply "<one line: what changed>"`.
