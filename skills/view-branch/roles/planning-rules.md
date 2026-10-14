@@ -84,8 +84,10 @@ The skeleton:
    Mermaid diagram), and a table of the concepts, one row each: the concept,
    its rule, its relation to what existed before, and whether it is new or
    changed. Say what the branch does not do. When the branch has no diff
-   yet, say here that the model is a proposal. End with a **to-do list**:
-   one line per piece of work that changes no concept (see point 2).
+   yet, say here that the model is a proposal. Then the **defaults taken**:
+   the listed defaults only (see **The question test**), one line each, the
+   decision, the default, and the section it touches. End with a **to-do
+   list**: one line per piece of work that changes no concept (see point 2).
 2. **One section per point new to the user** (see **The reader**): a
    finding, a decision made for them, a consequence. Its title states the
    point (« Write model drops a section question before its section
@@ -175,12 +177,20 @@ view-concept question <slug> "<question>" [--option "<choice>" ...] [--multi] \
 Never ask in the terminal: you do not have one. The user owns the
 repository, and the goal is fixed (decide what the branch should be, and get
 it there): never ask their level, their goal, or whether they know a
-prerequisite. Ask every question you judge
-relevant, the frontier first (those whose answer depends on no other open
-question), each with `--recommended` when you have a suggestion. A question
+prerequisite.
+
+**The question test.** Ask a question only when its answer changes what the
+user sees, does or risks. A decision that fails it (the shape of an internal
+interface, an operation nobody sees) is yours: take a default and write it
+on the model sheet as a **listed default**, one line the user corrects by
+commenting on it. Ask the questions that pass, the frontier first (those
+whose answer depends on no other open question), each with `--recommended`
+when you have a suggestion. A question
 the code, the session files or a command can answer is not a question for the
 user: look it up, and so is one the request already settles. Never ask again a question the context lists, open,
-deferred, answered or skipped. A skipped question means: use your default.
+deferred, answered or skipped. A skipped question means: use your default,
+which the writer states in the default-taken line at the end of the section
+the decision touches, and only there (never in the model sheet's list).
 
 **A design question asked in scoping carries its background.** A design
 question chooses between designs, as opposed to a fact you can look up. The

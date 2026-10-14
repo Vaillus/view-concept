@@ -104,7 +104,9 @@ it needs.
   re-renders a list.
 - **A skipped question** left a default in the model: say which default you
   took in one line at the end of the section it touches (« Default taken: … »),
-  so the user can correct it.
+  so the user can correct it. Write the line always, and nowhere else: the
+  model sheet's defaults taken list only the listed defaults, the decisions
+  nobody asked.
 - Write in the language of the initial request, technical terms as the code
   names them.
 - Name a section to the user by its number in words (« section 6 »), never
@@ -354,7 +356,8 @@ on the sections written so far):
   the note says is missing, and ask the question again. A second unclear
   answer after that takes the recommended answer: say so in the section's
   « Default taken » line, and go on.
-- **A skip** takes the recommended answer, the same way.
+- **A skip** takes the recommended answer, the same way: its « Default
+  taken » line at the end of the section the decision touches.
 - A pause question left open does not block the next sections when the user
   sends comments only: answer the comments, and go on writing only when the
   trigger answers, skips or defers every question of the pause, or holds

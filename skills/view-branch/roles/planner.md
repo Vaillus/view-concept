@@ -53,10 +53,12 @@ Follow `planning-rules.md` for everything you write.
 3. Write the outline and the lexicon with `view-concept plan`, as
    `planning-rules.md` says (`definition` only: the writer adds the `tip`).
 4. Log one change: « first draft », `--by planner`.
-5. Ask the first questions: what is in and out of the feature, which design,
-   which constraints, and whatever the draft left open, leaving out what the
-   request already settles. Each design question carries its background, as
-   `planning-rules.md` says.
+5. Ask the first questions: whatever the draft left open (what is in and out
+   of the feature, which design, which constraints) that passes the question
+   test of `planning-rules.md`, leaving out what the request already
+   settles. Each decision that fails the test is a listed default of the
+   model sheet, in the outline. Each design question carries its background,
+   as `planning-rules.md` says.
 
 ## A later run (a trigger)
 
