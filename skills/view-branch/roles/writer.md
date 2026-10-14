@@ -261,7 +261,11 @@ after a wave whose sections have questions to ask.
    stop after the wave: write nothing further, and report the pause
    (« paused after section 4, 2 questions »), naming the last section of the
    wave. Otherwise write the next wave, until no section is left.
-3. When every section is written, audit what you wrote:
+3. When every section is written, run the **writer-run audit**: you clear
+   every audit underline yourself, and none is left for the user to answer.
+   As you write, every term is already plain language or a lexicon entry
+   (a core concept or a peripheral concept, with its tip); this step catches
+   what slipped past.
 
    1. Run `view-concept check <slug>` and fix each forward reference and
       early use it lists by the precedence rule: reorder the outline or say
@@ -271,24 +275,22 @@ after a wave whose sections have questions to ask.
       section), two files for one section, an HTML section over 2 MB, a
       waiting question anchored to a section the outline no longer has
       (re-anchor it with `view-concept anchor`). Fix each one.
-   2. Re-read every section for the words that slipped past the lexicon, and
-      add each one to `audit.json` (`[{"term", "section", "issue", "note"}]`,
-      keeping the entries `check` wrote), with one of these issues:
-      - `undefined`: a term absent from the lexicon that is not plain
-        language (everyday words a reader understands with no knowledge of
-        the project or its field, as you judge them; a word the user uses
-        every day is not plain language for that reason);
-      - `metaphor`: a word such as « bridge » or « funnel » that names an
-        intuition instead of the mechanism;
-      - `ambiguous`: an overloaded word (« session », « state », « context »)
-        whose meaning here depends on context the reader may not share;
-      - `assumes-context`: a bare reference (« the config », « the
-        pipeline ») to something the text has not introduced.
+   2. Re-read every section for the words that slipped past the lexicon,
+      each with one of these issues, and fix each one yourself:
 
-      Do not fix these yourself: the page underlines each one, and the user
-      answers by commenting on it. Fix the ones the user agrees on, in a
-      later run, by the precise term, an inline definition or a
-      disambiguating clause, and update the lexicon to match.
+      | Issue | The word | Your fix |
+      |---|---|---|
+      | `undefined` | a term absent from the lexicon that is not plain language (everyday words a reader understands with no knowledge of the project or its field, as you judge them; a word the user uses every day is not plain language for that reason) | a lexicon entry: a peripheral concept with its tip, or a core concept defined in its home section's prose |
+      | `metaphor` | a word such as « bridge » or « funnel » that names an intuition instead of the mechanism | the name of the mechanism it stood for |
+      | `ambiguous` | an overloaded word (« session », « state », « context ») whose meaning here depends on context the reader may not share | the precise term, or a clause that says which meaning |
+      | `assumes-context` | a bare reference (« the config », « the pipeline ») to something the text has not introduced | name the thing, or say it in plain words |
+
+   3. Run `view-concept check <slug>` again, and leave in `audit.json`
+      (`[{"term", "section", "issue", "note"}]`) no entry you fixed: `check`
+      replaces its own entries, so remove any other one by editing the file.
+      The **undefined gate**: « Approve model » appears only when no entry
+      with `"issue": "undefined"` is left, so your report says what you
+      cleared, and names any entry you could not.
 
 ## Writing in waves
 
@@ -384,6 +386,8 @@ The trigger holds comments, answers, terminal messages, or « Rewrite model »
   <slug>` again and fix what it lists, including in sections nobody
   commented on: re-anchor a question whose anchor section you removed or
   merged to the section that now explains what it needs.
+- Audit what you wrote in the run as « Write model » step 3 says, so no
+  audit underline is left after it.
 - Log each change of the model, with the events that caused it.
 - Resolve each comment you handled:
   `view-concept resolve <slug> <ids> --reply "<one line: what changed>"`.

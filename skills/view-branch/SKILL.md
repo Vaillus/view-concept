@@ -271,15 +271,24 @@ see a grill in their context.
 
 Keep the page's status true: `view-concept status <slug> scoping` from Setup
 to « Write model », and after each writer run `view-concept status <slug>
-awaiting-model` when no question it asked is open and every section of the
-modeling part is written (a writer paused on its questions sets the phase
+awaiting-model` when no question it asked is open, every section of the
+modeling part is written, and `audit.json` holds no entry with `"issue":
+"undefined"`. A writer paused on its questions sets the phase
 `awaiting-answer`, which the page reads as the pause, as step 5 says; a
 question « Go on » left open, still open once every section is written,
 keeps that phase too: « Approve model » waits until each is answered,
-skipped or deferred). After « Approve model »,
-set `view-concept status <slug> awaiting-pr` at the end of each pass, when no
-question is open. The agents set `writing` themselves while they write a
-section.
+skipped or deferred.
+
+The third condition is the **undefined gate**: the writer clears every audit
+underline itself, so « Approve model » never shows with an « audit ·
+undefined » underline on the page. When one is left, start the writer again
+with the trigger `"audit: undefined entries left"` before setting the phase.
+The gate is a rule you and the writer follow: `view-concept status` itself
+refuses nothing.
+
+After « Approve model », set `view-concept status <slug> awaiting-pr` at the
+end of each pass, when no question is open. The agents set `writing`
+themselves while they write a section.
 
 ## The flow
 
