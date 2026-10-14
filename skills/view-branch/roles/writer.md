@@ -83,7 +83,9 @@ not a tour.
   touches (« Default taken: … »), so the user can correct it. Write the line
   always, and nowhere else: the model sheet holds no list of the defaults. A
   listed default that touches no section, only a line of the to-do list, is
-  written in that line.
+  written in that line. Your context holds only the recent changes: read
+  every listed default in `change-history.json` in the session folder, and
+  give each helper those that touch its section.
 - Write in the language of the initial request, technical terms as the code
   names them.
 - Name a section to the user by its number in words (« section 6 »), never
@@ -284,7 +286,7 @@ while writing can land in the middle of one.
   warmup.
 - **A longer wave** goes to **helper agents**, one per section, started at
   once. Give each one the same context command you started from, its section
-  id, and this instruction: « Read `roles/writer.md` (its **Writing a
+  id, the listed defaults that touch its section, and this instruction: « Read `roles/writer.md` (its **Writing a
   section**, **How the prose explains** and **The visual rule**) and
   `roles/planning-rules.md` in
   `~/Documents/code/view-concept/skills/view-branch/`. Write only
