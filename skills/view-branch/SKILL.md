@@ -40,8 +40,9 @@ where it lives.
 The model is written for the user, who asked for the branch: it never tells
 them back what they stated, and spends its text on what is new to them (what
 the code does that they did not say, the decisions made for them, the
-consequences). Its first section, the **model sheet**, holds the whole model
-on one screen: a before/after, a table of the concepts, the defaults taken
+consequences). Its first section, the **model sheet**, gives an intuitive
+view of the change, graphical where it can be, that lays out the subjects of
+the sections after it; then come the defaults taken
 for the user (the decisions that change nothing they see, do or risk, which
 no question asks), and a to-do list of the work that fails the **section
 test**. A section stays in the model only when it holds a decision the user

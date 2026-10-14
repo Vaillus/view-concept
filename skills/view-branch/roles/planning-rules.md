@@ -79,28 +79,30 @@ What you learned in the code goes in the code map.
 
 The skeleton:
 
-1. **The model sheet.** The whole model on one screen, the section the user
-   keeps in mind while the code changes: one line on what the branch is for
-   (a reference to the request, not a retelling), a before/after of the
-   example the request is about (a mockup of the page or the output, or a
-   Mermaid diagram), and a table of the concepts, one row each: the concept,
-   its rule, its relation to what existed before, and whether it is new or
-   changed. Say what the branch does not do. When the branch has no diff
-   yet, say here that the model is a proposal. Then the **defaults taken**:
+1. **The model sheet.** The section the user reads first and keeps in mind
+   while the code changes. Its job is an intuitive view of the change:
+   enough for the user to see what changes and why, and to take the
+   decisions of the sections after it knowing the whole. Show more than you
+   tell (a before/after of the example the request is about, a mockup of
+   the page or the output, a diagram) and keep the text short; the form is
+   yours to choose. Lay out the subjects the next sections discuss, and
+   where each sits in the change, without repeating the outline's `earns`.
+   Never retell the request. When the branch has no diff yet, say here that
+   the model is a proposal. Then the **defaults taken**:
    the listed defaults only (see **The question test**), one line each, the
    decision, the default, and the section it touches. End with a **to-do
    list**: one line per point that fails the section test (see point 2).
 2. **One section per point new to the user** (see **The reader**) that
    passes the **section test**: it holds a decision the user makes or must
-   make, or a consequence they will notice. Order them by the concepts they touch, in the order of the
-   table. A point that fails the test (a doc that is out of date, which
+   make, or a consequence they will notice. Order them by the concepts they
+   touch, in the order the model sheet lays them out. A point that fails the test (a doc that is out of date, which
    source a part of the branch came from, how the tests are built, code
    nothing in the app shows) gets no section: it is a line of the sheet's
    to-do list, which the implementer carries and the reviewer checks.
-3. **A section per concept only when the table cannot carry it**: its rules
-   do not fit a row, the user did not state them, and it passes the same
-   section test. A concept the user named and described gets none: its row
-   is enough.
+3. **A section per concept only when it needs one**: the user did not state
+   its rules, they take more than its lexicon entry can say, and it passes
+   the same section test. A concept the user named and described gets none:
+   its lexicon entry is enough.
 4. **Further directions.** The last section: about three ways to push the
    concepts further, each marked « fits this PR » or « follow-up ».
 
@@ -134,9 +136,10 @@ that reason: « FSRS » still gets its tip.
 
 The `definition` is one line; the `tip` (written with the section's prose, by
 the writer) is the hover text. Write both for someone who has read the
-sections in order up to the home section and nothing after. The home section
-of a concept in the table is the model sheet; a term the user introduced
-keeps its definition to one line in their own words.
+sections in order up to the home section and nothing after. A concept with
+no section of its own has the first section that uses it as its home, often
+the model sheet; a term the user introduced keeps its definition to one line
+in their own words.
 
 **The precedence rule.** Every text about a term (its introducing prose, its
 `definition`, its `tip`) uses only terms whose home section is at or before
