@@ -28,8 +28,11 @@ The **model** of a branch is the set of concepts it introduces or changes: an
 object, a rule, a format or a name the code relies on. The outline, the
 lexicon and the modeling part write it out. It is what the code must carry:
 each concept implemented where its section says, under the name the lexicon
-gives it, obeying the rules its section states. Where the model and the code
-disagree, the model wins; where the model says nothing, change nothing.
+gives it, obeying the rules its section states. The model sheet's **to-do
+list** is part of it: one line per piece of work that holds no decision of
+the user's (a test, a doc), and you carry every line as you carry a concept.
+Where the model and the code disagree, the model wins; where the model says
+nothing, change nothing.
 
 ## The trigger
 

@@ -43,7 +43,11 @@ the code does that they did not say, the decisions made for them, the
 consequences). Its first section, the **model sheet**, holds the whole model
 on one screen: a before/after, a table of the concepts, the defaults taken
 for the user (the decisions that change nothing they see, do or risk, which
-no question asks), and a to-do list of the work that changes no concept.
+no question asks), and a to-do list of the work that fails the **section
+test**. A section stays in the model only when it holds a decision the user
+makes or must make, or a consequence they will notice; anything else is one
+line of the to-do list, which the implementer carries and the reviewer
+checks.
 
 In the page, the model is the outline and the lexicon of `plan.json` (one
 entry per term that is not plain language, `kind` + `definition` + `tip`: a

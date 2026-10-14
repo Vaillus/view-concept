@@ -72,7 +72,10 @@ under `item` in the outline:
   list for what each verdict means and which ones send the item back to the
   implementer (`sends_to`); it gives them in the order of the review table.
 - `implements`: the concepts of the model it carries, by their lexicon names.
-- `note`: one line, such as the point it diverges on or an exception.
+- `note`: one line, such as the point it diverges on or an exception. When
+  the item's files carry a line of the model sheet's **to-do list** (the
+  work that holds no decision of the user's, such as « tests run on a
+  temporary collection »), the note names that line.
 - `relations`: its links to other files, each `{"to": "<path>", "kind": ...}`
   where the kind is `imports`, `imported-by`, `reads` or `writes`. When the
   item has several files, an optional `"from": "<path>"` names the one the
@@ -80,6 +83,10 @@ under `item` in the outline:
 
 Keep an item's id from one run to the next while its files stay the same: the
 page anchors the user's comments to ids.
+
+An item is judged against the concepts it carries and against the to-do
+lines its files carry, with the same verdicts: a to-do line the code does
+not carry is a divergence like a concept it breaks.
 
 The section file holds the item's **description**: what it does, what it
 reads and writes, and, unless it simply conforms, the finding (why it got its
