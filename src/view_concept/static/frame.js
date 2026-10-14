@@ -38,6 +38,17 @@
    - The term hover (frame -> page): the underlined word the pointer rests on and where
      it sits, or nothing once the pointer leaves it, so the page shows that term's tip.
 
+   The frame script also runs the component kit's tabs (`.tabs`, see frame.css): a click
+   on a `.tab` selects it and shows its panel, the n-th `.tab-panel` child of its `.tabs`,
+   hiding the others; at load each `.tabs` is made consistent (no tab selected: the
+   first). The section writes no script for them. A passage can sit in a holder that hides
+   it, a closed <details> or a hidden `.tab-panel`: it is found but has no box on screen.
+   So before measuring a passage to reveal, the frame opens each holder around it (sets
+   `open` on the <details>, selects the panel's tab); and the first time it finds a
+   passage of a comment, a side thread or a change, it opens its holders once, and
+   remembers the passage, so a tab the reader closes afterwards is not reopened by a later
+   message. A term opens nothing.
+
    Every highlight and underline is painted again when a script of the section redraws
    its text, from the anchors, changes and terms the frame already holds. Text a script
    paints into a <canvas> is pixels, not text: it cannot be selected, highlighted nor
@@ -115,6 +126,64 @@
     r.setStart(s[0], s[1]);
     r.setEnd(e[0], e[1] + 1);
     return r;
+  }
+
+  /* ---- the kit's tabs and the holders of a passage ---- */
+  function tabsOf(tabs) {
+    var row = null, panels = [];
+    for (var i = 0; i < tabs.children.length; i++) {
+      var c = tabs.children[i];
+      if (!row && c.classList.contains("tab-row")) row = c;
+      else if (c.classList.contains("tab-panel")) panels.push(c);
+    }
+    var buttons = row ? Array.prototype.filter.call(row.children, function (c) { return c.classList.contains("tab"); }) : [];
+    return { buttons: buttons, panels: panels };
+  }
+  // Select the k-th tab of a `.tabs` and show its panel; the others are hidden.
+  function selectTab(tabs, k) {
+    var t = tabsOf(tabs);
+    t.buttons.forEach(function (b, i) { b.setAttribute("aria-selected", i === k ? "true" : "false"); });
+    t.panels.forEach(function (p, i) { if (i === k) p.removeAttribute("hidden"); else p.setAttribute("hidden", ""); });
+  }
+  function initTabs() {
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs"), function (tabs) {
+      var t = tabsOf(tabs), k = 0;
+      t.buttons.forEach(function (b, i) { if (!k && b.getAttribute("aria-selected") === "true") k = i; });
+      selectTab(tabs, k);
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initTabs);
+  else initTabs();
+  addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest(".tab");
+    var row = b && b.parentElement, tabs = row && row.parentElement;
+    if (!tabs || !row.classList.contains("tab-row") || !tabs.classList.contains("tabs")) return;
+    selectTab(tabs, tabsOf(tabs).buttons.indexOf(b));
+  });
+
+  // Open every holder around a node: each closed <details> it is in (not its summary,
+  // which shows while closed) and each hidden `.tab-panel` (by selecting its tab).
+  function openFrom(node) {
+    var child = null;
+    for (var p = node && (node.nodeType === 1 ? node : node.parentElement); p; child = p, p = p.parentElement) {
+      if (p.tagName === "DETAILS" && !p.open && !(child && child.tagName === "SUMMARY" && child.parentElement === p)) p.open = true;
+      else if (p.classList.contains("tab-panel") && p.hasAttribute("hidden") && p.parentElement && p.parentElement.classList.contains("tabs")) {
+        var k = tabsOf(p.parentElement).panels.indexOf(p);
+        if (k >= 0) selectTab(p.parentElement, k);
+      }
+    }
+  }
+  function openHolders(range) {
+    openFrom(range.startContainer);
+    if (range.endContainer !== range.startContainer) openFrom(range.endContainer);
+  }
+  // The passages (comment, side thread, change) whose holders were opened once already.
+  var opened = {};
+  function openOnce(passage, range) {
+    var key = collapse(passage.prefix || "") + "\n" + collapse(passage.quote || "");
+    if (opened[key]) return;
+    opened[key] = true;
+    openHolders(range);
   }
 
   /* ---- the selection ---- */
@@ -219,12 +288,15 @@
     anchors.forEach(function (a) {
       var r = ranges[a.kind] && findQuote(index, a.quote, a.prefix);
       if (!r) return;
+      openOnce(a, r);
       ranges[a.kind].push(r);
       if (a.kind === "thread" && a.thread) threadRanges.push([a, r]);
     });
     changes.forEach(function (c) {
       var r = findQuote(index, c.quote, c.prefix);
-      if (r) ranges.updated.push(r);
+      if (!r) return;
+      openOnce(c, r);
+      ranges.updated.push(r);
     });
     var f = focus && findQuote(index, focus.quote, focus.prefix);
     if (f) ranges.focus.push(f);
@@ -249,6 +321,7 @@
   function reveal(quote, prefix) {
     var r = findQuote(textIndex(), quote, prefix);
     if (!r) { post({ viewConcept: "revealed", found: false }); return; }
+    openHolders(r);
     var b = r.getBoundingClientRect();
     post({ viewConcept: "revealed", found: true, top: b.top + scrollY, bottom: b.bottom + scrollY });
     focus = { quote: quote, prefix: prefix };
