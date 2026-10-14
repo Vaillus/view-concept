@@ -196,6 +196,7 @@ def _outline(outline: list[dict[str, Any]]) -> list[str]:
     lines = []
     for i, sec in enumerate(outline, 1):
         part = " [refactoring part]" if _refactoring(sec) else ""
+        part += " [overview]" if sec.get("overview") is True else ""
         earns = f": {sec['earns']}" if sec.get("earns") else ""
         lines.append(f"{i}. {sec.get('title', sec['id'])} ({sec['id']}){part}{earns}")
     return lines

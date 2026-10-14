@@ -566,6 +566,21 @@ def test_check_matches_whole_words_only(ordered):
     assert early == {("rule", "b"), ("KKT conditions", "a")}
 
 
+def test_check_reports_no_early_use_in_an_overview_section(ordered):
+    # Section 1 names « KKT conditions », whose home is section 2: an overview may.
+    plan = ordered.read_plan()
+    plan["outline"][0]["overview"] = True
+    ordered.plan_path.write_text(json.dumps(plan))
+    issues = {(p["issue"], p["term"]) for p in ordered.check_precedence(write=False)}
+    assert ("early", "KKT conditions") not in issues
+    assert ("forward", "rule") in issues
+
+
+def test_plan_refuses_an_overview_that_is_not_a_boolean(session):
+    with pytest.raises(SessionError, match="overview"):
+        session.write_plan(outline=[{"id": "a", "title": "A", "overview": "yes"}])
+
+
 def test_check_reports_a_waiting_question_whose_anchor_left_the_outline(session):
     session.add_question("Evict what?", section="s2")
     session.add_question("Cache what?", section="s2")

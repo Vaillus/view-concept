@@ -63,8 +63,9 @@ neither `core` nor `peripheral`.
 ## The outline
 
 The outline (`outline` in `plan.json`, one entry `{"id", "title", "earns"}`
-per section) follows the skeleton below. An **outline entry** holds two texts
-the user reads, and nothing else:
+per section, and `"overview": true` on the model sheet's) follows the
+skeleton below. An **outline entry** holds two texts the user reads, and
+nothing else:
 
 - `title`: high-level and short, the subject or the point. It is the first
   thing read in the outline, and the `earns` under it already says what the
@@ -95,10 +96,10 @@ The skeleton:
 2. **One section per point new to the user** (see **The reader**) that
    passes the **section test**: it holds a decision the user makes or must
    make, or a consequence they will notice. Order them by the concepts they
-   touch, in the order the model sheet lays them out. A point that fails the test (a doc that is out of date, which
-   source a part of the branch came from, how the tests are built, code
-   nothing in the app shows) gets no section: it is a line of the sheet's
-   to-do list, which the implementer carries and the reviewer checks.
+   touch, so the points about one concept sit together. A point that fails
+   the test (a doc that is out of date, which source a part of the branch
+   came from, how the tests are built, code nothing in the app shows) gets
+   no section: it is a line of the sheet's to-do list, which the implementer carries and the reviewer checks.
 3. **A section per concept only when it needs one**: the user did not state
    its rules, they take more than its lexicon entry can say, and it passes
    the same section test. A concept the user named and described gets none:
@@ -136,10 +137,8 @@ that reason: « FSRS » still gets its tip.
 
 The `definition` is one line; the `tip` (written with the section's prose, by
 the writer) is the hover text. Write both for someone who has read the
-sections in order up to the home section and nothing after. A concept with
-no section of its own has the first section that uses it as its home, often
-the model sheet; a term the user introduced keeps its definition to one line
-in their own words.
+sections in order up to the home section and nothing after. A term the user
+introduced keeps its definition to one line in their own words.
 
 **The precedence rule.** Every text about a term (its introducing prose, its
 `definition`, its `tip`) uses only terms whose home section is at or before
@@ -148,6 +147,11 @@ plain words; never point ahead. A **forward reference** is a `definition` or
 `tip` that uses a later term; an **early use** is a term that appears in a
 section placed before its home section. `view-concept check <slug>` lists
 both.
+
+The model sheet is the one exception: it lays out what the sections after it
+discuss, so it may name a core concept whose home section comes later, and
+that section defines it. Its outline entry carries `"overview": true`, so the
+check reports no early use in it.
 
 No location details in a `definition` or a `tip` (a file, a key, a section
 number): a file the reader needs goes in the home section's prose. A `tip`

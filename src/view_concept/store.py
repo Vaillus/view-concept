@@ -31,7 +31,9 @@ reach the agent session through the inbox.
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
-EARNS_MAX characters). A `brief` left in an older session's entry stays in the file, and
+EARNS_MAX characters). An optional `"overview": true` marks an overview section, which
+names terms the sections after it introduce: the precedence check reports no early use
+in it. A `brief` left in an older session's entry stays in the file, and
 nothing reads it. Its text is one file of sections/, whose extension alone says which
 kind of section it is: Markdown in <id>.md, or an HTML section in <id>.html, a
 self-contained HTML document (its HTML, CSS and JavaScript) which may hold prose and
@@ -469,6 +471,9 @@ class Session:
                     f"earns over {EARNS_MAX} characters: {', '.join(long)}. It is one "
                     "sentence for the user"
                 )
+            odd = [sec["id"] for sec in outline if sec.get("overview", False) not in (True, False)]
+            if odd:
+                raise SessionError(f"overview is true or false: {', '.join(odd)}")
             plan["outline"] = outline
         if lexicon is not None:
             if any(not t.get("term") or not t.get("section") for t in lexicon):
@@ -539,14 +544,16 @@ class Session:
         whose section is not in the outline is skipped. A forward reference is an
         entry's definition or tip using another term whose home section comes later;
         an early use is a term found in the prose of a section before its home
-        section. Returns one problem per finding: {issue, term, section (the id the
-        audit entry points at), home (1-based position of the term's home section),
-        at (position of the later home section, or of the early section), field,
-        other}. With `write`, replaces the forward and early entries of audit.json
-        and keeps every other entry, so a rerun is idempotent."""
+        section, other than an overview section (`"overview": true`). Returns one
+        problem per finding: {issue, term, section (the id the audit entry points at),
+        home (1-based position of the term's home section), at (position of the later
+        home section, or of the early section), field, other}. With `write`, replaces
+        the forward and early entries of audit.json and keeps every other entry, so a
+        rerun is idempotent."""
         plan = self.read_plan()
         pos = {sec["id"]: i + 1 for i, sec in enumerate(plan["outline"])}
         order = [sec["id"] for sec in plan["outline"]]
+        overviews = {sec["id"] for sec in plan["outline"] if sec.get("overview") is True}
         entries = [
             e for e in plan["lexicon"] if e.get("term", "").strip() and e.get("section") in pos
         ]
@@ -566,7 +573,7 @@ class Session:
                         "other": f["term"],
                     })  # fmt: skip
             for sid in order[: home - 1]:
-                if _uses(prose.get(sid, ""), e["term"]):
+                if sid not in overviews and _uses(prose.get(sid, ""), e["term"]):
                     problems.append({
                         "issue": "early", "term": e["term"], "section": sid,
                         "home": home, "at": pos[sid], "field": "", "other": "",
