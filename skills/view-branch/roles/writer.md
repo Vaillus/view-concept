@@ -81,7 +81,8 @@ not a tour.
   default (a decision nobody asked, which the change history logs with the
   section it touches): say it in one line at the end of the section it
   touches (« Default taken: … »), so the user can correct it. Write the line
-  always, and nowhere else: the model sheet holds no list of the defaults. A
+  always, and nowhere else: the prose does not state the default too, and
+  the model sheet holds no list of the defaults. A
   listed default that touches no section, only a line of the to-do list, is
   written in that line. Your context holds only the recent changes: read
   every listed default in `change-history.json` in the session folder, and
@@ -115,6 +116,8 @@ check` reports a pair).
   the reader can play with (two options side by side). Write a Markdown
   section when the section is an argument, a definition or a rule, with at
   most a small table: a visual that only repeats the prose is not relevant.
+  Nor does the prose repeat a visual: no paragraph tells what a figure
+  shows, and a caption says only what the figure cannot.
   A Mermaid block is for a plain structure in an otherwise prose section (a
   short sequence, a tree), not a substitute for showing the thing itself.
   Never write an HTML block (raw HTML that starts its own paragraph) into a
@@ -294,8 +297,9 @@ while writing can land in the middle of one.
   command that writes: return the lexicon terms your section
   introduces, each with its kind and tip, any move of the outline it needs, any change of the model, and
   any question it makes answerable (its text, options and recommended
-  answer), and a one-line summary. » Set `view-concept status <slug> writing
-  --section <id>` yourself, on the first section of the wave.
+  answer), and a one-line summary. What an earlier section's `earns`
+  settles is known to the reader: build on it, never restate it or rebuild
+  its example. » Set `view-concept status <slug> writing --section <id>` yourself, on the first section of the wave.
 - **The owner rule.** A helper writes only its own section file. The shared
   files (`plan.json`, the change history, the questions) are rewritten whole
   by each command, with no lock, so two helpers writing them would lose each
@@ -308,6 +312,9 @@ while writing can land in the middle of one.
   introduces. After writing what they returned, run `view-concept check
   <slug>`, which lists a term used before its home section, and fix what it
   lists.
+- **The consolidation pass.** Once helpers have written or rewritten two or
+  more sections, read the written sections in order and cut from a later
+  section any fact or setup an earlier one already gives.
 - **A question found mid-wave** does not cancel the sections after it, which
   other helpers wrote at the same time: they are kept and shown, written on
   the question's recommended answer, as after « Go on ». Ask the question,
