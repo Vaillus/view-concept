@@ -1071,10 +1071,11 @@ function applyHighlights() {
 /* ---------------- updates since the last batch ----------------
    An updated section carries the HTML of its highlight baseline: its text when the last
    batch was sent, or when the user last marked it read.
-   Both versions are cut into words, the words are diffed, and the words the rewrite
-   inserted are highlighted ("ev-updated"); every block (paragraph, list item, cell…)
-   holding an insertion or a deletion gets a bar in the margin. « updated · ok » in the
-   section heading marks the section as read. */
+   Both versions are cut into words, the words are diffed, and every block (paragraph,
+   list item, cell…) holding an insertion or a deletion gets a bar in the margin, always
+   drawn. The words the rewrite inserted show ("ev-updated") only while the pointer is
+   over their block; a block marked only for deleted words shows nothing on hover.
+   « updated · mark read » in the section heading marks the section as read. */
 
 const BLOCKS = "p, li, td, th, pre, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, .math.block, .mermaid";
 
@@ -1149,9 +1150,33 @@ function diffWords(a, b) {
   return { inserted, deleted };
 }
 
+/* The ranges of inserted words of each .changed block, and the block the pointer is over:
+   only its ranges are painted (a ::highlight cannot be scoped to :hover). */
+let changeRanges = new Map();
+let hoveredChange = null;
+
+function paintChange(block) {
+  hoveredChange = block;
+  if (window.CSS && CSS.highlights) CSS.highlights.set("ev-updated", new Highlight(...(changeRanges.get(block) || [])));
+}
+
+// The .changed block of a Markdown section that holds `node`, or null.
+const changedBlock = (node) => {
+  const b = node && node.closest ? node.closest(".sec .body .changed") : null;
+  return b && changeRanges.has(b) ? b : null;
+};
+
+for (const view of docViews()) {
+  view.addEventListener("mouseover", (e) => {
+    const b = changedBlock(e.target);
+    if (b !== hoveredChange) paintChange(b);
+  });
+  view.addEventListener("mouseleave", () => { if (hoveredChange) paintChange(null); });
+}
+
 function markUpdates() {
   document.querySelectorAll(".changed").forEach((n) => n.classList.remove("changed"));
-  const ranges = [];
+  changeRanges = new Map();
   for (const [id, sec] of Object.entries(state.sections)) {
     const body = sec.updated && document.querySelector(`#sec-${CSS.escape(id)} .body`);
     if (!body) continue;
@@ -1171,11 +1196,14 @@ function markUpdates() {
       if (run && run.block === w.block) run.range.setEnd(w.range.endContainer, w.range.endOffset);
       else {
         run = { block: w.block, range: w.range.cloneRange() };
-        ranges.push(run.range);
+        if (!changeRanges.has(w.block)) changeRanges.set(w.block, []);
+        changeRanges.get(w.block).push(run.range);
       }
     });
   }
-  if (window.CSS && CSS.highlights) CSS.highlights.set("ev-updated", new Highlight(...ranges));
+  // The blocks were redrawn: paint the one under the pointer now, if any.
+  const under = [...document.querySelectorAll(":hover")].pop();
+  paintChange(changedBlock(under));
   frames.forEach((f, id) => postChanges(id, f));
 }
 
