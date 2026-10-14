@@ -262,6 +262,9 @@ prose.
   verdict, never about how they were decided: no question id, side thread or
   marker (« (q2) », « Asked for by the user (q8) », « Proposed. ») anywhere
   in its text.
+- **Copy rules**, on trial: no aside set off by em-dashes, no « not X,
+  but Y », no colon before a punchline, no « worth noting ». They hold in a
+  Markdown section as in an HTML one.
 
 ### The visual rule: Markdown or HTML
 

@@ -95,6 +95,7 @@ The rules below scale with the level and the goal of Phase 1: at a beginner leve
 - **A diagram** (a ```` ```mermaid ```` block, which the page renders) when the structure is a sequence, a containment or a gradient that prose serialises badly: one, placed where it is needed, with prose on both sides. Never one that re-renders a list.
 - **Language.** The language the user writes in; technical terms in the language the field uses for them.
 - **No provenance in the prose.** A section is about the concept, never about how the explanation was decided: no question id, side thread or marker (« (q2) », « Asked for by the user (q8) », « Proposed. ») anywhere in its text.
+- **Copy rules**, on trial: no aside set off by em-dashes, no « not X, but Y », no colon before a punchline, no « worth noting ». They hold in a Markdown section as in an HTML one.
 
 Write each term's `tip` with the section that introduces it (see **Files you write**).
 
