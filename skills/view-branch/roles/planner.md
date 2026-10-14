@@ -68,11 +68,14 @@ The trigger holds answers, comments or terminal messages.
    change of the model, with the events that caused it.
 3. An unclear answer: defer the question as `planning-rules.md` says (the
    explanation it needs in the outline, its anchor section, a logged change).
+   It raises no question: neither the same one reworded nor a new one about
+   it, until its anchor section is written.
 4. A comment on the outline: apply it or, when it is a question, answer it.
    Then resolve it: `view-concept resolve <slug> <comment id> --reply "<one
    line: what changed>"`.
-5. Ask the questions the change raises, and only those: the context shows
-   what is already asked.
+5. Ask the questions the other events raise, and only those (an unclear
+   answer raises none): the context shows what is already asked. Close a
+   waiting question an answer made obsolete, as `planning-rules.md` says.
 
 ## Report
 

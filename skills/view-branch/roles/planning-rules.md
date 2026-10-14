@@ -206,8 +206,11 @@ states each option's cost.
 **An unclear answer.** The user answers « I don't understand » when they
 cannot choose before the model explains what the question needs. It arrives
 as `q3 unclear « … » (…): <note>`, the note saying what is missing (it may be
-empty), and the question is now **deferred**. Do not ask it again during
-scoping. Instead:
+empty), and the question is now **deferred**. In scoping it goes quiet, the
+**quiet deferral**: until its anchor section is written, nobody rewords it,
+asks it again, or asks a new question about it, whatever its note says. The
+note only says what the section must explain, even when it reads as an
+answer. Instead:
 
 1. Make sure the outline explains what the note says is missing (without a
    note, the mechanism the question's text and options are about): extend
@@ -218,7 +221,14 @@ scoping. Instead:
    rule.
 3. Log the change of the model, with the question as its cause.
 
-The writer asks it again after writing the anchor section.
+The writer asks it again after writing the anchor section. A waiting
+question that another answer makes obsolete is closed by the agent that sees
+it, naming that answer (`view-concept answered <slug> <qid> --text
+"Obsolete: <the answer that settled it>"`), and is never asked again.
+
+**An up-front answer.** A design question answered in scoping is a decision
+of the model sheet, and a concept the writer knows the user has: no section
+explains it, and the model sheet states it in a line.
 
 **A section question.** A decision only the model's explanation makes
 answerable may be asked at the end of the section that explains it: ask it
