@@ -53,3 +53,11 @@ def test_type_scale_variables_exist() -> None:
         assert f"{name}: {size}" in css
     assert re.search(r":where\(body\)\s*\{[^}]*font-size: var\(--fs-body\)", css)
     assert re.search(r":where\(body\)\s*\{[^}]*line-height: 1\.64", css)
+
+
+def test_kit_classes_are_defined() -> None:
+    selectors = " ".join(_base_selectors())
+    kit = (".label", ".chip", ".panel", ".pair", ".steps", ".callout")
+    tabs = (".tab-row", ".tab", '.tab[aria-selected="true"]', ".tab-panel[hidden]")
+    for cls in kit + tabs:
+        assert cls in selectors, cls
