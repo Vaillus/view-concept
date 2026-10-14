@@ -42,9 +42,10 @@ Follow `planning-rules.md` for everything you write.
    that is missing or that the code contradicts. Both go into the outline as
    findings.
    Then sort what you found against the request (see **The reader** in
-   `planning-rules.md`): what the user stated is known and goes in the model
-   sheet in a few words; each finding, decision made for them and
-   consequence gets its own section.
+   `planning-rules.md`): what the user stated is known and is never told
+   back, and a concept they named and described gets no section of its
+   own, its lexicon entry carries it; each finding, decision made for them
+   and consequence that passes the section test gets its own section.
 2. Write the **code map**, `code-map.md` in the session folder: what you
    learned of the code, so no later run explores it again. One line per
    module that carries the feature (path relative to the repo root, what it
