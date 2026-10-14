@@ -27,30 +27,28 @@ reach the agent session through the inbox.
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
 
-A section is one element of the `outline` list in plan.json: {id, title, earns, brief}:
-`earns` is the one sentence the user reads under the title (what the section gives them,
-at most EARNS_MAX characters), and the optional `brief` is what the agent that writes the
-section must carry into it (the decisions taken, the defaults, the lines of a table),
-which the agents' context shows and the page does not. Its text
-is one file of sections/, whose extension alone says which kind of section it is: Markdown
-in <id>.md, or an HTML section in <id>.html, a self-contained HTML document (its HTML, CSS
-and JavaScript) which may hold prose and visuals alike, as an artifact does. A section has
-one file; when both exist (an agent switched the kind and left the old file), every
-reader takes the .html file, and `check` reports the pair. An HTML section's media folder,
-sections/<id>/, holds the media files the agent produced for it (a manim render, a GIF),
-which have no web address: the section loads them by a relative address (<id>/<file>),
-the page serves them, and the published page and the vault export copy them along. An
-answer to a comment that belongs in the explanation amends a section or adds one at its
-place in the outline; a `kind: "question"` left by an older session is ignored, and the
-section reads as any other. A refactor section, marked `part: "refactoring"`, belongs
-to the refactoring part of a branch review or a refactor and is shown in the refactor
-tab; every other section is an explanation section, shown in the Explanation tab. A
-refactor section about one item of the diff carries its item fields under `item`:
-{files, verdict (one of the keys of the session workflow's list in verdicts.yaml, next
-to this module), batch? (a short label or number), implements, note, relations: [{to,
-kind, from?}]}, where the optional `from` names which of the item's files a relation
-starts from (by default the first).
-One with `kind: "finding"` and `items: [<section ids>]` is a finding across items.
+A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
+is the one sentence the user reads under the title (what the section gives them, at most
+EARNS_MAX characters). A `brief` left in an older session's entry stays in the file, and
+nothing reads it. Its text is one file of sections/, whose extension alone says which
+kind of section it is: Markdown in <id>.md, or an HTML section in <id>.html, a
+self-contained HTML document (its HTML, CSS and JavaScript) which may hold prose and
+visuals alike, as an artifact does. A section has one file; when both exist (an agent
+switched the kind and left the old file), every reader takes the .html file, and `check`
+reports the pair. An HTML section's media folder, sections/<id>/, holds the media files
+the agent produced for it (a manim render, a GIF), which have no web address: the
+section loads them by a relative address (<id>/<file>), the page serves them, and the
+published page and the vault export copy them along. An answer to a comment that belongs
+in the explanation amends a section or adds one at its place in the outline; a `kind:
+"question"` left by an older session is ignored, and the section reads as any other. A
+refactor section, marked `part: "refactoring"`, belongs to the refactoring part of a
+branch review or a refactor and is shown in the refactor tab; every other section is an
+explanation section, shown in the Explanation tab. A refactor section about one item of
+the diff carries its item fields under `item`: {files, verdict (one of the keys of the
+session workflow's list in verdicts.yaml, next to this module), batch? (a short label or
+number), implements, note, relations: [{to, kind, from?}]}, where the optional `from`
+names which of the item's files a relation starts from (by default the first). One with
+`kind: "finding"` and `items: [<section ids>]` is a finding across items.
 
 The session workflow, `workflow` in plan.json, is the skill that drives the session:
 view-concept, view-branch or view-refactor (a triage of existing code). It picks the
@@ -459,7 +457,7 @@ class Session:
             if long:
                 raise SessionError(
                     f"earns over {EARNS_MAX} characters: {', '.join(long)}. It is one "
-                    "sentence for the user; put what the writer needs in brief"
+                    "sentence for the user"
                 )
             plan["outline"] = outline
         if lexicon is not None:

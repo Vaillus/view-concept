@@ -121,9 +121,13 @@ def test_the_lexicon_gives_each_term_its_kind(branch):
     assert "- FSRS (section 1, peripheral): a scheduler" in text
 
 
-def test_the_outline_gives_each_section_its_brief(branch):
+def test_the_outline_leaves_out_a_brief_left_in_an_older_plan(branch):
+    # An older session's outline entry may still hold a brief: it stays in plan.json,
+    # and the context no longer prints it.
+    assert branch.read_plan()["outline"][1]["brief"] == "no flag"
     text = build(branch, "writer")
-    assert "2. The gate (s2): what it refuses\n   Brief: no flag\n" in text
+    assert "2. The gate (s2): what it refuses\n3. cli (i1)" in text
+    assert "Brief" not in text and "no flag" not in text
 
 
 def test_an_html_section_is_given_by_its_visible_text(branch):

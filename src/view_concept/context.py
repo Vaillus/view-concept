@@ -170,8 +170,6 @@ def _outline(outline: list[dict[str, Any]]) -> list[str]:
         part = " [refactoring part]" if _refactoring(sec) else ""
         earns = f": {sec['earns']}" if sec.get("earns") else ""
         lines.append(f"{i}. {sec.get('title', sec['id'])} ({sec['id']}){part}{earns}")
-        if sec.get("brief"):
-            lines.append(f"   Brief: {sec['brief']}")
     return lines
 
 
