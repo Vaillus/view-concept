@@ -67,7 +67,8 @@ not a tour.
 - **Honour the lexicon.** Use each defined term by its name, never a
   paraphrase of it. A core concept gets its definition in its home section
   and is used freely after; a peripheral concept gets its tip and no
-  definition in the body. No term that is not plain language appears without
+  definition in the body, and so does a core concept the user named and
+  described that has no section of its own: the user already knows it. No term that is not plain language appears without
   a lexicon entry: add it as you write, or cut the sentence.
 - **Show rather than tell.** No long text where an example (a real file, a
   command and its output, a trace of three steps) or a visual makes the

@@ -124,7 +124,11 @@ Every term that is not plain language gets an entry in `lexicon` of
 `kind` its **term kind**:
 
 - `core`, a **core concept**: a term the model introduces or changes. The
-  prose of its home section defines it. An entry without `kind` is one.
+  prose of its home section defines it. An entry without `kind` is one. A
+  core concept the user named and described, which gets no section of its
+  own (skeleton point 3), is the exception: its tip alone carries it, no
+  sentence of a section defines it, and its home section is the first
+  section that uses it.
 - `peripheral`, a **peripheral concept**: a term that is not plain language
   and that the model does not change (« FSRS », « rslib »). It gets its hover
   tip only: no sentence of a section's body defines it. Its home section is
