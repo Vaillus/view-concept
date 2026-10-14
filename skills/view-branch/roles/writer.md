@@ -42,66 +42,41 @@ Each section goes to `sections/<id>.md` (Markdown) or `sections/<id>.html`
 page renders the title). Before writing one, run
 `view-concept status <slug> writing --section <id>`.
 
-- **Few citations.** The reader wants the concepts, not a map of the code.
-  When a concept first comes up, name the file or script it lives in, as
-  inline code (`` `src/pkg/store.py` ``, path relative to the repo root). Cite
-  a line (`` `src/pkg/store.py:118` ``) only where the user must see the code
-  to judge the model: a threshold, a format, a name the branch changes. Most
-  sections cite no line. Still check every claim against the code before
-  writing it: an unchecked claim is cut, cited or not.
+- **No citations in the prose.** The reader wants the concepts, not a map of
+  the code: no file, script or line in a section. The code map gives the
+  implementer each location. Still check every claim against the code before
+  writing it: an unchecked claim is cut.
 - **One point, got quickly.** Each section makes one point, and the reader
   should get it quickly: the fewest words that carry it, and a visual wherever
-  the point can be shown (see **The visual rule**). When a section has to
-  carry more than one point, or its visual has to hold several ideas at once
-  to fit, split it into sections, one point each, rather than condensing:
-  place each new section where it belongs in the outline, and say so.
-- **A short first draft.** The first draft (« Write model ») is read to
-  discuss the concepts, not to check them: each section gives its core in
-  three to eight lines of prose, with an HTML section where it has something
-  to show (see **The visual rule**), a table or a diagram where it replaces
-  prose. After writing it, count the lines of prose of every section
-  (tables, code blocks, diagrams and the visuals of an HTML section don't
-  count) and cut any over eight.
-- **Develop when asked.** The limit binds the first draft only. When a
-  comment asks to develop, expand or detail a section, or says the user does
-  not understand it, write as much as the point needs, still in the order the
-  outline sets up; a reordering or a diagram is often worth trying first, but
-  when the user wants more, more prose is the answer. Over-concision makes a
-  worse explanation than length. A section the user asked to develop is never
-  cut back to eight lines in a later run, a « Rewrite model » included.
+  the point can be shown (see **The visual rule**). Split a section whenever
+  that makes it clearer, in particular one that edits have grown until it
+  holds barely related concepts: place each new section where it belongs in
+  the outline, and say so.
 - **The lexicon tips.** Write each term's `tip` with the section that
   introduces it, through `view-concept plan` like any lexicon change.
 
 ## How the prose explains
 
 The reader owns the repository, asked for the branch, and wants the model,
-not a tour. In a first draft each rule below is a sentence or a clause inside
-the eight lines; in a section the user asked to develop, each takes the room
-it needs.
+not a tour.
 
-- **Never tell the user back what they told you.** What is known (the
-  initial request, their answers, comments and terminal messages, see **The
-  reader** in `planning-rules.md`) is referred to in a few words, never
-  explained. A sentence the user could have written themselves before the
-  review is cut. What stays is what is new to them: what the code does, the
-  decisions made for them, the consequences they did not state. Lead each
-  section with that point, in its first sentence.
-- **Honour the lexicon.** A core concept gets its definition in its home
-  section and is used freely after; a peripheral concept gets its tip and no
+- **Never tell the user back what they told you.** A comment or an answer
+  changes the model as if it had been written that way from the first pass:
+  no section mentions it, nor what the section said before. The initial
+  request is never retold. From its first lines the reader knows what the
+  section is about; no first sentence is prescribed.
+- **Honour the lexicon.** Use each defined term by its name, never a
+  paraphrase of it. A core concept gets its definition in its home section
+  and is used freely after; a peripheral concept gets its tip and no
   definition in the body. No term that is not plain language appears without
-  a lexicon entry: add it, or cut the sentence.
-- **Mechanism before abstraction.** Show the point on the real example the
-  model sheet set up (a real file, a command and its output, a trace of three
-  steps) before stating it in general. Never let a metaphor stand in for a
-  mechanism you can show.
-- **Say why the concept earns its name**: what it lets the user see, predict
-  or decide that they could not before. One sentence, and none for a concept
-  the user asked for: they know why they wanted it.
-- **Say what it is not**, when a neighbouring concept or an existing name
-  could be mistaken for it. One clause; skip it when nothing is close.
-- **A diagram** (a Mermaid block) when the structure is a sequence, a
-  containment or a before/after that prose serialises badly; never one that
-  re-renders a list.
+  a lexicon entry: add it as you write, or cut the sentence.
+- **Show rather than tell.** No long text where an example (a real file, a
+  command and its output, a trace of three steps) or a visual makes the
+  point. Never let a metaphor stand in for a mechanism you can show. A
+  Mermaid block is one more way to show, where it helps.
+- **No part written because a rule lists it.** Why a concept earns its name,
+  what it is not, and the earlier decision a section follows from are said
+  where the section needs them, in passing, never as a part of their own.
 - **A skipped question** left a default in the model: say which default you
   took in one line at the end of the section it touches (« Default taken: … »),
   so the user can correct it. Write the line always, and nowhere else: the
@@ -220,7 +195,10 @@ check` reports a pair).
   cdn.jsdelivr.net or unpkg.com; any other site when the section needs it.
   Either way, a section that loads from the web needs a connection to show.
 - **Prose.** No preference: an HTML section may hold prose as well as visuals,
-  as an artifact does; choose how much goes there. Know its one cost: text a
+  as an artifact does; choose how much goes there. A **visual-carried
+  section** is one whose interactive visual makes its point alone (a hover
+  demo, a step player, a before/after to click through): its prose shrinks
+  to what the visual cannot show, often a sentence or two. Know its one cost: text a
   script paints into a `<canvas>` cannot be selected, highlighted or
   underlined, so a figure drawn there is commented as a whole. Everything else
   works as in a Markdown section: term underlines and their tips, change
@@ -352,8 +330,8 @@ on the sections written so far):
   model. Then go on writing from the next unwritten section, with the same
   pauses, as « Write model » says.
 - **An unclear answer** to a question asked again: the anchor section did not
-  explain enough. Develop it once (its « develop when asked » rule), with what
-  the note says is missing, and ask the question again. A second unclear
+  explain enough. Develop it once, with what the note says is missing, as
+  much as the point needs, and ask the question again. A second unclear
   answer after that takes the recommended answer: say so in the section's
   « Default taken » line, and go on.
 - **A skip** takes the recommended answer, the same way: its « Default

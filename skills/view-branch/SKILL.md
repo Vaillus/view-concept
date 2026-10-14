@@ -414,7 +414,10 @@ check` reports a pair).
   cdn.jsdelivr.net or unpkg.com; any other site when the section needs it.
   Either way, a section that loads from the web needs a connection to show.
 - **Prose.** No preference: an HTML section may hold prose as well as visuals,
-  as an artifact does; choose how much goes there. Know its one cost: text a
+  as an artifact does; choose how much goes there. A **visual-carried
+  section** is one whose interactive visual makes its point alone (a hover
+  demo, a step player, a before/after to click through): its prose shrinks
+  to what the visual cannot show, often a sentence or two. Know its one cost: text a
   script paints into a `<canvas>` cannot be selected, highlighted or
   underlined, so a figure drawn there is commented as a whole. Everything else
   works as in a Markdown section: term underlines and their tips, change
