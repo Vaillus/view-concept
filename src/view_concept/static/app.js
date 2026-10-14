@@ -367,9 +367,32 @@ function renderChanges() {
    section, or the item's description) and, in a section, the block of its body there,
    with its distance from the view's top. After the render, and at every later change of
    height in the tab, the view scrolls so that the anchor is back at that distance. The
-   anchor is held until the reader scrolls or the page scrolls to a passage. */
+   anchor is held until the reader scrolls or the page scrolls to a passage. While a
+   smooth scroll the page started is running (to a passage or a section), a
+   render notes no anchor: holding one would set scrollTop and stop that scroll short. */
 
 let anchor = null; // { view, key, block, offset }
+let pageScrolling = null; // { view } of the smooth scroll the page is running
+
+/* Runs a smooth scroll of the page in `view`, and marks it as running until the view's
+   scrollend; a scroll that moves nothing fires no scrollend, so the mark also goes when
+   no scroll event came in the next 200 ms. */
+function pageScroll(view, scroll) {
+  if (!view) { scroll(); return; }
+  const run = { view };
+  pageScrolling = run;
+  let moved = false;
+  const onScroll = () => { moved = true; };
+  const done = () => {
+    view.removeEventListener("scroll", onScroll);
+    view.removeEventListener("scrollend", done);
+    if (pageScrolling === run) pageScrolling = null;
+  };
+  view.addEventListener("scroll", onScroll, { passive: true });
+  view.addEventListener("scrollend", done, { once: true });
+  setTimeout(() => { if (!moved) done(); }, 200);
+  scroll();
+}
 
 function readingAnchor(view) {
   const top = view.getBoundingClientRect().top;
@@ -416,7 +439,8 @@ function renderDoc() {
     return;
   }
   const shown = docViews().find((v) => v.classList.contains("active"));
-  if (!anchor || anchor.view !== shown || !anchorNode(anchor)) anchor = shown && shown.scrollTop ? readingAnchor(shown) : null;
+  if (pageScrolling) anchor = null;
+  else if (!anchor || anchor.view !== shown || !anchorNode(anchor)) anchor = shown && shown.scrollTop ? readingAnchor(shown) : null;
   parkFrames();
   // A question box at the end of a section is re-attached on each render: keep its focus.
   const active = document.activeElement;
@@ -1012,7 +1036,7 @@ function frameRevealed(id, f, d) {
   if (!view) return;
   const v = view.getBoundingClientRect();
   releaseAnchor();
-  view.scrollBy({ top: (r.top + r.bottom) / 2 - (v.top + view.clientHeight / 2), behavior: "smooth" });
+  pageScroll(view, () => view.scrollBy({ top: (r.top + r.bottom) / 2 - (v.top + view.clientHeight / 2), behavior: "smooth" }));
 }
 
 /* ---------------- quotes <-> ranges ---------------- */
@@ -1227,7 +1251,8 @@ function revealQuote(c) {
   }
   const r = findQuote(c.section, c.quote, c.prefix);
   if (r) {
-    r.startContainer.parentElement.scrollIntoView({ block: "center", behavior: "smooth" });
+    const p = r.startContainer.parentElement;
+    pageScroll(p.closest(".view"), () => p.scrollIntoView({ block: "center", behavior: "smooth" }));
     if (CSS.highlights) {
       CSS.highlights.set("ev-focus", new Highlight(r));
       setTimeout(() => CSS.highlights.delete("ev-focus"), 1500);
@@ -1240,7 +1265,7 @@ function revealQuote(c) {
 function scrollToSection(id) {
   setTab(tabOf(id));
   const s = openItemOf(id) || document.getElementById(`sec-${id}`);
-  if (s) s.scrollIntoView({ block: "start", behavior: "smooth" });
+  if (s) pageScroll(s.closest(".view"), () => s.scrollIntoView({ block: "start", behavior: "smooth" }));
 }
 
 /* ---------------- selection -> composer ---------------- */
