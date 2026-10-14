@@ -57,9 +57,10 @@ Follow `planning-rules.md` for everything you write.
 5. Ask the first questions: whatever the draft left open (what is in and out
    of the feature, which design, which constraints) that passes the question
    test of `planning-rules.md`, leaving out what the request already
-   settles. Each decision that fails the test is a listed default of the
-   model sheet, in the outline. Each design question carries its background,
-   as `planning-rules.md` says.
+   settles. Each decision that fails the test is a listed default: log it
+   with `view-concept change`, naming the section it touches, as
+   `planning-rules.md` says (« The change history »). Each design question
+   carries its background, as `planning-rules.md` says.
 
 ## A later run (a trigger)
 

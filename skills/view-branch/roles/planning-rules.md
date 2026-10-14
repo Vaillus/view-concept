@@ -90,10 +90,11 @@ The skeleton:
    yours to choose. Lay out the subjects the next sections discuss, and
    where each sits in the change, without repeating the outline's `earns`.
    Never retell the request. When the branch has no diff yet, say here that
-   the model is a proposal. Then the **defaults taken**:
-   the listed defaults only (see **The question test**), one line each, the
-   decision, the default, and the section it touches. End with a **to-do
-   list**: one line per point that fails the section test (see point 2).
+   the model is a proposal. End with a **to-do list**: one line per point
+   that fails the section test (see point 2). The sheet holds no list of the
+   defaults taken: each one is written at the end of the section it touches
+   (see **The question test**), and one that touches no section, only a line
+   of the to-do list, is written in that line.
 2. **One section per point new to the user** (see **The reader**) that
    passes the **section test**: it holds a decision the user makes or must
    make, or a consequence they will notice. Order them by the concepts they
@@ -167,8 +168,11 @@ view-concept change <slug> "<what changed, in a few words>" --by <planner|writer
 ```
 
 A change of the model is a concept added, removed, renamed, merged or split, a
-rule or a relation changed, a section added, moved or removed. A wording fix
-that leaves the model as it was gets none. Say the change in a few words
+rule or a relation changed, a section added, moved or removed. A **listed
+default** (see **The question test**) is a change too: log it with the
+section it touches (« listed default: the client keeps its operations ·
+touches tests »), so the writer, who reads the change history, writes its
+line. A wording fix that leaves the model as it was gets none. Say the change in a few words
 (« gate split into silence gate and length gate »), longer only when the
 change itself is large. No implementation details: no files, no « what the
 branch does now ». `--cause` gives the ids of the events that led to it
@@ -191,16 +195,18 @@ prerequisite.
 
 **The question test.** Ask a question only when its answer changes what the
 user sees, does or risks. A decision that fails it (the shape of an internal
-interface, an operation nobody sees) is yours: take a default and write it
-on the model sheet as a **listed default**, one line the user corrects by
+interface, an operation nobody sees) is yours: take a default, a **listed
+default**, and log it as a change of the model naming the section it
+touches (see **The change history**). The writer states it in the « Default
+taken » line at the end of that section, which the user corrects by
 commenting on it. Ask the questions that pass, the frontier first (those
 whose answer depends on no other open question), each with `--recommended`
 when you have a suggestion. A question
 the code, the session files or a command can answer is not a question for the
 user: look it up, and so is one the request already settles. Never ask again a question the context lists, open,
 deferred, answered or skipped. A skipped question means: use your default,
-which the writer states in the default-taken line at the end of the section
-the decision touches, and only there (never in the model sheet's list).
+which the writer states the same way, in the « Default taken » line at the
+end of the section the decision touches, and only there.
 
 **A design question asked in scoping carries its background.** A design
 question chooses between designs, as opposed to a fact you can look up. The

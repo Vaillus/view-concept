@@ -76,11 +76,13 @@ not a tour.
 - **No part written because a rule lists it.** Why a concept earns its name,
   what it is not, and the earlier decision a section follows from are said
   where the section needs them, in passing, never as a part of their own.
-- **A skipped question** left a default in the model: say which default you
-  took in one line at the end of the section it touches (« Default taken: … »),
-  so the user can correct it. Write the line always, and nowhere else: the
-  model sheet's defaults taken list only the listed defaults, the decisions
-  nobody asked.
+- **A default taken** for the user, by a skipped question or as a listed
+  default (a decision nobody asked, which the change history logs with the
+  section it touches): say it in one line at the end of the section it
+  touches (« Default taken: … »), so the user can correct it. Write the line
+  always, and nowhere else: the model sheet holds no list of the defaults. A
+  listed default that touches no section, only a line of the to-do list, is
+  written in that line.
 - Write in the language of the initial request, technical terms as the code
   names them.
 - Name a section to the user by its number in words (« section 6 »), never

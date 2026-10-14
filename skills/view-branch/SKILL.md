@@ -42,13 +42,14 @@ them back what they stated, and spends its text on what is new to them (what
 the code does that they did not say, the decisions made for them, the
 consequences). Its first section, the **model sheet**, gives an intuitive
 view of the change, graphical where it can be, that lays out the subjects of
-the sections after it; then come the defaults taken
-for the user (the decisions that change nothing they see, do or risk, which
-no question asks), and a to-do list of the work that fails the **section
-test**. A section stays in the model only when it holds a decision the user
-makes or must make, or a consequence they will notice; anything else is one
-line of the to-do list, which the implementer carries and the reviewer
-checks.
+the sections after it, then a to-do list of the work that fails the
+**section test**. Each default taken for the user, a skipped question's or a
+listed default (a decision that changes nothing they see, do or risk, which
+no question asks), is one « Default taken » line at the end of the section
+it touches, never a list on the model sheet. A section stays in the model
+only when it holds a decision the user makes or must make, or a consequence
+they will notice; anything else is one line of the to-do list, which the
+implementer carries and the reviewer checks.
 
 In the page, the model is the outline and the lexicon of `plan.json` (one
 entry per term that is not plain language, `kind` + `definition` + `tip`: a
