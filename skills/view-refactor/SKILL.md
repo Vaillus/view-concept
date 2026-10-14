@@ -172,8 +172,10 @@ The outline starts with this skeleton, in this order:
    thresholds ». These are the lexicon entries, and they are what merge
    verdicts rest on.
 
-Each outline entry is `{"id": "s1", "title", "earns"}`, `earns` saying what
-the section gives the sections after it. The lexicon has one entry per term
+Each outline entry is `{"id": "s1", "title", "earns"}`, `earns` saying in
+one sentence what the section gives the sections after it: the user reads it
+in the page's outline, and `view-concept plan` refuses one over 200
+characters. The lexicon has one entry per term
 the sections will use, `{"term", "section", "definition", "tip"}`: the
 section that introduces it (its **home section**), the one-line definition
 you will give there, and the hover text (written with the section).

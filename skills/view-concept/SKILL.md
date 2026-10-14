@@ -48,7 +48,7 @@ When the request is already unambiguous, scoped and bounded, ask nothing and go 
 
 Fix the vocabulary before writing. This phase produces a draft plan, which Phase 4 revises once calibration comes back. Run `view-concept status <slug> planning` and write both parts to `plan.json` (see **Files you write**):
 
-- **The outline.** Numbered sections, each with what it establishes and why it sits there (`earns`: what it gives the sections after it). It is an argument about ordering, not a table of contents.
+- **The outline.** Numbered sections, each with what it establishes and why it sits there (`earns`: what it gives the sections after it, in one sentence of at most 200 characters, since the user reads it in the page's outline). It is an argument about ordering, not a table of contents.
 - **The lexicon.** Every technical term the explanation will use, the section that introduces it, and the one-line definition you will give there.
 
 The lexicon is a contract in both directions: every term in it is introduced at its declared section and used freely after, and **every technical term in the final text is in the lexicon**. There is no « used in passing » exemption: a term you are about to write that is not in it gets added with a definition, or the sentence goes. Committing to one definition per term, at one place, in advance is what keeps terms from being used before they are introduced, paraphrased three ways, or quietly redefined.

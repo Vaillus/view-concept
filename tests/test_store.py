@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from view_concept.store import (
+    EARNS_MAX,
     LISTENING_FOR,
     Session,
     SessionError,
@@ -655,6 +656,8 @@ def test_write_plan_keeps_the_other_fields(tmp_path):
         s.write_plan(lexicon=[{"term": "x", "section": "s9"}])
     with pytest.raises(SessionError, match="unique"):
         s.write_plan(outline=[{"id": "s1", "title": "A"}, {"id": "s1", "title": "B"}])
+    with pytest.raises(SessionError, match="earns over"):
+        s.write_plan(outline=[{"id": "s1", "title": "A", "earns": "x" * (EARNS_MAX + 1)}])
     with pytest.raises(SessionError, match="nothing to write"):
         s.write_plan()
     assert s.read_plan()["lexicon"][0]["term"] == "gate"  # a refused write changes nothing
