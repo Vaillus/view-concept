@@ -147,6 +147,7 @@ function render() {
 
 function setTab(name) {
   if (name === "refactor" && !hasRefactorTab()) name = "doc";
+  releaseAnchor(); // the page is about to move the view, or show another one
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === name));
@@ -357,6 +358,55 @@ function renderChanges() {
   }));
 }
 
+/* ---------------- reading position ----------------
+   A render rebuilds the whole tab, and what it holds above the reader keeps changing
+   height for a while after it: a Mermaid chart is a code block until it is drawn, a new
+   section frame is 150px high until it posts its height. The browser's own scroll
+   anchoring cannot hold the view, since the element it held is gone. So before a render
+   the page notes the reading anchor: the element with an id at the top of the view (the
+   section, or the item's description) and, in a section, the block of its body there,
+   with its distance from the view's top. After the render, and at every later change of
+   height in the tab, the view scrolls so that the anchor is back at that distance. The
+   anchor is held until the reader scrolls or the page scrolls to a passage. */
+
+let anchor = null; // { view, key, block, offset }
+
+function readingAnchor(view) {
+  const top = view.getBoundingClientRect().top;
+  // In document order, the first element still reaching the view's top is the outermost.
+  const node = [...view.querySelectorAll("[id]")].find((n) => {
+    const r = n.getBoundingClientRect();
+    return r.height && r.bottom > top;
+  });
+  if (!node) return null;
+  const blocks = [...(node.querySelector(":scope > .body") || { children: [] }).children];
+  const block = blocks.findIndex((b) => b.getBoundingClientRect().bottom > top);
+  const at = block < 0 ? node : blocks[block];
+  return { view, key: node.id, block, offset: at.getBoundingClientRect().top - top };
+}
+
+function anchorNode(a) {
+  const node = a.view.querySelector(`[id="${CSS.escape(a.key)}"]`);
+  if (!node) return null;
+  const body = node.querySelector(":scope > .body");
+  return (a.block >= 0 && body && body.children[a.block]) || node;
+}
+
+function holdAnchor() {
+  const node = anchor && anchorNode(anchor);
+  if (!node || !node.getClientRects().length) return;
+  const drift = node.getBoundingClientRect().top - anchor.view.getBoundingClientRect().top - anchor.offset;
+  if (Math.abs(drift) >= 1) anchor.view.scrollTop += drift;
+}
+
+const releaseAnchor = () => { anchor = null; };
+const anchorWatch = new ResizeObserver(holdAnchor);
+for (const view of docViews()) {
+  for (const type of ["wheel", "touchstart", "keydown", "mousedown"]) {
+    view.addEventListener(type, releaseAnchor, { passive: true });
+  }
+}
+
 function renderDoc() {
   const doc = $("#doc");
   const sections = allSections();
@@ -365,6 +415,8 @@ function renderDoc() {
     $("#refactor").replaceChildren();
     return;
   }
+  const shown = docViews().find((v) => v.classList.contains("active"));
+  if (!anchor || anchor.view !== shown || !anchorNode(anchor)) anchor = shown && shown.scrollTop ? readingAnchor(shown) : null;
   parkFrames();
   // A question box at the end of a section is re-attached on each render: keep its focus.
   const active = document.activeElement;
@@ -385,6 +437,9 @@ function renderDoc() {
     if (keep[1] != null) keep[0].setSelectionRange(keep[1], keep[2]);
   }
   placeFrames();
+  holdAnchor();
+  anchorWatch.disconnect();
+  for (const view of docViews()) for (const child of view.children) anchorWatch.observe(child);
   frames.forEach((f, id) => postTerms(id, f));
   applyHighlights();
   renderThreadChips();
@@ -956,6 +1011,7 @@ function frameRevealed(id, f, d) {
   const view = f.closest(".view");
   if (!view) return;
   const v = view.getBoundingClientRect();
+  releaseAnchor();
   view.scrollBy({ top: (r.top + r.bottom) / 2 - (v.top + view.clientHeight / 2), behavior: "smooth" });
 }
 
