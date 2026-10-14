@@ -296,6 +296,16 @@ def test_terminal_messages(session):
         session.add_terminal_message(" ")
 
 
+def test_the_request_transcript_is_written_and_replaced(session):
+    assert session.read_request() == ""
+    session.write_request("## User\nfirst\n")
+    session.write_request("## User\nfirst\n\n## Agent\nsecond\n")
+    assert session.read_request() == "## User\nfirst\n\n## Agent\nsecond"
+    assert session.request_path.name == "request.md"
+    with pytest.raises(SessionError):
+        session.write_request("  \n")
+
+
 def test_a_branch_review_records_its_base(tmp_path):
     s = Session("x", tmp_path)
     s.create("X", "rework the gate", kind="code", repo=str(tmp_path), base="main")

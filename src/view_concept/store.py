@@ -17,6 +17,8 @@ reach the agent session through the inbox.
                                                             (written by `implemented`)
         code-map.md     where the feature lives in the code: its modules, where each
                         concept is implemented    (written by the planner and the implementer)
+        request.md      the request transcript: the conversation that led to a review,
+                        one `## User` or `## Agent` heading per message  (written by `request`)
         questions.json  agent questions put to the user, with their answers  (`question`, server)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
@@ -63,15 +65,19 @@ reaches the main session.
 A coordinated session (the view-branch workflow) is driven by a main session that only
 coordinates: subagents do the work, each started from the session folder as
 `view-concept context` prints it (context.py). The initial request is the user's first
-message, kept verbatim in plan.json. The change history logs every change of the model:
-{id: m1…, at, by (planner or writer), change (a few words), cause (the ids of the
-questions, comments or terminal messages that led to it, or "own judgment")}. A session
-written before it has changes.json instead, read as its change history. The terminal
-messages are the user's later messages about the feature, typed in the terminal: {id:
-tm1…, at, phase (the phase when it was recorded), text}. The code map is free Markdown
-that says which modules carry the feature and where each concept lives, so a fresh agent
-does not explore the same code again: the planner writes it in scoping, the implementer
-updates it when it moves code, and every context loads it.
+message, kept verbatim in plan.json. When the review follows a conversation about the
+feature, request.md, the request transcript, holds all of it: every message from the
+first one about the feature, the user's and the agent's, verbatim and in order, under a
+`## User` or `## Agent` heading each; messages only, no tool call or tool output. The
+change history logs every change of the model: {id: m1…, at, by (planner or writer),
+change (a few words), cause (the ids of the questions, comments or terminal messages
+that led to it, or "own judgment")}. A session written before it has changes.json
+instead, read as its change history. The terminal messages are the user's later messages
+about the feature, typed in the terminal: {id: tm1…, at, phase (the phase when it was
+recorded), text}. The code map is free Markdown that says which modules carry the
+feature and where each concept lives, so a fresh agent does not explore the same code
+again: the planner writes it in scoping, the implementer updates it when it moves code,
+and every context loads it.
 
 The agent is "listening" while a watch runs for the session: the watch rewrites watch.json
 every HEARTBEAT_EVERY seconds, and a heartbeat older than LISTENING_FOR seconds (or none)
@@ -337,6 +343,10 @@ class Session:
     @property
     def code_map_path(self) -> Path:
         return self.dir / "code-map.md"
+
+    @property
+    def request_path(self) -> Path:
+        return self.dir / "request.md"
 
     @property
     def questions_path(self) -> Path:
@@ -704,6 +714,20 @@ class Session:
             return self.code_map_path.read_text(encoding="utf-8").strip()
         except FileNotFoundError:
             return ""
+
+    def read_request(self) -> str:
+        """The request transcript: the whole conversation that led to the review. Empty
+        when none is written (the review started from a single message)."""
+        try:
+            return self.request_path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            return ""
+
+    def write_request(self, text: str) -> None:
+        """Write the request transcript, replacing any previous one."""
+        if not text.strip():
+            raise SessionError("empty request transcript")
+        self.request_path.write_text(text.strip() + "\n", encoding="utf-8")
 
     def add_terminal_message(self, text: str) -> dict[str, Any]:
         """Record a terminal message of the user about the feature, so the subagents,

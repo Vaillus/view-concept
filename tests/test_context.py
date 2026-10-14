@@ -156,3 +156,30 @@ def test_every_role_of_a_code_session_gets_the_code_map(review, session):
         assert "## Code map\n- the gate: `src/gate.py`\n" in build(review, role)
     # An explanation has no code, so no code map.
     assert "## Code map" not in build(session, "writer")
+
+
+TRANSCRIPT = "## User\nrework the gate, as we said\n\n## Agent\nA flag, or a rule?"
+
+
+def test_without_a_transcript_every_role_gets_the_initial_request(branch):
+    for role in ("planner", "writer", "implementer", "reviewer", "thread"):
+        text = build(branch, role)
+        assert "## Initial request\nrework the gate\n" in text
+        assert "Request transcript" not in text and "request.md" not in text
+
+
+def test_the_planner_and_the_writer_read_the_transcript_whole(branch):
+    branch.write_request(TRANSCRIPT)
+    for role in ("planner", "writer"):
+        text = build(branch, role)
+        assert "## Request transcript\n" in text and TRANSCRIPT in text
+        assert "## Initial request" not in text
+
+
+def test_the_other_roles_get_the_initial_request_and_the_transcript_path(branch):
+    branch.write_request(TRANSCRIPT)
+    for role in ("implementer", "reviewer", "thread"):
+        text = build(branch, role)
+        assert "## Initial request\nrework the gate\n" in text
+        assert f"{branch.request_path}: open it when a comment needs" in text
+        assert "A flag, or a rule?" not in text

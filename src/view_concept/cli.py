@@ -303,6 +303,14 @@ def cmd_message(a: argparse.Namespace) -> None:
     print(f"{s.add_terminal_message(a.text)['id']} recorded")
 
 
+def cmd_request(a: argparse.Namespace) -> None:
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    s.write_request(sys.stdin.read() if a.file == "-" else Path(a.file).read_text("utf-8"))
+    print(f"request transcript written: {s.request_path}")
+
+
 def cmd_pr(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
@@ -519,6 +527,15 @@ def main() -> None:
     q.add_argument("slug")
     q.add_argument("text", help="the message, as the user wrote it")
     q.set_defaults(fn=cmd_message)
+
+    q = sub.add_parser(
+        "request", help="write the request transcript (request.md), replacing any previous one"
+    )
+    q.add_argument("slug")
+    q.add_argument(
+        "file", help="a Markdown file, one `## User` or `## Agent` heading per message, or -"
+    )
+    q.set_defaults(fn=cmd_request)
 
     q = sub.add_parser("pr", help="record the session's PR link, for the page to show")
     q.add_argument("slug")
