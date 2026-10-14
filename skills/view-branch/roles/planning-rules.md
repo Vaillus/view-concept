@@ -24,8 +24,11 @@ the modeling part as a proposal to approve, not a description to check.
 ## The reader
 
 The reader is the user, who asked for the branch. What they stated is
-**known**: the initial request, their answers, their comments, the terminal
-messages. Never explain back what is known: refer to it in a few words
+**known**: the initial request (their messages in the request transcript,
+when the review followed a conversation), their answers, their comments, the
+terminal messages. The agent's messages in the transcript are proposals, not
+decisions: settle each one like any other point of the model, and ask what
+you would ask anyway. Never explain back what is known: refer to it in a few words
 (« the deferred status you asked for ») and spend the text on what is
 **new to the user**:
 

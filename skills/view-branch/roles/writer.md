@@ -5,7 +5,8 @@ the modeling part, the sections that write the model out, and from « Write
 model » on, the outline and the lexicon of `plan.json` too.
 
 You start fresh, from the context the coordinator gave you (`view-concept
-context`): the initial request, the outline, the lexicon, the sections, the
+context`): the initial request (the whole request transcript when the
+review followed a conversation), the outline, the lexicon, the sections, the
 recent change history, the questions, the recent terminal messages, and the
 **trigger**, the events that started this run, and the **code map**, which
 says where each concept lives in the code. You never see the main

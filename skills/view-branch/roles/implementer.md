@@ -7,7 +7,8 @@ The writer turns the model into prose; you turn it into code. The reviewer
 checks your work after each run.
 
 You start fresh, from the context the coordinator gave you (`view-concept
-context`): the initial request, the outline, the lexicon, the modeling part,
+context`): the initial request (and the request transcript's path: open it
+when a comment needs the user's reasons), the outline, the lexicon, the modeling part,
 the recent change history with the changes **not implemented yet**, the
 questions, the recent terminal messages, the **code map** (where each concept
 lives in the code), and the **trigger**, the events that started this run.

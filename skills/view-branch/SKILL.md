@@ -74,15 +74,27 @@ requires approval for commands).
 
 ### Setup
 
-A code session opened on the branch, with the user's message verbatim as the
-initial request and the branch it is compared with (the slug is a short
-kebab-case name of the branch):
+A code session opened on the branch, with the user's first message verbatim
+as the initial request and the branch it is compared with (the slug is a
+short kebab-case name of the branch):
 
 ```bash
 view-concept new "<title>" --slug <slug> --initial-request "<the message>" \
     --kind code --repo <repo root> --base <base branch> --workflow view-branch
+view-concept request <slug> <file>   # when the review follows a conversation
 view-concept open <slug>          # starts the server if needed, shows the page
 ```
+
+When the review follows a conversation about the feature, write its
+**request transcript** right after `new`: every message of it, the user's and
+yours, word for word and in order, from the first message about the feature
+(leave out earlier messages on another subject), each under a `## User` or
+`## Agent` heading, messages only (no tool call, no tool output). The
+command writes it to `request.md` in the session folder, and replaces it
+when run again. The planner and the writer read it whole; the implementer,
+the reviewer and a side thread get its path and open it when a comment needs
+the user's reasons. A review started with a single message has no
+transcript: that message is its whole request.
 
 The page runs side threads on the agent you are. Claude Code and Codex are
 detected; any other agent (Jazz, …) adds `--agent jazz --agent-name <your own
@@ -186,7 +198,8 @@ Each run starts from the output of
 view-concept context <slug> --role <planner|writer|implementer|reviewer> --trigger <ids or words>
 ```
 
-It prints the **base context** (the initial request, the outline, the
+It prints the **base context** (the initial request, or the request
+transcript for the planner and the writer, the outline, the
 lexicon, the code map, the recent change history, the questions, the recent
 terminal messages, and the sections the role needs) and the **trigger**: the events
 that started this run, in full. Once the model is approved, it also says up
