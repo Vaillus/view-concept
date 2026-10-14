@@ -1,0 +1,49 @@
+/* The base style of a section frame.
+
+   frame.py tokens_css() appends this file after the theme tokens and the prose width,
+   so every frame head (the page, the published page, the vault export) carries it. It
+   is a default: every selector is wrapped in :where(), which has zero specificity, so
+   any rule the section writes itself wins over it, property by property. It uses only
+   the theme tokens of terminal.css (--bg, --raised, --ink, --muted, --line, --accent…).
+
+   Base style: the Markdown sections' size and line height on the body, a type scale of
+   three named sizes (--fs-body, --fs-small, --fs-label), balanced headings, and every
+   table styled as a data table that scrolls sideways when wider than the frame. */
+
+/* ---- base style ---- */
+
+:where(:root) {
+  --fs-body: 14px;
+  --fs-small: 12px;
+  --fs-label: 11px;
+}
+
+:where(body) {
+  font-size: var(--fs-body);
+  line-height: 1.64;
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  text-wrap: balance;
+}
+
+:where(table) {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+
+:where(th, td) {
+  border: 1px solid var(--line);
+  padding: 0.35em 0.7em;
+  vertical-align: top;
+  text-align: left;
+  min-width: 6ch;
+}
+
+:where(th) {
+  background: var(--raised);
+  font-weight: 600;
+}
