@@ -1,0 +1,170 @@
+/* The base style of a section frame, and its component kit.
+
+   frame.py tokens_css() appends this file after the theme tokens and the prose width,
+   so every frame head (the page, the published page, the vault export) carries it. It
+   is a default: every selector is wrapped in :where(), which has zero specificity, so
+   any rule the section writes itself wins over it, property by property. It uses only
+   the theme tokens of terminal.css (--bg, --raised, --ink, --muted, --line, --accent…).
+
+   Base style: the Markdown sections' font, size and line height on the body, a type scale of
+   three named sizes (--fs-body, --fs-small, --fs-label), balanced headings, and every
+   table styled as a data table that scrolls sideways when wider than the frame.
+
+   Component kit, the classes a section reuses instead of inventing its own:
+
+     <span class="label">status</span>        uppercase, letter-spaced metadata
+     <span class="chip">new</span>            a small neutral tag
+     <div class="panel">…</div>               a fill, no border: the one block that
+                                              must stand apart
+     <div class="pair">                       before/after, side by side, stacked
+       <div class="before">…</div>            when narrow; before always first
+       <div class="after">…</div>
+     </div>
+     <ol class="steps"><li>…</li></ol>        numbered steps joined by a line
+     <div class="callout">…</div>             accent bar and light fill, for a
+                                              verdict or a default taken
+     <div class="tabs">                       alternatives; the n-th .tab shows the
+       <div class="tab-row">                  n-th .tab-panel child of .tabs, the
+         <button class="tab" aria-selected="true">A</button>   others carry hidden;
+         <button class="tab">B</button>       frame.js runs the clicks
+       </div>
+       <div class="tab-panel">…</div>
+       <div class="tab-panel" hidden>…</div>
+     </div>
+
+   A .pair child, a .panel or a .callout may start with a .label. */
+
+/* ---- base style ---- */
+
+:where(:root) {
+  --fs-body: 14px;
+  --fs-small: 12px;
+  --fs-label: 11px;
+}
+
+:where(body) {
+  font-family: var(--mono);
+  font-size: var(--fs-body);
+  line-height: 1.64;
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  text-wrap: balance;
+}
+
+:where(table) {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+
+:where(th, td) {
+  border: 1px solid var(--line);
+  padding: 0.35em 0.7em;
+  vertical-align: top;
+  text-align: left;
+  min-width: 6ch;
+}
+
+:where(th) {
+  background: var(--raised);
+  font-weight: 600;
+}
+
+/* ---- component kit ---- */
+
+:where(.label) {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: var(--fs-label);
+  color: var(--muted);
+}
+
+:where(.panel > .label:first-child, .callout > .label:first-child,
+       .pair > * > .label:first-child) {
+  display: block;
+  margin-bottom: 0.4em;
+}
+
+:where(.chip) {
+  display: inline-block;
+  padding: 0 0.5em;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  background: var(--neutralbg);
+  color: var(--neutralink);
+}
+
+:where(.panel) {
+  background: var(--raised);
+  padding: 0.8em 1em;
+}
+
+:where(.pair) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1em;
+}
+
+:where(.pair > *) {
+  min-width: 0;
+}
+
+:where(.steps) {
+  list-style: decimal;
+  padding-left: 2em;
+}
+
+:where(.steps > li) {
+  border-left: 2px solid var(--line);
+  padding: 0 0 0.8em 0.8em;
+}
+
+:where(.steps > li:last-child) {
+  padding-bottom: 0;
+}
+
+:where(.callout) {
+  border-left: 3px solid var(--accent);
+  background: var(--accentbg);
+  padding: 0.6em 1em;
+}
+
+:where(.tab-row) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2em;
+  border-bottom: 1px solid var(--line);
+}
+
+:where(.tab) {
+  font: inherit;
+  font-size: var(--fs-small);
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 0.3em 0.8em;
+  cursor: pointer;
+}
+
+:where(.tab:hover) {
+  color: var(--ink);
+}
+
+:where(.tab[aria-selected="true"]) {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+:where(.tab-panel) {
+  padding-top: 0.8em;
+}
+
+/* !important: a section's own display rule on a panel must not show a hidden one. */
+:where(.tab-panel[hidden]) {
+  display: none !important;
+}

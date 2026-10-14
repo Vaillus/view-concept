@@ -30,13 +30,26 @@
      the page opens that thread on it.
    - The changes (page -> frame): the passages an agent added since the last batch or
      « mark read ». The page finds them by comparing the section's visible text now and
-     then; the frame highlights them as it highlights the anchors.
+     then; the frame highlights a passage only while the pointer is over a block holding
+     it (the block of its start or of its end, so a passage over two blocks shows whole
+     when either is hovered); the page's bar marks the whole frame.
    - The terms (page -> frame): the lexicon terms, the one this section is the home of,
      and the words the vocabulary audit flags in it. The frame underlines each
      occurrence by painting a style over the word, as it paints the anchors: no element
      of the section is changed, so its scripts find their text as they wrote it.
    - The term hover (frame -> page): the underlined word the pointer rests on and where
      it sits, or nothing once the pointer leaves it, so the page shows that term's tip.
+
+   The frame script also runs the component kit's tabs (`.tabs`, see frame.css): a click
+   on a `.tab` selects it and shows its panel, the n-th `.tab-panel` child of its `.tabs`,
+   hiding the others; at load each `.tabs` is made consistent (no tab selected: the
+   first). The section writes no script for them. A passage can sit in a holder that hides
+   it, a closed <details> or a hidden `.tab-panel`: it is found but has no box on screen.
+   So before measuring a passage to reveal, the frame opens each holder around it (sets
+   `open` on the <details>, selects the panel's tab); and the first time it finds a
+   passage of a comment, a side thread or a change, it opens its holders once, and
+   remembers the passage, so a tab the reader closes afterwards is not reopened by a later
+   message. A term opens nothing.
 
    Every highlight and underline is painted again when a script of the section redraws
    its text, from the anchors, changes and terms the frame already holds. Text a script
@@ -117,6 +130,64 @@
     return r;
   }
 
+  /* ---- the kit's tabs and the holders of a passage ---- */
+  function tabsOf(tabs) {
+    var row = null, panels = [];
+    for (var i = 0; i < tabs.children.length; i++) {
+      var c = tabs.children[i];
+      if (!row && c.classList.contains("tab-row")) row = c;
+      else if (c.classList.contains("tab-panel")) panels.push(c);
+    }
+    var buttons = row ? Array.prototype.filter.call(row.children, function (c) { return c.classList.contains("tab"); }) : [];
+    return { buttons: buttons, panels: panels };
+  }
+  // Select the k-th tab of a `.tabs` and show its panel; the others are hidden.
+  function selectTab(tabs, k) {
+    var t = tabsOf(tabs);
+    t.buttons.forEach(function (b, i) { b.setAttribute("aria-selected", i === k ? "true" : "false"); });
+    t.panels.forEach(function (p, i) { if (i === k) p.removeAttribute("hidden"); else p.setAttribute("hidden", ""); });
+  }
+  function initTabs() {
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs"), function (tabs) {
+      var t = tabsOf(tabs), k = 0;
+      t.buttons.forEach(function (b, i) { if (!k && b.getAttribute("aria-selected") === "true") k = i; });
+      selectTab(tabs, k);
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initTabs);
+  else initTabs();
+  addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest(".tab");
+    var row = b && b.parentElement, tabs = row && row.parentElement;
+    if (!tabs || !row.classList.contains("tab-row") || !tabs.classList.contains("tabs")) return;
+    selectTab(tabs, tabsOf(tabs).buttons.indexOf(b));
+  });
+
+  // Open every holder around a node: each closed <details> it is in (not its summary,
+  // which shows while closed) and each hidden `.tab-panel` (by selecting its tab).
+  function openFrom(node) {
+    var child = null;
+    for (var p = node && (node.nodeType === 1 ? node : node.parentElement); p; child = p, p = p.parentElement) {
+      if (p.tagName === "DETAILS" && !p.open && !(child && child.tagName === "SUMMARY" && child.parentElement === p)) p.open = true;
+      else if (p.classList.contains("tab-panel") && p.hasAttribute("hidden") && p.parentElement && p.parentElement.classList.contains("tabs")) {
+        var k = tabsOf(p.parentElement).panels.indexOf(p);
+        if (k >= 0) selectTab(p.parentElement, k);
+      }
+    }
+  }
+  function openHolders(range) {
+    openFrom(range.startContainer);
+    if (range.endContainer !== range.startContainer) openFrom(range.endContainer);
+  }
+  // The passages (comment, side thread, change) whose holders were opened once already.
+  var opened = {};
+  function openOnce(passage, range) {
+    var key = collapse(passage.prefix || "") + "\n" + collapse(passage.quote || "");
+    if (opened[key]) return;
+    opened[key] = true;
+    openHolders(range);
+  }
+
   /* ---- the selection ---- */
   var selected = false;
   function selection() {
@@ -149,6 +220,9 @@
   var terms = [];   // { term, kind: term | def | audit, key }
   var focus = null; // { quote, prefix } of the passage being revealed
   var threadRanges = [], termRanges = []; // [anchor, range], [term, range] as last painted
+  var changeRanges = []; // [blocks holding the change's start and end, range] as last found
+  var pointer = null;    // { x, y } of the pointer over the frame, null once it left
+  var shownChanges = null; // the indexes in changeRanges painted now, joined
   var placed = null; // the side threads' ids last posted as "placed", joined
   var KINDS = ["draft", "sent", "thread", "focus", "updated", "term", "def", "audit"];
   var marks = document.createElement("style");
@@ -219,13 +293,20 @@
     anchors.forEach(function (a) {
       var r = ranges[a.kind] && findQuote(index, a.quote, a.prefix);
       if (!r) return;
+      openOnce(a, r);
       ranges[a.kind].push(r);
       if (a.kind === "thread" && a.thread) threadRanges.push([a, r]);
     });
+    changeRanges = [];
     changes.forEach(function (c) {
       var r = findQuote(index, c.quote, c.prefix);
-      if (r) ranges.updated.push(r);
+      if (!r) return;
+      openOnce(c, r);
+      changeRanges.push([[blockOf(r.startContainer), blockOf(r.endContainer)], r]);
     });
+    var under = pointer && document.elementFromPoint(pointer.x, pointer.y);
+    shownChanges = hoveredChanges(under).join(",");
+    ranges.updated = hoveredChanges(under).map(function (k) { return changeRanges[k][1]; });
     var f = focus && findQuote(index, focus.quote, focus.prefix);
     if (f) ranges.focus.push(f);
     termRanges = underline(index);
@@ -234,6 +315,29 @@
       CSS.highlights.set("ev-" + k, new (Function.prototype.bind.apply(Highlight, [null].concat(ranges[k])))());
     });
     postPlaced(answer);
+  }
+
+  // The block a change passage's start or end sits in.
+  function blockOf(node) {
+    var e = node.nodeType === 1 ? node : node.parentElement;
+    return e && e.closest(BLOCKS);
+  }
+  // The indexes of the changes with a block holding `target`.
+  function hoveredChanges(target) {
+    var out = [];
+    if (target) changeRanges.forEach(function (cr, k) {
+      if (cr[0].some(function (b) { return b && b.contains(target); })) out.push(k);
+    });
+    return out;
+  }
+  // Paint the changes of the blocks under the pointer, when they are not painted already.
+  function paintChanges(target) {
+    if (!window.CSS || !CSS.highlights) return;
+    var shown = hoveredChanges(target);
+    if (shown.join(",") === shownChanges) return;
+    shownChanges = shown.join(",");
+    CSS.highlights.set("ev-updated", new (Function.prototype.bind.apply(Highlight,
+      [null].concat(shown.map(function (k) { return changeRanges[k][1]; }))))());
   }
 
   // A script that redraws the section's text drops the ranges with the old nodes: find
@@ -249,6 +353,7 @@
   function reveal(quote, prefix) {
     var r = findQuote(textIndex(), quote, prefix);
     if (!r) { post({ viewConcept: "revealed", found: false }); return; }
+    openHolders(r);
     var b = r.getBoundingClientRect();
     post({ viewConcept: "revealed", found: true, top: b.top + scrollY, bottom: b.bottom + scrollY });
     focus = { quote: quote, prefix: prefix };
@@ -282,12 +387,14 @@
     post(t ? { viewConcept: "term-hover", key: t.key, rect: rectOf(rect) } : { viewConcept: "term-hover", key: null });
   }
   addEventListener("mousemove", function (e) {
+    pointer = { x: e.clientX, y: e.clientY };
+    paintChanges(e.target);
     var h = hit(termRanges, e.clientX, e.clientY);
     hover(h && h[0], h && h[1]);
     // The passage of a thread is clickable: say so with the cursor.
     root.style.cursor = hit(threadRanges, e.clientX, e.clientY) ? "pointer" : "";
   });
-  document.addEventListener("mouseleave", function () { hover(null); });
+  document.addEventListener("mouseleave", function () { hover(null); pointer = null; paintChanges(null); });
   addEventListener("scroll", function () { hover(null); });
 
   addEventListener("message", function (e) {

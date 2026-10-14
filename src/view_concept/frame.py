@@ -8,7 +8,11 @@ the section may load from any site.
 
 The page does not serve the section's file as it is: it adds a short head, which defines
 the theme tokens (`tokens_css`), keeps the prose written straight in the body and the
-figure captions to the page's text width, centred, and loads static/frame.js. The theme
+figure captions to the page's text width, centred, adds the base style (static/frame.css:
+the Markdown sections' size and line height, a type scale, data tables that scroll
+sideways, and the component kit, classes such as .label, .panel or .tabs a section reuses
+instead of inventing its own), and loads static/frame.js. The base style is a default:
+each of its rules has zero specificity (:where()), so a section's own rule wins. The theme
 tokens are the named colours of the page (--bg, --ink, --accent, --flag… of
 terminal.css) and its light or dark mode: a frame is a separate web page, where the
 page's names would mean nothing, so the head brings them, and the page tells the frame
@@ -59,15 +63,17 @@ _PROSE_CSS = (
 
 
 def tokens_css() -> str:
-    """The theme tokens: every theme's palette (themes.css) and the semantic names bound
-    onto it (the :root block of terminal.css), without the skin's styles; and the width
-    of the section's prose."""
+    """The stylesheet of a frame head: the theme tokens, that is every theme's palette
+    (themes.css) and the semantic names bound onto it (the :root block of terminal.css),
+    without the skin's styles; the width of the section's prose; and the base style with
+    its component kit (frame.css), last, every rule of it overridable by the section."""
     terminal = (STATIC / "terminal.css").read_text(encoding="utf-8")
     m = _TOKENS_BLOCK.search(terminal)
     if not m:
         raise RuntimeError("terminal.css has no :root block of theme tokens")
     themes = (STATIC / "themes.css").read_text(encoding="utf-8")
-    return themes + "\n" + m.group(0) + "\n" + _PROSE_CSS
+    base = (STATIC / "frame.css").read_text(encoding="utf-8")
+    return themes + "\n" + m.group(0) + "\n" + _PROSE_CSS + base
 
 
 def frame_js() -> str:

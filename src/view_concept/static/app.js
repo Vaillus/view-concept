@@ -147,6 +147,7 @@ function render() {
 
 function setTab(name) {
   if (name === "refactor" && !hasRefactorTab()) name = "doc";
+  releaseAnchor(); // the page is about to move the view, or show another one
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === name));
@@ -357,6 +358,78 @@ function renderChanges() {
   }));
 }
 
+/* ---------------- reading position ----------------
+   A render rebuilds the whole tab, and what it holds above the reader keeps changing
+   height for a while after it: a Mermaid chart is a code block until it is drawn, a new
+   section frame is 150px high until it posts its height. The browser's own scroll
+   anchoring cannot hold the view, since the element it held is gone. So before a render
+   the page notes the reading anchor: the element with an id at the top of the view (the
+   section, or the item's description) and, in a section, the block of its body there,
+   with its distance from the view's top. After the render, and at every later change of
+   height in the tab, the view scrolls so that the anchor is back at that distance. The
+   anchor is held until the reader scrolls or the page scrolls to a passage. While a
+   smooth scroll the page started is running (to a passage or a section), a
+   render notes no anchor: holding one would set scrollTop and stop that scroll short. */
+
+let anchor = null; // { view, key, block, offset }
+let pageScrolling = null; // { view } of the smooth scroll the page is running
+
+/* Runs a smooth scroll of the page in `view`, and marks it as running until the view's
+   scrollend; a scroll that moves nothing fires no scrollend, so the mark also goes when
+   no scroll event came in the next 200 ms. */
+function pageScroll(view, scroll) {
+  if (!view) { scroll(); return; }
+  const run = { view };
+  pageScrolling = run;
+  let moved = false;
+  const onScroll = () => { moved = true; };
+  const done = () => {
+    view.removeEventListener("scroll", onScroll);
+    view.removeEventListener("scrollend", done);
+    if (pageScrolling === run) pageScrolling = null;
+  };
+  view.addEventListener("scroll", onScroll, { passive: true });
+  view.addEventListener("scrollend", done, { once: true });
+  setTimeout(() => { if (!moved) done(); }, 200);
+  scroll();
+}
+
+function readingAnchor(view) {
+  const top = view.getBoundingClientRect().top;
+  // In document order, the first element still reaching the view's top is the outermost.
+  const node = [...view.querySelectorAll("[id]")].find((n) => {
+    const r = n.getBoundingClientRect();
+    return r.height && r.bottom > top;
+  });
+  if (!node) return null;
+  const blocks = [...(node.querySelector(":scope > .body") || { children: [] }).children];
+  const block = blocks.findIndex((b) => b.getBoundingClientRect().bottom > top);
+  const at = block < 0 ? node : blocks[block];
+  return { view, key: node.id, block, offset: at.getBoundingClientRect().top - top };
+}
+
+function anchorNode(a) {
+  const node = a.view.querySelector(`[id="${CSS.escape(a.key)}"]`);
+  if (!node) return null;
+  const body = node.querySelector(":scope > .body");
+  return (a.block >= 0 && body && body.children[a.block]) || node;
+}
+
+function holdAnchor() {
+  const node = anchor && anchorNode(anchor);
+  if (!node || !node.getClientRects().length) return;
+  const drift = node.getBoundingClientRect().top - anchor.view.getBoundingClientRect().top - anchor.offset;
+  if (Math.abs(drift) >= 1) anchor.view.scrollTop += drift;
+}
+
+const releaseAnchor = () => { anchor = null; };
+const anchorWatch = new ResizeObserver(holdAnchor);
+for (const view of docViews()) {
+  for (const type of ["wheel", "touchstart", "keydown", "mousedown"]) {
+    view.addEventListener(type, releaseAnchor, { passive: true });
+  }
+}
+
 function renderDoc() {
   const doc = $("#doc");
   const sections = allSections();
@@ -365,6 +438,9 @@ function renderDoc() {
     $("#refactor").replaceChildren();
     return;
   }
+  const shown = docViews().find((v) => v.classList.contains("active"));
+  if (pageScrolling) anchor = null;
+  else if (!anchor || anchor.view !== shown || !anchorNode(anchor)) anchor = shown && shown.scrollTop ? readingAnchor(shown) : null;
   parkFrames();
   // A question box at the end of a section is re-attached on each render: keep its focus.
   const active = document.activeElement;
@@ -385,6 +461,9 @@ function renderDoc() {
     if (keep[1] != null) keep[0].setSelectionRange(keep[1], keep[2]);
   }
   placeFrames();
+  holdAnchor();
+  anchorWatch.disconnect();
+  for (const view of docViews()) for (const child of view.children) anchorWatch.observe(child);
   frames.forEach((f, id) => postTerms(id, f));
   applyHighlights();
   renderThreadChips();
@@ -956,7 +1035,8 @@ function frameRevealed(id, f, d) {
   const view = f.closest(".view");
   if (!view) return;
   const v = view.getBoundingClientRect();
-  view.scrollBy({ top: (r.top + r.bottom) / 2 - (v.top + view.clientHeight / 2), behavior: "smooth" });
+  releaseAnchor();
+  pageScroll(view, () => view.scrollBy({ top: (r.top + r.bottom) / 2 - (v.top + view.clientHeight / 2), behavior: "smooth" }));
 }
 
 /* ---------------- quotes <-> ranges ---------------- */
@@ -1015,10 +1095,11 @@ function applyHighlights() {
 /* ---------------- updates since the last batch ----------------
    An updated section carries the HTML of its highlight baseline: its text when the last
    batch was sent, or when the user last marked it read.
-   Both versions are cut into words, the words are diffed, and the words the rewrite
-   inserted are highlighted ("ev-updated"); every block (paragraph, list item, cell…)
-   holding an insertion or a deletion gets a bar in the margin. « updated · ok » in the
-   section heading marks the section as read. */
+   Both versions are cut into words, the words are diffed, and every block (paragraph,
+   list item, cell…) holding an insertion or a deletion gets a bar in the margin, always
+   drawn. The words the rewrite inserted show ("ev-updated") only while the pointer is
+   over their block; a block marked only for deleted words shows nothing on hover.
+   « updated · mark read » in the section heading marks the section as read. */
 
 const BLOCKS = "p, li, td, th, pre, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, .math.block, .mermaid";
 
@@ -1093,9 +1174,33 @@ function diffWords(a, b) {
   return { inserted, deleted };
 }
 
+/* The ranges of inserted words of each .changed block, and the block the pointer is over:
+   only its ranges are painted (a ::highlight cannot be scoped to :hover). */
+let changeRanges = new Map();
+let hoveredChange = null;
+
+function paintChange(block) {
+  hoveredChange = block;
+  if (window.CSS && CSS.highlights) CSS.highlights.set("ev-updated", new Highlight(...(changeRanges.get(block) || [])));
+}
+
+// The .changed block of a Markdown section that holds `node`, or null.
+const changedBlock = (node) => {
+  const b = node && node.closest ? node.closest(".sec .body .changed") : null;
+  return b && changeRanges.has(b) ? b : null;
+};
+
+for (const view of docViews()) {
+  view.addEventListener("mouseover", (e) => {
+    const b = changedBlock(e.target);
+    if (b !== hoveredChange) paintChange(b);
+  });
+  view.addEventListener("mouseleave", () => { if (hoveredChange) paintChange(null); });
+}
+
 function markUpdates() {
   document.querySelectorAll(".changed").forEach((n) => n.classList.remove("changed"));
-  const ranges = [];
+  changeRanges = new Map();
   for (const [id, sec] of Object.entries(state.sections)) {
     const body = sec.updated && document.querySelector(`#sec-${CSS.escape(id)} .body`);
     if (!body) continue;
@@ -1115,11 +1220,14 @@ function markUpdates() {
       if (run && run.block === w.block) run.range.setEnd(w.range.endContainer, w.range.endOffset);
       else {
         run = { block: w.block, range: w.range.cloneRange() };
-        ranges.push(run.range);
+        if (!changeRanges.has(w.block)) changeRanges.set(w.block, []);
+        changeRanges.get(w.block).push(run.range);
       }
     });
   }
-  if (window.CSS && CSS.highlights) CSS.highlights.set("ev-updated", new Highlight(...ranges));
+  // The blocks were redrawn: paint the one under the pointer now, if any.
+  const under = [...document.querySelectorAll(":hover")].pop();
+  paintChange(changedBlock(under));
   frames.forEach((f, id) => postChanges(id, f));
 }
 
@@ -1143,7 +1251,8 @@ function revealQuote(c) {
   }
   const r = findQuote(c.section, c.quote, c.prefix);
   if (r) {
-    r.startContainer.parentElement.scrollIntoView({ block: "center", behavior: "smooth" });
+    const p = r.startContainer.parentElement;
+    pageScroll(p.closest(".view"), () => p.scrollIntoView({ block: "center", behavior: "smooth" }));
     if (CSS.highlights) {
       CSS.highlights.set("ev-focus", new Highlight(r));
       setTimeout(() => CSS.highlights.delete("ev-focus"), 1500);
@@ -1156,7 +1265,7 @@ function revealQuote(c) {
 function scrollToSection(id) {
   setTab(tabOf(id));
   const s = openItemOf(id) || document.getElementById(`sec-${id}`);
-  if (s) s.scrollIntoView({ block: "start", behavior: "smooth" });
+  if (s) pageScroll(s.closest(".view"), () => s.scrollIntoView({ block: "start", behavior: "smooth" }));
 }
 
 /* ---------------- selection -> composer ---------------- */
