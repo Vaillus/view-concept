@@ -6,7 +6,7 @@
    any rule the section writes itself wins over it, property by property. It uses only
    the theme tokens of terminal.css (--bg, --raised, --ink, --muted, --line, --accent…).
 
-   Base style: the Markdown sections' size and line height on the body, a type scale of
+   Base style: the Markdown sections' font, size and line height on the body, a type scale of
    three named sizes (--fs-body, --fs-small, --fs-label), balanced headings, and every
    table styled as a data table that scrolls sideways when wider than the frame.
 
@@ -43,6 +43,7 @@
 }
 
 :where(body) {
+  font-family: var(--mono);
   font-size: var(--fs-body);
   line-height: 1.64;
 }

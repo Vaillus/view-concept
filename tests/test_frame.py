@@ -53,6 +53,7 @@ def test_type_scale_variables_exist() -> None:
         assert f"{name}: {size}" in css
     assert re.search(r":where\(body\)\s*\{[^}]*font-size: var\(--fs-body\)", css)
     assert re.search(r":where\(body\)\s*\{[^}]*line-height: 1\.64", css)
+    assert re.search(r":where\(body\)\s*\{[^}]*font-family: var\(--mono\)", css)
 
 
 def test_kit_classes_are_defined() -> None:

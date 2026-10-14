@@ -152,9 +152,9 @@ check` reports a pair).
   78 characters and centres it, as in a Markdown section. Text in a `<div>` of
   your own runs the frame's full width.
 - **Base style.** The frame gives every section the Markdown section's font
-  size and line height, three named sizes, `var(--fs-body)` (14px),
-  `var(--fs-small)` (12px) and `var(--fs-label)` (11px), and the table look
-  to every table (borders, a header fill, small text, a sideways scroll when
+  (`var(--mono)`), size and line height, three named sizes,
+  `var(--fs-body)` (14px), `var(--fs-small)` (12px) and `var(--fs-label)`
+  (11px), and the table look to every table (borders, a header fill, small text, a sideways scroll when
   wider than the frame). Set no body size or table style of your own; a rule
   you write still wins over the base style, property by property.
 - **Component kit.** The base style defines these classes in every frame:

@@ -262,7 +262,7 @@ def test_an_html_section_is_drawn_in_a_frame(client, session):
     assert r.headers["content-security-policy"] == f"sandbox {frame.SANDBOX}"
     tokens = client.get("/frame/tokens.css").text
     assert '[data-theme="catppuccin-latte"]' in tokens and "--ink: var(--om-foreground)" in tokens
-    assert "font-family" not in tokens  # the tokens, without the skin's styles
+    assert "-webkit-font-smoothing" not in tokens  # the tokens, without the skin's styles
     assert client.get("/s/kv-cache/sections/s1.html").status_code == 404
 
 
