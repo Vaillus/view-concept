@@ -46,8 +46,8 @@ the sections after it, then a to-do list of the work that fails the
 **section test**. Each default taken for the user, a skipped question's or a
 listed default (a decision that changes nothing they see, do or risk, which
 no question asks), is one « Default taken » line at the end of the section
-it touches, never a list on the model sheet. A section stays in the model
-only when it holds a decision the user makes or must make, or a consequence
+it touches, never a list on the model sheet, and never stated in the
+prose too. A section stays in the model only when it holds a decision the user makes or must make, or a consequence
 they will notice; anything else is one line of the to-do list, which the
 implementer carries and the reviewer checks.
 
@@ -345,6 +345,8 @@ check` reports a pair).
   the reader can play with (two options side by side). Write a Markdown
   section when the section is an argument, a definition or a rule, with at
   most a small table: a visual that only repeats the prose is not relevant.
+  Nor does the prose repeat a visual: no paragraph tells what a figure
+  shows, and a caption says only what the figure cannot.
   A Mermaid block is for a plain structure in an otherwise prose section (a
   short sequence, a tree), not a substitute for showing the thing itself.
   Never write an HTML block (raw HTML that starts its own paragraph) into a
