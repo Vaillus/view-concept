@@ -308,10 +308,10 @@ parts. The **modeling part** writes the model out; the page shows it in the
 Model tab (the page's name for the Explanation tab in a branch review). The
 **refactoring part** checks the code against the model; a section with
 `"part": "refactoring"` belongs to it, and is a **refactor section**: the
-page shows it in the refactor tab. An outline entry's `earns` is the one
-sentence the user reads under its title in the page (at most 200
-characters), and its optional `brief` the notes the agent that writes the
-section works from, which the context shows and the page does not.
+page shows it in the refactor tab. An outline entry holds a short,
+high-level title (the subject or the point) and its `earns`, the one
+sentence the user reads under the title in the page (at most 200
+characters): no notes for the writer, who works from the same outline.
 
 ### The visual rule: Markdown or HTML
 

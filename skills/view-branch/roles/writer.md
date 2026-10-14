@@ -28,12 +28,10 @@ agent. A bug you notice in the code goes in your report, not in a fix.
 Follow `planning-rules.md` for the outline, the lexicon, the change history
 and your questions.
 
-Write each section from its outline entry: its `earns` is the point the
-section makes, and its `brief`, when it has one, is what the planner
-settled for it (decisions, defaults, table rows, to-do lines). Carry every
-line of the brief into the section or, when the model has moved past it,
-update the brief with the outline. When you change what a section says,
-keep its `earns` true to it.
+Write each section from its outline entry, its title and its `earns` (the
+point the section makes), and the rest of your context: find the example
+that carries the point yourself. When you change what a section says, keep
+its title and `earns` true to it.
 
 ## Writing a section
 

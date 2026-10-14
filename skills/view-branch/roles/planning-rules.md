@@ -59,21 +59,20 @@ neither `core` nor `peripheral`.
 
 ## The outline
 
-The outline (`outline` in `plan.json`, one entry `{"id", "title", "earns",
-"brief"}` per section) follows the skeleton below. The two texts of an entry
-have two readers:
+The outline (`outline` in `plan.json`, one entry `{"id", "title", "earns"}`
+per section) follows the skeleton below. An **outline entry** holds two texts
+the user reads, and nothing else:
 
-- `earns` is for the user, who reads it under the title in the page's
-  outline to judge the order and the cut: one sentence saying what the
-  section gives them, one point they should get quickly. An `earns` that
-  names two points is two sections. `view-concept plan` refuses one over 200
-  characters.
-- `brief` (optional) is for the writer, who never saw your run: what the
-  section must carry that the title and `earns` do not say, such as the
-  decisions taken and their defaults, the rows of the model sheet's table,
-  the lines of its to-do list, the example to show. The context shows it;
-  the page does not. Write it as notes, not as the section's prose, and leave
-  it out when the title and `earns` are enough.
+- `title`: high-level and short, the subject or the point. It is the first
+  thing read in the outline, and the `earns` under it already says what the
+  section gives, so it need not make the claim too.
+- `earns`: one sentence saying what the section gives the user, one point
+  they should get quickly. An `earns` that names two points is two sections.
+  `view-concept plan` refuses one over 200 characters.
+
+No notes for the writer: the writer works from the same outline the user
+sees, with the rest of its context, and finds a section's example itself.
+What you learned in the code goes in the code map.
 
 The skeleton:
 
@@ -90,9 +89,7 @@ The skeleton:
    list**: one line per point that fails the section test (see point 2).
 2. **One section per point new to the user** (see **The reader**) that
    passes the **section test**: it holds a decision the user makes or must
-   make, or a consequence they will notice. Its title states the point
-   (« Write model drops a section question before its section exists »),
-   not the topic. Order them by the concepts they touch, in the order of the
+   make, or a consequence they will notice. Order them by the concepts they touch, in the order of the
    table. A point that fails the test (a doc that is out of date, which
    source a part of the branch came from, how the tests are built, code
    nothing in the app shows) gets no section: it is a line of the sheet's
