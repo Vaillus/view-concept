@@ -9,6 +9,7 @@ textarea { font: inherit; color: var(--ink); background: var(--raised); border: 
 textarea:focus { outline: none; border-color: var(--accent); }
 
 .btn { background: transparent; border: 1px solid var(--line-strong); padding: 2px 10px; }
+a.btn { color: var(--ink); text-decoration: none; text-align: center; }
 .btn:hover:not(:disabled) { background: var(--hover); }
 .btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .btn:disabled { opacity: .45; cursor: default; }

@@ -5,7 +5,7 @@ the plan and the sections; the page reads them; the page writes review comments,
 reach the agent session through the inbox.
 
     <home>/sessions/<slug>/
-        plan.json       title, initial_request, kind, workflow, repo, base, outline, lexicon
+        plan.json       title, initial_request, kind, workflow, repo, base, pr, outline, lexicon
         sections/<id>.md  the prose of one outline section         (written by the agent)
         sections/<id>.html  an HTML section instead: a self-contained HTML document
         sections/<id>/  its media folder: media files the agent produced for it
@@ -127,6 +127,9 @@ marked that section read later. A section whose file differs from its baseline i
 the highlights show what it changed for that batch. The first text of a section is its
 first baseline, recorded when the page first loads it, so a first write is never an
 update.
+
+A branch review's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
+at} (written by `pr`). The page links it at the top and at the end of the refactor tab.
 
 published.json is the publish record, what the session remembers of its last publish
 (see publish.py): {url (the published page's link), at (when), fingerprint}. The
@@ -463,6 +466,15 @@ class Session:
             raise SessionError(f"lexicon entries point to no section: {', '.join(unknown)}")
         _write_json(self.plan_path, plan)
         return plan
+
+    def set_pr(self, url: str) -> dict[str, Any]:
+        """Record the session's PR (its link), once the agent opened it."""
+        if not url.startswith(("https://", "http://")):
+            raise SessionError(f"not a link: {url!r}")
+        plan = self.read_plan()
+        plan["pr"] = {"url": url, "at": now_iso()}
+        _write_json(self.plan_path, plan)
+        return plan["pr"]
 
     def section_files(self) -> dict[str, Path]:
         """Each written section's file, by id in id order: <id>.html for an HTML section,
