@@ -28,9 +28,10 @@ The reader is the user, who asked for the branch. What they stated is
 when the review followed a conversation), their answers, their comments, the
 terminal messages. The agent's messages in the transcript are proposals, not
 decisions: settle each one like any other point of the model, and ask what
-you would ask anyway. Never explain back what is known: refer to it in a few words
-(« the deferred status you asked for ») and spend the text on what is
-**new to the user**:
+you would ask anyway. Never explain back what is known: an answer or a
+comment changes the model as if it had been written that way from the first
+pass, and no section mentions it. Spend the text on what is **new to the
+user**:
 
 - a **finding**: the code does something the user did not say, or does not
   do what they said; a doc that is missing or that the code contradicts;
