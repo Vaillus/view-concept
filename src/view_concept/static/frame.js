@@ -30,7 +30,9 @@
      the page opens that thread on it.
    - The changes (page -> frame): the passages an agent added since the last batch or
      « mark read ». The page finds them by comparing the section's visible text now and
-     then; the frame highlights them as it highlights the anchors.
+     then; the frame highlights a passage only while the pointer is over a block holding
+     it (the block of its start or of its end, so a passage over two blocks shows whole
+     when either is hovered); the page's bar marks the whole frame.
    - The terms (page -> frame): the lexicon terms, the one this section is the home of,
      and the words the vocabulary audit flags in it. The frame underlines each
      occurrence by painting a style over the word, as it paints the anchors: no element
@@ -218,6 +220,9 @@
   var terms = [];   // { term, kind: term | def | audit, key }
   var focus = null; // { quote, prefix } of the passage being revealed
   var threadRanges = [], termRanges = []; // [anchor, range], [term, range] as last painted
+  var changeRanges = []; // [blocks holding the change's start and end, range] as last found
+  var pointer = null;    // { x, y } of the pointer over the frame, null once it left
+  var shownChanges = null; // the indexes in changeRanges painted now, joined
   var placed = null; // the side threads' ids last posted as "placed", joined
   var KINDS = ["draft", "sent", "thread", "focus", "updated", "term", "def", "audit"];
   var marks = document.createElement("style");
@@ -292,12 +297,16 @@
       ranges[a.kind].push(r);
       if (a.kind === "thread" && a.thread) threadRanges.push([a, r]);
     });
+    changeRanges = [];
     changes.forEach(function (c) {
       var r = findQuote(index, c.quote, c.prefix);
       if (!r) return;
       openOnce(c, r);
-      ranges.updated.push(r);
+      changeRanges.push([[blockOf(r.startContainer), blockOf(r.endContainer)], r]);
     });
+    var under = pointer && document.elementFromPoint(pointer.x, pointer.y);
+    shownChanges = hoveredChanges(under).join(",");
+    ranges.updated = hoveredChanges(under).map(function (k) { return changeRanges[k][1]; });
     var f = focus && findQuote(index, focus.quote, focus.prefix);
     if (f) ranges.focus.push(f);
     termRanges = underline(index);
@@ -306,6 +315,29 @@
       CSS.highlights.set("ev-" + k, new (Function.prototype.bind.apply(Highlight, [null].concat(ranges[k])))());
     });
     postPlaced(answer);
+  }
+
+  // The block a change passage's start or end sits in.
+  function blockOf(node) {
+    var e = node.nodeType === 1 ? node : node.parentElement;
+    return e && e.closest(BLOCKS);
+  }
+  // The indexes of the changes with a block holding `target`.
+  function hoveredChanges(target) {
+    var out = [];
+    if (target) changeRanges.forEach(function (cr, k) {
+      if (cr[0].some(function (b) { return b && b.contains(target); })) out.push(k);
+    });
+    return out;
+  }
+  // Paint the changes of the blocks under the pointer, when they are not painted already.
+  function paintChanges(target) {
+    if (!window.CSS || !CSS.highlights) return;
+    var shown = hoveredChanges(target);
+    if (shown.join(",") === shownChanges) return;
+    shownChanges = shown.join(",");
+    CSS.highlights.set("ev-updated", new (Function.prototype.bind.apply(Highlight,
+      [null].concat(shown.map(function (k) { return changeRanges[k][1]; }))))());
   }
 
   // A script that redraws the section's text drops the ranges with the old nodes: find
@@ -355,12 +387,14 @@
     post(t ? { viewConcept: "term-hover", key: t.key, rect: rectOf(rect) } : { viewConcept: "term-hover", key: null });
   }
   addEventListener("mousemove", function (e) {
+    pointer = { x: e.clientX, y: e.clientY };
+    paintChanges(e.target);
     var h = hit(termRanges, e.clientX, e.clientY);
     hover(h && h[0], h && h[1]);
     // The passage of a thread is clickable: say so with the cursor.
     root.style.cursor = hit(threadRanges, e.clientX, e.clientY) ? "pointer" : "";
   });
-  document.addEventListener("mouseleave", function () { hover(null); });
+  document.addEventListener("mouseleave", function () { hover(null); pointer = null; paintChanges(null); });
   addEventListener("scroll", function () { hover(null); });
 
   addEventListener("message", function (e) {
