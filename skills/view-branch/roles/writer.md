@@ -138,13 +138,64 @@ check` reports a pair).
   a palette.
 - **Width.** The frame is wider than the text column of a Markdown section:
   up to 120 characters of the page's font (about 1000px), narrower in a small
-  window. Lay figures out to use that width (two panels side by side, a long
-  timeline) and let them shrink with the frame. Prose keeps the page's text
-  width, and the frame sets it: write a paragraph, list or quote as `<p>`,
+  window, about 340px on the published page's phone layout. Lay figures out
+  to use that width (two panels side by side, a long timeline), and make the
+  section read in a 340px frame too, with nothing cut off and no sideways
+  scroll but a table's own: a row of panels sets a minimum width per column
+  (`repeat(auto-fit, minmax(min(100%, 16rem), 1fr))`), never a column count.
+  Prose keeps the page's text width, and the frame sets it: write a paragraph, list or quote as `<p>`,
   `<ul>`, `<ol>` or `<blockquote>` straight in the `<body>`, and a caption as
   a `<figcaption>` (inside the `<figure>` it captions); the frame caps each at
   78 characters and centres it, as in a Markdown section. Text in a `<div>` of
   your own runs the frame's full width.
+- **Base style.** The frame gives every section the Markdown section's font
+  size and line height, three named sizes, `var(--fs-body)` (14px),
+  `var(--fs-small)` (12px) and `var(--fs-label)` (11px), and the table look
+  to every table (borders, a header fill, small text, a sideways scroll when
+  wider than the frame). Set no body size or table style of your own; a rule
+  you write still wins over the base style, property by property.
+- **Component kit.** The base style defines these classes in every frame:
+  reuse them instead of inventing your own, so repeated siblings share one
+  class.
+  - `.label`: a small uppercase, letter-spaced label; it may open a panel, a
+    pair's child or a callout.
+  - `.chip`: an inline tag on a neutral fill.
+  - `.panel`: a block on a fill, with no border.
+  - `.pair`: a before/after, `<div class="pair"><div class="before">…</div>
+    <div class="after">…</div></div>`, before always first (left, or above
+    once the columns wrap).
+  - `.steps`: an ordered timeline, `<ol class="steps"><li>…</li></ol>`.
+  - `.callout`: a left bar on a light fill, for a verdict or a default taken.
+  - `.tabs`: alternatives, one panel shown at a time. The n-th `.tab` shows
+    the n-th `.tab-panel`; the others carry `hidden`:
+
+    ```html
+    <div class="tabs">
+      <div class="tab-row">
+        <button class="tab" aria-selected="true">Option A</button>
+        <button class="tab">Option B</button>
+      </div>
+      <div class="tab-panel">…</div>
+      <div class="tab-panel" hidden>…</div>
+    </div>
+    ```
+
+    Write no script: the frame runs the tabs, and opens the tab or
+    `<details>` that holds a passage a comment, a side thread or a change
+    points to.
+- **Design rules.**
+  - Short table cells (a name, a number, a few words), and code references
+    (`path:line`, a function) in one column of their own.
+  - A border, a fill or a shadow only on the element that must stand apart:
+    on every block, nothing stands apart.
+  - Metadata (a status, a kind, a column name) in a `.label`.
+  - No table for a layout: a to-do list or a grid of panels is a list or a
+    grid of `<div>`s, since every table reads as a data table.
+  - Only the three named font sizes.
+  - Siblings spaced with their container's `gap`, never a margin per child.
+  - Numbers only where the order is real: a number, a label above a heading
+    or a divider says something true about the content.
+  - Alternatives and long lists in `.tabs` or a `<details>`.
 - **Size.** Under 2 MB, embedded media included. Never write a large image or
   video into the file as a data URI: load it from the web or, when you
   produced it yourself (a manim render, a GIF), put it in the section's media

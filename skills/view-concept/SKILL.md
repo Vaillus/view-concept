@@ -104,7 +104,38 @@ A section may be written as an **HTML section**: `sections/<id>.html` instead of
 
 - **When.** The user prefers to be shown rather than told: whenever a section has something to show, write it as an HTML section. Something to show is a mechanism that runs over time (a step player through a trace), a structure the reader can explore (a slider over a parameter, a toggle between two cases), a before/after, a mockup of an output, or a chart. Write a Markdown section when the section is an argument, a definition or a rule, with at most a small table: a visual that only repeats the prose is not relevant. A Mermaid block is for a plain structure in an otherwise prose section (a short sequence, a tree), not a substitute for showing the thing itself. Never write an HTML block (raw HTML that starts its own paragraph) into a Markdown section: `view-concept check` reports it; inline HTML in a sentence (`<b>`, `<span>`) is fine.
 - **What the file holds.** One self-contained HTML document: its HTML, CSS and JavaScript in the file, no heading of its own (the page renders the title). Paint with the page's theme tokens, `var(--bg)`, `var(--ink)`, `var(--ink-dim)`, `var(--muted)`, `var(--line)`, `var(--raised)`, `var(--accent)`, `var(--ok)`, `var(--warn)`, `var(--flag)`, `var(--danger)`, `var(--info)`, `var(--alt)` and `var(--mono)` for the font: the frame receives them and follows the page's light or dark theme, so never hard-code a palette.
-- **Width.** The frame is wider than the text column of a Markdown section: up to 120 characters of the page's font (about 1000px), narrower in a small window. Lay figures out to use that width (two panels side by side, a long timeline) and let them shrink with the frame. Prose keeps the page's text width, and the frame sets it: write a paragraph, list or quote as `<p>`, `<ul>`, `<ol>` or `<blockquote>` straight in the `<body>`, and a caption as a `<figcaption>` (inside the `<figure>` it captions); the frame caps each at 78 characters and centres it, as in a Markdown section. Text in a `<div>` of your own runs the frame's full width.
+- **Width.** The frame is wider than the text column of a Markdown section: up to 120 characters of the page's font (about 1000px), narrower in a small window, about 340px on the published page's phone layout. Lay figures out to use that width (two panels side by side, a long timeline), and make the section read in a 340px frame too, with nothing cut off and no sideways scroll but a table's own: a row of panels sets a minimum width per column (`repeat(auto-fit, minmax(min(100%, 16rem), 1fr))`), never a column count. Prose keeps the page's text width, and the frame sets it: write a paragraph, list or quote as `<p>`, `<ul>`, `<ol>` or `<blockquote>` straight in the `<body>`, and a caption as a `<figcaption>` (inside the `<figure>` it captions); the frame caps each at 78 characters and centres it, as in a Markdown section. Text in a `<div>` of your own runs the frame's full width.
+- **Base style.** The frame gives every section the Markdown section's font size and line height, three named sizes, `var(--fs-body)` (14px), `var(--fs-small)` (12px) and `var(--fs-label)` (11px), and the table look to every table (borders, a header fill, small text, a sideways scroll when wider than the frame). Set no body size or table style of your own; a rule you write still wins over the base style, property by property.
+- **Component kit.** The base style defines these classes in every frame: reuse them instead of inventing your own, so repeated siblings share one class.
+  - `.label`: a small uppercase, letter-spaced label; it may open a panel, a pair's child or a callout.
+  - `.chip`: an inline tag on a neutral fill.
+  - `.panel`: a block on a fill, with no border.
+  - `.pair`: a before/after, `<div class="pair"><div class="before">…</div><div class="after">…</div></div>`, before always first (left, or above once the columns wrap).
+  - `.steps`: an ordered timeline, `<ol class="steps"><li>…</li></ol>`.
+  - `.callout`: a left bar on a light fill, for a verdict or a default taken.
+  - `.tabs`: alternatives, one panel shown at a time. The n-th `.tab` shows the n-th `.tab-panel`; the others carry `hidden`:
+
+    ```html
+    <div class="tabs">
+      <div class="tab-row">
+        <button class="tab" aria-selected="true">Option A</button>
+        <button class="tab">Option B</button>
+      </div>
+      <div class="tab-panel">…</div>
+      <div class="tab-panel" hidden>…</div>
+    </div>
+    ```
+
+    Write no script: the frame runs the tabs, and opens the tab or `<details>` that holds a passage a comment, a side thread or a change points to.
+- **Design rules.**
+  - Short table cells (a name, a number, a few words), and code references (`path:line`, a function) in one column of their own.
+  - A border, a fill or a shadow only on the element that must stand apart: on every block, nothing stands apart.
+  - Metadata (a status, a kind, a column name) in a `.label`.
+  - No table for a layout: a to-do list or a grid of panels is a list or a grid of `<div>`s, since every table reads as a data table.
+  - Only the three named font sizes.
+  - Siblings spaced with their container's `gap`, never a margin per child.
+  - Numbers only where the order is real: a number, a label above a heading or a divider says something true about the content.
+  - Alternatives and long lists in `.tabs` or a `<details>`.
 - **Size.** Under 2 MB, embedded media included. Never write a large image or video into the file as a data URI: load it from the web or, when you produced it yourself (a manim render, a GIF), put it in the section's media folder, `sections/<id>/`, and load it by a relative address (`<video src="<id>/step-1.mp4">`). The page serves the folder, and the published page and the vault export copy it along. `view-concept check` reports a file over the limit.
 - **Loading from the web.** Libraries from cdnjs.cloudflare.com, cdn.jsdelivr.net or unpkg.com; any other site when the section needs it. Either way, a section that loads from the web needs a connection to show.
 - **Prose.** No preference: an HTML section may hold prose as well as visuals, as an artifact does; choose how much goes there. Know its one cost: text a script paints into a `<canvas>` cannot be selected, highlighted or underlined, so a figure drawn there is commented as a whole. Everything else works as in a Markdown section: term underlines and their tips, change highlights, comments and side threads on a passage. Its visible text (outside its scripts and styles) still counts for `view-concept check`.
