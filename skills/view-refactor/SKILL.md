@@ -138,8 +138,9 @@ skipped (after « Write model », the page has already marked them so), except
 a section question whose section is not written yet: it stays open, to be
 answered at the end of its section once written. Then
 write the outline and the lexicon in the same turn. When every question is
-answered and you have none left to ask, say so in one terminal line and wait
-for the user to end scoping.
+answered and you have none left to ask, end with `view-concept status <slug>
+scoping --done`, say so in one terminal line and wait for the user to end
+scoping.
 
 ## The modeling part — what the scope is
 
@@ -530,6 +531,7 @@ call per transition:
 | When | Phase |
 |---|---|
 | From Setup to the end of scoping | `scoping`: a question leaves the phase alone, and the scope block shows « Write model » |
+| Scoping, once you have no question left | `scoping --done`: the banner reads « scoping done »; a new question or a batch clears it |
 | Writing the outline and the lexicon | `planning` |
 | The plan is presented for approval | `awaiting-approval` |
 | A writing run starts (once, before its first section) | `writing`, naming none on a first pass, each rewritten section otherwise (`--section <id>`, repeated) |

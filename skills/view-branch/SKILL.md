@@ -308,7 +308,8 @@ refuses nothing.
 
 After « Approve model », set `view-concept status <slug> awaiting-pr` at the
 end of each pass, when no question is open. The agents set the rest
-themselves: the writer or the reviewer `writing` once at the start of each run of
+themselves: the planner `scoping --done` when it leaves no question open, and
+the writer or the reviewer `writing` once at the start of each run of
 sections, naming them (`--section <id>`, repeated) unless it writes every
 section with no file yet. The page reads from the section files which
 section is being written and how many are done.
