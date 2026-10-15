@@ -294,15 +294,34 @@ function approvalPending() {
   return state.comments.batches.some((b) => b.action === approval.action && b.sent >= since);
 }
 
+/* Batch progress: where your last batch stands, in every phase. The server sends its
+   stage: "sent" (it waits in the inbox), "received" (the delivery mark passed it: the
+   agent has it), "acted" (the agent wrote a session file after receiving it). Until it
+   is acted on, the banner names what you sent and where it stands, in place of the
+   phase's wording; then the phase takes over, and the wordings the page used to fix at
+   the click (« model approved · the agent is implementing »…) are true. */
+const BATCH_WHAT = { answer: "answered", "go-on": "going on", "approve-plan": "plan approved",
+                     "approve-model": "model approved", "create-pr": "PR requested", plan: "scoping ended",
+                     grill: "grill", "stop-grill": "grill stopped" };
+const BATCH_STAGE = { sent: "in the inbox", received: "the agent has it" };
+
+function batchProgress() {
+  const b = state.batch;
+  if (!b || !BATCH_STAGE[b.stage]) return "";
+  return `${b.action ? BATCH_WHAT[b.action] || b.action : "comments"} · ${BATCH_STAGE[b.stage]}`;
+}
+
 // The phases at work: the banner shows them in the active colour, with its moving dots.
 const AT_WORK = ["planning", "writing", "audit", "revising"];
 
 /* What the banner says, and whether it shows the agent at work (`active`) or waits for
-   the user (`ask`). A derived phase (writing, planning or the audit, read from a trace
+   the user (`ask`). Batch progress comes first, in every phase. A derived phase (writing, planning or the audit, read from a trace
    later than the agent's last status call) takes the wording of that phase; the declared
    phase's message is dropped with it, since it described the step the trace ended. */
 function banner() {
   const { phase, message } = state.status;
+  const progress = batchProgress();
+  if (progress) return { text: progress, active: true, ask: false };
   const shown = shownPhase();
   if (shown !== phase) {
     const text = shown === "writing" ? writingLabel() : { planning: "drafting the plan", audit: "vocabulary audit" }[shown] || shown;
