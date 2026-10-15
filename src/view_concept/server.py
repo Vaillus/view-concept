@@ -138,7 +138,9 @@ def state(slug: str) -> dict[str, Any]:
         html_sections = s.html_sections()
         audit = s.read_audit()
         comments = s.read_comments()
-        status = s.read_status()
+        status = s.shown_status()
+        activity = s.last_activity()
+        batch = s.batch_progress()
         changes = s.read_changes()
         implemented = s.implemented_through()
         unimplemented = [d["id"] for d in s.unimplemented_changes()]
@@ -161,6 +163,10 @@ def state(slug: str) -> dict[str, Any]:
         "sections": {
             k: section_view(v, seen[k], html=k in html_sections) for k, v in sections.items()
         },
+        # What the banner adds to the status: the last session file the agent wrote, and
+        # where the last batch sent stands.
+        "activity": activity,
+        "batch": batch,
         "audit": audit,
         "comments": comments,
         "changes": changes,

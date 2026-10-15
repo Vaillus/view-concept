@@ -122,8 +122,10 @@ const isUpdated = (id) => !!(state.sections[id] || {}).updated;
 
 function render() {
   const { plan } = state;
-  // A mark in the tab title while an agent question waits, to be seen from another window.
-  document.title = `${openQuestions().length ? "● " : ""}${plan.title} · view-concept`;
+  // A mark in the tab title while an agent question waits, and the progress of a writing
+  // run, to be seen from another window.
+  const run = writingRun();
+  document.title = `${openQuestions().length ? "● " : ""}${run ? `${run.k}/${run.set.length} · ` : ""}${plan.title} · view-concept`;
   $("#title").textContent = plan.title;
   renderListening();
   renderPublish();
@@ -158,12 +160,13 @@ function setTab(name) {
 }
 
 function followSession() {
-  const phase = state.status.phase;
+  const phase = shownPhase();
   const onPlan = ["scoping", "awaiting-approval"].includes(phase);
   if (tab === null) setTab(Object.keys(state.sections).length && !onPlan ? "doc" : "plan");
   else if (phase !== lastPhase) {
     if (onPlan) setTab("plan");
-    if (phase === "writing") setTab(tabOf(state.status.section));
+    // A run opens on the tab of the set's first section not written yet.
+    if (phase === "writing") setTab(tabOf(writingId() || (writingRun() || { set: [""] }).set[0]));
   }
   lastPhase = phase;
   $('.tab[data-tab="refactor"]').hidden = !hasRefactorTab();
@@ -173,7 +176,7 @@ function followSession() {
   $('.tab[data-tab="doc"]').title = `${docLabel[0].toUpperCase()}${docLabel.slice(1)} (2)`;
   for (const [name, label] of [["doc", docLabel], ["refactor", "refactor"]]) {
     const n = Object.keys(state.sections).filter((id) => isUpdated(id) && tabOf(id) === name).length;
-    const writing = phase === "writing" && tabOf(state.status.section) === name;
+    const writing = !!writingId() && tabOf(writingId()) === name;
     $(`.tab[data-tab="${name}"]`).replaceChildren(...[label,
       n ? el("span", { class: "badge new", text: `${n} updated` }) : null,
       writing ? el("span", { class: "badge accent writing", text: "writing" }) : null].filter(Boolean));
@@ -202,7 +205,43 @@ function renderListening() {
 const NOT_LISTENING = "The agent isn't listening: write anything in the terminal and it will read this batch";
 const sentToast = (msg) => toast(state.listening ? msg : NOT_LISTENING, state.listening ? 3000 : 8000);
 
-const writingId = () => (state.status.phase === "writing" ? state.status.section : "");
+/* The phase the banner shows: the one the agent declared, or the derived phase when a
+   trace in the session files (a new section file, the plan, the audit) came after the
+   agent's last status call (the server computes it). The banner wording, the writing
+   badge and the tab follow read it; the buttons stay on the declared phase, since only
+   the agent's call opens or closes what they answer. An older server sends no `shown`. */
+const shownPhase = () => state.status.shown || state.status.phase;
+
+/* A writing run, as the server reads it from the section files: its run set (the
+   sections it writes, in outline order) and those written in this run (file modified
+   after the run began). The section named is the first of the set not written yet, ""
+   once the whole set is written (the run is finishing). Null when the banner shows no
+   writing run, or when an older server sends no run. */
+function writingRun() {
+  const run = state.status.run;
+  if (shownPhase() !== "writing" || !run || !(run.set || []).length) return null;
+  const written = new Set(run.written || []);
+  return { set: run.set, k: run.set.filter((id) => written.has(id)).length,
+           named: run.set.find((id) => !written.has(id)) || "" };
+}
+
+/* The one section badged « writing »: the section the banner names. In a wave several
+   sections are written at once, but nothing on disk says which until their files land,
+   so the page marks only the first one missing, and none while the run is finishing.
+   Without a run (older server) it falls back to the section the agent declared. */
+function writingId() {
+  if (shownPhase() !== "writing") return "";
+  const run = writingRun();
+  return run ? run.named : state.status.section || "";
+}
+
+// The banner of a writing run: the section named and the progress, or « finishing ».
+function writingLabel() {
+  const run = writingRun();
+  if (!run) return state.status.section ? `writing §${numberOf(state.status.section)} ${titleOf(state.status.section)}` : "writing";
+  const n = run.set.length;
+  return run.named ? `writing §${numberOf(run.named)} ${titleOf(run.named)} · ${run.k}/${n} written` : `${n}/${n} written · finishing`;
+}
 
 /* "awaiting-answer" waits on the open agent questions, answered from their boxes in the
    scope block (see "agent questions" below), so it has no button here. */
@@ -255,33 +294,105 @@ function approvalPending() {
   return state.comments.batches.some((b) => b.action === approval.action && b.sent >= since);
 }
 
-function renderStatus() {
-  const { phase, section, message } = state.status;
+/* Batch progress: where your last batch stands, in every phase. The server sends its
+   stage: "sent" (it waits in the inbox), "received" (the delivery mark passed it: the
+   agent has it), "acted" (the agent wrote a session file after receiving it). Until it
+   is acted on, the banner names what you sent and where it stands, in place of the
+   phase's wording; then the phase takes over, and the wordings the page used to fix at
+   the click (« model approved · the agent is implementing »…) are true. */
+const BATCH_WHAT = { answer: "answered", "go-on": "going on", "approve-plan": "plan approved",
+                     "approve-model": "model approved", "create-pr": "PR requested", plan: "scoping ended",
+                     grill: "grill", "stop-grill": "grill stopped" };
+const BATCH_STAGE = { sent: "in the inbox", received: "the agent has it" };
+
+function batchProgress() {
+  const b = state.batch;
+  if (!b || !BATCH_STAGE[b.stage]) return "";
+  return `${b.action ? BATCH_WHAT[b.action] || b.action : "comments"} · ${BATCH_STAGE[b.stage]}`;
+}
+
+/* The inactivity notice: a phase at work keeps its moving label until another phase is
+   declared, so an agent that stopped mid-run would look busy for good. Once the agent has
+   written no session file for ten minutes (`state.activity`, the time of the last one;
+   the page's own writes and the watch's heartbeat do not count), the banner adds the
+   count of quiet minutes. It claims nothing more: a long read looks the same as a run
+   that ended without a status call. Never on a banner that waits for you. */
+const QUIET_MIN = 10;
+
+function quietNotice() {
+  const last = Date.parse(state.activity || "");
+  if (Number.isNaN(last)) return "";
+  const min = Math.floor((Date.now() - last) / 60000);
+  return min >= QUIET_MIN ? `no activity for ${min} min` : "";
+}
+// The count goes up with no file changing, so no event from the server: redraw on a timer.
+setInterval(() => { if (state) renderStatus(); }, 30000);
+
+// The phases at work: the banner shows them in the active colour, with its moving dots.
+const AT_WORK = ["planning", "writing", "audit", "revising"];
+
+/* What the banner says, and whether it shows the agent at work (`active`) or waits for
+   the user (`ask`). Batch progress comes first, in every phase. A derived phase (writing, planning or the audit, read from a trace
+   later than the agent's last status call) takes the wording of that phase; the declared
+   phase's message is dropped with it, since it described the step the trace ended. */
+function banner() {
+  const { phase, message } = state.status;
+  const progress = batchProgress();
+  if (progress) return { text: progress, active: true, ask: false };
+  const shown = shownPhase();
+  if (shown !== phase) {
+    const text = shown === "writing" ? writingLabel() : { planning: "drafting the plan", audit: "vocabulary audit" }[shown] || shown;
+    return { text, active: true, ask: false };
+  }
   const approval = APPROVALS[phase];
   const asking = ["scoping", "awaiting-answer"].includes(phase) && openQuestions().length > 0 && !goOnPending();
   // The PR recorded after the last « Create PR »: the agent opened (or updated) it.
   const prReady = phase === "awaiting-pr" && approvalPending() && !!state.plan.pr &&
                   state.plan.pr.at >= lastBatchOf("create-pr").sent;
+  // The agent declared it has nothing more to ask, and nothing moved since (the server
+  // clears the mark on a new question or a batch): the banner waits for « Write plan ».
+  const scopingDone = phase === "scoping" && !asking && !planPending() && !!state.status.scoping_done;
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Write plan » ends it.
     scoping: asking ? "scoping · questions waiting for you"
            : planPending() ? `scoping ended · the agent is ${rewriting() ? "revising" : "writing"} the ${scopingProduct()}`
+           : scopingDone ? "scoping done · Write plan when ready"
+           : repliedInScoping() ? "reading your reply"
            : "scoping the question",
     planning: "drafting the plan",
     ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
     ...(prReady ? { [phase]: `${prLabel(state.plan.pr.url)} ready · open it from the top bar` } : {}),
     "awaiting-answer": goOnPending() ? "going on · the writer is writing the next sections"
                      : openQuestions().length ? QUESTION_LABELS.ready : QUESTION_LABELS.sent,
-    writing: section ? `writing §${numberOf(section)} ${titleOf(section)}` : "writing",
+    // While the run is finishing, the phase is still at work: same colour, no section named.
+    writing: writingLabel(),
     audit: "vocabulary audit",
     revising: "revising",
   };
-  const active = (phase === "scoping" && !asking) || ["planning", "writing", "audit", "revising"].includes(phase) ||
+  const active = (phase === "scoping" && !asking && !scopingDone) || AT_WORK.includes(phase) ||
                  (approval && approvalPending() && !prReady) || (phase === "awaiting-answer" && !asking);
+  const text = labels[phase] ? [labels[phase], message].filter(Boolean).join(" · ") : "";
+  return { text, active, ask: !!((approval && !approvalPending()) || asking || scopingDone) };
+}
+
+/* In scoping, a batch you sent after the agent's last question (or its last status call,
+   if later): the agent is reading your answers or comments, until it asks again or
+   declares scoping done. With nothing sent since, the banner keeps « scoping the
+   question ». Same-second times count as after, as in approvalPending. */
+function repliedInScoping() {
+  const asked = (state.questions || []).flatMap((q) => [q.asked, q.reasked]).filter(Boolean);
+  const since = [...asked, state.status.since || ""].reduce((a, b) => (b > a ? b : a), "");
+  return state.comments.batches.some((b) => b.sent >= since);
+}
+
+function renderStatus() {
+  const { phase } = state.status;
+  const approval = APPROVALS[phase];
+  const b = banner();
   const p = $("#phase");
-  p.hidden = !labels[phase];
-  p.className = `phase ${active ? "active" : ""} ${(approval && !approvalPending()) || asking ? "ask" : ""}`;
-  p.textContent = [labels[phase], message].filter(Boolean).join(" · ");
+  p.hidden = !b.text;
+  p.className = `phase ${b.active ? "active" : ""} ${b.ask ? "ask" : ""}`;
+  p.textContent = [b.text, b.active && !b.ask ? quietNotice() : ""].filter(Boolean).join(" · ");
 
   $("#approve").hidden = docButton.hidden = prButton.hidden = true;
   if (!approval) return;

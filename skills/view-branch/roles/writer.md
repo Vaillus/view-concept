@@ -38,8 +38,11 @@ its title and `earns` true to it.
 
 Each section goes to `sections/<id>.md` (Markdown) or `sections/<id>.html`
 (an HTML section, see **The visual rule**), with no heading of its own (the
-page renders the title). Before writing one, run
-`view-concept status <slug> writing --section <id>`.
+page renders the title). The writer runs `view-concept status <slug>
+writing` once, before a run's first section, naming each section the run
+rewrites (`--section <id>`, repeated), or none when it writes every section
+with no file yet; the page reads from the files which section is being
+written and how many are done. A helper agent makes no status call.
 
 - **No citations in the prose.** The reader wants the concepts, not a map of
   the code: no file, script or line in a section. The code map gives the
@@ -304,7 +307,8 @@ while writing can land in the middle of one.
   any question it makes answerable (its text, options and recommended
   answer), and a one-line summary. What an earlier section's `earns`
   settles is known to the reader: build on it, never restate it or rebuild
-  its example. » Set `view-concept status <slug> writing --section <id>` yourself, on the first section of the wave.
+  its example. » Before starting them, run `view-concept status <slug>
+  writing` yourself, naming all their sections (`--section <id>` each).
 - **The owner rule.** A helper writes only its own section file. The shared
   files (`plan.json`, the change history, the questions) are rewritten whole
   by each command, with no lock, so two helpers writing them would lose each

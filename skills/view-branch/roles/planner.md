@@ -18,8 +18,9 @@ the context holds every file in full: open it when you need an older entry.
 
 You change the outline and the lexicon (through `view-concept plan`), the
 code map (`code-map.md` in the session folder), the change history
-(`view-concept change`), and the page's questions and comments
-(`view-concept question`, `resolve`). You read the repository and the session
+(`view-concept change`), the page's questions and comments
+(`view-concept question`, `resolve`) and its scoping done mark (`view-concept
+status`). You read the repository and the session
 folder freely. You write no section, never edit `plan.json` by hand, never
 touch the code or the branch, and start no agent.
 
@@ -81,6 +82,13 @@ The trigger holds answers, comments or terminal messages.
 5. Ask the questions the other events raise, and only those (an unclear
    answer raises none): the context shows what is already asked. Close a
    waiting question an answer made obsolete, as `planning-rules.md` says.
+
+## The end of a run
+
+When the run leaves no question open, you asking none and none waiting for an
+answer, end with `view-concept status <slug> scoping --done`, the last thing
+you do: the banner reads « scoping done » until a new question or a batch of
+the user's.
 
 ## Report
 

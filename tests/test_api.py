@@ -317,3 +317,14 @@ def test_launch_opens_a_terminal_in_the_project(client, tmp_path, monkeypatch):
     assert opened == [(str(tmp_path), r.json()["command"])]
     r = client.post("/api/launch", json={**body, "skill": "explain"})
     assert r.status_code == 400 and len(opened) == 1
+
+
+def test_state_carries_what_the_banner_is_computed_from(client, session):
+    st = session.write_status("writing", ["s1"])
+    state = client.get("/api/s/kv-cache").json()
+    assert state["status"]["shown"] == "writing" and state["status"]["run"]["set"] == ["s1"]
+    assert state["activity"] >= st["since"]
+    assert state["batch"] is None
+    client.post("/api/s/kv-cache/batch", json={"comments": [{"section": "s1", "text": "hi"}]})
+    batch = client.get("/api/s/kv-cache").json()["batch"]
+    assert batch["id"] == "b1" and batch["stage"] == "sent" and batch["comments"] == 1

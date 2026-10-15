@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime, timedelta
 
 import pytest
@@ -764,3 +765,139 @@ def test_project_of_groups_worktrees_under_their_main_checkout(tmp_path):
     # a removed worktree is cut at its worktrees folder
     assert project_of("/gone/repo/.claude/worktrees/x") == "/gone/repo"
     assert project_of("") == ""
+
+
+# ---- the banner computed from the files ----
+
+
+def _touch(path, t):
+    """Set a file's modification time."""
+    os.utime(path, (t, t))
+
+
+def _bare(session):
+    """The fixture session with no section file yet."""
+    for p in session.sections_dir.glob("*.md"):
+        p.unlink()
+    return session
+
+
+def test_writing_run_keeps_its_start_and_grows_its_set(session):
+    first = session.write_status("writing", ["s1"])
+    again = session.write_status("writing", ["s2"])
+    assert again["run"]["start"] == first["run"]["start"]
+    assert again["run"]["set"] == ["s1", "s2"]
+    session.write_status("audit")
+    assert "run" not in session.read_status()
+    assert session.write_status("writing")["run"]["start"] > first["run"]["start"]
+
+
+def test_a_run_that_names_no_section_takes_those_with_no_file(session):
+    (session.sections_dir / "s1.md").unlink()
+    assert session.write_status("writing")["run"]["set"] == ["s1"]
+    session.write_status("idle")
+    (session.sections_dir / "s1.md").write_text("x")
+    assert session.write_status("writing")["run"]["set"] == ["s1", "s2"]  # all have a file
+
+
+def test_run_progress_counts_files_changed_since_its_start(session):
+    st = session.write_status("writing", ["s2", "s1"])
+    shown = session.shown_status()
+    assert shown["shown"] == "writing" and not shown["derived"]
+    assert shown["run"]["set"] == ["s1", "s2"] and shown["run"]["written"] == []
+    _touch(session.sections_dir / "s2.md", st["at"] + 5)
+    assert session.shown_status()["run"]["written"] == ["s2"]
+
+
+def test_a_new_section_file_is_a_trace_of_writing(session):
+    _bare(session)
+    st = session.write_status("awaiting-answer")
+    (session.sections_dir / "s2.md").write_text("x")
+    _touch(session.sections_dir / "s2.md", st["at"] + 5)
+    shown = session.shown_status()
+    assert shown["phase"] == "awaiting-answer" and shown["shown"] == "writing"
+    assert shown["derived"] and shown["run"]["set"] == ["s1", "s2"]
+    assert shown["run"]["written"] == ["s2"]  # the file that revealed the run counts
+
+
+def test_a_rewritten_section_is_no_trace(session):
+    st = session.write_status("awaiting-answer")
+    _touch(session.sections_dir / "s1.md", st["at"] + 5)
+    assert session.shown_status()["shown"] == "awaiting-answer"
+
+
+def test_a_plan_change_is_a_trace_of_planning_only_with_no_section(session):
+    _bare(session)
+    st = session.write_status("awaiting-approval")
+    _touch(session.plan_path, st["at"] + 5)
+    assert session.shown_status()["shown"] == "planning"
+    session.write_status("scoping")  # scoping drafts the outline: no trace there
+    _touch(session.plan_path, session.read_status()["at"] + 5)
+    assert session.shown_status()["shown"] == "scoping"
+    (session.sections_dir / "s1.md").write_text("x")
+    st = session.write_status("awaiting-model")
+    _touch(session.plan_path, st["at"] + 5)
+    assert session.shown_status()["shown"] == "awaiting-model"
+
+
+def test_an_audit_change_is_a_trace_of_the_audit_unless_sections_are_left(session):
+    st = session.write_status("writing", ["s1", "s2"])
+    session.audit_path.write_text("[]")
+    _touch(session.audit_path, st["at"] + 5)
+    assert session.shown_status()["shown"] == "writing"  # the writer's check, mid-run
+    for sid in ("s1", "s2"):
+        _touch(session.sections_dir / f"{sid}.md", st["at"] + 3)
+    assert session.shown_status()["shown"] == "audit"
+
+
+def test_a_status_without_files_derives_nothing(session):
+    old = {"phase": "idle", "since": "2020-01-01T00:00:00+00:00"}
+    session.status_path.write_text(json.dumps(old))
+    assert session.shown_status()["shown"] == "idle"
+
+
+def test_scoping_done_is_cleared_by_a_question_or_a_batch(session):
+    with pytest.raises(SessionError):
+        session.write_status("writing", done=True)
+    session.write_status("scoping", done=True)
+    assert session.read_status()["done"] and session.shown_status()["scoping_done"]
+    st = session.read_status()
+    st["since"] = "2020-01-01T00:00:00+00:00"
+    session.status_path.write_text(json.dumps(st))
+    session.add_question("Which one?")
+    assert not session.shown_status()["scoping_done"]
+    session.write_status("scoping", done=True)
+    assert session.shown_status()["scoping_done"]
+    st = session.read_status()
+    st["since"] = "2020-01-01T00:00:00+00:00"
+    session.status_path.write_text(json.dumps(st))
+    session.questions_path.unlink()
+    session.add_batch([{"text": "hi"}])
+    assert not session.shown_status()["scoping_done"]
+
+
+def test_last_activity_counts_only_what_the_agent_writes(session):
+    for p in [*session.sections_dir.glob("*.md"), session.plan_path]:
+        _touch(p, 1_000_000)
+    assert session.last_activity() == "1970-01-12T13:46:40+00:00"
+    session.add_batch([{"text": "hi"}])  # the page's write
+    session.mark_seen({"s1": "x"})
+    assert session.last_activity() == "1970-01-12T13:46:40+00:00"
+    session.resolve(["c1"])
+    assert session.last_activity() > "2000"
+
+
+def test_batch_progress_follows_the_delivery_mark(session):
+    assert session.batch_progress() is None
+    for p in [*session.sections_dir.glob("*.md"), session.plan_path]:
+        _touch(p, 1_000_000)
+    b = session.add_batch([{"text": "hi"}])
+    progress = session.batch_progress()
+    assert progress and progress["id"] == b["id"] and progress["stage"] == "sent"
+    session.cursor_path.write_text(str(session.inbox_path.stat().st_size))
+    progress = session.batch_progress()
+    assert progress and progress["stage"] == "received"
+    _touch(session.cursor_path, 2_000_000)
+    _touch(session.sections_dir / "s1.md", 3_000_000)
+    progress = session.batch_progress()
+    assert progress and progress["stage"] == "acted"
