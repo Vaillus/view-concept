@@ -478,6 +478,7 @@ function renderDoc() {
     renderMermaid(view);
     annotateAudit(view);
     annotateLexicon(view);
+    annotateQuestions(view);
   }
   if (keep && keep[0].isConnected && document.activeElement !== keep[0]) {
     keep[0].focus({ preventScroll: true });
@@ -838,6 +839,15 @@ function annotateLexicon(doc) {
     doc.querySelectorAll(".sec .body").forEach((body) =>
       wrapTerm(body, t.term, () => el("span", { class: "term", "data-term": i })));
   });
+}
+
+/* The texts of the agent questions under `root` (a question's text and background, its
+   options) underline the lexicon terms too. A box is kept across renders: a term it
+   already underlines is skipped, so annotating it again only adds new terms. */
+function annotateQuestions(root) {
+  const texts = root.querySelectorAll(".q-text, .q-options label > span:not(.badge)");
+  state.plan.lexicon.forEach((t, i) => texts.forEach((n) =>
+    wrapTerm(n, t.term, () => el("span", { class: "term", "data-term": i }))));
 }
 
 /* ---------------- section frames ----------------
@@ -1550,6 +1560,7 @@ function renderScope() {
          : answerText(q.status === "skipped" ? { skipped: true } : q.answer || {}),
        q.answer?.from === "terminal" ? el("span", { class: "dim", text: " (in the terminal)" }) : null))));
   $("#scope-empty").hidden = questions.length > 0 || state.status.phase === "scoping";
+  annotateQuestions($("#scope"));
 
   const grill = $("#grill");
   grill.textContent = state.grilling ? "Stop grill" : "Grill me";
@@ -1638,6 +1649,7 @@ function renderReview() {
           el("span", { class: c.status === "resolved" ? "badge ok" : "badge", text: c.status === "resolved" ? "✓ resolved" : "waiting" }),
           c.reply ? el("span", { class: "c-reply", text: ` ${c.reply}` }) : null))))
   ) : [el("p", { class: "dim", text: "Nothing sent yet." })]));
+  if (state) annotateQuestions($("#history"));
   const pane = $(".review");
   if (reviewAtEnd) pane.scrollTop = pane.scrollHeight;
 }
