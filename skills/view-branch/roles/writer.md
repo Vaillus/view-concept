@@ -80,8 +80,10 @@ not a tour.
 - **A default taken** for the user, by a skipped question or as a listed
   default (a decision nobody asked, which the change history logs with the
   section it touches): say it in one line at the end of the section it
-  touches (« Default taken: … »), so the user can correct it. Write the line
-  always, and nowhere else: the prose does not state the default too, and
+  touches (« Default taken: … »), so the user can correct it. In an HTML
+  section, the section's defaults go in one `.defaults` block instead (see
+  **Component kit**), one `<p>` per default, without the « Default taken: »
+  prefix. Write the line always, and nowhere else: the prose does not state the default too, and
   the model sheet holds no list of the defaults. A
   listed default that touches no section, only a line of the to-do list, is
   written in that line. Your context holds only the recent changes: read
@@ -160,7 +162,10 @@ check` reports a pair).
     <div class="after">…</div></div>`, before always first (left, or above
     once the columns wrap).
   - `.steps`: an ordered timeline, `<ol class="steps"><li>…</li></ol>`.
-  - `.callout`: a left bar on a light fill, for a verdict or a default taken.
+  - `.callout`: a left bar on a light fill, for a verdict.
+  - `.defaults`: the defaults taken, closing a section: a `.label` header,
+    then one `<p>` per default, ruled apart:
+    `<div class="defaults"><div class="label">defaults taken</div><p>…</p></div>`.
   - `.tabs`: alternatives, one panel shown at a time. The n-th `.tab` shows
     the n-th `.tab-panel`; the others carry `hidden`:
 

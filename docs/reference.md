@@ -100,7 +100,8 @@ Before the section's own head, the page writes the **frame head**: the theme tok
 | `.panel` | a block on a fill, with no border |
 | `.pair` > `.before` + `.after` | a before/after side by side, stacked once the frame is too narrow, before first |
 | `.steps` | an `<ol>` drawn as a timeline of numbered steps |
-| `.callout` | a left accent bar on a light fill, for a verdict or a default taken |
+| `.callout` | a left accent bar on a light fill, for a verdict |
+| `.defaults` | the defaults taken that close a section: a `.label` header (« defaults taken »), then one `<p>` per default, ruled apart, at the prose width |
 | `.tabs` | alternatives, one panel shown at a time, run by the frame (markup below) |
 
 The kit's tabs are written as a `.tabs` element holding a `.tab-row` of `.tab` buttons and, after it, one `.tab-panel` per button; the n-th `.tab` shows the n-th `.tab-panel`, and every other panel carries `hidden`:
