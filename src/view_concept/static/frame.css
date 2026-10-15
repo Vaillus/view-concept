@@ -22,7 +22,11 @@
      </div>
      <ol class="steps"><li>…</li></ol>        numbered steps joined by a line
      <div class="callout">…</div>             accent bar and light fill, for a
-                                              verdict or a default taken
+                                              verdict
+     <div class="defaults">                   the defaults taken, at the end of
+       <div class="label">defaults taken</div>  a section: a header, then one
+       <p>…</p>                               line per default, ruled apart
+     </div>
      <div class="tabs">                       alternatives; the n-th .tab shows the
        <div class="tab-row">                  n-th .tab-panel child of .tabs, the
          <button class="tab" aria-selected="true">A</button>   others carry hidden;
@@ -130,6 +134,26 @@
   border-left: 3px solid var(--accent);
   background: var(--accentbg);
   padding: 0.6em 1em;
+}
+
+:where(.defaults) {
+  max-width: 78ch;
+  margin: 1.4em auto 0;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+}
+
+:where(.defaults > .label:first-child) {
+  display: block;
+  padding: 0.4em 1em;
+  background: var(--accentbg);
+  color: var(--accent);
+}
+
+:where(.defaults > :not(.label)) {
+  margin: 0;
+  padding: 0.6em 1em;
+  border-top: 1px solid var(--line);
 }
 
 :where(.tab-row) {

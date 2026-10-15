@@ -58,7 +58,7 @@ def test_type_scale_variables_exist() -> None:
 
 def test_kit_classes_are_defined() -> None:
     selectors = " ".join(_base_selectors())
-    kit = (".label", ".chip", ".panel", ".pair", ".steps", ".callout")
+    kit = (".label", ".chip", ".panel", ".pair", ".steps", ".callout", ".defaults")
     tabs = (".tab-row", ".tab", '.tab[aria-selected="true"]', ".tab-panel[hidden]")
     for cls in kit + tabs:
         assert cls in selectors, cls

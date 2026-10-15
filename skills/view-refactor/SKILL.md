@@ -327,7 +327,10 @@ check` reports a pair).
     <div class="after">…</div></div>`, before always first (left, or above
     once the columns wrap).
   - `.steps`: an ordered timeline, `<ol class="steps"><li>…</li></ol>`.
-  - `.callout`: a left bar on a light fill, for a verdict or a default taken.
+  - `.callout`: a left bar on a light fill, for a verdict.
+  - `.defaults`: the defaults taken, closing a section: a `.label` header,
+    then one `<p>` per default, ruled apart:
+    `<div class="defaults"><div class="label">defaults taken</div><p>…</p></div>`.
   - `.tabs`: alternatives, one panel shown at a time. The n-th `.tab` shows
     the n-th `.tab-panel`; the others carry `hidden`:
 
