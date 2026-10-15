@@ -302,3 +302,18 @@ def test_request_writes_the_transcript_from_a_file_or_stdin(tmp_path):
     assert r.returncode == 0, r.stderr
     assert request.read_text() == "## Agent\nreplaced\n"
     assert view_concept(tmp_path, "request", "nope", str(source)).returncode != 0
+
+
+def test_status_takes_a_run_set_and_a_scoping_done_mark(tmp_path):
+    s = Session("demo", tmp_path / "sessions")
+    s.create("Demo", "explain")
+    s.write_plan([{"id": "a", "title": "A"}, {"id": "b", "title": "B"}], [])
+    r = view_concept(tmp_path, "status", "demo", "writing", "--section", "b", "--section", "a")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.split() == ["writing", "b", "a"]
+    start = s.read_status()["run"]["start"]
+    view_concept(tmp_path, "status", "demo", "writing", "--section", "c")
+    assert s.read_status()["run"] == {"start": start, "set": ["b", "a", "c"]}
+    assert view_concept(tmp_path, "status", "demo", "scoping", "--done").returncode == 0
+    assert s.read_status()["done"] is True
+    assert view_concept(tmp_path, "status", "demo", "writing", "--done").returncode != 0

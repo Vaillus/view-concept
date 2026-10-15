@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from . import frame, launch, publish, threads
 from .render import md
-from .store import Session, SessionError, list_sessions
+from .store import Session, SessionError, iso_time, list_sessions
 
 STATIC = Path(__file__).parent / "static"
 # The verdicts an item can get, by session workflow, each list in the review table's order:
@@ -138,7 +138,11 @@ def state(slug: str) -> dict[str, Any]:
         html_sections = s.html_sections()
         audit = s.read_audit()
         comments = s.read_comments()
-        status = s.read_status()
+        status = s.shown_status()
+        times = s.section_times()
+        files = s.file_times()
+        activity = s.last_activity()
+        batch = s.batch_progress()
         changes = s.read_changes()
         implemented = s.implemented_through()
         unimplemented = [d["id"] for d in s.unimplemented_changes()]
@@ -159,8 +163,17 @@ def state(slug: str) -> dict[str, Any]:
         "workflow": plan.get("workflow", ""),
         "status": status,
         "sections": {
-            k: section_view(v, seen[k], html=k in html_sections) for k, v in sections.items()
+            k: {
+                **section_view(v, seen[k], html=k in html_sections),
+                "modified": iso_time(times[k]),
+            }
+            for k, v in sections.items()
         },
+        # What the banner is computed from: the plan, audit and questions files' times, the
+        # last session file the agent wrote, and where the last batch sent stands.
+        "files": files,
+        "activity": activity,
+        "batch": batch,
         "audit": audit,
         "comments": comments,
         "changes": changes,

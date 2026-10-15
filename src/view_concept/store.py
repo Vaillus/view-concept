@@ -10,7 +10,8 @@ reach the agent session through the inbox.
         sections/<id>.html  an HTML section instead: a self-contained HTML document
         sections/<id>/  its media folder: media files the agent produced for it
         audit.json      vocabulary-audit findings       (written by the agent and `check`)
-        status.json     what the agent is doing now: phase, section    (written by `status`)
+        status.json     what the agent is doing now: phase, its writing run (start, run
+                        set), the scoping done mark, the section files it saw  (`status`)
         change-history.json  every change of the model, oldest first     (written by `change`)
         terminal-messages.json  the user's later terminal messages      (written by `message`)
         implemented.json     the last model change each implementer run took into account
@@ -156,6 +157,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import unicodedata
 from datetime import UTC, date, datetime
 from functools import cache
@@ -925,12 +927,180 @@ class Session:
     def read_status(self) -> dict[str, Any]:
         return _read_json(self.status_path, {"phase": "idle"})
 
-    def write_status(self, phase: str, section: str = "", message: str = "") -> dict[str, Any]:
+    def write_status(
+        self,
+        phase: str,
+        section: str | list[str] = "",
+        message: str = "",
+        done: bool = False,
+    ) -> dict[str, Any]:
+        """Declare the phase the agent is in.
+
+        `since` is the time of this call (seconds, compared with batch times) and `at` the
+        same time as an epoch float, compared with file modification times; `files` lists
+        the sections that have a file now, so a section file that appears later is a trace
+        of writing (see `shown_status`).
+
+        A writing run starts on the call that enters "writing": `run` = {start, set}, the
+        run set being the sections named, or, when none is named, every section of the
+        outline with no file yet, or the whole outline when every section has one. A
+        writing call during a writing run keeps the run's start and adds the sections it
+        names to the set. Any other phase ends the run. `done` (phase "scoping" only) is
+        the scoping done mark: the agent has nothing more to ask."""
         if phase not in PHASES:
             raise SessionError(f"unknown phase {phase!r}; one of {', '.join(PHASES)}")
-        status = {"phase": phase, "section": section, "message": message, "since": now_iso()}
+        if done and phase != "scoping":
+            raise SessionError("the scoping done mark goes with the phase 'scoping' only")
+        sections = [section] if isinstance(section, str) else list(section)
+        sections = list(dict.fromkeys(s for s in sections if s))
+        previous = self.read_status()
+        files = list(self.section_files())
+        at = time.time()
+        status: dict[str, Any] = {
+            "phase": phase,
+            "section": sections[0] if sections else "",
+            "message": message,
+            "since": now_iso(),
+            "at": at,
+            "files": files,
+        }
+        if phase == "writing":
+            run = previous.get("run") if previous.get("phase") == "writing" else None
+            if run:
+                run = {**run, "set": run["set"] + [s for s in sections if s not in run["set"]]}
+            else:
+                run = {"start": at, "set": sections or self._unwritten(set(files))}
+            status["run"] = run
+        if done:
+            status["done"] = True
         _write_json(self.status_path, status)
         return status
+
+    def _unwritten(self, had: set[str]) -> list[str]:
+        """The run set of a run that names none: the outline's sections with no file in
+        `had`, or the whole outline when every one has a file."""
+        outline = [s["id"] for s in self.read_plan().get("outline", [])]
+        return [sid for sid in outline if sid not in had] or outline
+
+    def section_times(self) -> dict[str, float]:
+        """Each section file's modification time, by id."""
+        return {sid: p.stat().st_mtime for sid, p in self.section_files().items()}
+
+    def shown_status(self) -> dict[str, Any]:
+        """The status as the page shows it: `status.json` plus
+        - `shown`: the phase the banner shows, the derived phase when a trace in the
+          session files is later than the last status call, else the declared `phase`;
+        - `derived`: whether `shown` comes from a trace;
+        - `run`: while `shown` is "writing", {start, set, written}: the run set in outline
+          order and its sections written in this run (file modified since the run's
+          start); None otherwise;
+        - `scoping_done`: the scoping done mark, unless a question was asked or a batch
+          sent after it.
+
+        A trace is a change only one kind of step makes: a section file that appears where
+        there was none (writing; the run starts at the first such file, its set the
+        sections that had no file before it), a plan change while no section has a file
+        (planning, outside scoping), an audit file change except during a writing run with
+        sections of its set left (audit). The latest trace wins."""
+        status = self.read_status()
+        phase = status.get("phase", "idle")
+        since = status.get("at")
+        times = self.section_times()
+        outline = [s["id"] for s in self.read_plan().get("outline", [])]
+        traces: list[tuple[float, str]] = []
+        run: dict[str, Any] | None = None
+        if phase == "writing":
+            run = status.get("run") or {
+                "start": since or 0.0,
+                "set": [status["section"]] if status.get("section") else outline,
+            }
+        # A status written before `files` existed cannot tell a new file from a rewritten
+        # one, so it derives nothing; nor does a session with no status call.
+        if since is not None and "files" in status:
+            had = set(status["files"])
+            new = {sid: t for sid, t in times.items() if sid not in had and t > since}
+            if new and phase != "writing":
+                run = {"start": min(new.values()), "set": self._unwritten(had)}
+                traces.append((max(new.values()), "writing"))
+            plan_t = _mtime(self.plan_path)
+            if plan_t and plan_t > since and not times and phase not in ("scoping", "planning"):
+                traces.append((plan_t, "planning"))
+            audit_t = _mtime(self.audit_path)
+            left = run and any(times.get(sid, -1.0) < run["start"] for sid in run["set"])
+            if audit_t and audit_t > since and phase != "audit" and not left:
+                traces.append((audit_t, "audit"))
+        shown = max(traces)[1] if traces else phase
+        out = {**status, "shown": shown, "derived": shown != phase, "run": None}
+        if shown == "writing" and run:
+            order = {sid: i for i, sid in enumerate(outline)}
+            ids = sorted(run["set"], key=lambda sid: order.get(sid, len(order)))
+            written = [sid for sid in ids if times.get(sid, -1.0) >= run["start"]]
+            out["run"] = {"start": iso_time(run["start"]), "set": ids, "written": written}
+        out["scoping_done"] = bool(phase == "scoping" and status.get("done")) and not any(
+            t > status.get("since", "")
+            for t in [*self._asked_times(), *(b["sent"] for b in self.read_comments()["batches"])]
+        )
+        return out
+
+    def _asked_times(self) -> list[str]:
+        """When each agent question was asked or asked again."""
+        return [t for q in self.read_questions() for t in (q.get("asked"), q.get("reasked")) if t]
+
+    def file_times(self) -> dict[str, str]:
+        """The modification times of the plan, the audit file and the questions ("" when
+        absent), which the page reads traces from."""
+        paths = {"plan": self.plan_path, "audit": self.audit_path, "questions": self.questions_path}
+        return {k: iso_time(t) if (t := _mtime(p)) else "" for k, p in paths.items()}
+
+    def last_activity(self) -> str:
+        """When the agent last wrote a session file, "" when never. Only what the agent
+        writes counts: the page's own writes (a batch, an answer, seen.json) and the
+        watch's heartbeat do not; questions count by when they were asked, comments by
+        when they were resolved."""
+        paths = [
+            self.plan_path,
+            self.audit_path,
+            self.status_path,
+            self.change_history_path,
+            self.legacy_changes_path,
+            self.implemented_path,
+            self.terminal_messages_path,
+            self.code_map_path,
+            self.request_path,
+            *self.section_files().values(),
+        ]
+        times = [iso_time(t) for p in paths if (t := _mtime(p))]
+        times += self._asked_times()
+        for b in self.read_comments()["batches"]:
+            times += [t for x in [b, *b["comments"]] if (t := x.get("resolved_at"))]
+        return max(times, default="")
+
+    def batch_progress(self) -> dict[str, Any] | None:
+        """Where the last batch sent from the page stands: {id, sent, action, comments,
+        answers, stage}, `stage` being "sent" while it waits in the inbox, "received" once
+        the delivery mark (the watch's cursor) passed it, "acted" once the agent wrote a
+        session file after receiving it. None when no batch was sent."""
+        batches = self.read_comments()["batches"]
+        if not batches:
+            return None
+        b = batches[-1]
+        out = {
+            "id": b["id"],
+            "sent": b["sent"],
+            "action": b.get("action", ""),
+            "comments": len(b["comments"]),
+            "answers": len(b.get("answers", [])),
+            "stage": "sent",
+        }
+        try:
+            cursor = int(self.cursor_path.read_text())
+        except (FileNotFoundError, ValueError):
+            cursor = 0
+        size = _mtime(self.inbox_path) and self.inbox_path.stat().st_size
+        delivered = _mtime(self.cursor_path)
+        if size and cursor >= size and delivered:
+            out["stage"] = "acted" if self.last_activity() > iso_time(delivered) else "received"
+        return out
 
     # ---- the watch's heartbeat ----
     def write_heartbeat(self) -> None:
@@ -1168,11 +1338,14 @@ class Session:
             for c in b["comments"]:
                 if c["id"] in wanted or b["id"] in wanted:
                     c["status"] = "resolved"
+                    c["resolved_at"] = now_iso()
                     if reply:
                         c["reply"] = reply
                     touched.append(c["id"])
-            if b["id"] in wanted and reply and not b["comments"]:
-                b["reply"] = reply
+            if b["id"] in wanted and not b["comments"]:
+                b["resolved_at"] = now_iso()
+                if reply:
+                    b["reply"] = reply
         unknown = wanted - set(touched) - {b["id"] for b in data["batches"]}
         if unknown:
             raise SessionError(f"unknown id(s): {', '.join(sorted(unknown))}")
@@ -1490,6 +1663,19 @@ def project_of(repo: str) -> str:
     if common.endswith("/.git"):
         return common.removesuffix("/.git")
     return repo.split(WORKTREES_DIR, 1)[0]
+
+
+def _mtime(path: Path) -> float | None:
+    """A file's modification time, None when it does not exist."""
+    try:
+        return path.stat().st_mtime
+    except FileNotFoundError:
+        return None
+
+
+def iso_time(ts: float) -> str:
+    """An epoch time as the ISO time the session files use."""
+    return datetime.fromtimestamp(ts, UTC).isoformat(timespec="seconds")
 
 
 def _stat_signature(paths: list[Path]) -> tuple:

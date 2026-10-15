@@ -213,8 +213,8 @@ def cmd_wait(a: argparse.Namespace) -> None:
 
 
 def cmd_status(a: argparse.Namespace) -> None:
-    st = Session(a.slug).write_status(a.phase, a.section or "", a.message or "")
-    print(f"{st['phase']} {st['section']}".strip())
+    st = Session(a.slug).write_status(a.phase, a.section, a.message or "", a.done)
+    print(" ".join([st["phase"], *st.get("run", {}).get("set", [])]))
 
 
 def cmd_question(a: argparse.Namespace) -> None:
@@ -454,7 +454,18 @@ def main() -> None:
     q = sub.add_parser("status", help="tell the page what the agent is doing now")
     q.add_argument("slug")
     q.add_argument("phase", choices=PHASES)
-    q.add_argument("--section", help="outline id being written, for phase 'writing'")
+    q.add_argument(
+        "--section",
+        action="append",
+        default=[],
+        help="a section the writing run writes (repeatable), on the call that starts the run: "
+        "its run set; none means every section with no file yet",
+    )
+    q.add_argument(
+        "--done",
+        action="store_true",
+        help="with phase 'scoping': the agent has nothing more to ask (scoping done)",
+    )
     q.add_argument("--message", help="short free text shown next to the phase")
     q.set_defaults(fn=cmd_status)
 
