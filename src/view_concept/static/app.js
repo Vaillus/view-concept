@@ -313,10 +313,15 @@ function banner() {
   // The PR recorded after the last « Create PR »: the agent opened (or updated) it.
   const prReady = phase === "awaiting-pr" && approvalPending() && !!state.plan.pr &&
                   state.plan.pr.at >= lastBatchOf("create-pr").sent;
+  // The agent declared it has nothing more to ask, and nothing moved since (the server
+  // clears the mark on a new question or a batch): the banner waits for « Write plan ».
+  const scopingDone = phase === "scoping" && !asking && !planPending() && !!state.status.scoping_done;
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Write plan » ends it.
     scoping: asking ? "scoping · questions waiting for you"
            : planPending() ? `scoping ended · the agent is ${rewriting() ? "revising" : "writing"} the ${scopingProduct()}`
+           : scopingDone ? "scoping done · Write plan when ready"
+           : repliedInScoping() ? "reading your reply"
            : "scoping the question",
     planning: "drafting the plan",
     ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
@@ -328,10 +333,20 @@ function banner() {
     audit: "vocabulary audit",
     revising: "revising",
   };
-  const active = (phase === "scoping" && !asking) || AT_WORK.includes(phase) ||
+  const active = (phase === "scoping" && !asking && !scopingDone) || AT_WORK.includes(phase) ||
                  (approval && approvalPending() && !prReady) || (phase === "awaiting-answer" && !asking);
   const text = labels[phase] ? [labels[phase], message].filter(Boolean).join(" · ") : "";
-  return { text, active, ask: !!((approval && !approvalPending()) || asking) };
+  return { text, active, ask: !!((approval && !approvalPending()) || asking || scopingDone) };
+}
+
+/* In scoping, a batch you sent after the agent's last question (or its last status call,
+   if later): the agent is reading your answers or comments, until it asks again or
+   declares scoping done. With nothing sent since, the banner keeps « scoping the
+   question ». Same-second times count as after, as in approvalPending. */
+function repliedInScoping() {
+  const asked = (state.questions || []).flatMap((q) => [q.asked, q.reasked]).filter(Boolean);
+  const since = [...asked, state.status.since || ""].reduce((a, b) => (b > a ? b : a), "");
+  return state.comments.batches.some((b) => b.sent >= since);
 }
 
 function renderStatus() {
