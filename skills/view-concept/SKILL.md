@@ -80,7 +80,7 @@ Rewrite `plan.json` in full with the revised outline and lexicon, and state the 
 
 ### Phase 5 — Explain
 
-Write each section to `sections/<id>.md`, in outline order, running `view-concept status <slug> writing --section <id>` before each one, so the page fills in as you go. In the terminal, one line saying the explanation is written, never the prose itself. Later edits rewrite only the sections they touch.
+Write each section to `sections/<id>.md`, in outline order. Before the first one, run `view-concept status <slug> writing` once, naming no section: the page fills in as you go, and reads from the section files which one is being written and how many are done. When you later rewrite only some sections, name them on that one call, `--section <id>` once per section. In the terminal, one line saying the explanation is written, never the prose itself. Later edits rewrite only the sections they touch.
 
 The rules below scale with the level and the goal of Phase 1: at a beginner level several shrink to a clause or disappear; at a practitioner level they expand. Applying every rule at full size regardless of the reader is what turns a short answer into a tour.
 
@@ -220,7 +220,7 @@ The page shows what you are doing; keep it true with `view-concept status <slug>
 | Scoping starts: right after Setup, and again before the Phase 3 questions (see **Scoping in the page**) | `status <slug> scoping` — while it holds, `view-concept question` leaves the phase alone, and the page shows « Write plan » in the scope block |
 | Phase 2 starts | `status <slug> planning` |
 | The plan is presented and you stop for approval (Phase 4, or Phase 2 when the user asked to review) | `status <slug> awaiting-approval` — the page then shows « Approve plan » |
-| Before writing each section in Phase 5 | `status <slug> writing --section <id>` |
+| A writing run starts: Phase 5, or a rewrite of some sections | `status <slug> writing`, once, before its first section — naming none on a first pass, and each rewritten section (`--section <id>`, repeated) otherwise; the page reads the section being written and the progress from the files |
 | Phase 6 | `status <slug> audit` |
 | Applying a comment batch | `status <slug> revising` |
 | You ask an agent question outside scoping (see **agent questions**) | `awaiting-answer`, set by `view-concept question` itself — the page shows the question in the scope block |

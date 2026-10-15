@@ -223,8 +223,10 @@ sections only after the user replied: a terminal message, or a batch with
 
 Each section goes to `sections/<id>.md`, in outline order: Markdown, no
 heading of its own (the page renders the title), ```` ```mermaid ```` for
-diagrams. Run `view-concept status <slug> writing --section <id>` before each
-one. In the terminal, one line saying the modeling part is written, never the
+diagrams. Run `view-concept status <slug> writing` once, before the first:
+it names no section on a first pass, and each section a later run rewrites
+(`--section <id>`, repeated); the page reads from the files which section is
+being written and how many are done. In the terminal, one line saying the modeling part is written, never the
 prose.
 
 - **Citations are required.** Every claim about the code cites where it is
@@ -530,7 +532,7 @@ call per transition:
 | From Setup to the end of scoping | `scoping`: a question leaves the phase alone, and the scope block shows « Write model » |
 | Writing the outline and the lexicon | `planning` |
 | The plan is presented for approval | `awaiting-approval` |
-| Before writing each section | `writing --section <id>` |
+| A writing run starts (once, before its first section) | `writing`, naming none on a first pass, each rewritten section otherwise (`--section <id>`, repeated) |
 | The vocabulary audit | `audit` |
 | Applying a comment batch | `revising` |
 | The triage is written or revised, no correction pending | `awaiting-model` |
