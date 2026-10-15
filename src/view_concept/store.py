@@ -1046,12 +1046,6 @@ class Session:
         """When each agent question was asked or asked again."""
         return [t for q in self.read_questions() for t in (q.get("asked"), q.get("reasked")) if t]
 
-    def file_times(self) -> dict[str, str]:
-        """The modification times of the plan, the audit file and the questions ("" when
-        absent), which the page reads traces from."""
-        paths = {"plan": self.plan_path, "audit": self.audit_path, "questions": self.questions_path}
-        return {k: iso_time(t) if (t := _mtime(p)) else "" for k, p in paths.items()}
-
     def last_activity(self) -> str:
         """When the agent last wrote a session file, "" when never. Only what the agent
         writes counts: the page's own writes (a batch, an answer, seen.json) and the

@@ -323,8 +323,6 @@ def test_state_carries_what_the_banner_is_computed_from(client, session):
     st = session.write_status("writing", ["s1"])
     state = client.get("/api/s/kv-cache").json()
     assert state["status"]["shown"] == "writing" and state["status"]["run"]["set"] == ["s1"]
-    assert state["sections"]["s1"]["modified"].endswith("+00:00")
-    assert state["files"]["plan"] and state["files"]["audit"] == ""
     assert state["activity"] >= st["since"]
     assert state["batch"] is None
     client.post("/api/s/kv-cache/batch", json={"comments": [{"section": "s1", "text": "hi"}]})
