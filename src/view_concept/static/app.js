@@ -311,6 +311,23 @@ function batchProgress() {
   return `${b.action ? BATCH_WHAT[b.action] || b.action : "comments"} · ${BATCH_STAGE[b.stage]}`;
 }
 
+/* The inactivity notice: a phase at work keeps its moving label until another phase is
+   declared, so an agent that stopped mid-run would look busy for good. Once the agent has
+   written no session file for ten minutes (`state.activity`, the time of the last one;
+   the page's own writes and the watch's heartbeat do not count), the banner adds the
+   count of quiet minutes. It claims nothing more: a long read looks the same as a run
+   that ended without a status call. Never on a banner that waits for you. */
+const QUIET_MIN = 10;
+
+function quietNotice() {
+  const last = Date.parse(state.activity || "");
+  if (Number.isNaN(last)) return "";
+  const min = Math.floor((Date.now() - last) / 60000);
+  return min >= QUIET_MIN ? `no activity for ${min} min` : "";
+}
+// The count goes up with no file changing, so no event from the server: redraw on a timer.
+setInterval(() => { if (state) renderStatus(); }, 30000);
+
 // The phases at work: the banner shows them in the active colour, with its moving dots.
 const AT_WORK = ["planning", "writing", "audit", "revising"];
 
@@ -375,7 +392,7 @@ function renderStatus() {
   const p = $("#phase");
   p.hidden = !b.text;
   p.className = `phase ${b.active ? "active" : ""} ${b.ask ? "ask" : ""}`;
-  p.textContent = b.text;
+  p.textContent = [b.text, b.active && !b.ask ? quietNotice() : ""].filter(Boolean).join(" · ");
 
   $("#approve").hidden = docButton.hidden = prButton.hidden = true;
   if (!approval) return;
