@@ -449,6 +449,8 @@ body.sb-collapsed .sidebar { display: none; }
 .sb-item .badge { margin-left: 0; }
 .sb-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sb-when { font-size: 11px; flex: none; }
+.sb-where { font-size: 11px; flex: none; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-active { color: var(--ok); }
 .sb-dot::before { content: "○"; font-size: 9px; color: var(--dim); }
 .sb-dot.on::before { content: "●"; color: var(--ok); }
 .sb-empty { padding: 8px 4px; }
