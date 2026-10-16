@@ -83,7 +83,7 @@ COORDINATOR = [
 ]
 
 WRITER = [
-    user("00:03.500", f"Run `{CONTEXT}` and treat its output as your context."),
+    user("00:03.500", f"Run `{CONTEXT}` as your context. Read `roles/writer.md`."),
     call("00:05.000", "w1", [tool("t1", "Bash", command=CONTEXT)], cache_read=9000),
     result("00:06.000", "t1", "x" * 500),
     call(
@@ -105,7 +105,7 @@ WRITER = [
 ]
 
 HELPER_1 = [
-    user("00:21.000", "You are a helper of the writer. Write section a."),
+    user("00:21.000", "You are a helper of the writer. Read `roles/writer.md`. Write section a."),
     call(
         "00:25.000", "h1", [tool("a1", "Bash", command="cd /h/x && sed -n 1,20p roles/writer.md")]
     ),
@@ -367,10 +367,10 @@ def test_series_and_slow_runs():
 @pytest.mark.parametrize(
     ("command", "activity"),
     [
-        ("view-concept context rev --role writer", "loading context"),
+        ("view-concept context rev --role writer", "exploring code"),
         ("cd /repo && view-concept check rev", "view-concept commands"),
-        ("cd /h/skills/view-branch && sed -n 1,9p roles/writer.md", "loading context"),
-        ("cat ~/.view-concept/sessions/rev/questions.json", "loading context"),
+        ("cd /h/skills/view-branch && sed -n 1,9p roles/writer.md", "exploring code"),
+        ("cat ~/.view-concept/sessions/rev/questions.json", "exploring code"),
         ("cd /repo && grep -n foo src/x.py 2>/dev/null", "exploring code"),
         ("cat > /s/sections/a.html <<'EOF'\n<p>x</p>\nEOF", "writing"),
         ("python3 - <<'EOF'\nopen('a', 'w').write('x')\nEOF", "writing"),
@@ -382,6 +382,91 @@ def test_series_and_slow_runs():
 )
 def test_shell_activity(command, activity):
     assert metrics.shell_activity(command) == activity
+
+
+def opening_run(tmp_path, prompt: str, reads: list[list[dict]]) -> dict:
+    """The measures of a run whose calls each make the given tool calls, one second
+    apart, each result 500 characters, then a report."""
+    lines = [user("00:00.000", prompt)]
+    for i, tools in enumerate(reads):
+        lines.append(call(f"00:{2 * i + 1:02d}.000", f"m{i}", tools))
+        lines += [result(f"00:{2 * i + 2:02d}.000", t["id"], "x" * 500) for t in tools]
+    lines.append(call("00:59.000", "end", [text()], "end_turn"))
+    path = tmp_path / "t.jsonl"
+    write_jsonl(path, lines)
+    t = metrics.load_transcript(path)
+    assert t.start and t.end
+    return metrics.measure(t.calls, t.inputs, t.start, t.end, prompt=t.prompt)
+
+
+PROMPT = f"Run `{CONTEXT}`, then read `roles/writer.md` in skills/view-branch."
+ROLE = "/h/skills/view-branch/roles/writer.md"
+
+
+def acts_of(m: dict) -> list[str]:
+    return [s["activity"] for s in m["stretches"]]
+
+
+def test_a_named_role_file_read_after_code_explores_code(tmp_path):
+    m = opening_run(
+        tmp_path,
+        PROMPT,
+        [
+            [tool("t1", "Bash", command=CONTEXT)],
+            [tool("t2", "Grep", pattern="foo", path="/repo/src")],
+            [tool("t3", "Read", file_path=ROLE)],
+        ],
+    )
+    assert acts_of(m) == ["loading context", "exploring code", "exploring code", "report"]
+    assert m["context"]["read_chars"] == 500 and m["context"]["context_chars"] == 500
+
+
+def test_an_unnamed_role_file_explores_code(tmp_path):
+    m = opening_run(
+        tmp_path,
+        PROMPT,
+        [
+            [tool("t1", "Bash", command=CONTEXT)],
+            [tool("t2", "Read", file_path="/h/skills/view-branch/roles/reviewer.md")],
+            [tool("t3", "Read", file_path=ROLE)],
+        ],
+    )
+    assert acts_of(m) == ["loading context", "exploring code", "exploring code", "report"]
+
+
+def test_a_call_mixing_a_named_role_file_stays_in_the_opening(tmp_path):
+    m = opening_run(
+        tmp_path,
+        PROMPT,
+        [
+            [tool("t1", "Bash", command=CONTEXT)],
+            [
+                tool("t2", "Read", file_path=ROLE),
+                tool("t3", "Read", file_path="/s/questions.json"),
+                tool("t4", "Bash", command="grep -n foo src/x.py"),
+            ],
+            [tool("t5", "Read", file_path="/repo/src/x.py")],
+            [tool("t6", "Bash", command=CONTEXT)],
+        ],
+    )
+    assert acts_of(m) == [
+        "loading context",
+        "loading context",
+        "exploring code",
+        "exploring code",
+        "report",
+    ]
+    assert m["context"]["read_chars"] == 2000 and m["context"]["context_chars"] == 500
+    assert m["activities"]["loading context"] == 4.0
+
+
+def test_a_skill_call_ends_the_opening(tmp_path):
+    m = opening_run(
+        tmp_path,
+        PROMPT,
+        [[tool("t1", "Skill", skill="x")], [tool("t2", "Bash", command=CONTEXT)]],
+    )
+    assert acts_of(m) == ["other", "exploring code", "report"]
 
 
 def test_a_stretch_over_ten_minutes_is_stalled(tmp_path, monkeypatch):

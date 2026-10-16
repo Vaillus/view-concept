@@ -335,8 +335,8 @@ _GIT_WRITES = {
 }
 _WAIT_COMMANDS = {"until", "sleep", "while", "wait"}
 _CHECK_COMMANDS = {"pytest", "ruff", "ty", "uv", "npm", "npx", "node", "make", "mypy"}
-# A role file, a skill file or a session file: reading one is loading context.
-_CONTEXT_PATH = re.compile(r"roles/[\w-]+\.md|skills/view-branch|\.view-concept/sessions")
+_CONTEXT_COMMAND = re.compile(r"view-concept\s+context\b")
+_ROLE_FILE = re.compile(r"roles/[\w-]+\.md")
 _READ_TOOLS = {"Read", "Grep", "Glob", "LS", "NotebookRead", "WebFetch", "WebSearch"}
 _WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 _AGENT_TOOLS = {"Agent", "Task", "TaskOutput"}
@@ -374,15 +374,15 @@ def _writes(command: str) -> bool:
 
 def shell_activity(command: str) -> str:
     """The activity of a shell command, from its first word after any leading `cd … &&`:
-    `view-concept context` is loading context, any other view-concept command is a
+    `view-concept context` reads, so it explores code, any other view-concept command is a
     view-concept command; a command that writes a file is writing; a wait loop is waiting
-    on helpers; tests and lint are other; a read of a role, skill or session file is
-    loading context; any other command explores code."""
+    on helpers; tests and lint are other; any other command explores code. Loading context
+    is not a command's own activity: it is the run's opening (`_opening`)."""
     rest = command
     while m := _CD.match(rest):
         rest = rest[m.end() :]
-    if re.search(r"view-concept\s+context\b", rest):
-        return "loading context"
+    if _CONTEXT_COMMAND.search(rest):
+        return "exploring code"
     segments = _segments(rest)
     words = segments[0] if segments else []
     first = words[0] if words else ""
@@ -396,13 +396,12 @@ def shell_activity(command: str) -> str:
         return "waiting on helpers"
     if first in _CHECK_COMMANDS:
         return "other"
-    if _CONTEXT_PATH.search(command):
-        return "loading context"
     return "exploring code"
 
 
 def tool_activity(tool: Tool) -> str:
-    """The activity of one tool call, from its name (and a shell command's words)."""
+    """The activity of one tool call, from its name (and a shell command's words), outside
+    the run's opening."""
     name, inp = tool.name, tool.input
     if name in _SHELL_TOOLS:
         return shell_activity(str(inp.get("command") or inp.get("cmd") or ""))
@@ -412,12 +411,42 @@ def tool_activity(tool: Tool) -> str:
         return "waiting on helpers"
     if name == "SubagentHandback":
         return "report"
-    if name == "Skill":
-        return "loading context"
     if name in _READ_TOOLS:
-        path = str(inp.get("file_path") or inp.get("path") or "")
-        return "loading context" if _CONTEXT_PATH.search(path) else "exploring code"
+        return "exploring code"
     return "other"
+
+
+def _opens(tool: Tool, named: set[str]) -> bool:
+    """Whether a tool call belongs in a run's opening on its own: it runs `view-concept
+    context`, or reads a role file (`roles/<name>.md`) the run's first prompt names."""
+    if tool.name in _SHELL_TOOLS:
+        command = str(tool.input.get("command") or tool.input.get("cmd") or "")
+        if _CONTEXT_COMMAND.search(command):
+            return True
+        text = command
+    elif tool.name in _READ_TOOLS:
+        text = str(tool.input.get("file_path") or tool.input.get("path") or "")
+    else:
+        return False
+    return tool_activity(tool) == "exploring code" and bool(named & set(_ROLE_FILE.findall(text)))
+
+
+def _opening(calls: list[Call], prompt: str | None) -> int:
+    """How many of a run's first calls are its opening, the calls that load its context:
+    from the first call, each that runs the context command or reads a role file the first
+    prompt names, with every other file it reads. The first call that does neither ends
+    it. A coordinator pass (prompt None) has no opening."""
+    if prompt is None:
+        return 0
+    named = set(_ROLE_FILE.findall(prompt))
+    for i, call in enumerate(calls):
+        tools = call.tools
+        if not (
+            any(_opens(t, named) for t in tools)
+            and all(tool_activity(t) == "exploring code" for t in tools)
+        ):
+            return i
+    return len(calls)
 
 
 # The activity a call takes when its tools differ: the first in this order.
@@ -469,22 +498,28 @@ def stretches(
     start: datetime,
     end: datetime,
     can_stall: bool = True,
+    prompt: str | None = None,
 ) -> list[Stretch]:
     """Split a run into stretches. A call with tools ends its stretch at its last tool
     result, and the stretch takes the call's activity; its tool time runs from the first
     tool call to that result. A call with no tool, before the last, ends with the agent
     waiting for a message (its helpers' reports): that stretch runs to the next message and
-    waits on helpers, the wait counted as tool time. The last stretch is the report. With
-    can_stall False (a coordinator pass), no stretch is stalled."""
+    waits on helpers, the wait counted as tool time. The last stretch is the report. The
+    calls of the run's opening (`_opening`, from its first prompt) are loading context.
+    With can_stall False (a coordinator pass), no stretch is stalled."""
     out: list[Stretch] = []
     cursor = start
+    opening = _opening(calls, prompt)
     for i, call in enumerate(calls):
         if call.tools:
             results = [t.result_at for t in call.tools if t.result_at]
             stop = max([call.end, *results])
-            acts = {tool_activity(t): t for t in call.tools}
-            activity = next(a for a in _PRIORITY if a in acts)
-            main = acts[activity]
+            if i < opening:
+                activity, main = "loading context", call.tools[0]
+            else:
+                acts = {tool_activity(t): t for t in call.tools}
+                activity = next(a for a in _PRIORITY if a in acts)
+                main = acts[activity]
             tool_secs = _secs(min(t.at for t in call.tools), stop) if results else 0.0
             out.append(
                 Stretch(cursor, stop, activity, main.name, _tool_label(main), tool_secs, call.tools)
@@ -515,6 +550,7 @@ def measure(
     start: datetime,
     end: datetime,
     can_stall: bool = True,
+    prompt: str | None = None,
 ) -> dict[str, Any]:
     """Every measure of one run.
 
@@ -527,11 +563,11 @@ def measure(
     - tokens: prompt tokens (input + cache writes + cache reads) of the first call, the
       last, and in all; the share read from the cache; output tokens summed over the calls
       that record a stop reason only, with no estimate (None when none does).
-    - context: the first call's prompt tokens, the characters loading context read, and
-      the characters `view-concept context` printed.
+    - context: the first call's prompt tokens, the characters the opening's calls read
+      (loading context), and the characters `view-concept context` printed in it.
     - activities: seconds by activity, stalled stretches left out.
     """
-    parts = stretches(calls, inputs, start, end, can_stall)
+    parts = stretches(calls, inputs, start, end, can_stall, prompt)
     live = [p for p in parts if not p.stalled]
     stalled = sum(p.seconds for p in parts if p.stalled)
     activities = dict.fromkeys(ACTIVITIES, 0.0)
@@ -549,12 +585,12 @@ def measure(
     recorded = [c.output for c in calls if c.stop_reason and c.output is not None]
     read_chars = context_chars = 0
     for p in parts:
+        if p.activity != "loading context":
+            continue
         for t in p.tools:
-            act = tool_activity(t)
-            if act == "loading context":
-                read_chars += t.result_chars
-                if re.search(r"view-concept\s+context\b", str(t.input.get("command", ""))):
-                    context_chars += t.result_chars
+            read_chars += t.result_chars
+            if _CONTEXT_COMMAND.search(str(t.input.get("command", ""))):
+                context_chars += t.result_chars
     return {
         "wall": _r(wall),
         "stalled": _r(stalled),
@@ -724,7 +760,7 @@ def _subagent_runs(slug: str, convs: list[str]) -> list[Run]:
             run.trigger_words = run.trigger_words or list(root.trigger_words)
             runs[run.parent].helpers.append(run.id)
     for run in runs.values():
-        run.measures = measure(run.calls, run.inputs, run.start, run.end)
+        run.measures = measure(run.calls, run.inputs, run.start, run.end, prompt=_prompt(run))
     return list(runs.values())
 
 
@@ -958,8 +994,16 @@ def _waiting(
     return out
 
 
+def _prompt(r: Run) -> str | None:
+    """A run's first prompt, which names the role files of its opening; None for a
+    coordinator pass, which has no opening."""
+    if r.kind == "pass":
+        return None
+    return r.transcript.prompt if r.transcript else ""
+
+
 def _stretches_of(r: Run) -> list[Stretch]:
-    return stretches(r.calls, r.inputs, r.start, r.end, r.kind != "pass")
+    return stretches(r.calls, r.inputs, r.start, r.end, r.kind != "pass", _prompt(r))
 
 
 def _stall_spans(runs: list[Run]) -> list[tuple[datetime, datetime]]:
