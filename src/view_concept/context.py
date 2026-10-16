@@ -21,12 +21,13 @@ comment needs the user's reasons.
 Roles:
 
 - `planner`: owns the outline and the lexicon during scoping. No sections exist yet.
-- `writer`: owns the modeling part (its sections) and, from « Write model » on, the
-  outline and the lexicon. Gets every section.
-- `implementer`: owns the code, from « Approve model » on. Gets the modeling part, and the
-  sections its trigger names (the reviewer's items it must act on).
-- `reviewer`: owns the refactoring part, which checks the code against the model. Gets
-  every section.
+- `writer`: owns the modeling part (its sections), the to-do list (the section `todo`,
+  in the refactoring part) and, from « Write model » on, the outline and the lexicon.
+  Gets every section.
+- `implementer`: owns the code, from « Approve model » on. Gets the modeling part, the
+  to-do list, and the sections its trigger names (the reviewer's items it must act on).
+- `reviewer`: owns the rest of the refactoring part, which checks the code against the
+  model. Gets every section.
 - `thread`: a side thread, read-only. Gets the section its passage belongs to; it reads
   the others on demand.
 
@@ -96,8 +97,11 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
         out += ["", "## Sections", *_sections(outline, sections, None, html=html)]
     elif role == "implementer":
         named = set(trigger or [])
+        # The to-do list is part of the model, though it sits in the refactoring part.
+        named.add("todo")
         wanted = {sec["id"] for sec in outline if not _refactoring(sec) or sec["id"] in named}
-        out += ["", "## Sections (the modeling part, and the sections the trigger names)"]
+        head = "## Sections (the modeling part, the to-do list, and the sections the trigger names)"
+        out += ["", head]
         out += _sections(outline, sections, None, wanted, html)
     elif role == "thread" and section:
         out += ["", "## Section of the passage", *_sections(outline, sections, section, html=html)]

@@ -152,7 +152,7 @@ a.cite:hover code { text-decoration: underline; }
 .d-files { font-size: 11px; margin-top: 2px; }
 .d-files a.cite, .d-files code { font-size: 11px; }
 
-/* ---- the refactor tab: review table (item entries, descriptions) ---- */
+/* ---- the code tab: review table (item entries, descriptions) ---- */
 .refactor > .rv-wide { max-width: 120ch; }
 .rv { margin-top: 8px; margin-bottom: 24px; }
 .rv-head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; padding: 10px 0 6px; margin-bottom: 4px;
@@ -185,7 +185,7 @@ a.cite:hover code { text-decoration: underline; }
 .sec.bare h2 { margin: 0; padding-top: 4px; min-height: 18px; }
 .sec.bare .body > :first-child { margin-top: 0; }
 
-/* ---- the refactor tab: structure view, findings across items ----
+/* ---- the code tab: structure view, findings across items ----
    Mermaid styles its nodes under the id of its chart, hence !important. */
 .rv-structure .mermaid { background: var(--raised); padding: 8px; overflow-x: auto; }
 .rv-structure .cluster rect { fill: var(--bg) !important; stroke: var(--line-strong) !important; stroke-dasharray: 3 3; }

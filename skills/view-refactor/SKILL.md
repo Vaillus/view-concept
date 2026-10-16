@@ -411,7 +411,7 @@ Go on to the triage in the same turn.
 
 The refactoring part comes after the modeling part in the outline. Every
 section of it has `"part": "refactoring"`, so the page shows it in the
-refactor tab: one section per item, the findings across items, and, in a
+code tab: one section per item, the findings across items, and, in a
 small refactor, the applied changes.
 
 An **item** is one unit of the scope that gets its own verdict: one script,

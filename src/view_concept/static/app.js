@@ -1,8 +1,8 @@
 /* view-concept — the session page.
 
    Tabs share the main space: the plan (the scope block with the agent questions, outline,
-   change history, lexicon), the explanation (one block per explanation section) and, in a
-   branch review that has reached the refactoring step, the refactor tab (the refactor
+   lexicon, change history), the explanation (one block per explanation section) and, in a
+   branch review that has reached the refactoring step, the code tab (the refactor
    sections, the refactoring part); the review pane (a conversation: sent batches and answered agent
    questions, a line counting the open ones, then the draft comments) stays on the
    right. The page never edits the explanation: the agent writes the files, the server
@@ -109,7 +109,7 @@ const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).titl
 
 /* The refactoring part of a branch review, written in the refactoring step, is made of
    refactor sections (sections with "part": "refactoring"): they are read in their own
-   tab, "refactor"; every other section is an explanation section, in the explanation (in
+   tab, the code tab (id "refactor"); every other section is an explanation section, in the explanation (in
    a branch review, the modeling part). Both tabs are rendered into their own view, with
    the same section blocks. Sessions written before the rename mark them "part": 2. */
 const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
@@ -142,14 +142,14 @@ function render() {
 }
 
 /* ---------------- tabs ----------------
-   The plan, the explanation and the refactor tab share one space; one is shown at a
-   time. The refactor tab exists only once a section is in the refactoring part. The tab follows the
+   The plan, the explanation and the code tab share one space; one is shown at a
+   time. The code tab exists only once a section is in the refactoring part. The tab follows the
    session at the moments that matter — scoping starting (its questions are in the scope
    block, on the Plan tab), the plan waiting for approval, the writing starting (in the
    tab of the section being written) — and otherwise stays where the user put it. A
    model waiting for approval does not move it, nor does a PR waiting to be created:
    « Approve model » sits at the end of the explanation, where the model is read, and
-   « Create PR » at the end of the refactor tab. A branch review also has the Metrics tab,
+   « Create PR » at the end of the code tab. A branch review also has the Metrics tab,
    which fetches its numbers when shown and again on each state update while shown. */
 
 function setTab(name) {
@@ -182,7 +182,7 @@ function followSession() {
   // In a branch review, the explanation is the modeling part, so its tab is named after the model.
   const docLabel = state.workflow === "view-branch" ? "model" : "explanation";
   $('.tab[data-tab="doc"]').title = `${docLabel[0].toUpperCase()}${docLabel.slice(1)} (2)`;
-  for (const [name, label] of [["doc", docLabel], ["refactor", "refactor"]]) {
+  for (const [name, label] of [["doc", docLabel], ["refactor", "code"]]) {
     const n = Object.keys(state.sections).filter((id) => isUpdated(id) && tabOf(id) === name).length;
     const writing = !!writingId() && tabOf(writingId()) === name;
     $(`.tab[data-tab="${name}"]`).replaceChildren(...[label,
@@ -264,12 +264,12 @@ const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "a
    included. Until the agent moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it.
    « Approve model » sits at the end of the explanation, after the last section of the modeling part,
-   where the model is read; « Create PR » at the end of the refactor tab. The page does not
+   where the model is read; « Create PR » at the end of the code tab. The page does not
    switch tabs for them. */
 const docButton = el("button", { id: "doc-approve", class: "btn primary approve doc-approve", hidden: true });
 const prButton = el("button", { id: "pr-create", class: "btn primary approve doc-approve", hidden: true });
 // Once the agent opened the PR (plan.json's `pr`), the page links it in the top bar and at
-// the end of the refactor tab, under « Create PR » (« Update PR » from then on).
+// the end of the code tab, under « Create PR » (« Update PR » from then on).
 const prEnd = el("a", { id: "pr-end", class: "btn doc-approve", target: "_blank", rel: "noopener", hidden: true });
 const prLabel = (url) => { const m = /\/pull\/(\d+)/.exec(url); return m ? `PR #${m[1]}` : "PR"; };
 
@@ -641,7 +641,7 @@ function sectionBlock(s, { bare = false } = {}) {
             ...(paused() ? [goOnButton()] : []))] : []));
 }
 
-/* ---------------- the refactor tab ----------------
+/* ---------------- the code tab ----------------
    A refactor section that carries item fields ("item": {files, verdict, batch?,
    implements, note, relations}) is an item: one unit of the diff, a file or files doing
    one job, judged against the model. The items are drawn as the review table: one item
@@ -649,8 +649,10 @@ function sectionBlock(s, { bare = false } = {}) {
    concepts it implements, a note), the items that need action first. Clicking an entry opens its description underneath, which is
    the section's own block, so comments, threads, highlights and annotations work there
    as in the explanation. Below the table, the structure view (see structureView). The
-   other refactor sections, such as the applied changes, follow as plain sections. A
-   review whose refactor sections carry no item fields is drawn as plain sections only. */
+   to-do list of a branch review (the section "todo": the work that holds no decision of
+   the user's, written with the model) comes above the table; the other refactor sections,
+   such as the applied changes, follow it as plain sections. A review whose refactor
+   sections carry no item fields is drawn as plain sections only. */
 
 // Verdict keys in table order (the session workflow's list in verdicts.yaml, sent with the
 // state): those that need action first, the one that needs none (« conforms », « keep ») last.
@@ -681,9 +683,14 @@ function refactorTab(sections) {
   if (!items.length) return sections.map((s) => sectionBlock(s));
   const findings = sections.filter(isFinding);
   const rest = sections.filter((s) => !isItem(s) && !isFinding(s));
-  const after = rest.map((s) => sectionBlock(s));
-  after.forEach((b) => b.classList.add("rv-after")); // aligned on the table, see app.css
-  return [reviewTable(items), structureView(items, findings), ...after].filter(Boolean);
+  const block = (s) => {
+    const b = sectionBlock(s);
+    b.classList.add("rv-after"); // aligned on the table, see app.css
+    return b;
+  };
+  const before = rest.filter((s) => s.id === "todo").map(block);
+  const after = rest.filter((s) => s.id !== "todo").map(block);
+  return [...before, reviewTable(items), structureView(items, findings), ...after].filter(Boolean);
 }
 
 function verdictBadge(v) {

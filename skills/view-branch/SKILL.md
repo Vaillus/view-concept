@@ -42,8 +42,11 @@ them back what they stated, and spends its text on what is new to them (what
 the code does that they did not say, the decisions made for them, the
 consequences). Its first section, the **model sheet**, gives an intuitive
 view of the change, graphical where it can be, that lays out the subjects of
-the sections after it, then a to-do list of the work that fails the
-**section test**. Each default taken for the user, a skipped question's or a
+the sections after it. The work that fails the **section test** goes in the
+**to-do list**, the section `todo`: the writer writes it with the model, but
+it sits in the refactoring part (`"part": "refactoring"`, the part's first
+entry), so the page shows it at the top of the code tab, next to the code
+that carries it. Each default taken for the user, a skipped question's or a
 listed default (a decision that changes nothing they see, do or risk, which
 no question asks), is one « Default taken » line at the end of the section
 it touches, never a list on the model sheet, and never stated in the
@@ -178,9 +181,9 @@ the lexicon, the sections or the code yourself:
 | Agent | Owns | Role file |
 |---|---|---|
 | **planner** | the outline and the lexicon, during scoping, and the first code map | `roles/planner.md` |
-| **writer** | the modeling part (its sections), and the outline and the lexicon from « Write model » on | `roles/writer.md` |
+| **writer** | the modeling part (its sections), the to-do list, and the outline and the lexicon from « Write model » on | `roles/writer.md` |
 | **implementer** | the code on the branch and the repo's docs, and the code map, from « Approve model » on | `roles/implementer.md` |
-| **reviewer** | the refactoring part: the code checked against the model, item by item | `roles/reviewer.md` |
+| **reviewer** | the refactoring part but the to-do list: the code checked against the model, item by item | `roles/reviewer.md` |
 
 The **code map**, `code-map.md` in the session folder, says which modules
 carry the feature and where each concept lives, so a fresh agent does not
@@ -264,7 +267,7 @@ starts one pass. Who takes it depends on the stage:
 | an answer (`action: answer`) | planner | writer | the agent that asked it |
 | a skip | nothing: the outline already used the default | the writer, when it answers a pause; nothing otherwise | nothing |
 | an unclear answer | planner | writer | the agent that asked it |
-| comments with no action | planner | writer | by section: the modeling part to the writer, the refactoring part to the reviewer |
+| comments with no action | planner | writer | by section: the modeling part and the to-do list to the writer, the rest of the refactoring part to the reviewer |
 | a terminal message about the feature | record it, then planner | record it, then writer | record it, then the writer if it is about the model, the implementer if it asks for a code change |
 | an answer to a page question typed in the terminal | `view-concept answered`, then planner | the same, then writer | the same, then the agent that asked it |
 | « Rewrite model » (`action: plan`, the line says rewrite) | — | writer | writer |
@@ -298,7 +301,7 @@ see a grill in their context.
 Keep the page's status true: `view-concept status <slug> scoping` from Setup
 to « Write model », and after each writer run `view-concept status <slug>
 awaiting-model` when no question it asked is open, every section of the
-modeling part is written, and `audit.json` holds no entry with `"issue":
+modeling part and the to-do list are written, and `audit.json` holds no entry with `"issue":
 "undefined"`. A writer paused on its questions sets the phase
 `awaiting-answer`, which the page reads as the pause, as step 5 says; a
 question « Go on » left open, still open once every section is written,
@@ -333,7 +336,8 @@ parts. The **modeling part** writes the model out; the page shows it in the
 Model tab (the page's name for the Explanation tab in a branch review). The
 **refactoring part** checks the code against the model; a section with
 `"part": "refactoring"` belongs to it, and is a **refactor section**: the
-page shows it in the refactor tab. An outline entry holds a short,
+page shows it in the code tab. The to-do list (`todo`) is the one refactor
+section written with the model, and the page shows it first. An outline entry holds a short,
 high-level title (the subject or the point) and its `earns`, the one
 sentence the user reads under the title in the page (at most 200
 characters): no notes for the writer, who works from the same outline.
@@ -518,7 +522,7 @@ those with nothing to do:
    judges again the items the run touched.
 
 Then set `awaiting-pr` (see **Status**) and wait: the page shows « Create
-PR » at the bottom of the refactor tab.
+PR » at the bottom of the code tab.
 
 The reviewer's report can name items judged `diverges` or `move`, or
 comments that ask for a code change: run the implementer on them, then the
@@ -543,5 +547,5 @@ ones a later change undid). Push the branch and open the PR with
 `gh pr create --body-file <file>`, or, when the branch already has one,
 update it with `gh pr edit <n> --body-file <file>`. Record its link with
 `view-concept pr <slug> <url>`: the page links it in its top bar and at the
-end of the refactor tab. Give the PR link in the terminal too: the user
+end of the code tab. Give the PR link in the terminal too: the user
 reviews it in VS Code. No vault export.
