@@ -28,7 +28,7 @@ from typing import Any
 
 from .agents import Backend, TurnState, resolve
 from .context import build
-from .store import Session, SessionError, now_iso
+from .store import Session, SessionError, now_iso, now_iso_ms
 
 FLUSH_EVERY = 0.25  # seconds between writes of a streaming reply
 
@@ -208,6 +208,9 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
 def _run(
     s: Session, thread: dict[str, Any], backend: Backend, proc: subprocess.Popen, prompt: str
 ) -> None:
+    """Stream the turn's reply into the thread. The reply keeps its turn's start (`at`)
+    and gains `first_text`, when its first words reached the page, and `ended`, when the
+    turn ended: a turn's timing, for the run metrics."""
     key = (str(s.dir), thread["id"])
     reply = thread["messages"][-1]
     turn = TurnState()
@@ -221,6 +224,8 @@ def _run(
             turn.noise.append("the agent closed its input before reading the prompt")
         for line in proc.stdout:
             changed = backend.feed(line, thread, reply, turn)
+            if reply["text"] and "first_text" not in reply:
+                reply["first_text"] = now_iso_ms()
             if changed and time.monotonic() - last_flush > FLUSH_EVERY:
                 s.write_thread(thread)
                 last_flush = time.monotonic()
@@ -240,6 +245,9 @@ def _run(
                 thread.update(state="idle", error="")
                 if not reply["text"].strip():
                     reply["text"] = turn.final_text
+            reply["ended"] = now_iso_ms()
+            if reply["text"] and "first_text" not in reply:
+                reply["first_text"] = reply["ended"]
             thread["activity"] = ""
             s.write_thread(thread)
             # Only once the final state is on disk: a reader that sees the thread no longer

@@ -61,6 +61,8 @@ def test_first_turn_forks_the_main_session(session, fake_claude):
     assert t["forked_from"] == "main-1"
     assert [m["role"] for m in t["messages"]] == ["user", "assistant"]
     assert t["messages"][1]["text"] == "Short \n\nanswer."
+    reply = t["messages"][1]
+    assert reply["at"][:19] <= reply["first_text"][:19] and reply["first_text"] <= reply["ended"]
     (call,) = calls(fake_claude)
     assert call["args"][call["args"].index("--resume") + 1] == "main-1"
     assert "--fork-session" in call["args"]
