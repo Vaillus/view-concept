@@ -22,10 +22,9 @@ and the lexicon (through `view-concept plan`), the change history
 (`view-concept change`), and the page's questions and comments
 (`view-concept question`, `resolve`, `status`, `check`). You read the
 repository and the session folder freely. You never edit `plan.json` by hand,
-never touch the rest of the refactoring part, the code or the branch. You may start
-helper agents, one per section of a wave, or one per section to rewrite
-when a run rewrites two or more (see **Writing in waves**), and no other
-agent. A bug you notice in the code goes in your report, not in a fix.
+never touch the rest of the refactoring part, the code or the branch. You
+start no other agent: you write every section yourself, one after the other
+(see **Writing in order**). A bug you notice in the code goes in your report, not in a fix.
 
 Follow `planning-rules.md` for the outline, the lexicon, the change history
 and your questions.
@@ -43,7 +42,7 @@ page renders the title). The writer runs `view-concept status <slug>
 writing` once, before a run's first section, naming each section the run
 rewrites (`--section <id>`, repeated), or none when it writes every section
 with no file yet; the page reads from the files which section is being
-written and how many are done. A helper agent makes no status call.
+written and how many are done.
 
 - **No citations in the prose.** The reader wants the concepts, not a map of
   the code: no file, script or line in a section. The code map gives the
@@ -91,12 +90,17 @@ not a tour.
   the model sheet holds no list of the defaults. A
   listed default that touches no section, only a line of the to-do list, is
   written in that line. Your context holds only the recent changes: read
-  every listed default in `change-history.json` in the session folder, and
-  give each helper those that touch its section.
+  every listed default in `change-history.json` in the session folder.
 - Write in the language of the initial request, technical terms as the code
   names them.
 - Name a section to the user by its number in words (« section 6 »), never
-  by its id.
+  by its id. A bare number is always a section of this report: a section of
+  another report (one a running example comes from) is named by its title
+  and that report (« the tests section of replace-ankiconnect »).
+- **Keep the running example.** Once a section has set up an example, the
+  sections after it carry on with that example, extending it where they need
+  more, instead of starting a new one. A section that needs another example
+  says why the first cannot show its point.
 - **No provenance in the prose.** A section is about the model, never about
   how the model was decided: no question id, side thread or marker (« (q2) »,
   « Asked for by the user (q8) », « Proposed. ») anywhere in its text. The
@@ -223,8 +227,9 @@ check` reports a pair).
 
 ## « Write model »
 
-Write the modeling part, then the to-do list, in waves, in outline order, and stop at a **pause**:
-after a wave whose sections have questions to ask.
+Write the modeling part, then the to-do list, one section at a time, in
+outline order (see **Writing in order**), and stop at a **pause**: after a
+section that has questions to ask.
 
 1. First check the deferred questions the context lists. Each has an anchor
    section (the planner set it; set one with `view-concept anchor` where it
@@ -234,11 +239,7 @@ after a wave whose sections have questions to ask.
    open with an anchor section) whose anchor section left the outline in
    scoping; re-anchor it with `view-concept anchor` to the section that now
    explains what it needs.
-2. Write the next **wave** (see **Writing in waves**): the sections from the
-   next unwritten one up to the next section with a known waiting question
-   (a deferred question anchored to it, or a section question still open and
-   anchored to it), that section included. Then look at what each section of
-   the wave opens:
+2. Write the next unwritten section. Then look at what it opens:
    - a deferred question anchored to it: ask it again, under the same id,
      with `view-concept reask <slug> <qid>`, which removes its scoping
      background;
@@ -253,10 +254,10 @@ after a wave whose sections have questions to ask.
    section is its explanation. So the section states each option's cost,
    including those the scoping background listed.
 
-   When a section of the wave opened a question, or has one still open,
-   stop after the wave: write nothing further, and report the pause
-   (« paused after section 4, 2 questions »), naming the last section of the
-   wave. Otherwise write the next wave, until no section is left.
+   When the section opened a question, or has one still open, stop after
+   it: write nothing further, and report the pause (« paused after section
+   4, 2 questions »). Otherwise write the next section, until no section is
+   left.
 3. When every section is written, run the **writer-run audit**: you clear
    every audit underline yourself, and none is left for the user to answer.
    As you write, every term is already plain language or a lexicon entry
@@ -288,57 +289,46 @@ after a wave whose sections have questions to ask.
       with `"issue": "undefined"` is left, so your report says what you
       cleared, and names any entry you could not.
 
-## Writing in waves
+## Writing in order
 
-A **wave** is the sections you write at once: from the next unwritten section
-up to the next section with a known waiting question. Only a question found
-while writing can land in the middle of one.
+You write the sections one after the other, in outline order, so each one is
+written from the text of the sections before it, not only from their
+`earns`.
 
-- **A wave of one section** you write yourself: a helper would only add its
-  warmup.
-- **A longer wave** goes to **helper agents**, one per section, started at
-  once. Give each one the same context command you started from, its section
-  id, the listed defaults that touch its section, and this instruction: « Read `roles/writer.md` (its **Writing a
-  section**, **How the prose explains** and **The visual rule**) and
-  `roles/planning-rules.md` in
-  `~/Documents/code/view-concept/skills/view-branch/`. Write only
-  `sections/<id>.md` or `sections/<id>.html`, and run no `view-concept`
-  command that writes: return the lexicon terms your section
-  introduces, each with its kind and tip, any move of the outline it needs, any change of the model, and
-  any question it makes answerable (its text, options and recommended
-  answer), and a one-line summary. What an earlier section's `earns`
-  settles is known to the reader: build on it, never restate it or rebuild
-  its example. » Before starting them, run `view-concept status <slug>
-  writing` yourself, naming all their sections (`--section <id>` each).
-- **The owner rule.** A helper writes only its own section file. The shared
-  files (`plan.json`, the change history, the questions) are rewritten whole
-  by each command, with no lock, so two helpers writing them would lose each
-  other's work. You write what the helpers return, alone, once they have all
-  ended: the lexicon terms, kinds and tips and the outline moves in one
-  `view-concept plan` call, the changes with `view-concept change`, the
-  questions with `view-concept question … --section <id>`.
-- **Each helper starts from the outline and the lexicon as they stand before
-  the wave**, so it cannot see the terms another helper of the same wave
-  introduces. After writing what they returned, run `view-concept check
-  <slug>`, which lists a term used before its home section, and fix what it
-  lists.
-- **The consolidation pass.** Once helpers have written or rewritten two or
-  more sections, read the written sections in order and cut from a later
-  section any fact or setup an earlier one already gives.
-- **A question found mid-wave** does not cancel the sections after it, which
-  other helpers wrote at the same time: they are kept and shown, written on
-  the question's recommended answer, as after « Go on ». Ask the question,
-  leave it open, and stop after the wave. An answer that contradicts the
-  recommended one makes your next run rewrite the sections it touches.
+- **Before a section**, read the sections written before it: your context
+  holds those of earlier runs, and you wrote the others in this run. Build on
+  them: their example, their figures, their terms, their numbers. What an
+  earlier section gives is known to the reader: never restate it or rebuild
+  its example, and point back to it by its number where the reader needs it.
+- **After a section**, write at once what it introduced, before the next
+  one: its lexicon terms, kinds and tips and its outline moves in one
+  `view-concept plan` call, its changes of the model with `view-concept
+  change`, its questions with `view-concept question … --section <id>`. The
+  next section then starts from the lexicon and the outline as they now
+  stand.
+- **The consolidation pass.** At the end of every run that wrote or
+  rewrote a section, and before you pause or run the audit, read every
+  written section in order as the first-use reader, who has read up to it
+  and nothing after, and fix the text both ways.
+  - Add what a section uses before any section sets it up: a fact, a
+    mechanism, a decision, an example, the meaning of a number. Set it up
+    where it is first needed, in a clause or a sentence, or move the section
+    that sets it up earlier.
+  - Cut each sentence the reader does not need:
+    - a fact, setup or example an earlier section already gives;
+    - what the user already said or decided, and the motivation they
+      already know;
+    - prose or a caption that repeats what a figure or a table shows;
+    - hedges, and transitions that only link one paragraph to the next.
+
+  Keep every decision, consequence, visual and default taken. The pass
+  changes no concept, rule or relation, so it logs no change of the model.
 - **Rewriting several sections.** A run that rewrites sections already
   written (« Rewrite model », an answer that contradicts written sections,
-  comments on several sections) splits the same way: two or more sections to
-  rewrite, one helper each, started at once, with the same instruction plus
-  what to change in its section (the comment ids, the answers); a single
-  section you rewrite yourself. The owner rule holds: a helper resolves no
-  comment, and you resolve them, with what it returned. No pause cuts these
-  sections, which are written already: ask the questions the helpers return,
-  and stop after them.
+  comments on several sections) rewrites them the same way, one after the
+  other in outline order, each from the sections before it as they now
+  stand. No pause cuts these sections, which are written already: ask the
+  questions they raise, and stop after them.
 
 ## After a pause
 
@@ -346,8 +336,7 @@ A run whose trigger holds answers to the questions of a pause (or comments
 on the sections written so far):
 
 - **An answer** settles its decision. When it contradicts a section already
-  written, rewrite that section in the same run (two or more such sections
-  go to helpers, see **Writing in waves**), and log the change of the
+  written, rewrite that section in the same run (see **Writing in order**), and log the change of the
   model. Then go on writing from the next unwritten section, with the same
   pauses, as « Write model » says.
 - **An unclear answer** to a question asked again: the anchor section did not
@@ -361,7 +350,7 @@ on the sections written so far):
   sends comments only: answer the comments, and go on writing only when the
   trigger answers, skips or defers every question of the pause, or holds
   « Go on » (`action: go-on`, or `go on` from the terminal).
-- **« Go on »** ends the pause without answering: write the next waves,
+- **« Go on »** ends the pause without answering: write the next sections,
   with the same pauses. The pause's questions stay open; write the sections
   after them on their recommended answer, and rewrite what an answer, when it
   comes, contradicts.
@@ -372,8 +361,8 @@ The trigger holds comments, answers, terminal messages, or « Rewrite model »
 (revise with every answer given since the sections were written).
 
 - **A comment** asks for a change, or asks a question. Edit what it asks
-  for (comments that ask to rewrite two or more sections go to helpers, one
-  per section, see **Writing in waves**); answer a question in the `resolve` reply when it only matters to the
+  for (several sections are rewritten in order, see **Writing in order**);
+  answer a question in the `resolve` reply when it only matters to the
   conversation, or fold the answer into the document when it clarifies the
   model durably. A comment ending with `(from side thread t3:
   threads/t3.json)` was discussed in a side thread first: read that file
