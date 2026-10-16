@@ -1315,29 +1315,47 @@ def _run_view(r: Run, variant: str) -> dict[str, Any]:
 
 
 def _by_role(runs: list[Run]) -> list[dict[str, Any]]:
-    """Agent time by role: the summed wall time of its runs, stalls left out, with its
-    activities."""
-    rows: dict[str, dict[str, Any]] = {}
+    """Agent time by role: the time at least one of its runs was going, stalls left out,
+    so helpers running side by side count once. That time is split by activity: a moment
+    two stretches share goes half to each, and a role agent waiting on helpers takes no
+    share of a moment one of its role's runs spends on any other activity."""
+    stretches_by: dict[str, list[Stretch]] = {}
+    counts: Counter[str] = Counter()
     for r in runs:
-        row = rows.setdefault(
-            r.role,
-            {
-                "role": r.role,
-                "seconds": 0.0,
-                "runs": 0,
-                "activities": dict.fromkeys(ACTIVITIES, 0.0),
-            },
+        counts[r.role] += 1
+        live = [p for p in _stretches_of(r) if not p.stalled]
+        stretches_by.setdefault(r.role, []).extend(live)
+    rows: list[dict[str, Any]] = []
+    for role, parts in stretches_by.items():
+        events = sorted(
+            [(p.start, 1, p.activity) for p in parts] + [(p.end, -1, p.activity) for p in parts],
+            key=lambda e: (e[0], e[1]),
         )
-        row["seconds"] += r.measures["wall"] or 0.0
-        row["runs"] += 1
-        for k, v in r.measures["activities"].items():
-            row["activities"][k] += v or 0.0
+        activities = dict.fromkeys(ACTIVITIES, 0.0)
+        active: Counter[str] = Counter()
+        seconds = 0.0
+        prev: datetime | None = None
+        for when, step, activity in events:
+            if prev is not None and when > prev and +active:
+                span = _secs(prev, when)
+                seconds += span
+                work = {a: n for a, n in active.items() if n > 0 and a != "waiting on helpers"}
+                share = work or {a: n for a, n in active.items() if n > 0}
+                total = sum(share.values())
+                for a, n in share.items():
+                    activities[a] += span * n / total
+            active[activity] += step
+            prev = when
+        rows.append(
+            {
+                "role": role,
+                "seconds": _r(seconds),
+                "runs": counts[role],
+                "activities": {k: _r(v) for k, v in activities.items()},
+            }
+        )
     order = [*ROLES, "coordinator"]
-    out = sorted(rows.values(), key=lambda x: order.index(x["role"]) if x["role"] in order else 99)
-    for row in out:
-        row["seconds"] = _r(row["seconds"])
-        row["activities"] = {k: _r(v) for k, v in row["activities"].items()}
-    return out
+    return sorted(rows, key=lambda x: order.index(x["role"]) if x["role"] in order else 99)
 
 
 def session_metrics(s: Session) -> dict[str, Any]:

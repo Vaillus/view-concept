@@ -430,6 +430,16 @@ def test_a_queued_notice_continues_the_pass(tmp_path, projects):
     assert m["batches"][0]["waited"] == "2026-10-15T10:02:32.100+00:00"
 
 
+def test_time_by_role_counts_parallel_helpers_once(review):
+    m = metrics.session_metrics(review)
+    writer = next(x for x in m["by_role"] if x["role"] == "writer")
+    # The writer's run spans both helpers: 10:00:03.5 → 10:02:00.4, not the sum of the three.
+    assert writer["runs"] == 3 and writer["seconds"] == 116.9
+    assert sum(writer["activities"].values()) == pytest.approx(116.9, abs=0.3)
+    # While its helpers work, the writer's wait takes no share.
+    assert writer["activities"]["waiting on helpers"] < 99.0
+
+
 def test_a_batch_leaves_its_stalls_out_of_agent_time(review, monkeypatch):
     monkeypatch.setattr(metrics, "STALL", 30.0)
     m = metrics.session_metrics(review)
