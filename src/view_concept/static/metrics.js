@@ -349,7 +349,7 @@
     const chips = h("div", "mx-chips");
     if (b.busy) add(chips, chip(`sent during a run · waited ${dur(b.agent)}`, "", "its wait counts as agent time: the page was not waiting for you"));
     else add(chips, chip(`pickup ${dur(b.pickup)}`), chip(`agent ${dur(b.agent)}`));
-    if (b.stalled) add(chips, chip("holds a stall", "mx-flag"));
+    if (b.stalled) add(chips, chip(`stalled ${dur(b.stalled)}`, "mx-flag", "run stretches over ten minutes, left out of its agent time"));
     if (b.user != null) add(chips, chip(`then user time ${dur(b.user)}`));
     out.push(chips);
     out.push(runs.length ? add(h("div", "mx-sub"), label("the runs of its coordinator pass"), runList(runs))
@@ -499,7 +499,9 @@
     const part = add(h("div", "mx-part"), label("your waiting · per batch"));
     const bs = data.batches || [];
     if (!bs.length) return add(part, h("p", "dim", "No batch yet."));
+    // Agent time comes with its runs' stalled seconds left out; they show apart, after the time.
     const tot = (b) => (b.busy ? b.agent || 0 : (b.pickup || 0) + (b.agent || 0));
+    const stall = (b) => (b.stalled ? h("span", "mx-flag", ` · stalled ${dur(b.stalled)}`, { "data-tip": "left out of its agent time" }) : null);
     const max = Math.max(1, ...bs.map(tot));
     add(part, add(h("div", "mx-brow head"), h("span", "", "batch"), h("span", "", "carried"), h("span", "", "pickup · agent"), h("span", "mx-num", "waited")));
     for (const b of bs) {
@@ -507,13 +509,13 @@
       add(row, h("span", "", b.id), h("span", "dim", b.label));
       if (b.busy) {
         add(row, h("div", "mx-joined", null, { "data-tip": "sent during a run: waited for it to end, as agent time", style: { width: `${(100 * tot(b)) / max}%` } }),
-          h("span", "mx-num dim", dur(b.agent)));
+          add(h("span", "mx-num dim"), dur(b.agent), stall(b)));
       } else {
         const t = Math.max(0.001, tot(b));
         add(row, add(h("div", "mx-stack", null, { style: { width: `${Math.max(1, (100 * t) / max)}%` } }),
           h("div", "p-pick", null, { "data-tip": `pickup ${dur(b.pickup)}`, style: { width: `${(100 * (b.pickup || 0)) / t}%` } }),
           h("div", "p-agent", null, { "data-tip": `agent ${dur(b.agent)}`, style: { width: `${(100 * (b.agent || 0)) / t}%` } })),
-        add(h("span", "mx-num"), dur(t), b.stalled ? h("span", "mx-flag", " + stall") : null));
+        add(h("span", "mx-num"), dur(t), stall(b)));
       }
       add(part, row);
     }

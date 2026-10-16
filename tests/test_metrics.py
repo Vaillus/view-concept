@@ -428,3 +428,13 @@ def test_a_queued_notice_continues_the_pass(tmp_path, projects):
     m = metrics.session_metrics(make_review(tmp_path / "sessions", "rev"))
     assert runs_of(m)["ar"]["parent"] == "pass:b1"
     assert m["batches"][0]["waited"] == "2026-10-15T10:02:32.100+00:00"
+
+
+def test_a_batch_leaves_its_stalls_out_of_agent_time(review, monkeypatch):
+    monkeypatch.setattr(metrics, "STALL", 30.0)
+    m = metrics.session_metrics(review)
+    b1 = m["batches"][0]
+    spans = [(r["start"], s) for r in m["runs"] if r["id"] in b1["runs"] for s in r["stretches"]]
+    assert any(s["stalled"] for _, s in spans)
+    assert b1["stalled"] > 0
+    assert b1["agent"] + b1["stalled"] == pytest.approx(120.1, abs=0.2)

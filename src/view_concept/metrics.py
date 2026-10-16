@@ -879,8 +879,9 @@ def _waiting(
     waiting phase after the pass's last role agent ended, else the pass's end. A batch
     delivered during a pass it did not open is busy: no pickup, its whole wait is agent
     time. User time runs from the page waiting to the next batch that opens a pass.
-    With no coordinator transcript (another agent), the phase history alone gives the
-    times."""
+    Agent time leaves out the stalled stretches of the pass's runs (merged where runs
+    overlap), and `stalled` holds those seconds. With no coordinator transcript (another
+    agent), the phase history alone gives the times."""
     pass_of = {bid: p for p in passes for bid in p.batches}
     for i, p in enumerate(passes):
         nxt = passes[i + 1].start if i + 1 < len(passes) else None
@@ -906,7 +907,12 @@ def _waiting(
                 acted = _phase_after(history, delivered, False, None)
             waited = _phase_after(history, acted or delivered, True, None) if delivered else None
         runs = _descendants(p.runs, runs_by_id) if p else []
-        stalled = any((runs_by_id[r].measures.get("stalled") or 0) > 0 for r in runs)
+        begin = sent if busy else acted
+        stalled = (
+            _overlap(_stall_spans([runs_by_id[r] for r in runs]), begin, waited)
+            if begin and waited
+            else 0.0
+        )
         out.append(
             {
                 "id": bid,
@@ -916,10 +922,10 @@ def _waiting(
                 "acted": _iso(acted),
                 "waited": _iso(waited),
                 "pickup": _r(_secs(sent, acted)) if acted and not busy else None,
-                "agent": _r(_secs(sent if busy else acted, waited)) if waited else None,
+                "agent": _r(_secs(begin, waited) - stalled) if waited else None,
                 "user": None,
                 "busy": busy,
-                "stalled": stalled,
+                "stalled": _r(stalled),
                 "runs": runs,
             }
         )
@@ -936,6 +942,27 @@ def _waiting(
         if nxt:
             rec["user"] = _r(_secs(waited, nxt))
     return out
+
+
+def _stretches_of(r: Run) -> list[Stretch]:
+    return stretches(r.calls, r.inputs, r.start, r.end)
+
+
+def _stall_spans(runs: list[Run]) -> list[tuple[datetime, datetime]]:
+    """The stalled stretches of these runs, merged where they overlap."""
+    spans = sorted((p.start, p.end) for r in runs for p in _stretches_of(r) if p.stalled)
+    out: list[tuple[datetime, datetime]] = []
+    for a, b in spans:
+        if out and a <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return out
+
+
+def _overlap(spans: list[tuple[datetime, datetime]], a: datetime, b: datetime) -> float:
+    """Seconds of these disjoint spans that fall between a and b."""
+    return sum(_secs(max(a, x), min(b, y)) for x, y in spans)
 
 
 def _descendants(ids: list[str], runs_by_id: dict[str, Run]) -> list[str]:
@@ -961,7 +988,7 @@ def _clock(
     for b in batches:
         sent, acted, waited = _dt(b["sent"]), _dt(b["acted"]), _dt(b["waited"])
         if not b["busy"] and sent and waited:
-            events.append((sent, acted, waited, b["id"], b["stalled"]))
+            events.append((sent, acted, waited, b["id"], bool(b["stalled"])))
     opened = {b["id"] for b in batches}
     for p in passes:
         if not (set(p.batches) & opened) and p.waited:
