@@ -138,47 +138,15 @@ def _jsonl(path: Path) -> list[dict[str, Any]]:
     return out
 
 
-def _agent(s: Session) -> dict[str, Any]:
-    """agent.json, or the older claude.json (which only held `parent`, for Claude)."""
-    rec = _json(s.agent_path, None)
-    if isinstance(rec, dict):
-        return rec
-    legacy = _json(s.legacy_claude_path, {})
-    return {"agent": "claude", "parent": legacy["parent"]} if legacy.get("parent") else {}
-
-
-def _conversations(s: Session) -> list[str]:
-    """Every Claude Code conversation the session ran in, oldest first."""
-    rec = _agent(s)
-    convs = rec.get("conversations")
-    if isinstance(convs, list) and convs:
-        return [str(c) for c in convs if c]
-    return [str(rec["parent"])] if rec.get("parent") else []
-
-
 def _phase_history(s: Session) -> list[tuple[datetime, str]]:
-    out = []
-    for rec in _jsonl(s.dir / "phase-history.jsonl"):
-        at = _dt(rec.get("at"))
-        if at:
-            out.append((at, str(rec.get("phase", ""))))
+    out = [
+        (at, str(h.get("phase", ""))) for h in s.read_phase_history() if (at := _dt(h.get("at")))
+    ]
     return sorted(out)
 
 
 def _deliveries(s: Session) -> dict[str, datetime]:
-    out = {}
-    for rec in _jsonl(s.dir / "deliveries.jsonl"):
-        at = _dt(rec.get("at"))
-        if at and rec.get("batch"):
-            out.setdefault(str(rec["batch"]), at)
-    return out
-
-
-def _variant(plan: dict[str, Any]) -> dict[str, Any]:
-    v = plan.get("variant")
-    if isinstance(v, dict) and v.get("name"):
-        return {"name": str(v["name"]), "models": dict(v.get("models") or {})}
-    return {"name": "none", "models": {}}
+    return {bid: at for bid, raw in s.read_deliveries().items() if bid and (at := _dt(raw))}
 
 
 def _batches(s: Session) -> list[dict[str, Any]]:
@@ -1231,9 +1199,9 @@ def quality(s: Session, runs: list[Run]) -> dict[str, int]:
 
 def _review_runs(s: Session) -> list[Run]:
     """A session's role agents and helpers: none unless its agent is Claude Code."""
-    if _agent(s).get("agent", "claude") != "claude":
+    if (s.read_agent().get("agent") or "claude") != "claude":
         return []
-    return _subagent_runs(s.slug, _conversations(s))
+    return _subagent_runs(s.slug, s.conversations())
 
 
 def _role_walls(runs: list[Run]) -> dict[str, list[float]]:
@@ -1271,7 +1239,7 @@ def _compare(
         per_role = _role_walls(runs)
         for role, values in per_role.items():
             walls.setdefault(role, []).extend(values)
-        name = _variant(_json(review.plan_path, {}))["name"]
+        name = review.read_variant()["name"]
         variants.setdefault(name, []).append(
             {
                 "slug": review.slug,
@@ -1348,10 +1316,10 @@ def _by_role(runs: list[Run]) -> list[dict[str, Any]]:
 def session_metrics(s: Session) -> dict[str, Any]:
     """The metrics report of one branch review, as the Metrics tab reads it."""
     plan = _json(s.plan_path, {})
-    variant = _variant(plan)
-    agent = str(_agent(s).get("agent", "")) or "claude"
+    variant = s.read_variant()
+    agent = s.read_agent().get("agent") or "claude"
     runs = _review_runs(s)
-    convs = _conversations(s) if agent == "claude" else []
+    convs = s.conversations() if agent == "claude" else []
     transcripts: list[Transcript] = []
     for conv in convs:
         for path in _coordinator_paths(conv):
