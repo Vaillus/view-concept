@@ -1142,7 +1142,19 @@ class Session:
         if not self.agent_path.exists() and self.legacy_claude_path.exists():
             parent = str(_read_json(self.legacy_claude_path, {}).get("parent", ""))
             return {"agent": "claude", "parent": parent} if parent else {}
-        return {key: str(value) for key, value in _read_json(self.agent_path, {}).items()}
+        record = _read_json(self.agent_path, {})
+        return {key: str(value) for key, value in record.items() if key != "conversations"}
+
+    def conversations(self) -> list[str]:
+        """Every agent conversation the session ran in, oldest first, the current one
+        (`parent`) last. A session opened from a new conversation (after /clear, the next
+        day) adds it; the earlier ones stay, so the runs they hold can still be found. A
+        session recorded before the list existed has its `parent` only."""
+        listed = _read_json(self.agent_path, {}).get("conversations")
+        if isinstance(listed, list):
+            return [str(c) for c in listed if c]
+        parent = self.read_parent()
+        return [parent] if parent else []
 
     def read_parent(self) -> str:
         """Id of the agent conversation that drives this one, "" when unknown."""
@@ -1166,14 +1178,18 @@ class Session:
 
     def bind_agent(self, agent: str, parent: str = "", name: str = "") -> bool:
         """Record the agent driving the session. Returns True when it changed (a resumed
-        session runs in a new agent conversation, so threads fork from the new one)."""
+        session runs in a new agent conversation, so threads fork from the new one). The
+        conversation joins the session's list of conversations (`conversations`)."""
         if not agent:
             return False
         current = self.read_agent()
         record = {"agent": agent, "parent": parent, "name": name or current.get("name", "")}
         if all(current.get(key) == value for key, value in record.items()):
             return False
-        _write_json(self.agent_path, {**record, "since": now_iso()})
+        conversations = self.conversations()
+        if parent and parent not in conversations:
+            conversations.append(parent)
+        _write_json(self.agent_path, {**record, "since": now_iso(), "conversations": conversations})
         return True
 
     # ---- side threads ----
