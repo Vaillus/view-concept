@@ -12,6 +12,7 @@ reach the agent session through the inbox.
         audit.json      vocabulary-audit findings       (written by the agent and `check`)
         status.json     what the agent is doing now: phase, its writing run (start, run
                         set), the scoping done mark, the section files it saw  (`status`)
+        phase-history.jsonl  each change of the phase, with its time  (`status`)
         change-history.json  every change of the model, oldest first     (written by `change`)
         terminal-messages.json  the user's later terminal messages      (written by `message`)
         implemented.json     the last model change each implementer run took into account
@@ -150,6 +151,7 @@ Unpublishing deletes the record.
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import json
 import os
@@ -238,6 +240,32 @@ def slugify(text: str) -> str:
 
 def now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def now_iso_ms() -> str:
+    """Now, to the millisecond: for the records the run metrics compare (a pickup takes
+    a few seconds)."""
+    return datetime.now(UTC).isoformat(timespec="milliseconds")
+
+
+def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """The records of an append-only file; a line cut by a crash is skipped."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return []
+    out = []
+    for line in lines:
+        with contextlib.suppress(json.JSONDecodeError):
+            if isinstance(record := json.loads(line), dict):
+                out.append(record)
+    return out
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -351,6 +379,10 @@ class Session:
     @property
     def request_path(self) -> Path:
         return self.dir / "request.md"
+
+    @property
+    def phase_history_path(self) -> Path:
+        return self.dir / "phase-history.jsonl"
 
     @property
     def questions_path(self) -> Path:
@@ -946,7 +978,8 @@ class Session:
         outline with no file yet, or the whole outline when every section has one. A
         writing call during a writing run keeps the run's start and adds the sections it
         names to the set. Any other phase ends the run. `done` (phase "scoping" only) is
-        the scoping done mark: the agent has nothing more to ask."""
+        the scoping done mark: the agent has nothing more to ask. A phase other than the
+        previous one is appended to the phase history (`read_phase_history`)."""
         if phase not in PHASES:
             raise SessionError(f"unknown phase {phase!r}; one of {', '.join(PHASES)}")
         if done and phase != "scoping":
@@ -974,7 +1007,15 @@ class Session:
         if done:
             status["done"] = True
         _write_json(self.status_path, status)
+        if phase != previous.get("phase"):
+            _append_jsonl(self.phase_history_path, {"phase": phase, "at": now_iso_ms()})
         return status
+
+    def read_phase_history(self) -> list[dict[str, Any]]:
+        """Each change of the declared phase, {phase, at}, oldest first: when the page
+        started waiting for the user and when it stopped (the run metrics' waiting split).
+        status.json keeps the current phase only."""
+        return _read_jsonl(self.phase_history_path)
 
     def _unwritten(self, had: set[str]) -> list[str]:
         """The run set of a run that names none: the outline's sections with no file in
