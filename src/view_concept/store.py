@@ -5,7 +5,8 @@ the plan and the sections; the page reads them; the page writes review comments,
 reach the agent session through the inbox.
 
     <home>/sessions/<slug>/
-        plan.json       title, initial_request, kind, workflow, repo, base, pr, outline, lexicon
+        plan.json       title, initial_request, kind, workflow, repo, base, pr, variant,
+                        outline, lexicon
         sections/<id>.md  the prose of one outline section         (written by the agent)
         sections/<id>.html  an HTML section instead: a self-contained HTML document
         sections/<id>/  its media folder: media files the agent produced for it
@@ -214,6 +215,8 @@ KINDS = ("explanation", "code")
 WORKFLOWS = ("view-concept", "view-branch", "view-refactor")
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
+# The role agents a branch review's coordinator starts; a variant sets a model per role.
+AGENT_ROLES = ("planner", "writer", "implementer", "reviewer")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
@@ -538,6 +541,29 @@ class Session:
         plan["pr"] = {"url": url, "at": now_iso()}
         _write_json(self.plan_path, plan)
         return plan["pr"]
+
+    def read_variant(self) -> dict[str, Any]:
+        """The setup the session runs with: {name, models}, `models` mapping a role to the
+        model its agent runs on. A session that names none runs variant "none"."""
+        variant = self.read_plan().get("variant") or {}
+        return {"name": variant.get("name") or "none", "models": dict(variant.get("models", {}))}
+
+    def set_variant(self, name: str, models: dict[str, str]) -> dict[str, Any]:
+        """Name the setup the session runs with and the model of each role it sets, in one
+        write, so the label matches what ran. A role left out keeps the coordinator's
+        model; a helper takes its role agent's."""
+        name = name.strip()
+        if not name:
+            raise SessionError("a variant needs a name")
+        odd = sorted(set(models) - set(AGENT_ROLES))
+        if odd:
+            raise SessionError(f"unknown role {', '.join(odd)}; one of {', '.join(AGENT_ROLES)}")
+        if any(not m.strip() for m in models.values()):
+            raise SessionError("a model per role needs a model name")
+        plan = self.read_plan()
+        plan["variant"] = {"name": name, "models": models}
+        _write_json(self.plan_path, plan)
+        return plan["variant"]
 
     def section_files(self) -> dict[str, Path]:
         """Each written section's file, by id in id order: <id>.html for an HTML section,

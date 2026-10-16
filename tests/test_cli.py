@@ -319,3 +319,17 @@ def test_status_takes_a_run_set_and_a_scoping_done_mark(tmp_path):
     assert view_concept(tmp_path, "status", "demo", "scoping", "--done").returncode == 0
     assert s.read_status()["done"] is True
     assert view_concept(tmp_path, "status", "demo", "writing", "--done").returncode != 0
+
+
+def test_variant_names_the_setup_and_a_model_per_role(tmp_path):
+    assert view_concept(tmp_path, "new", "Speed").returncode == 0
+    r = view_concept(tmp_path, "variant", "speed")
+    assert r.returncode == 0 and r.stdout.strip() == "variant: none · no model per role"
+    r = view_concept(tmp_path, "variant", "speed", "writer on sonnet", "--model", "writer=sonnet")
+    assert r.returncode == 0 and "writer=sonnet" in r.stdout
+    plan = json.loads((tmp_path / "sessions" / "speed" / "plan.json").read_text())
+    assert plan["variant"] == {"name": "writer on sonnet", "models": {"writer": "sonnet"}}
+    r = view_concept(tmp_path, "variant", "speed", "odd", "--model", "helper=haiku")
+    assert r.returncode == 1 and "unknown role helper" in r.stderr
+    r = view_concept(tmp_path, "variant", "speed", "odd", "--model", "writer")
+    assert r.returncode == 1 and "role=model" in r.stderr
