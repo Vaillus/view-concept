@@ -216,7 +216,11 @@ the code, the session files or a command can answer is not a question for the
 user: look it up, and so is one the request already settles. Never ask again a question the context lists, open,
 deferred, answered or skipped. A skipped question means: use your default,
 which the writer states the same way, in the « Default taken » line at the
-end of the section the decision touches, and only there.
+end of the section the decision touches, and only there. An answer line
+followed by `(from side thread t5: threads/t5.json)` was discussed first in a
+side thread the user opened on the question, from its box: read the thread
+when the answer alone leaves you unsure what the user wants or why; the
+answer line stays the answer.
 
 **A design question asked in scoping carries its background.** A design
 question chooses between designs, as opposed to a fact you can look up. The

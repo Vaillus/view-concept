@@ -13,6 +13,12 @@ import json, sys
 prompt = sys.stdin.read()
 with open(sys.argv[0] + ".calls", "a") as f:
     f.write(json.dumps({"args": sys.argv[1:], "prompt": prompt}) + "\\n")
+if "--json-schema" in sys.argv:
+    print(json.dumps({"type": "system", "subtype": "init", "session_id": "child-1"}))
+    answer = {"choices": ["no", "maybe"], "text": "Drop it, the reads are cheap."}
+    print(json.dumps({"type": "result", "is_error": False, "result": json.dumps(answer),
+                      "structured_output": answer}))
+    sys.exit(0)
 if "FAIL" in prompt:
     print(json.dumps({"type": "result", "is_error": True, "result": "boom"}))
     sys.exit(1)
@@ -317,3 +323,88 @@ def test_the_briefing_gives_the_vocabulary_read_up_to_the_passage(session):
     assert "skills loaded above" not in text and "not a section of the explanation" in text
     general = threads._briefing(session, {**thread, "section": "", "quote": ""}, ClaudeBackend())
     assert "read the whole document" in general and "cache (stored keys)" in general
+
+
+def test_a_thread_on_an_agent_question(session, fake_command):
+    from view_concept.agents import ClaudeBackend
+
+    session.add_question("Keep the cache?", ["yes", "no"], background="It stores the keys.")
+    with pytest.raises(SessionError):
+        session.new_thread(question="q9")
+    threads.create(session, "", "", "", "what does no change?", question="q1")
+    t = wait_idle(session, "t1")
+    assert t["question"] == "q1"
+    text = threads._briefing(session, t, ClaudeBackend())
+    assert "the agent question q1: « Keep the cache? »" in text
+    assert "options: yes | no" in text and "background: It stores the keys." in text
+    assert "to understand it before answering it" in text
+    b = session.answer_question("q1", ["no"])
+    assert b["answers"] == [{"question": "q1", "choices": ["no"], "text": "", "threads": ["t1"]}]
+    out = format_batch("kv-cache", b, session.read_plan()["outline"], session.read_questions())
+    assert "answer to q1 « Keep the cache? »: no\n    (from side thread t1: threads/t1.json)" in out
+    with pytest.raises(SessionError):  # the answer points to it
+        threads.delete(session, "t1")
+    with pytest.raises(SessionError):  # only an open question takes a new thread
+        session.new_thread(question="q1")
+
+
+def test_an_answer_without_threads_names_none(session):
+    session.add_question("Keep the cache?", ["yes", "no"])
+    session.add_question("Why?")
+    assert "threads" not in session.skip_question("q1")["answers"][0]
+    assert "threads" not in session.unclear_question("q2", "what cache?")["answers"][0]
+
+
+def test_use_as_answer_drafts_the_answer(session, tmp_path, monkeypatch):
+    script = tmp_path / "drafter"
+    script.write_text(
+        f"#!{sys.executable}\nimport sys\nprompt = sys.stdin.read()\n"
+        "print('**choice:** no' if 'Write my answer' in prompt else 'It changes the reads.')\n"
+        "print('choice: maybe')\nprint('answer: Drop it, the reads are cheap.')\n"
+    )
+    script.chmod(0o755)
+    monkeypatch.setenv("VIEW_CONCEPT_AGENT_COMMAND", str(script))
+    session.add_question("Keep the cache?", ["yes", "no"])
+    threads.create(session, "", "", "", "what does no change?")
+    wait_idle(session, "t1")
+    with pytest.raises(SessionError):  # not opened on a question
+        threads.send(session, "t1", "", draft=True)
+    threads.create(session, "", "", "", "what does no change?", question="q1")
+    wait_idle(session, "t2")
+    threads.send(session, "t2", "", draft=True)
+    t = wait_idle(session, "t2")
+    asked, reply = t["messages"][-2:]
+    assert asked == {**asked, "text": "Draft my answer to q1", "draft": True}
+    assert reply["draft"] == {"choices": ["no"], "text": "Drop it, the reads are cheap."}
+    assert "draft" not in t["messages"][1]
+    session.skip_question("q1")
+    with pytest.raises(SessionError):  # the question is closed
+        threads.send(session, "t2", "", draft=True)
+
+
+def test_use_as_answer_on_claude_holds_the_turn_to_a_schema(session, fake_claude):
+    session.add_question("Keep the cache?", ["yes", "no"])
+    threads.create(session, "", "", "", "what does no change?", question="q1")
+    wait_idle(session, "t1")
+    threads.send(session, "t1", "", draft=True)
+    t = wait_idle(session, "t1")
+    reply = t["messages"][-1]
+    assert reply["draft"] == {"choices": ["no"], "text": "Drop it, the reads are cheap."}
+    assert reply["text"] == "**Choice:** no\n\nDrop it, the reads are cheap."
+    first, second = calls(fake_claude)
+    assert "--json-schema" not in first["args"]
+    schema = json.loads(second["args"][second["args"].index("--json-schema") + 1])
+    assert schema["properties"]["choices"]["items"]["enum"] == ["yes", "no"]
+    assert schema["properties"]["choices"]["maxItems"] == 1
+    assert "`choices`" in second["prompt"] and "choice: <option>" not in second["prompt"]
+
+
+def test_read_draft_keeps_real_options_only():
+    q = {"options": ["a", "b"], "multi": False}
+    assert threads._read_draft("choice: c\nchoice: b\nchoice: a\nanswer:", q) == {
+        "choices": ["b"],
+        "text": "",
+    }
+    multi = {**q, "multi": True}
+    text = "choice: a\nchoice: b\nanswer: both,\nfor speed."
+    assert threads._read_draft(text, multi) == {"choices": ["a", "b"], "text": "both, for speed."}

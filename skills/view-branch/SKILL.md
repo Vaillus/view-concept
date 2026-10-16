@@ -144,7 +144,9 @@ note: <optional note for the whole batch>
 The `action` line names the button: `answer` (an agent question answered,
 skipped, or not understood: `answer to q1 « … »: …`, `q3 skipped « … »` or
 `q4 unclear « … » (…): <what is missing>`; an unclear question is
-**deferred** until an agent asks it again), `plan` (« Write
+**deferred** until an agent asks it again; an answer line can be followed by
+`(from side thread t5: threads/t5.json)`, a side thread the user opened on
+the question before answering), `plan` (« Write
 model », or « Rewrite model » when the line says rewrite; the page has
 already marked the open questions skipped, except a section question whose
 section is not written yet, which stays open), `go-on` (« Go on », during a

@@ -46,15 +46,22 @@ class TurnState:
     failed: bool = False
     error: str = ""
     final_text: str = ""
+    structured: Any = None  # the object a turn run with a JSON schema returned
     noise: list[str] = field(default_factory=list)
 
 
 class Backend:
     name = ""
     forks = False  # a thread can start from the main conversation
+    structured = False  # a turn can be held to a JSON schema (`schema_args`)
 
     def args(self, s: Session, thread: dict[str, Any]) -> list[str]:
         raise NotImplementedError
+
+    def schema_args(self, schema: dict[str, Any]) -> list[str]:
+        """The arguments that hold the turn's answer to `schema`, on a structured backend;
+        the answer then lands in `TurnState.structured`."""
+        return []
 
     def prompt(self, thread: dict[str, Any], briefing: str, text: str) -> str:
         """What goes on stdin: the briefing on a thread's first turn, then the message."""
@@ -81,6 +88,7 @@ class Backend:
 class ClaudeBackend(Backend):
     name = "claude"
     forks = True
+    structured = True
 
     def args(self, s: Session, thread: dict[str, Any]) -> list[str]:
         args = [os.environ.get(CLAUDE_ENV, "claude"), "-p", "--output-format", "stream-json"]
@@ -94,6 +102,9 @@ class ClaudeBackend(Backend):
             args += ["--resume", s.fork_parent(), "--fork-session"]
         return args
 
+    def schema_args(self, schema: dict[str, Any]) -> list[str]:
+        return ["--json-schema", json.dumps(schema)]
+
     def feed(
         self, line: str, thread: dict[str, Any], reply: dict[str, Any], turn: TurnState
     ) -> bool:
@@ -106,6 +117,7 @@ class ClaudeBackend(Backend):
         if kind == "result":
             turn.finished = True
             turn.final_text = str(event.get("result", ""))
+            turn.structured = event.get("structured_output")
             if event.get("is_error"):
                 turn.failed = True
                 turn.error = turn.final_text.strip()

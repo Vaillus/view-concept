@@ -355,6 +355,7 @@ class ThreadIn(BaseModel):
     section: str = ""
     quote: str = ""
     prefix: str = ""
+    question: str = ""
     text: str
 
 
@@ -397,7 +398,8 @@ def list_threads(slug: str) -> dict[str, Any]:
 def new_thread(slug: str, body: ThreadIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
-        return thread_view(s, threads.create(s, body.section, body.quote, body.prefix, body.text))
+        t = threads.create(s, body.section, body.quote, body.prefix, body.text, body.question)
+        return thread_view(s, t)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
 
@@ -407,6 +409,19 @@ def thread_message(slug: str, tid: str, body: MessageIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
         return thread_view(s, threads.send(s, tid, body.text))
+    except threads.ThreadBusy as e:
+        raise HTTPException(409, str(e)) from e
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/s/{slug}/threads/{tid}/draft")
+def thread_draft(slug: str, tid: str) -> dict[str, Any]:
+    """« use as answer »: a turn of a thread opened on an agent question that drafts the
+    user's answer to it (the reply's `draft`), which the page puts in the question's box."""
+    s = get_session(slug)
+    try:
+        return thread_view(s, threads.send(s, tid, "", draft=True))
     except threads.ThreadBusy as e:
         raise HTTPException(409, str(e)) from e
     except SessionError as e:
