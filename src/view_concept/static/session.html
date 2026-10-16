@@ -34,6 +34,7 @@
       <button class="tab" data-tab="plan" title="Plan (1)">plan</button>
       <button class="tab" data-tab="doc" title="Explanation (2)">explanation</button>
       <button class="tab" data-tab="refactor" title="Refactoring (3)" hidden>refactor</button>
+      <button class="tab" data-tab="metrics" title="Metrics (4)" hidden>metrics</button>
     </nav>
     <div id="plan-view" class="view plan" data-view="plan">
       <div class="plan-inner">
@@ -61,6 +62,7 @@
     </div>
     <article id="doc" class="view doc" data-view="doc"></article>
     <article id="refactor" class="view doc refactor" data-view="refactor"></article>
+    <article id="metrics" class="view metrics" data-view="metrics"></article>
   </section>
 
   <div id="divider" class="divider" title="Drag to resize the review pane; double-click to reset"></div>
@@ -96,6 +98,7 @@
 <div id="frame-park" hidden></div>
 
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
+<script defer src="/static/metrics.js"></script>
 <script defer src="/static/app.js"></script>
 <script defer src="/static/sidebar.js"></script>
 </body>

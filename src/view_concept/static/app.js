@@ -26,7 +26,7 @@ let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
 let drafts = loadJSON(DRAFTS_KEY, []);
 let pendingSelection = null;
-let tab = null;          // "plan" | "doc" | "refactor"
+let tab = null;          // "plan" | "doc" | "refactor" | "metrics"
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
 let popThread = null;          // id of the thread shown in the popover
@@ -75,6 +75,7 @@ async function load() {
   if (state && JSON.stringify(state.plan) !== JSON.stringify(next.plan)) planChanged = true;
   state = next;
   render();
+  if (tab === "metrics") refreshMetrics();
 }
 
 function connect() {
@@ -115,6 +116,8 @@ const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
 const tabOf = (id) => (inRefactoringPart(id) ? "refactor" : "doc");
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
+// The Metrics tab (metrics.js) draws a branch review's runs: other workflows have no role agents.
+const hasMetricsTab = () => state.workflow === "view-branch";
 const docViews = () => [$("#doc"), $("#refactor")];
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
@@ -146,10 +149,12 @@ function render() {
    tab of the section being written) — and otherwise stays where the user put it. A
    model waiting for approval does not move it, nor does a PR waiting to be created:
    « Approve model » sits at the end of the explanation, where the model is read, and
-   « Create PR » at the end of the refactor tab. */
+   « Create PR » at the end of the refactor tab. A branch review also has the Metrics tab,
+   which fetches its numbers when shown and again on each state update while shown. */
 
 function setTab(name) {
   if (name === "refactor" && !hasRefactorTab()) name = "doc";
+  if (name === "metrics" && !hasMetricsTab()) name = "doc";
   releaseAnchor(); // the page is about to move the view, or show another one
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
@@ -157,6 +162,7 @@ function setTab(name) {
   $("#sel-actions").hidden = true;
   renderMermaid($(`.view[data-view="${name}"]`));
   positionPopover();
+  if (name === "metrics") refreshMetrics();
 }
 
 function followSession() {
@@ -171,6 +177,8 @@ function followSession() {
   lastPhase = phase;
   $('.tab[data-tab="refactor"]').hidden = !hasRefactorTab();
   if (tab === "refactor" && !hasRefactorTab()) setTab("doc");
+  $('.tab[data-tab="metrics"]').hidden = !hasMetricsTab();
+  if (tab === "metrics" && !hasMetricsTab()) setTab("doc");
   // In a branch review, the explanation is the modeling part, so its tab is named after the model.
   const docLabel = state.workflow === "view-branch" ? "model" : "explanation";
   $('.tab[data-tab="doc"]').title = `${docLabel[0].toUpperCase()}${docLabel.slice(1)} (2)`;
@@ -189,6 +197,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "1") setTab("plan");
   if (e.key === "2") setTab("doc");
   if (e.key === "3" && hasRefactorTab()) setTab("refactor");
+  if (e.key === "4" && hasMetricsTab()) setTab("metrics");
 });
 
 /* ---------------- status + approvals ---------------- */

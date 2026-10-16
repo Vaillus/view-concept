@@ -308,6 +308,127 @@ a.cite:hover code { text-decoration: underline; }
 .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--raised);
          border: 1px solid var(--accent); padding: 6px 14px; z-index: 20; }
 
+/* ---- the Metrics tab of a branch review (metrics.js) ---- */
+.metrics { padding: 8px 32px 40px; }
+.mx { max-width: 120ch; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; font-size: 12px; line-height: 18px; }
+.mx-empty { margin-top: 20vh; text-align: center; }
+.mx-part { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.mx-label { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
+.mx-note { margin: 0; }
+.mx-num { text-align: right; font-variant-numeric: tabular-nums; }
+.mx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 18px; align-items: start; }
+.mx-grid > * { min-width: 0; }
+.mx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mx-chip { display: inline-block; padding: 0 6px; background: var(--neutralbg); color: var(--neutralink); }
+.mx-chip.mx-flag, .mx-flag { color: var(--danger); }
+.mx-chip.mx-flag { background: var(--dangerbg); }
+.mx-chip.mx-series { background: var(--infobg); color: var(--info); }
+.mx-chip.mx-link { cursor: pointer; color: var(--accent); }
+.mx-chip.mx-link:hover { background: var(--accentbg); }
+.mx-click { cursor: pointer; }
+.mx-click:hover, .mx-click.sel { color: var(--accent); }
+.mx-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 8px; }
+.mx-kpi { display: flex; flex-direction: column; gap: 2px; }
+.mx-kpi b { font-size: 14px; color: var(--ink); }
+
+/* activity colours, shared by every bar; the clock's own parts; the hatched breaks */
+.mx .a-load { background: var(--info); }
+.mx .a-explore { background: var(--alt); }
+.mx .a-write { background: var(--accent); }
+.mx .a-commands { background: var(--ok); }
+.mx .a-launch { background: var(--flag); }
+.mx .a-helpers { background: var(--line-strong); }
+.mx .a-report { background: var(--muted); }
+.mx .a-other { background: var(--ink-dim); }
+.mx .p-pick { background: var(--warn); }
+.mx .p-agent { background: var(--ink-dim); }
+.mx .cut { background: repeating-linear-gradient(135deg, var(--raised) 0 3px, var(--bg) 3px 6px); }
+.mx .cut.stall { background: repeating-linear-gradient(135deg, var(--danger) 0 2px, var(--bg) 2px 6px); }
+.mx-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--ink-dim); font-size: 11px; }
+.mx-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.mx-sw { display: inline-block; width: 10px; height: 10px; }
+
+/* the review's clock: a band for the page, one lane per role, runs packed in rows */
+.mx-tl { display: flex; flex-direction: column; gap: 3px; }
+.mx-lane { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: 8px; align-items: center; }
+.mx-who { color: var(--ink-dim); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mx-band { position: relative; height: 14px; }
+.mx-track { position: relative; }
+.mx-row { position: relative; height: 12px; }
+.mx-row + .mx-row { margin-top: 2px; }
+.mx-seg { position: absolute; top: 0; bottom: 0; }
+.mx-tick { position: absolute; top: -4px; bottom: -4px; width: 2px; padding: 0; border: 0; background: var(--ink); }
+.mx-tick:hover { background: var(--accent); }
+.mx-runbox { position: absolute; top: -1px; bottom: -1px; padding: 0; border: 0; background: none; }
+.mx-runbox:hover, .mx-runbox.sel { outline: 2px solid var(--ink); outline-offset: 1px; z-index: 2; }
+.mx-axis { position: relative; height: 14px; color: var(--muted); font-size: 11px; }
+.mx-axis span { position: absolute; white-space: nowrap; transform: translateX(-50%); }
+
+/* the detail panel: a batch, a role or a run */
+.mx-panel { background: var(--raised); padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mx-dhead { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.mx-dhead b { font-size: 14px; }
+.mx-sub { display: flex; flex-direction: column; gap: 4px; }
+.mx-abar { position: relative; display: flex; height: 18px; }
+.mx-abar > div { height: 100%; }
+.mx-first { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--danger); }
+.mx-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: 8px; }
+.mx-tile { display: flex; flex-direction: column; gap: 2px; background: var(--bg); padding: 6px 8px; }
+.mx-tile b { font-size: 13px; font-weight: normal; color: var(--ink); }
+.mx-tile.wide { grid-column: 1 / -1; }
+.mx-acts { display: grid; grid-template-columns: 11rem minmax(0, 1fr) 6rem; gap: 3px 8px; align-items: center; }
+.mx-abar-one { height: 8px; }
+.mx-wave { display: flex; flex-direction: column; gap: 4px; }
+.mx-wrow { display: grid; grid-template-columns: 8rem minmax(0, 1fr) 6rem; gap: 8px; align-items: center; cursor: pointer; }
+.mx-wrow:hover, .mx-wrow.sel { color: var(--accent); }
+.mx-wtrack { position: relative; height: 14px; background: var(--bg); }
+.mx-wtrack .mx-abar { top: 0; height: 14px; }
+
+/* by role, per batch */
+.mx-rrow { display: grid; grid-template-columns: 8rem minmax(0, 1fr) 6rem; gap: 8px; align-items: center; }
+.mx-brow { display: grid; grid-template-columns: 3rem 8rem minmax(0, 1fr) 7rem; gap: 8px; align-items: center; }
+.mx-rrow.head, .mx-brow.head { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.mx-stack { display: flex; height: 12px; }
+.mx-joined { height: 2px; background: var(--ink-dim); }
+
+/* runs list, side-thread turns */
+.mx-subtabs { display: flex; border-bottom: 1px solid var(--line); }
+.mx-subtab { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 4px 12px; color: var(--muted); }
+.mx-subtab:hover { color: var(--ink); }
+.mx-subtab.on { color: var(--ink); border-bottom-color: var(--accent); }
+.mx-scroll { overflow-x: auto; display: flex; flex-direction: column; gap: 6px; }
+.mx-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mx-table th { text-align: left; font-weight: normal; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+               padding: 4px 6px; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+.mx-table th.mx-num { text-align: right; }
+.mx-table th.mx-sort { cursor: pointer; }
+.mx-table th.mx-sort:hover { color: var(--ink); }
+.mx-table td { padding: 3px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.mx-table td.mx-ind { padding-left: 22px; color: var(--ink-dim); }
+.mx-table tbody tr[data-run] { cursor: pointer; }
+.mx-table tbody tr[data-run]:hover td, .mx-table tbody tr.sel td { color: var(--accent); }
+.mx-table td .mx-chip + .mx-chip { margin-left: 4px; }
+
+/* every branch review of the repository, by variant */
+.mx-rows { display: flex; flex-direction: column; gap: 4px; }
+.mx-strip { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 8px; align-items: center; }
+.mx-strack { position: relative; height: 16px; border-bottom: 1px solid var(--line); margin-right: 12px; }
+.mx-sax { position: relative; height: 14px; color: var(--muted); font-size: 11px; margin-right: 12px; }
+.mx-sax span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.mx-v0 { --mx-c: var(--accent); }
+.mx-v1 { --mx-c: var(--alt); }
+.mx-v2 { --mx-c: var(--info); }
+.mx-v3 { --mx-c: var(--ok); }
+.mx-v4 { --mx-c: var(--flag); }
+.mx-v5 { --mx-c: var(--warn); }
+.mx-dot { position: absolute; top: 3px; width: 9px; height: 9px; border-radius: 50%; transform: translateX(-50%); background: var(--mx-c); opacity: .85; }
+.mx-dot.me { outline: 2px solid var(--ink); outline-offset: 1px; opacity: 1; z-index: 1; }
+.mx-med { position: absolute; top: 0; bottom: -3px; width: 2px; transform: translateX(-50%); background: var(--mx-c); }
+.mx-dotsw { border-radius: 50%; background: var(--mx-c, var(--accent)); }
+.mx-mesw { outline: 2px solid var(--ink); outline-offset: 1px; }
+.mx-medsw { width: 2px; background: var(--ink-dim); }
+.mx-ring { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--mx-c); }
+
 /* ---- sidebar: the sessions by project (sidebar.js), on every page ---- */
 .shell { flex: 1; display: flex; min-height: 0; }
 .shell > main { flex: 1; min-width: 0; }
