@@ -545,7 +545,7 @@ function pageScroll(view, scroll) {
 }
 
 /* The block key: how the reading anchor names its block, by the first 80 characters of
-   the block's visible text (whitespace collapsed), with the block's rank and the words of
+   the block's text (its words joined by spaces), with the block's rank and the words of
    the whole element's body at the time it is noted. After a render, the block is found
    in that element only, by these questions in order:
    - the element is gone: no block (the view does not move);
@@ -562,15 +562,19 @@ const KEY_LENGTH = 80;
 
 // The body of an anchored element: a section's, or the section block of an item's description.
 const bodyOf = (node) => node.querySelector(":scope > .body, :scope > td > .sec > .body");
-const blockText = (b) => collapse(b.textContent);
+/* A block's words and text, cut the way the change highlights cut them (words): a formula
+   counts as its TeX and a diagram as its source, so a re-typeset formula or a drawn SVG
+   keeps the block's key and words. */
+const blockWords = (b) => words(b).map((w) => w.text);
+const blockText = (b) => blockWords(b).join(" ");
 
 // The words of a body's blocks, each with the rank of its block.
 function bodyWords(body) {
-  const words = [], ranks = [];
+  const list = [], ranks = [];
   [...body.children].forEach((b, k) => {
-    for (const w of blockText(b).split(" ").filter(Boolean)) { words.push(w); ranks.push(k); }
+    for (const w of blockWords(b)) { list.push(w); ranks.push(k); }
   });
-  return { words, ranks };
+  return { words: list, ranks };
 }
 
 function noteBlock(a, body, block) {
