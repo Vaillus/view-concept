@@ -12,6 +12,13 @@ thread has said. Each turn is one process, run by the server in a background Pyt
 its reply streams into threads/<id>.json, which the server's event stream watches like the
 other session files. `agents.py` holds what differs between agents.
 
+A thread opened on an agent question (`question`) helps the user understand it before
+answering it from its box. Its « use as answer » turn (`draft`) asks for the answer, which
+the server keeps as the reply's `draft` ({choices, text}); the page fills the question's
+box with it. On Claude the turn is held to a JSON schema whose choices can only be the
+question's options; another agent writes the answer in a fixed text form, read back here.
+The answer the user sends names the question's threads.
+
 Threads are read-only, whatever the agent: its read-only tool set or sandbox, no approvals
 asked. A change the discussion leads to goes to the main session as a comment of the next
 batch (the comment carries the thread id).
@@ -55,32 +62,39 @@ def view(s: Session, thread: dict[str, Any]) -> dict[str, Any]:
     return thread
 
 
-def create(s: Session, section: str, quote: str, prefix: str, text: str) -> dict[str, Any]:
+def create(
+    s: Session, section: str, quote: str, prefix: str, text: str, question: str = ""
+) -> dict[str, Any]:
     if not text.strip():
         raise SessionError("empty message")
     with _lock:
-        thread = s.new_thread(section, quote, prefix)
+        thread = s.new_thread(section, quote, prefix, question)
     return send(s, thread["id"], text)
 
 
-def send(s: Session, tid: str, text: str) -> dict[str, Any]:
-    """Add the user's message and start the turn that answers it."""
-    text = text.strip()
-    if not text:
-        raise SessionError("empty message")
+def send(s: Session, tid: str, text: str, draft: bool = False) -> dict[str, Any]:
+    """Add the user's message and start the turn that answers it. A `draft` turn, on a
+    thread opened on an open agent question, asks for the user's answer to it instead."""
     with _lock:
         if is_running(s, tid):
             raise ThreadBusy(f"{tid} is still answering")
         thread = s.read_thread(tid)
+        question = _draft_question(s, thread) if draft else None
+        text = f"Draft my answer to {question['id']}" if question else text.strip()
+        if not text:
+            raise SessionError("empty message")
         try:
             backend = resolve(s)
         except ValueError as e:
             raise SessionError(str(e)) from e
         first = not thread["agent_session"]
         args = backend.args(s, thread)
-        prompt = backend.prompt(thread, _briefing(s, thread, backend), text)
+        if question and backend.structured:
+            args += backend.schema_args(_draft_schema(question))
+        asked = _draft_request(question, backend.structured) if question else text
+        prompt = backend.prompt(thread, _briefing(s, thread, backend), asked)
         thread["messages"] += [
-            {"role": "user", "text": text, "at": now_iso()},
+            {"role": "user", "text": text, "at": now_iso(), **({"draft": True} if draft else {})},
             {"role": "assistant", "text": "", "at": now_iso()},
         ]
         if first and backend.forks:
@@ -101,8 +115,101 @@ def send(s: Session, tid: str, text: str) -> dict[str, Any]:
         _running[(str(s.dir), tid)] = proc
         thread.update(state="running", activity="starting", error="")
         s.write_thread(thread)
-    threading.Thread(target=_run, args=(s, thread, backend, proc, prompt), daemon=True).start()
+    args = (s, thread, backend, proc, prompt, question)
+    threading.Thread(target=_run, args=args, daemon=True).start()
     return thread
+
+
+def _draft_question(s: Session, thread: dict[str, Any]) -> dict[str, Any]:
+    """The open agent question a « use as answer » turn drafts the answer to."""
+    qid = thread.get("question", "")
+    if not qid:
+        raise SessionError(f"{thread['id']} is not about an agent question")
+    q = next((q for q in s.read_questions() if q["id"] == qid), None)
+    if not q or q["status"] != "open":
+        raise SessionError(f"{qid} is no longer open")
+    return q
+
+
+def _draft_schema(q: dict[str, Any]) -> dict[str, Any]:
+    """The JSON schema of a structured « use as answer » turn: only the question's options
+    can be chosen, one unless it takes several."""
+    choices: dict[str, Any] = {"type": "array", "items": {"type": "string", "enum": q["options"]}}
+    if not q["options"]:
+        choices = {"type": "array", "maxItems": 0}
+    elif not q.get("multi"):
+        choices["maxItems"] = 1
+    return {
+        "type": "object",
+        "properties": {"choices": choices, "text": {"type": "string"}},
+        "required": ["choices", "text"],
+        "additionalProperties": False,
+    }
+
+
+def _draft_request(q: dict[str, Any], structured: bool) -> str:
+    """The message of a « use as answer » turn: the answer the discussion leads to, held
+    to `_draft_schema` on a structured backend, else in a form `_read_draft` reads back."""
+    ask = (
+        f"Write my answer to {q['id']} as this discussion leads me to give it, in my voice,"
+        " to the agent who asked."
+    )
+    if structured:
+        return (
+            f"{ask} `choices`: the option(s) it picks, none when no option fits. `text`: one"
+            " or two sentences, what I want and why, or what the chosen option leaves out;"
+            " empty when the option says it all."
+        )
+    options = (
+        "On one line each, the option(s) it picks, copied exactly from the list, as"
+        f" « choice: <option> »{' (several allowed)' if q.get('multi') else ''}; none when"
+        " no option fits. Options: " + " | ".join(q["options"]) + "\n"
+        if q["options"]
+        else ""
+    )
+    return (
+        f"{ask} Reply with these lines only, no other text:\n"
+        f"{options}"
+        "Then one line « answer: <one or two sentences> »: what I want and why, or what the"
+        " chosen option leaves out. Write « answer: » with nothing after it when the option"
+        " says it all."
+    )
+
+
+def _read_draft(text: str, q: dict[str, Any]) -> dict[str, Any]:
+    """The answer a « use as answer » reply drafts: the options it names (only real ones,
+    one unless the question takes several) and its text."""
+    choices: list[str] = []
+    answer: list[str] = []
+    for line in text.splitlines():
+        key, _, value = line.strip().strip("*`").partition(":")
+        value = value.strip().strip("*`").strip()
+        if key.strip().lower() == "choice" and value in q["options"] and value not in choices:
+            choices.append(value)
+        elif key.strip().lower() == "answer":
+            answer.append(value)
+        elif answer and line.strip():
+            answer.append(line.strip())
+    if not q.get("multi"):
+        choices = choices[:1]
+    return {"choices": choices, "text": " ".join(a for a in answer if a)}
+
+
+def _structured_draft(answer: Any, q: dict[str, Any]) -> dict[str, Any]:
+    """The answer a structured « use as answer » turn returned, checked against the
+    question all the same."""
+    answer = answer if isinstance(answer, dict) else {}
+    raw = answer.get("choices")
+    choices = [c for c in dict.fromkeys(raw if isinstance(raw, list) else []) if c in q["options"]]
+    if not q.get("multi"):
+        choices = choices[:1]
+    return {"choices": choices, "text": str(answer.get("text", "")).strip()}
+
+
+def _draft_text(draft: dict[str, Any]) -> str:
+    """A drafted answer as the thread shows it."""
+    lines = [f"**Choice:** {', '.join(draft['choices'])}"] if draft["choices"] else []
+    return "\n\n".join(lines + ([draft["text"]] if draft["text"] else []))
 
 
 def stop(s: Session, tid: str) -> None:
@@ -157,7 +264,10 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
     titles = {sec["id"]: sec.get("title", sec["id"]) for sec in outline}
     doc = "review" if plan.get("workflow") in ("view-branch", "view-refactor") else "explanation"
     sec = thread["section"]
-    if sec:
+    qid = thread.get("question", "")
+    if qid:
+        anchor = _question_anchor(s, qid, number, titles)
+    elif sec:
         where = f"§{number.get(sec, '?')} {titles.get(sec, sec)} ({sec})"
         anchor = f"{where}: « {thread['quote']} »" if thread["quote"] else f"the whole of {where}"
     else:
@@ -186,6 +296,7 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
         f"- This is a conversation, not a section of the {doc}: answer in a few sentences"
         " of plain prose, without tables, headings or bullet lists unless the user asks"
         " for them.",
+        _question_rule(qid, doc),
         "- Answer the question asked, and only that one. When it opens a larger point,"
         " name it in one sentence and let the user decide whether to go there.",
         f"- The {doc} may have changed since this conversation started: the"
@@ -205,8 +316,43 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
     return "\n".join(lines)
 
 
+def _question_anchor(s: Session, qid: str, number: dict[str, int], titles: dict[str, str]) -> str:
+    """The agent question a thread was opened on, as its box shows it to the user."""
+    q = next((q for q in s.read_questions() if q["id"] == qid), None)
+    if not q:
+        return f"the agent question {qid}"
+    lines = [f"the agent question {qid}: « {q['text']} »"]
+    if q.get("section"):
+        sec = q["section"]
+        lines.append(f"  asked about §{number.get(sec, '?')} {titles.get(sec, sec)} ({sec})")
+    if q["options"]:
+        several = " (several allowed)" if q.get("multi") else ""
+        lines.append(f"  options{several}: " + " | ".join(q["options"]))
+    if q.get("recommended"):
+        lines.append(f"  recommended: {q['recommended']}")
+    if q.get("background"):
+        lines.append(f"  background: {' '.join(q['background'].split())}")
+    return "\n".join(lines)
+
+
+def _question_rule(qid: str, doc: str) -> str:
+    if not qid:
+        return ""
+    return (
+        f"- The user opened this thread on the agent question {qid}, below, to understand it"
+        " before answering it. Explain what it asks, what each option would change and what"
+        f" the {doc} says about it; give your view when asked. The user answers from the"
+        " question's box, and the answer reaches the main session with this thread."
+    )
+
+
 def _run(
-    s: Session, thread: dict[str, Any], backend: Backend, proc: subprocess.Popen, prompt: str
+    s: Session,
+    thread: dict[str, Any],
+    backend: Backend,
+    proc: subprocess.Popen,
+    prompt: str,
+    question: dict[str, Any] | None = None,
 ) -> None:
     """Stream the turn's reply into the thread. The reply keeps its turn's start (`at`)
     and gains `first_text`, when its first words reached the page, and `ended`, when the
@@ -245,6 +391,11 @@ def _run(
                 thread.update(state="idle", error="")
                 if not reply["text"].strip():
                     reply["text"] = turn.final_text
+                if question and turn.structured is not None:
+                    reply["draft"] = _structured_draft(turn.structured, question)
+                    reply["text"] = _draft_text(reply["draft"])
+                elif question:
+                    reply["draft"] = _read_draft(reply["text"], question)
             reply["ended"] = now_iso_ms()
             if reply["text"] and "first_text" not in reply:
                 reply["first_text"] = reply["ended"]

@@ -103,8 +103,10 @@ section? (its anchor section: the section after which it is asked), status: "ope
 without waiting, so the phase stays. The page shows each open one in the scope block at
 the top of the Plan tab, or, when it has an anchor section that is written, at the end of
 that section. The user's answer reaches the session as a batch whose action is "answer",
-carrying `answers: [{question, choices, text}]`. A skipped question (the user leaves it to
-the agent's default) is sent the same way, its entry `{question, skipped: true}`. An
+carrying `answers: [{question, choices, text}]`; an entry also carries `threads`, the
+side threads the user opened on the question from its box, when there are any. A skipped
+question (the user leaves it to the agent's default) is sent the same way, its entry
+`{question, skipped: true}`. An
 unclear answer (« I don't understand »: the user cannot answer before the model explains
 what the question needs) too, its entry `{question, unclear: true, note}`: the question
 becomes "deferred", the agent anchors it to the section that will explain what it needs
@@ -876,6 +878,12 @@ class Session:
         if section not in {s["id"] for s in self.read_plan().get("outline", [])}:
             raise SessionError(f"no section {section!r} in the outline")
 
+    def _answer(self, qid: str, **entry: Any) -> dict[str, Any]:
+        """The entry of an answer batch for `qid`, with `threads`, the side threads the user
+        opened on the question, when there are any: the user discussed it there first."""
+        tids = [t["id"] for t in self.read_threads() if t.get("question") == qid]
+        return {"question": qid, **entry, **({"threads": tids} if tids else {})}
+
     def answer_question(self, qid: str, choices: list[str], text: str = "") -> dict[str, Any]:
         """Record the user's answer to an open agent question and send it at once, as a
         batch whose action is "answer". Returns the batch."""
@@ -891,7 +899,7 @@ class Session:
         if not choices and not text:
             raise SessionError("empty answer")
         batch = self.add_batch(
-            [], action="answer", answers=[{"question": qid, "choices": choices, "text": text}]
+            [], action="answer", answers=[self._answer(qid, choices=choices, text=text)]
         )
         q["status"] = "answered"
         q["answer"] = {"choices": choices, "text": text, "at": batch["sent"]}
@@ -915,7 +923,7 @@ class Session:
         batch."""
         questions = self.read_questions()
         q = self._open_question(questions, qid)
-        batch = self.add_batch([], action="answer", answers=[{"question": qid, "skipped": True}])
+        batch = self.add_batch([], action="answer", answers=[self._answer(qid, skipped=True)])
         q["status"] = "skipped"
         q["skipped"] = batch["sent"]
         _write_json(self.questions_path, questions)
@@ -930,7 +938,7 @@ class Session:
         q = self._open_question(questions, qid)
         note = note.strip()
         batch = self.add_batch(
-            [], action="answer", answers=[{"question": qid, "unclear": True, "note": note}]
+            [], action="answer", answers=[self._answer(qid, unclear=True, note=note)]
         )
         q["status"] = "deferred"
         q.setdefault("unclear", []).append({"note": note, "at": batch["sent"]})
@@ -1292,8 +1300,14 @@ class Session:
     def write_thread(self, thread: dict[str, Any]) -> None:
         _write_json(self.thread_path(thread["id"]), thread)
 
-    def new_thread(self, section: str = "", quote: str = "", prefix: str = "") -> dict[str, Any]:
-        """Create an empty thread, anchored to a passage like a comment, or to nothing."""
+    def new_thread(
+        self, section: str = "", quote: str = "", prefix: str = "", question: str = ""
+    ) -> dict[str, Any]:
+        """Create an empty thread, anchored to a passage like a comment, to an open agent
+        question (`question`, its id: the user discusses it before answering), or to
+        nothing."""
+        if question:
+            self._open_question(self.read_questions(), question)
         n = max((int(t["id"][1:]) for t in self.read_threads()), default=0) + 1
         thread = {
             "id": f"t{n}",
@@ -1301,6 +1315,7 @@ class Session:
             "section": section,
             "quote": quote,
             "prefix": prefix,
+            "question": question,
             "agent_session": "",
             "forked_from": "",
             "state": "idle",
@@ -1312,13 +1327,15 @@ class Session:
         return thread
 
     def delete_thread(self, tid: str) -> None:
-        """Delete a thread that led to nothing. One a sent comment points to is kept: the
-        session reads it to act on that comment."""
+        """Delete a thread that led to nothing. One a sent comment or a sent answer points
+        to is kept: the session reads it to act on that comment or answer."""
         path = self.thread_path(tid)
         if not path.exists():
             raise SessionError(f"no thread {tid!r}")
-        sent = (c for b in self.read_comments()["batches"] for c in b["comments"])
-        if any(c.get("thread") == tid for c in sent):
+        batches = self.read_comments()["batches"]
+        commented = {c.get("thread") for b in batches for c in b["comments"]}
+        answered = {t for b in batches for a in b.get("answers", []) for t in a.get("threads", [])}
+        if tid in commented | answered:
             raise SessionError(f"{tid} was sent in a batch")
         path.unlink()
 
@@ -1853,17 +1870,17 @@ def format_batch(
             quoted = f" « {text} »" if text else ""
             if a.get("skipped"):
                 lines.append(f"{a['question']} skipped{quoted} (no answer: use your default)")
-                continue
-            if a.get("unclear"):
+            elif a.get("unclear"):
                 note = f": {a['note']}" if a.get("note") else ""
                 lines.append(
                     f"{a['question']} unclear{quoted} (the user doesn't understand it yet: "
                     f"explain what it needs, then ask it again){note}"
                 )
-                continue
-            parts = [", ".join(a.get("choices", [])), a.get("text", "")]
-            answer = " — ".join(p for p in parts if p)
-            lines.append(f"answer to {a['question']}{quoted}: {answer}")
+            else:
+                parts = [", ".join(a.get("choices", [])), a.get("text", "")]
+                answer = " — ".join(p for p in parts if p)
+                lines.append(f"answer to {a['question']}{quoted}: {answer}")
+            lines += [f"    (from side thread {t}: threads/{t}.json)" for t in a.get("threads", [])]
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
     lines += [format_comment(c, number) for c in batch["comments"]]

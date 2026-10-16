@@ -1482,8 +1482,8 @@ function openComposer(target, mode = "comment") {
   c.hidden = false;
   c._target = target;
   c._mode = mode;
-  $(".composer-quote", c).textContent = target.quote
-    ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
+  $(".composer-quote", c).textContent = target.question ? `agent question ${target.question}`
+    : target.quote ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
     : target.section ? `whole section §${numberOf(target.section)} ${titleOf(target.section)}`
     : "general question, no passage";
   $(".add", c).textContent = mode === "ask" ? "Ask" : "Add";
@@ -1544,6 +1544,9 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    trade-offs), shown folded under its text. A question with an anchor section (`section`)
    whose section is written is shown at the end of that section in the Model tab instead,
    and the scope block keeps a line pointing to it (see sectionQuestions).
+   « ask » opens a side thread on the question, to understand it before answering; the
+   box shows its threads as chips, and the answer, whichever exit, names them (see
+   "side threads" for « use as answer », which fills the box from a thread).
    A box has four exits: « Validate » sends the answer at once (a batch whose action is
    "answer"), « Skip » sends « no answer, use your default » the same way (its entry
    `{question, skipped: true}`), « I don't understand » sends the text field as a note of
@@ -1581,6 +1584,9 @@ function questionCard(q) {
   const unclear = el("button", { class: "btn", text: "I don't understand",
                                  title: "The model explains what this question needs, then asks it again. The text field, if filled, says what is missing; the options are ignored" });
   const button = el("button", { class: "btn primary q-answer", text: "Validate" });
+  const ask = el("button", { class: "btn q-ask", text: "ask", title: "Open a side thread to discuss this question before answering it",
+                             onclick: (e) => openComposer({ section: q.section || "", quote: "", prefix: "", question: q.id,
+                                                            rect: e.currentTarget.getBoundingClientRect() }, "ask") });
   const choices = () => [...options.querySelectorAll("input:checked")].map((i) => i.value);
   const update = () => { button.disabled = !choices().length && !ta.value.trim(); };
   update();
@@ -1607,7 +1613,13 @@ function questionCard(q) {
     q.options.length ? options : null,
     rec && !recOption ? el("div", { class: "q-suggested" }, suggested()) : null,
     ta,
-    el("div", { class: "q-actions" }, unclear, skip, button));
+    el("div", { class: "q-actions" }, el("span", { class: "t-chips", "data-question": q.id }), ask, unclear, skip, button));
+  // « use as answer » puts a thread's draft in the box (see applyDraft).
+  card._fill = ({ choices: picked, text }) => {
+    for (const i of options.querySelectorAll("input")) i.checked = picked.includes(i.value);
+    ta.value = text;
+    update();
+  };
   questionCards.set(q.id, card);
   return card;
 }
@@ -1685,7 +1697,8 @@ function renderScope() {
        q.status === "deferred"
          ? deferredText(q)
          : answerText(q.status === "skipped" ? { skipped: true } : q.answer || {}),
-       q.answer?.from === "terminal" ? el("span", { class: "dim", text: " (in the terminal)" }) : null))));
+       q.answer?.from === "terminal" ? el("span", { class: "dim", text: " (in the terminal)" }) : null),
+    el("span", { class: "t-chips", "data-question": q.id }))));
   $("#scope-empty").hidden = questions.length > 0 || state.status.phase === "scoping";
   annotateQuestions($("#scope"));
 
@@ -1735,6 +1748,7 @@ $(".review").addEventListener("scroll", (e) => {
 }, { passive: true });
 
 function quoteLine(c) {
+  if (c.question) return el("div", { class: "c-quote" }, el("span", { class: "num", text: "?" }), ` agent question ${c.question}`);
   const where = c.section ? `§${numberOf(c.section)}` : "·";
   const q = c.quote ? `« ${c.quote.length > 90 ? c.quote.slice(0, 90) + "…" : c.quote} »`
           : c.section ? "whole section" : "general";
@@ -1798,7 +1812,9 @@ function answeredQuestion(a, b) {
   return el("div", { class: "question answered" },
     el("div", { class: "q-head" }, "Question from the agent ", el("span", { class: "dim", text: q.id })),
     q.text ? el("div", { class: "q-text", text: q.text }) : null,
-    el("div", { class: `q-reply ${a.skipped || a.unclear ? "dim" : ""}`, text: answerText(a) }),
+    el("div", { class: `q-reply ${a.skipped || a.unclear ? "dim" : ""}`, text: answerText(a) },
+       ...(a.threads || []).map((tid) => el("span", { class: "badge alt t-link", text: `↳ ${tid}`,
+                                                       onclick: () => threadOf(tid) && openPopover(tid) }))),
     b.reply ? el("div", { class: "c-status" }, el("span", { class: "badge ok", text: "✓ resolved" }),
                  el("span", { class: "c-reply", text: ` ${b.reply}` })) : null);
 }
@@ -1888,8 +1904,8 @@ addEventListener("resize", () => setReviewWidth(loadJSON(WIDTH_KEY, null)));
    A thread opens in a popover on its passage. One is shown at a time; a click anywhere
    else closes it, and a click on the passage (highlighted) opens it again. A thread with
    no passage to sit on (a whole-section thread, a general one, or one whose passage was
-   rewritten) gets a chip instead: in its section's heading, or in the top bar for a
-   general one. The popover follows its anchor when the view scrolls, and hides while the
+   rewritten) gets a chip instead: in its section's heading, in the top bar for a
+   general one, or in its question's box for a thread opened on an agent question. The popover follows its anchor when the view scrolls, and hides while the
    anchor is out of sight.
 
    A thread's card is built once and then patched in place (head, messages, footer
@@ -1900,8 +1916,34 @@ async function loadThreads() {
   if (!r.ok) return;
   threadsState = await r.json();
   for (const id of cards.keys()) if (!threadsState.threads.some((t) => t.id === id)) cards.delete(id);
-  if (state) { applyHighlights(); renderThreadChips(); }
+  if (state) { applyHighlights(); renderThreadChips(); applyDrafts(); }
   renderPopover();
+}
+
+/* « use as answer » on a thread opened on an open agent question: a turn that drafts the
+   user's answer from the discussion (the reply's `draft`, read by the server), which fills
+   the question's box once, to edit before « Validate ». */
+const appliedDrafts = new Set(); // "<thread>@<reply time>": drafts already put in their box
+function applyDrafts() {
+  for (const t of threadsState.threads) {
+    const reply = t.messages[t.messages.length - 1];
+    const key = `${t.id}@${reply?.at}`;
+    if (t.state !== "idle" || !reply?.draft || appliedDrafts.has(key)) continue;
+    appliedDrafts.add(key);
+    const q = openQuestions().find((x) => x.id === t.question);
+    if (!q) continue;
+    const { choices, text } = reply.draft;
+    if (!choices.length && !text) { toast(`${t.id} could not draft an answer to ${q.id}`); continue; }
+    questionCard(q)._fill(reply.draft);
+    toast(`${q.id}: answer drafted from ${t.id}, check it and Validate`, 4000);
+  }
+}
+
+async function draftAnswer(tid) {
+  try {
+    await postJSON(`/api/s/${SLUG}/threads/${tid}/draft`, {});
+    await loadThreads();
+  } catch (e) { toast(`Could not draft the answer: ${e.message}`); }
 }
 
 async function postJSON(url, body, method = "POST") {
@@ -1915,9 +1957,9 @@ async function askThread() {
   const c = $("#composer");
   const text = $("textarea", c).value.trim();
   if (!text) return;
-  const { section, quote, prefix } = c._target;
+  const { section, quote, prefix, question = "" } = c._target;
   try {
-    const t = await postJSON(`/api/s/${SLUG}/threads`, { section, quote, prefix, text });
+    const t = await postJSON(`/api/s/${SLUG}/threads`, { section, quote, prefix, question, text });
     closeComposer();
     getSelection().removeAllRanges();
     popThread = t.id;
@@ -1929,7 +1971,8 @@ $("#new-thread").addEventListener("click", (e) =>
   openComposer({ section: "", quote: "", prefix: "", rect: e.target.getBoundingClientRect() }, "ask"));
 
 const threadOf = (id) => threadsState.threads.find((t) => t.id === id);
-const sentThreads = () => new Set((state ? state.comments.batches : []).flatMap((b) => b.comments).map((c) => c.thread).filter(Boolean));
+const sentThreads = () => new Set((state ? state.comments.batches : []).flatMap((b) => [
+  ...b.comments.map((c) => c.thread), ...(b.answers || []).flatMap((a) => a.threads || [])]).filter(Boolean));
 
 /* The threads without a passage on the page, as chips: a passage of a Markdown section
    (threadRanges) or one a frame found (placed) takes the chip away. */
@@ -1942,9 +1985,11 @@ function renderThreadChips() {
   });
   document.querySelectorAll(".t-chips[data-section]").forEach((box) =>
     box.replaceChildren(...threadsState.threads
-      .filter((t) => t.section === box.dataset.section && !placed.has(t.id)
+      .filter((t) => t.section === box.dataset.section && !t.question && !placed.has(t.id)
         && !frames.get(t.section)?.placed?.has(t.id)).map(chip)));
-  $("#general-threads").replaceChildren(...threadsState.threads.filter((t) => !t.section).map(chip));
+  document.querySelectorAll(".t-chips[data-question]").forEach((box) =>
+    box.replaceChildren(...threadsState.threads.filter((t) => t.question === box.dataset.question).map(chip)));
+  $("#general-threads").replaceChildren(...threadsState.threads.filter((t) => !t.section && !t.question).map(chip));
 }
 
 function threadAt(x, y) {
@@ -1969,7 +2014,7 @@ function anchorRect(id) {
 function openPopover(id) {
   const t = threadOf(id);
   if (!t) return;
-  if (t.section && !t.quote.startsWith("plan · ")) {
+  if (t.section && !t.question && !t.quote.startsWith("plan · ")) {
     if (tab !== tabOf(t.section)) setTab(tabOf(t.section));
     openItemOf(t.section);
   }
@@ -2036,11 +2081,14 @@ function threadCard(t) {
     batch: el("button", { class: "btn", text: "→ batch", title: "Add a draft comment that points to this thread",
                           onclick: () => threadToBatch(t.id) }),
     del: el("button", { class: "btn t-delete", text: "Delete", onclick: () => deleteThread(t.id) }),
+    draft: el("button", { class: "btn", text: "use as answer",
+                          title: "Draft your answer to the question from this discussion, in its box, to check before Validate",
+                          onclick: () => draftAnswer(t.id) }),
   };
   ta.addEventListener("keydown", (e) => {
     if (sendsOnEnter(e)) { e.preventDefault(); replyThread(t.id); }
   });
-  card.foot = el("div", { class: "t-foot" }, ta, el("div", { class: "t-actions" }, card.del, card.batch, card.stop, card.reply));
+  card.foot = el("div", { class: "t-foot" }, ta, el("div", { class: "t-actions" }, card.del, card.batch, card.draft, card.stop, card.reply));
   card.root.append(card.head, card.msgs, card.error, card.foot);
   cards.set(t.id, card);
   return card;
@@ -2077,6 +2125,11 @@ function patchCard(t, card) {
   card.stop.hidden = !running;
   card.batch.disabled = sent || drafted;
   card.batch.textContent = sent ? "sent" : drafted ? "in the batch" : "→ batch";
+  // A thread on an agent question reaches the session with the answer, not as a comment.
+  const open = t.question && openQuestions().some((q) => q.id === t.question);
+  card.batch.hidden = !!t.question;
+  card.draft.hidden = !open;
+  card.draft.disabled = running || !t.messages.some((m) => m.role === "assistant" && m.text.trim());
   // Only a thread that led to nothing can go: the session reads the ones a sent comment points to.
   card.del.hidden = sent;
   card.del.disabled = running;

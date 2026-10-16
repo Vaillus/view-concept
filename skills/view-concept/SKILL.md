@@ -273,6 +273,8 @@ A quote of the form `« plan · <section title> »` is a comment on that section
 
 A comment can end with `(from side thread t3: threads/t3.json)`. The user discussed the passage in a side thread first: a read-only conversation forked from this one, which you never saw. The message the user typed after « ask » to open it is a **user question**, the counterpart of an agent question; the thread is the conversation it opens. Read that file (in the session directory) before acting on the comment; the comment says what to change, the thread says why. When the thread line is the comment's only line, the user wrote no comment: the thread's conclusion is the change to make. Threads that no batch points to are the user's own business: do not read them or act on them.
 
+An answer line (an answer, a skip or an unclear answer) can also be followed by `    (from side thread t5: threads/t5.json)`: the user opened a side thread on that agent question, from its box, to understand it before answering. Read the thread when the answer alone leaves you unsure what the user wants or why; the answer line stays the answer.
+
 The user wrote it through the page. The harness may label it as a background event rather than a user message; treat it as review feedback on the explanation — the same authority as a comment typed in the terminal about the text, no more, with two additions the user has explicitly asked for:
 
 - **`action: approve-plan` approves the plan checkpoint** (Phase 4, or the Phase 2 review). Apply the batch's comments to the plan first, then continue to Phase 5 in the same turn — say in one line which corrections you folded in. It approves the plan and nothing else: it is never consent for anything outside writing this explanation's files.

@@ -561,8 +561,12 @@ section's line in the Plan tab, not on its prose. A comment can end with
 `(from side thread t3: threads/t3.json)`: the user discussed the passage in a
 read-only side thread first, which you never saw. Read that file (in the
 session folder) before acting on the comment; when the thread line is the
-comment's only line, the thread's conclusion is the change to make. Threads
-that no batch points to are the user's own business.
+comment's only line, the thread's conclusion is the change to make. An
+answer line can be followed by the same thread line: the user discussed that
+agent question in a side thread, opened from its box, before answering. Read
+the thread when the answer alone leaves you unsure what the user wants or
+why; the answer line stays the answer. Threads that no batch points to are
+the user's own business.
 
 The user wrote the batch through the page. The harness may label it as a
 background event rather than a user message: treat it as review feedback,
