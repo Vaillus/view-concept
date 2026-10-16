@@ -20,6 +20,7 @@
 const SLUG = decodeURIComponent(location.pathname.split("/").pop());
 const DRAFTS_KEY = `view-concept:drafts:${SLUG}`;
 const NOTE_KEY = `view-concept:note:${SLUG}`;
+const POSITION_KEY = `view-concept:position:${SLUG}`; // the saved position (see "saved position")
 const WIDTH_KEY = "view-concept:review-width"; // per browser, for every session
 
 let state = null;        // last payload from /api/s/<slug>
@@ -163,13 +164,19 @@ function setTab(name) {
   renderMermaid($(`.view[data-view="${name}"]`));
   positionPopover();
   if (name === "metrics") refreshMetrics();
+  savePosition();
 }
 
+/* The tab follow rule moves the tab only on a phase change it sees while the page is on
+   the session. At load, the saved position's tab opens (the model tab when that tab is
+   no longer shown), whatever the phase; without one, the tab is picked from the phase. */
 function followSession() {
   const phase = shownPhase();
   const onPlan = ["scoping", "awaiting-approval"].includes(phase);
-  if (tab === null) setTab(Object.keys(state.sections).length && !onPlan ? "doc" : "plan");
-  else if (phase !== lastPhase) {
+  if (tab === null) {
+    if (!restorePosition()) setTab(Object.keys(state.sections).length && !onPlan ? "doc" : "plan");
+    positionReady = true;
+  } else if (phase !== lastPhase) {
     if (onPlan) setTab("plan");
     // A run opens on the tab of the set's first section not written yet.
     if (phase === "writing") setTab(tabOf(writingId() || (writingRun() || { set: [""] }).set[0]));
@@ -640,6 +647,48 @@ for (const view of docViews()) {
   }
 }
 
+/* ---------------- saved position ----------------
+   What the page keeps of the reader's place in this session, in this browser's storage
+   (one per session, like the drafts): the open tab, the reading anchor of the view shown
+   (with its block key; the Plan and Metrics tabs keep only the tab), and the open item
+   entries of the code tab. Written at the end of a scroll, at a change of tab, when an
+   item entry opens or closes, and when the page goes away; put back at every load of the
+   session (a click in the sessions list, `view-concept open`, a reload). */
+
+let positionReady = false; // false until the saved position is put back: nothing is written before
+let positionTimer = null;
+
+function savePosition() {
+  if (!positionReady) return;
+  const view = docViews().find((v) => v.dataset.view === tab);
+  const a = !view ? null : anchor && anchor.view === view ? anchor : view.scrollTop ? readingAnchor(view) : null;
+  saveJSON(POSITION_KEY, {
+    tab,
+    anchor: a && { view: view.dataset.view, key: a.key, block: a.block, offset: a.offset, text: a.text, words: a.words, ranks: a.ranks },
+    open: [...openItems],
+  });
+}
+
+/* Puts back the saved position, if any: its open item entries, its tab, and its reading
+   anchor, held until the first render has placed it. Returns whether there was one. */
+function restorePosition() {
+  const saved = loadJSON(POSITION_KEY, null);
+  if (!saved || !saved.tab) return false;
+  for (const id of saved.open || []) openItems.add(id);
+  setTab(saved.tab);
+  const view = docViews().find((v) => v.dataset.view === tab);
+  if (view && saved.anchor && saved.anchor.view === tab) anchor = { ...saved.anchor, view, restore: true };
+  return true;
+}
+
+for (const view of docViews()) {
+  view.addEventListener("scroll", () => {
+    clearTimeout(positionTimer);
+    positionTimer = setTimeout(savePosition, 250);
+  }, { passive: true });
+}
+addEventListener("pagehide", savePosition);
+
 function renderDoc() {
   const doc = $("#doc");
   const sections = allSections();
@@ -650,6 +699,7 @@ function renderDoc() {
   }
   const shown = docViews().find((v) => v.classList.contains("active"));
   if (pageScrolling) anchor = null;
+  else if (anchor && anchor.restore) { /* the saved position, placed after this render */ }
   else if (!anchor || anchor.view !== shown || !anchorNode(anchor)) anchor = shown && shown.scrollTop ? readingAnchor(shown) : null;
   parkFrames();
   // A question box at the end of a section is re-attached on each render: keep its focus.
@@ -673,6 +723,10 @@ function renderDoc() {
   }
   placeFrames();
   holdAnchor();
+  if (anchor && anchor.restore) {
+    delete anchor.restore;
+    if (!anchorNode(anchor)) anchor = null; // the element is gone: the tab opens at its top
+  }
   anchorWatch.disconnect();
   for (const view of docViews()) for (const child of view.children) anchorWatch.observe(child);
   frames.forEach((f, id) => postTerms(id, f));
@@ -907,6 +961,7 @@ function setItemOpen(id, open) {
   description.hidden = !open;
   if (open) renderMermaid(description);
   positionPopover();
+  savePosition();
 }
 
 function typesetMath(root) {
