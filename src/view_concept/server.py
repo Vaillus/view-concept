@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import frame, launch, publish, threads
+from . import frame, launch, metrics, publish, threads
 from .render import md
 from .store import Session, SessionError, list_sessions
 
@@ -356,6 +356,20 @@ class ThreadIn(BaseModel):
     quote: str = ""
     prefix: str = ""
     text: str
+
+
+@app.get("/api/s/{slug}/metrics")
+def session_metrics(slug: str) -> dict[str, Any]:
+    """The metrics report of a branch review (the Metrics tab): its runs, waiting and
+    quality signals, and every branch review of its repository by variant. 404 for a
+    session of another workflow."""
+    s = get_session(slug)
+    try:
+        if s.read_plan().get("workflow") != "view-branch":
+            raise HTTPException(404, f"{slug!r} is not a branch review")
+        return metrics.session_metrics(s)
+    except SessionError as e:
+        raise HTTPException(422, str(e)) from e
 
 
 class MessageIn(BaseModel):
