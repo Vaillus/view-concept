@@ -234,9 +234,9 @@ function writingRun() {
            named: run.set.find((id) => !written.has(id)) || "" };
 }
 
-/* The one section badged « writing »: the section the banner names. In a wave several
-   sections are written at once, but nothing on disk says which until their files land,
-   so the page marks only the first one missing, and none while the run is finishing.
+/* The one section badged « writing »: the section the banner names. A run declares
+   several sections, but nothing on disk says which one is being written until its file
+   lands, so the page marks only the first one missing, and none while the run is finishing.
    Without a run (older server) it falls back to the section the agent declared. */
 function writingId() {
   if (shownPhase() !== "writing") return "";

@@ -240,11 +240,12 @@ when and how:
 
 | Role | A helper's part |
 |---|---|
-| writer | one section of a **wave**: the sections from the next unwritten one up to the next section with a known waiting question; or one section to rewrite, when a run rewrites two or more |
 | reviewer | one item, or a few small items grouped |
 | implementer | a set of files no other part touches, in its own git worktree, when at least two such sets are each more than a small fix |
 
-The planner starts none, and a helper never starts one itself. Every helper
+The planner and the writer start none: the writer writes its sections one
+after the other, each from the text of the sections before it. A helper
+never starts one itself. Every helper
 obeys the **owner rule**: it writes only its own section file (or, for the
 implementer, its own code files), and returns everything else (lexicon terms
 and tips, outline moves, changes of the model, item fields, questions, what
@@ -477,10 +478,10 @@ check` reports a pair).
    anchor section. Let the planner run first if events are still queued, then start
    the writer with the trigger `"« Write model »"` and the batch id. From here
    the writer owns the outline and the lexicon too.
-5. **The pauses.** The writer writes the model in waves, each wave's
-   sections at once, and stops after a wave whose sections have questions to
-   ask (a deferred question anchored to one, a decision one makes answerable,
-   or a section question still open and anchored to one): its report says
+5. **The pauses.** The writer writes the model one section at a time, in
+   outline order, and stops after a section that has questions to ask (a
+   deferred question anchored to it, a decision it makes answerable, or a
+   section question still open and anchored to it): its report says
    « paused after section N ». Run `view-concept status <slug> awaiting-answer`, the phase
    the page reads as the pause (it shows « Go on » only then), say so in one
    terminal line and wait. The answers, skips and
