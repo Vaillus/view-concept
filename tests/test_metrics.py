@@ -448,3 +448,13 @@ def test_a_batch_leaves_its_stalls_out_of_agent_time(review, monkeypatch):
     assert any(s["stalled"] for _, s in spans)
     assert b1["stalled"] > 0
     assert b1["agent"] + b1["stalled"] == pytest.approx(120.1, abs=0.2)
+
+
+def test_a_coordinator_pass_never_stalls(review, monkeypatch):
+    # The pass waits on the writer with no line in its transcript: that wait stays agent
+    # time, so only the role agents' and helpers' stretches are cut as stalls.
+    monkeypatch.setattr(metrics, "STALL", 30.0)
+    m = metrics.session_metrics(review)
+    p = runs_of(m)["pass:b1"]
+    assert max(s["end"] - s["start"] for s in p["stretches"]) > 30.0
+    assert not any(s["stalled"] for s in p["stretches"]) and p["stalled"] == 0.0

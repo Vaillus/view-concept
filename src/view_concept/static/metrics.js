@@ -9,8 +9,9 @@
    it), a role agent that started helpers onto its wave.
 
    Two kinds of time are drawn as a hatched break of fixed width instead of to scale:
-   user time over a minute (a clock span with "break") and a stalled run stretch (over
-   ten minutes, "stalled"), which the server already leaves out of every sum.
+   user time over a minute (a clock span with "break") and a stalled stretch of a role agent
+   or a helper (over ten minutes, "stalled"), which the server already leaves out of every
+   sum. A coordinator pass never stalls: its wait on the agents it started is agent time.
 
    app.js shows the tab on branch reviews only and calls refreshMetrics() when the tab is
    shown and on each state update while it is. The published page has no Metrics tab. */
@@ -154,7 +155,7 @@
       ["your waiting", dur(pickup + agent), "pickup time + agent time, stalls left out"],
       ["pickup time", dur(pickup), "from sending a batch to the coordinator acting on it"],
       ["agent time", dur(agent), "from the coordinator acting on a batch to the page waiting for you again"],
-      ["stalled", dur(stalled), "run stretches over ten minutes, left out of every sum"],
+      ["stalled", dur(stalled), "role agent and helper stretches over ten minutes, left out of every sum"],
       ["user time", dur(user), "from the page waiting for you to your next batch"],
       ["runs", `${runs.filter((r) => r.kind === "role").length} + ${runs.filter((r) => r.kind === "helper").length} helpers`],
       ["coordinator passes", String(runs.filter((r) => r.kind === "pass").length || (data.batches || []).filter((b) => !b.busy).length)],
@@ -184,10 +185,12 @@
   }
   const rel = (iso, t0) => (ms(iso) - t0) / 1000;
 
-  // Stalled stretches of every run, as absolute [start, end] ms, merged where they overlap.
+  // Stalled stretches of the role agents and helpers (a pass never stalls), as absolute
+  // [start, end] seconds, merged where they overlap: the cut the batch rows make.
   function stallCuts() {
     const cuts = [];
     for (const r of data.runs || []) {
+      if (r.kind === "pass") continue;
       for (const s of r.stretches || []) if (s.stalled) cuts.push([ms(r.start) / 1000 + s.start, ms(r.start) / 1000 + s.end]);
     }
     return merge(cuts);
@@ -349,7 +352,7 @@
     const chips = h("div", "mx-chips");
     if (b.busy) add(chips, chip(`sent during a run · waited ${dur(b.agent)}`, "", "its wait counts as agent time: the page was not waiting for you"));
     else add(chips, chip(`pickup ${dur(b.pickup)}`), chip(`agent ${dur(b.agent)}`));
-    if (b.stalled) add(chips, chip(`stalled ${dur(b.stalled)}`, "mx-flag", "run stretches over ten minutes, left out of its agent time"));
+    if (b.stalled) add(chips, chip(`stalled ${dur(b.stalled)}`, "mx-flag", "role agent and helper stretches over ten minutes, left out of its agent time"));
     if (b.user != null) add(chips, chip(`then user time ${dur(b.user)}`));
     out.push(chips);
     out.push(runs.length ? add(h("div", "mx-sub"), label("the runs of its coordinator pass"), runList(runs))

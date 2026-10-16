@@ -26,8 +26,10 @@ signals, which come from the session's files.
 A run's time splits into **stretches**: each runs from one tool result to the next and
 takes the activity of the tool call that ends it; a wait for a message with no tool
 running (the agent waits on its helpers) is a stretch of its own, and the last stretch is
-the report. A stretch over STALL seconds is **stalled**: counted apart, and left out of
-every sum (wall time, activities, model and tool time).
+the report. A role agent's or a helper's stretch over STALL seconds is **stalled**:
+counted apart, and left out of every sum (wall time, activities, model and tool time). A
+coordinator pass's stretches never stall: its long stretches are its wait on the agents it
+started, which stays agent time.
 """
 
 from __future__ import annotations
@@ -450,6 +452,7 @@ class Stretch:
     command: str = ""
     tool_seconds: float = 0.0
     tools: list[Tool] = field(default_factory=list)
+    can_stall: bool = True  # False for a coordinator pass's stretches
 
     @property
     def seconds(self) -> float:
@@ -457,17 +460,22 @@ class Stretch:
 
     @property
     def stalled(self) -> bool:
-        return self.seconds > STALL
+        return self.can_stall and self.seconds > STALL
 
 
 def stretches(
-    calls: list[Call], inputs: list[datetime], start: datetime, end: datetime
+    calls: list[Call],
+    inputs: list[datetime],
+    start: datetime,
+    end: datetime,
+    can_stall: bool = True,
 ) -> list[Stretch]:
     """Split a run into stretches. A call with tools ends its stretch at its last tool
     result, and the stretch takes the call's activity; its tool time runs from the first
     tool call to that result. A call with no tool, before the last, ends with the agent
     waiting for a message (its helpers' reports): that stretch runs to the next message and
-    waits on helpers, the wait counted as tool time. The last stretch is the report."""
+    waits on helpers, the wait counted as tool time. The last stretch is the report. With
+    can_stall False (a coordinator pass), no stretch is stalled."""
     out: list[Stretch] = []
     cursor = start
     for i, call in enumerate(calls):
@@ -496,11 +504,17 @@ def stretches(
             out[-1].end = end
     elif end > start:
         out.append(Stretch(start, end, "report"))
+    for p in out:
+        p.can_stall = can_stall
     return out
 
 
 def measure(
-    calls: list[Call], inputs: list[datetime], start: datetime, end: datetime
+    calls: list[Call],
+    inputs: list[datetime],
+    start: datetime,
+    end: datetime,
+    can_stall: bool = True,
 ) -> dict[str, Any]:
     """Every measure of one run.
 
@@ -517,7 +531,7 @@ def measure(
       the characters `view-concept context` printed.
     - activities: seconds by activity, stalled stretches left out.
     """
-    parts = stretches(calls, inputs, start, end)
+    parts = stretches(calls, inputs, start, end, can_stall)
     live = [p for p in parts if not p.stalled]
     stalled = sum(p.seconds for p in parts if p.stalled)
     activities = dict.fromkeys(ACTIVITIES, 0.0)
@@ -815,7 +829,7 @@ def _pass_run(p: Pass, labels: dict[str, str]) -> Run:
         inputs=inputs,
         transcript=t,
     )
-    run.measures = measure(calls, inputs, p.start, p.end)
+    run.measures = measure(calls, inputs, p.start, p.end, can_stall=False)
     return run
 
 
@@ -945,7 +959,7 @@ def _waiting(
 
 
 def _stretches_of(r: Run) -> list[Stretch]:
-    return stretches(r.calls, r.inputs, r.start, r.end)
+    return stretches(r.calls, r.inputs, r.start, r.end, r.kind != "pass")
 
 
 def _stall_spans(runs: list[Run]) -> list[tuple[datetime, datetime]]:
