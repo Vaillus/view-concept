@@ -1,7 +1,9 @@
 /* view-concept — the session sidebar, on the home page and every session page.
 
    Lists the sessions grouped by project (the main checkout of their repo; explanations,
-   which have none, last), the most recently updated project and session first. Opening
+   which have none, last), the most recently updated project and session first. Above
+   them, « active » repeats the sessions whose agent is listening, with their project,
+   to switch between the features in progress. Opening
    a session navigates this tab. « + » starts a new feature in a project: the server
    opens a terminal there and starts the agent on a skill.
 
@@ -64,21 +66,30 @@
     return out;
   }
 
+  function item(r, withProject) {
+    const a = h("a", { class: "sb-item" + (r.slug === current ? " current" : ""), href: `/s/${r.slug}`, title: r.repo || r.slug },
+      h("span", { class: "sb-dot" + (r.listening ? " on" : ""), title: r.listening ? "Agent listening" : "" }),
+      h("span", { class: "sb-title", text: r.title }));
+    if (withProject && r.project) a.append(h("span", { class: "sb-where dim", text: base(r.project) }));
+    if (r.pending) a.append(h("span", { class: "badge flag", title: "Comments sent, not resolved yet", text: String(r.pending) }));
+    a.append(h("span", { class: "sb-when dim", text: ago(r.updated) }));
+    return a;
+  }
+
   function render() {
     const list = h("div", { class: "sb-list" });
+    const active = rows.filter((r) => r.listening);
+    if (active.length) {
+      list.append(h("div", { class: "sb-project sb-active", title: "Sessions whose agent is listening" },
+        h("span", { class: "sb-name", text: "active" })));
+      for (const r of active) list.append(item(r, true));
+    }
     for (const [project, items] of groups()) {
       const head = h("div", { class: "sb-project", title: project || "explanations, tied to no repository" },
         h("span", { class: "sb-name", text: project ? base(project) : "explanations" }));
       if (project) head.append(h("button", { class: "sb-add", title: `New feature in ${project}`, text: "+", onclick: () => openLauncher(project) }));
       list.append(head);
-      for (const r of items) {
-        const a = h("a", { class: "sb-item" + (r.slug === current ? " current" : ""), href: `/s/${r.slug}`, title: r.repo || r.slug },
-          h("span", { class: "sb-dot" + (r.listening ? " on" : ""), title: r.listening ? "Agent listening" : "" }),
-          h("span", { class: "sb-title", text: r.title }));
-        if (r.pending) a.append(h("span", { class: "badge flag", title: "Comments sent, not resolved yet", text: String(r.pending) }));
-        a.append(h("span", { class: "sb-when dim", text: ago(r.updated) }));
-        list.append(a);
-      }
+      for (const r of items) list.append(item(r, false));
     }
     if (!rows.length) list.append(h("p", { class: "dim sb-empty", text: "No session yet." }));
     nav.replaceChildren(
