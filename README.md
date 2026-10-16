@@ -42,11 +42,11 @@ To keep an explanation, « Export to vault » writes it as an Obsidian note, and
 | `/view-branch` | review a branch you are building, concepts first |
 | `/view-refactor` | decide what stays in quickly written code, then restructure it |
 
-A **branch review** (`/view-branch`) first writes the concepts the branch introduces, with their rules; you correct them and approve. The main session only coordinates: separate agents write the concepts, change the code to match them, and check the result. The Refactor tab lists each changed file with its **verdict** (the decision recorded for that item) and a chart of how the files relate. A concept you change after approval shows as « not implemented yet » until the code catches up. « Create PR » opens the pull request.
+A **branch review** (`/view-branch`) first writes the concepts the branch introduces, with their rules; you correct them and approve. The main session only coordinates: separate agents write the concepts, change the code to match them, and check the result. The Code tab lists each changed file with its **verdict** (the decision recorded for that item) and a chart of how the files relate. A concept you change after approval shows as « not implemented yet » until the code catches up. « Create PR » opens the pull request.
 
 To speed the workflow up, the Metrics tab of a branch review shows where its time went, run by run, and compares the repository's reviews by **variant** (`view-concept variant <slug> "writer on sonnet" --model writer=sonnet` names a session's setup and the model of each role).
 
-![The Refactor tab of a branch review: one verdict per item, then the structure chart](docs/screenshots/branch-review.png)
+![The Code tab of a branch review: one verdict per item, then the structure chart](docs/screenshots/branch-review.png)
 
 `/view-refactor` works the same way on existing code: each item gets a triage verdict (`keep`, `move`, `split`, `merge`, `throw`, `separate-pr`), then the agent applies it on the current branch or splits it into PRs reviewed with `/view-branch`.
 

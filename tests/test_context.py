@@ -93,6 +93,15 @@ def test_the_implementer_gets_the_modeling_part_and_the_items_it_must_act_on(bra
     assert "Store." in build(branch, "reviewer")
 
 
+def test_the_implementer_gets_the_to_do_list_without_naming_it(branch):
+    plan = branch.read_plan()
+    todo = {"id": "todo", "title": "To-do", "part": "refactoring"}
+    branch.write_plan(outline=[*plan["outline"], todo])
+    (branch.sections_dir / "todo.md").write_text("- update the README")
+    text = build(branch, "implementer")
+    assert "- update the README" in text and "Cli." not in text
+
+
 def test_changes_not_implemented_yet_are_shown_once_the_model_is_approved(branch):
     for i in range(CONTEXT_RECENT + 2):
         branch.add_change(f"change {i}")

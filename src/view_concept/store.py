@@ -50,7 +50,7 @@ published page and the vault export copy them along. An answer to a comment that
 in the explanation amends a section or adds one at its place in the outline; a `kind:
 "question"` left by an older session is ignored, and the section reads as any other. A
 refactor section, marked `part: "refactoring"`, belongs to the refactoring part of a
-branch review or a refactor and is shown in the refactor tab; every other section is an
+branch review or a refactor and is shown in the code tab; every other section is an
 explanation section, shown in the Explanation tab. A refactor section about one item of
 the diff carries its item fields under `item`: {files, verdict (one of the keys of the
 session workflow's list in verdicts.yaml, next to this module), batch? (a short label or
@@ -139,7 +139,7 @@ first baseline, recorded when the page first loads it, so a first write is never
 update.
 
 A branch review's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
-at} (written by `pr`). The page links it at the top and at the end of the refactor tab.
+at} (written by `pr`). The page links it at the top and at the end of the code tab.
 
 published.json is the publish record, what the session remembers of its last publish
 (see publish.py): {url (the published page's link), at (when), fingerprint}. The

@@ -90,9 +90,8 @@ The skeleton:
    yours to choose. Lay out the subjects the next sections discuss, and
    where each sits in the change, without repeating the outline's `earns`.
    Never retell the request. When the branch has no diff yet, say here that
-   the model is a proposal. End with a **to-do list**: one line per point
-   that fails the section test (see point 2). The sheet holds no list of the
-   defaults taken: each one is written at the end of the section it touches
+   the model is a proposal. The sheet holds no to-do list (see point 5)
+   and no list of the defaults taken: each one is written at the end of the section it touches
    (see **The question test**), and one that touches no section, only a line
    of the to-do list, is written in that line.
 2. **One section per point new to the user** (see **The reader**) that
@@ -101,13 +100,20 @@ The skeleton:
    touch, so the points about one concept sit together. A point that fails
    the test (a doc that is out of date, which source a part of the branch
    came from, how the tests are built, code nothing in the app shows) gets
-   no section: it is a line of the sheet's to-do list, which the implementer carries and the reviewer checks.
+   no section: it is a line of the to-do list (point 5), which the implementer carries and the reviewer checks.
 3. **A section per concept only when it needs one**: the user did not state
    its rules, they take more than its lexicon entry can say, and it passes
    the same section test. A concept the user named and described gets none:
    its lexicon entry is enough.
-4. **Further directions.** The last section: about three ways to push the
-   concepts further, each marked « fits this PR » or « follow-up ».
+4. **Further directions.** The last section of the modeling part: about
+   three ways to push the concepts further, each marked « fits this PR » or
+   « follow-up ».
+5. **The to-do list.** `{"id": "todo", "title": "To-do", "earns": ...,
+   "part": "refactoring"}`, after the modeling part, the first entry of the
+   refactoring part: one line per point that fails the section test (see
+   point 2). It is part of the model, written with it, but the page shows it
+   at the top of the code tab, where the code that carries it is judged.
+   Leave it out when no point fails the test.
 
 A « Today » or « What goes wrong » section is written only when the request
 does not state them, and then before the model sheet: the user does not need

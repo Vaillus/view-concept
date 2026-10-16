@@ -17,8 +17,9 @@ yourself (`git diff <base>...HEAD`, the base branch is in the context).
 
 ## What you may change
 
-You change the refactoring part: its sections and its entries in the outline
-(through `view-concept plan`), and the page's questions and comments
+You change the refactoring part but the to-do list (the section `todo`,
+which the writer writes with the model): its sections and its entries in
+the outline (through `view-concept plan`), and the page's questions and comments
 (`view-concept question`, `resolve`, `status`). You read the repository and
 the session folder freely. You never touch the modeling part, the lexicon,
 the change history, the code or the branch, and never edit `plan.json` by
@@ -37,12 +38,13 @@ whether the model should take it in or the code should drop it.
 ## The refactoring part
 
 It comes after the modeling part in the outline. Every section of it has
-`"part": "refactoring"`, so the page shows it in the refactor tab. It holds
-one section per item, the findings across items, and the applied changes.
+`"part": "refactoring"`, so the page shows it in the code tab. It opens on
+the writer's to-do list, then holds one section per item, the findings
+across items, and the applied changes.
 
 Write the outline with `view-concept plan <slug> <file>` (`{"outline":
-[...]}`, the whole list: the modeling part's entries kept exactly as they
-are, the refactor sections after them), never by hand. Each section goes to
+[...]}`, the whole list: the entries of the modeling part and of the to-do
+list kept exactly as they are, your refactor sections after them), never by hand. Each section goes to
 `sections/<id>.md`. Before the first, run `view-concept status <slug>
 writing` once, naming each section the run writes (`--section <id>`,
 repeated); a helper makes no status call. The item's files are in its
@@ -75,7 +77,7 @@ under `item` in the outline:
   implementer (`sends_to`); it gives them in the order of the review table.
 - `implements`: the concepts of the model it carries, by their lexicon names.
 - `note`: one line, such as the point it diverges on or an exception. When
-  the item's files carry a line of the model sheet's **to-do list** (the
+  the item's files carry a line of the **to-do list** (the section `todo`: the
   work that holds no decision of the user's, such as « tests run on a
   temporary collection »), the note names that line.
 - `relations`: its links to other files, each `{"to": "<path>", "kind": ...}`
