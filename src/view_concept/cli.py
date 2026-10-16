@@ -143,12 +143,12 @@ def cmd_stop(a: argparse.Namespace) -> None:
 
 
 def _batches(s: Session, slug: str):
-    """Yield each new batch of the inbox as `(text, cursor after it)`, and None while the
-    inbox is quiet; writes the heartbeat meanwhile.
+    """Yield each new batch of the inbox as `(text, cursor after it, batch id)`, and None
+    while the inbox is quiet; writes the heartbeat meanwhile.
 
     The cursor persists across runs, so a later run neither loses a batch sent in between
-    nor repeats one already delivered. The caller stores the cursor once it has delivered
-    the text."""
+    nor repeats one already delivered. The caller stores the cursor and records the
+    delivery (`deliver`) once it has printed the text."""
     try:
         cursor = int(s.cursor_path.read_text())
     except (FileNotFoundError, ValueError):
@@ -172,12 +172,23 @@ def _batches(s: Session, slug: str):
                 for raw in complete.splitlines(keepends=True):
                     cursor += len(raw)
                     if raw.strip():
-                        yield format_batch(slug, json.loads(raw), outline, questions), cursor
+                        batch = json.loads(raw)
+                        text = format_batch(slug, batch, outline, questions)
+                        yield text, cursor, str(batch.get("id", ""))
                     else:
                         s.cursor_path.write_text(str(cursor))
                 continue
         yield None
         time.sleep(0.5)
+
+
+def deliver(s: Session, delivery: tuple[str, int, str]) -> None:
+    """Hand one batch to the agent: print it, move the cursor past it, and record when."""
+    text, cursor, batch_id = delivery
+    print(text, flush=True)
+    s.cursor_path.write_text(str(cursor))
+    if batch_id:
+        s.record_delivery(batch_id)
 
 
 def cmd_watch(a: argparse.Namespace) -> None:
@@ -190,9 +201,7 @@ def cmd_watch(a: argparse.Namespace) -> None:
         raise SessionError(f"no session {a.slug!r}")
     for delivery in _batches(s, a.slug):
         if delivery is not None:
-            text, cursor = delivery
-            print(text, flush=True)
-            s.cursor_path.write_text(str(cursor))
+            deliver(s, delivery)
 
 
 def cmd_wait(a: argparse.Namespace) -> None:
@@ -204,9 +213,7 @@ def cmd_wait(a: argparse.Namespace) -> None:
     deadline = time.monotonic() + a.timeout
     for delivery in _batches(s, a.slug):
         if delivery is not None:
-            text, cursor = delivery
-            print(text, flush=True)
-            s.cursor_path.write_text(str(cursor))
+            deliver(s, delivery)
             return
         if time.monotonic() >= deadline:
             sys.exit(WAIT_TIMEOUT_CODE)

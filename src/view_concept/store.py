@@ -25,6 +25,7 @@ reach the agent session through the inbox.
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
+        deliveries.jsonl  when each batch was handed to the agent  (`watch`, `wait`)
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text   (server)
@@ -395,6 +396,10 @@ class Session:
     @property
     def cursor_path(self) -> Path:
         return self.dir / ".watch_cursor"
+
+    @property
+    def deliveries_path(self) -> Path:
+        return self.dir / "deliveries.jsonl"
 
     @property
     def watch_path(self) -> Path:
@@ -1135,6 +1140,18 @@ class Session:
         delivered = _mtime(self.cursor_path)
         if size and cursor >= size and delivered:
             out["stage"] = "acted" if self.last_activity() > iso_time(delivered) else "received"
+        return out
+
+    def record_delivery(self, batch_id: str) -> None:
+        """Record that the watch or a wait handed batch `batch_id` to the agent now."""
+        _append_jsonl(self.deliveries_path, {"batch": batch_id, "at": now_iso_ms()})
+
+    def read_deliveries(self) -> dict[str, str]:
+        """When each batch was handed to the agent, by batch id (the first delivery when
+        a batch was delivered twice). Pickup time runs from a batch's `sent` to it."""
+        out: dict[str, str] = {}
+        for d in _read_jsonl(self.deliveries_path):
+            out.setdefault(str(d.get("batch", "")), str(d.get("at", "")))
         return out
 
     # ---- the watch's heartbeat ----

@@ -188,6 +188,8 @@ def test_wait_delivers_one_batch_per_call(tmp_path):
     second = view_concept(tmp_path, "wait", "pair", "--timeout", "5")
     assert second.returncode == 0 and "second" in second.stdout and "first" not in second.stdout
     assert view_concept(tmp_path, "wait", "pair", "--timeout", "1").returncode == 3
+    delivered = Session("pair", tmp_path / "sessions").read_deliveries()
+    assert list(delivered) == ["b1", "b2"] and delivered["b1"] <= delivered["b2"]
 
 
 def test_wait_writes_its_heartbeat(tmp_path):
