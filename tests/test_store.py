@@ -134,6 +134,19 @@ def test_status(session):
         session.write_status("dreaming")
 
 
+def test_phase_history(session):
+    assert session.read_phase_history() == []
+    session.write_status("writing", "s1")
+    session.write_status("writing", "s2")  # same phase: no new entry
+    session.write_status("awaiting-model")
+    history = session.read_phase_history()
+    assert [h["phase"] for h in history] == ["writing", "awaiting-model"]
+    assert history[0]["at"] <= history[1]["at"] and "." in history[0]["at"]
+    with session.phase_history_path.open("a") as f:
+        f.write('{"phase": "idl')  # a line cut by a crash
+    assert len(session.read_phase_history()) == 2
+
+
 def test_approve_plan_batch(session):
     b = session.add_batch([], action="approve-plan")  # an approval alone is not empty
     assert b["action"] == "approve-plan"

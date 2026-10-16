@@ -61,6 +61,8 @@ def test_first_turn_forks_the_main_session(session, fake_claude):
     assert t["forked_from"] == "main-1"
     assert [m["role"] for m in t["messages"]] == ["user", "assistant"]
     assert t["messages"][1]["text"] == "Short \n\nanswer."
+    reply = t["messages"][1]
+    assert reply["at"][:19] <= reply["first_text"][:19] and reply["first_text"] <= reply["ended"]
     (call,) = calls(fake_claude)
     assert call["args"][call["args"].index("--resume") + 1] == "main-1"
     assert "--fork-session" in call["args"]
@@ -112,6 +114,8 @@ def test_bind_agent_and_thread_ids(session):
     assert session.read_parent() == ""
     assert session.bind_agent("claude", "a") and not session.bind_agent("claude", "a")
     assert session.bind_agent("claude", "b") and session.read_parent() == "b"
+    assert session.conversations() == ["a", "b"]
+    assert session.bind_agent("claude", "a") and session.conversations() == ["a", "b"]
     assert [session.new_thread()["id"] for _ in range(2)] == ["t1", "t2"]
     with pytest.raises(SessionError):
         session.read_thread("../plan")
@@ -131,7 +135,9 @@ def test_a_thread_from_before_agents_still_resumes(session, fake_claude):
 def test_a_session_from_before_agents_keeps_its_parent(session):
     session.legacy_claude_path.write_text(json.dumps({"parent": "p", "since": "x"}))
     assert session.read_agent() == {"agent": "claude", "parent": "p"}
+    assert session.conversations() == ["p"]
     assert session.bind_agent("codex", "q") and session.read_parent() == "q"
+    assert session.conversations() == ["p", "q"]
 
 
 def test_comment_from_a_thread(session):

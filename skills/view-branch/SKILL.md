@@ -223,6 +223,12 @@ change, and nothing beyond it. Nothing else from this conversation: what the
 agents need is in the folder. When the run ends, give its one-line report in the
 terminal.
 
+The session may run a **variant**, a named setup with a model per role, which
+`view-concept variant <slug>` prints (run it when you open or resume the
+session). When the variant sets a model for a role, start that role's agent
+with it as the Agent tool's model; a role it leaves out gets no model, and
+keeps yours. Its helpers then take its model.
+
 You start the role agents. A role agent may in turn start **helper agents**,
 one per part of its run, so the parts are done at once; its role file says
 when and how:

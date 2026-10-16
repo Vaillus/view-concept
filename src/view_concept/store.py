@@ -5,13 +5,15 @@ the plan and the sections; the page reads them; the page writes review comments,
 reach the agent session through the inbox.
 
     <home>/sessions/<slug>/
-        plan.json       title, initial_request, kind, workflow, repo, base, pr, outline, lexicon
+        plan.json       title, initial_request, kind, workflow, repo, base, pr, variant,
+                        outline, lexicon
         sections/<id>.md  the prose of one outline section         (written by the agent)
         sections/<id>.html  an HTML section instead: a self-contained HTML document
         sections/<id>/  its media folder: media files the agent produced for it
         audit.json      vocabulary-audit findings       (written by the agent and `check`)
         status.json     what the agent is doing now: phase, its writing run (start, run
                         set), the scoping done mark, the section files it saw  (`status`)
+        phase-history.jsonl  each change of the phase, with its time  (`status`)
         change-history.json  every change of the model, oldest first     (written by `change`)
         terminal-messages.json  the user's later terminal messages      (written by `message`)
         implemented.json     the last model change each implementer run took into account
@@ -24,6 +26,7 @@ reach the agent session through the inbox.
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
+        deliveries.jsonl  when each batch was handed to the agent  (`watch`, `wait`)
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text   (server)
@@ -150,6 +153,7 @@ Unpublishing deletes the record.
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import json
 import os
@@ -211,6 +215,8 @@ KINDS = ("explanation", "code")
 WORKFLOWS = ("view-concept", "view-branch", "view-refactor")
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
+# The role agents a branch review's coordinator starts; a variant sets a model per role.
+AGENT_ROLES = ("planner", "writer", "implementer", "reviewer")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
@@ -238,6 +244,32 @@ def slugify(text: str) -> str:
 
 def now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def now_iso_ms() -> str:
+    """Now, to the millisecond: for the records the run metrics compare (a pickup takes
+    a few seconds)."""
+    return datetime.now(UTC).isoformat(timespec="milliseconds")
+
+
+def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """The records of an append-only file; a line cut by a crash is skipped."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return []
+    out = []
+    for line in lines:
+        with contextlib.suppress(json.JSONDecodeError):
+            if isinstance(record := json.loads(line), dict):
+                out.append(record)
+    return out
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -353,6 +385,10 @@ class Session:
         return self.dir / "request.md"
 
     @property
+    def phase_history_path(self) -> Path:
+        return self.dir / "phase-history.jsonl"
+
+    @property
     def questions_path(self) -> Path:
         return self.dir / "questions.json"
 
@@ -363,6 +399,10 @@ class Session:
     @property
     def cursor_path(self) -> Path:
         return self.dir / ".watch_cursor"
+
+    @property
+    def deliveries_path(self) -> Path:
+        return self.dir / "deliveries.jsonl"
 
     @property
     def watch_path(self) -> Path:
@@ -501,6 +541,29 @@ class Session:
         plan["pr"] = {"url": url, "at": now_iso()}
         _write_json(self.plan_path, plan)
         return plan["pr"]
+
+    def read_variant(self) -> dict[str, Any]:
+        """The setup the session runs with: {name, models}, `models` mapping a role to the
+        model its agent runs on. A session that names none runs variant "none"."""
+        variant = self.read_plan().get("variant") or {}
+        return {"name": variant.get("name") or "none", "models": dict(variant.get("models", {}))}
+
+    def set_variant(self, name: str, models: dict[str, str]) -> dict[str, Any]:
+        """Name the setup the session runs with and the model of each role it sets, in one
+        write, so the label matches what ran. A role left out keeps the coordinator's
+        model; a helper takes its role agent's."""
+        name = name.strip()
+        if not name:
+            raise SessionError("a variant needs a name")
+        odd = sorted(set(models) - set(AGENT_ROLES))
+        if odd:
+            raise SessionError(f"unknown role {', '.join(odd)}; one of {', '.join(AGENT_ROLES)}")
+        if any(not m.strip() for m in models.values()):
+            raise SessionError("a model per role needs a model name")
+        plan = self.read_plan()
+        plan["variant"] = {"name": name, "models": models}
+        _write_json(self.plan_path, plan)
+        return plan["variant"]
 
     def section_files(self) -> dict[str, Path]:
         """Each written section's file, by id in id order: <id>.html for an HTML section,
@@ -946,7 +1009,8 @@ class Session:
         outline with no file yet, or the whole outline when every section has one. A
         writing call during a writing run keeps the run's start and adds the sections it
         names to the set. Any other phase ends the run. `done` (phase "scoping" only) is
-        the scoping done mark: the agent has nothing more to ask."""
+        the scoping done mark: the agent has nothing more to ask. A phase other than the
+        previous one is appended to the phase history (`read_phase_history`)."""
         if phase not in PHASES:
             raise SessionError(f"unknown phase {phase!r}; one of {', '.join(PHASES)}")
         if done and phase != "scoping":
@@ -974,7 +1038,15 @@ class Session:
         if done:
             status["done"] = True
         _write_json(self.status_path, status)
+        if phase != previous.get("phase"):
+            _append_jsonl(self.phase_history_path, {"phase": phase, "at": now_iso_ms()})
         return status
+
+    def read_phase_history(self) -> list[dict[str, Any]]:
+        """Each change of the declared phase, {phase, at}, oldest first: when the page
+        started waiting for the user and when it stopped (the run metrics' waiting split).
+        status.json keeps the current phase only."""
+        return _read_jsonl(self.phase_history_path)
 
     def _unwritten(self, had: set[str]) -> list[str]:
         """The run set of a run that names none: the outline's sections with no file in
@@ -1096,6 +1168,18 @@ class Session:
             out["stage"] = "acted" if self.last_activity() > iso_time(delivered) else "received"
         return out
 
+    def record_delivery(self, batch_id: str) -> None:
+        """Record that the watch or a wait handed batch `batch_id` to the agent now."""
+        _append_jsonl(self.deliveries_path, {"batch": batch_id, "at": now_iso_ms()})
+
+    def read_deliveries(self) -> dict[str, str]:
+        """When each batch was handed to the agent, by batch id (the first delivery when
+        a batch was delivered twice). Pickup time runs from a batch's `sent` to it."""
+        out: dict[str, str] = {}
+        for d in _read_jsonl(self.deliveries_path):
+            out.setdefault(str(d.get("batch", "")), str(d.get("at", "")))
+        return out
+
     # ---- the watch's heartbeat ----
     def write_heartbeat(self) -> None:
         _write_json(self.watch_path, {"pid": os.getpid(), "at": now_iso()})
@@ -1142,7 +1226,19 @@ class Session:
         if not self.agent_path.exists() and self.legacy_claude_path.exists():
             parent = str(_read_json(self.legacy_claude_path, {}).get("parent", ""))
             return {"agent": "claude", "parent": parent} if parent else {}
-        return {key: str(value) for key, value in _read_json(self.agent_path, {}).items()}
+        record = _read_json(self.agent_path, {})
+        return {key: str(value) for key, value in record.items() if key != "conversations"}
+
+    def conversations(self) -> list[str]:
+        """Every agent conversation the session ran in, oldest first, the current one
+        (`parent`) last. A session opened from a new conversation (after /clear, the next
+        day) adds it; the earlier ones stay, so the runs they hold can still be found. A
+        session recorded before the list existed has its `parent` only."""
+        listed = _read_json(self.agent_path, {}).get("conversations")
+        if isinstance(listed, list):
+            return [str(c) for c in listed if c]
+        parent = self.read_parent()
+        return [parent] if parent else []
 
     def read_parent(self) -> str:
         """Id of the agent conversation that drives this one, "" when unknown."""
@@ -1166,14 +1262,18 @@ class Session:
 
     def bind_agent(self, agent: str, parent: str = "", name: str = "") -> bool:
         """Record the agent driving the session. Returns True when it changed (a resumed
-        session runs in a new agent conversation, so threads fork from the new one)."""
+        session runs in a new agent conversation, so threads fork from the new one). The
+        conversation joins the session's list of conversations (`conversations`)."""
         if not agent:
             return False
         current = self.read_agent()
         record = {"agent": agent, "parent": parent, "name": name or current.get("name", "")}
         if all(current.get(key) == value for key, value in record.items()):
             return False
-        _write_json(self.agent_path, {**record, "since": now_iso()})
+        conversations = self.conversations()
+        if parent and parent not in conversations:
+            conversations.append(parent)
+        _write_json(self.agent_path, {**record, "since": now_iso(), "conversations": conversations})
         return True
 
     # ---- side threads ----

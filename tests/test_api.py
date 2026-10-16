@@ -328,3 +328,18 @@ def test_state_carries_what_the_banner_is_computed_from(client, session):
     client.post("/api/s/kv-cache/batch", json={"comments": [{"section": "s1", "text": "hi"}]})
     batch = client.get("/api/s/kv-cache").json()["batch"]
     assert batch["id"] == "b1" and batch["stage"] == "sent" and batch["comments"] == 1
+
+
+def test_metrics_serve_branch_reviews_only(client, session, tmp_path, monkeypatch):
+    monkeypatch.setenv("VIEW_CONCEPT_CLAUDE_PROJECTS", str(tmp_path / "projects"))
+    assert client.get("/api/s/kv-cache/metrics").status_code == 404
+    review = Session("review", session.dir.parent)
+    review.create("A review", kind="code", repo=str(tmp_path / "repo"))
+    review.add_batch([{"section": "s1", "text": "why?"}])
+    r = client.get("/api/s/review/metrics")
+    assert r.status_code == 200
+    m = r.json()
+    assert m["slug"] == "review" and m["variant"] == {"name": "none", "models": {}}
+    assert m["runs"] == [] and m["quality"]["comments"] == 1
+    assert [b["id"] for b in m["batches"]] == ["b1"]
+    assert m["compare"]["variants"][0]["reviews"][0]["current"] is True
