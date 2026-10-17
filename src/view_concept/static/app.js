@@ -20,6 +20,7 @@
 const SLUG = decodeURIComponent(location.pathname.split("/").pop());
 const DRAFTS_KEY = `view-concept:drafts:${SLUG}`;
 const NOTE_KEY = `view-concept:note:${SLUG}`;
+const POSITION_KEY = `view-concept:position:${SLUG}`; // the saved position (see "saved position")
 const WIDTH_KEY = "view-concept:review-width"; // per browser, for every session
 
 let state = null;        // last payload from /api/s/<slug>
@@ -163,13 +164,19 @@ function setTab(name) {
   renderMermaid($(`.view[data-view="${name}"]`));
   positionPopover();
   if (name === "metrics") refreshMetrics();
+  savePosition();
 }
 
+/* The tab follow rule moves the tab only on a phase change it sees while the page is on
+   the session. At load, the saved position's tab opens (the model tab when that tab is
+   no longer shown), whatever the phase; without one, the tab is picked from the phase. */
 function followSession() {
   const phase = shownPhase();
   const onPlan = ["scoping", "awaiting-approval"].includes(phase);
-  if (tab === null) setTab(Object.keys(state.sections).length && !onPlan ? "doc" : "plan");
-  else if (phase !== lastPhase) {
+  if (tab === null) {
+    if (!restorePosition()) setTab(Object.keys(state.sections).length && !onPlan ? "doc" : "plan");
+    positionReady = true;
+  } else if (phase !== lastPhase) {
     if (onPlan) setTab("plan");
     // A run opens on the tab of the set's first section not written yet.
     if (phase === "writing") setTab(tabOf(writingId() || (writingRun() || { set: [""] }).set[0]));
@@ -514,7 +521,7 @@ function renderChanges() {
    smooth scroll the page started is running (to a passage or a section), a
    render notes no anchor: holding one would set scrollTop and stop that scroll short. */
 
-let anchor = null; // { view, key, block, offset }
+let anchor = null; // { view, key, block, offset, text, words, ranks, node }
 let pageScrolling = null; // { view } of the smooth scroll the page is running
 
 /* Runs a smooth scroll of the page in `view`, and marks it as running until the view's
@@ -537,6 +544,51 @@ function pageScroll(view, scroll) {
   scroll();
 }
 
+/* The block key: how the reading anchor names its block, by the first 80 characters of
+   the block's text (its words joined by spaces), with the block's rank and the words of
+   the whole element's body at the time it is noted. After a render, the block is found
+   in that element only, by these questions in order:
+   - the element is gone: no block (the view does not move);
+   - a block starts with the key: that block, the closest to the old rank among several;
+   - else the old and new words are paired (diffWords) and, with fewer than half of the
+     old words paired, the first block (the section was rewritten);
+   - else the block holding the pair of the first paired word of the old block;
+   - else the block of the word that follows, in the new version, the last word paired
+     before the old block (the text written in its place);
+   - else the first block.
+   In an HTML section the block is the whole section frame: the page cannot see the
+   blocks drawn in it, only the distance from the frame's top is kept. */
+const KEY_LENGTH = 80;
+
+// The body of an anchored element: a section's, or the section block of an item's description.
+const bodyOf = (node) => node.querySelector(":scope > .body, :scope > td > .sec > .body");
+/* A block's words and text, cut the way the change highlights cut them (words): a formula
+   counts as its TeX and a diagram as its source, so a re-typeset formula or a drawn SVG
+   keeps the block's key and words. A block that is itself a formula or a diagram (a
+   display formula, a drawn diagram, or the `pre` of its source before the drawing) is
+   that one word: words() reads only below the element it is given. */
+function blockWords(b) {
+  const atom = atomOf(b) ?? (b.matches("pre") ? b.querySelector(":scope > code.language-mermaid") : null)?.textContent;
+  return atom != null ? [`\u0000${collapse(atom)}`] : words(b).map((w) => w.text);
+}
+const blockText = (b) => blockWords(b).join(" ");
+
+// The words of a body's blocks, each with the rank of its block.
+function bodyWords(body) {
+  const list = [], ranks = [];
+  [...body.children].forEach((b, k) => {
+    for (const w of blockWords(b)) { list.push(w); ranks.push(k); }
+  });
+  return { words: list, ranks };
+}
+
+function noteBlock(a, body, block) {
+  a.block = block;
+  a.text = block >= 0 && body ? blockText(body.children[block]).slice(0, KEY_LENGTH) : "";
+  Object.assign(a, body ? bodyWords(body) : { words: [], ranks: [] });
+  return a;
+}
+
 function readingAnchor(view) {
   const top = view.getBoundingClientRect().top;
   // In document order, the first element still reaching the view's top is the outermost.
@@ -545,17 +597,48 @@ function readingAnchor(view) {
     return r.height && r.bottom > top;
   });
   if (!node) return null;
-  const blocks = [...(node.querySelector(":scope > .body") || { children: [] }).children];
+  const body = bodyOf(node);
+  const blocks = [...(body || { children: [] }).children];
   const block = blocks.findIndex((b) => b.getBoundingClientRect().bottom > top);
   const at = block < 0 ? node : blocks[block];
-  return { view, key: node.id, block, offset: at.getBoundingClientRect().top - top };
+  return noteBlock({ view, key: node.id, offset: at.getBoundingClientRect().top - top, node: at }, body, block);
 }
 
+// The block of `blocks` the anchor `a` names, by the questions above.
+function findBlock(a, blocks) {
+  if (a.text) {
+    const keyed = blocks.map((b, k) => k).filter((k) => blockText(blocks[k]).startsWith(a.text));
+    if (keyed.length) return keyed.reduce((x, k) => (Math.abs(k - a.block) < Math.abs(x - a.block) ? k : x));
+  }
+  if (!a.words || !a.words.length) return Math.min(a.block, blocks.length - 1);
+  const now = bodyWords({ children: blocks });
+  const { pairs } = diffWords(a.words, now.words);
+  const paired = pairs.filter((j) => j >= 0).length;
+  if (paired * 2 < a.words.length) return 0;
+  let first = -1, before = -1;
+  a.words.forEach((w, i) => {
+    if (pairs[i] < 0) return;
+    if (a.ranks[i] < a.block) before = i;
+    else if (a.ranks[i] === a.block && first < 0) first = i;
+  });
+  if (first >= 0) return now.ranks[pairs[first]];
+  if (before >= 0) return now.ranks[Math.min(pairs[before] + 1, now.words.length - 1)];
+  return 0;
+}
+
+/* The DOM node the anchor `a` names: its block, or the element itself when the anchor has
+   no block; null when the element is gone. Found once per render, then re-noted from what
+   was found, so the next render compares with the text the reader had last. */
 function anchorNode(a) {
+  if (a.node && a.node.isConnected) return a.node;
   const node = a.view.querySelector(`[id="${CSS.escape(a.key)}"]`);
-  if (!node) return null;
-  const body = node.querySelector(":scope > .body");
-  return (a.block >= 0 && body && body.children[a.block]) || node;
+  if (!node) return (a.node = null);
+  const body = bodyOf(node);
+  const blocks = [...(body || { children: [] }).children];
+  if (a.block < 0 || !blocks.length) return (a.node = node);
+  const block = findBlock(a, blocks);
+  noteBlock(a, body, block);
+  return (a.node = blocks[block]);
 }
 
 function holdAnchor() {
@@ -573,6 +656,48 @@ for (const view of docViews()) {
   }
 }
 
+/* ---------------- saved position ----------------
+   What the page keeps of the reader's place in this session, in this browser's storage
+   (one per session, like the drafts): the open tab, the reading anchor of the view shown
+   (with its block key; the Plan and Metrics tabs keep only the tab), and the open item
+   entries of the code tab. Written at the end of a scroll, at a change of tab, when an
+   item entry opens or closes, and when the page goes away; put back at every load of the
+   session (a click in the sessions list, `view-concept open`, a reload). */
+
+let positionReady = false; // false until the saved position is put back: nothing is written before
+let positionTimer = null;
+
+function savePosition() {
+  if (!positionReady) return;
+  const view = docViews().find((v) => v.dataset.view === tab);
+  const a = !view ? null : anchor && anchor.view === view ? anchor : view.scrollTop ? readingAnchor(view) : null;
+  saveJSON(POSITION_KEY, {
+    tab,
+    anchor: a && { view: view.dataset.view, key: a.key, block: a.block, offset: a.offset, text: a.text, words: a.words, ranks: a.ranks },
+    open: [...openItems],
+  });
+}
+
+/* Puts back the saved position, if any: its open item entries, its tab, and its reading
+   anchor, held until the first render has placed it. Returns whether there was one. */
+function restorePosition() {
+  const saved = loadJSON(POSITION_KEY, null);
+  if (!saved || !saved.tab) return false;
+  for (const id of saved.open || []) openItems.add(id);
+  setTab(saved.tab);
+  const view = docViews().find((v) => v.dataset.view === tab);
+  if (view && saved.anchor && saved.anchor.view === tab) anchor = { ...saved.anchor, view, restore: true };
+  return true;
+}
+
+for (const view of docViews()) {
+  view.addEventListener("scroll", () => {
+    clearTimeout(positionTimer);
+    positionTimer = setTimeout(savePosition, 250);
+  }, { passive: true });
+}
+addEventListener("pagehide", savePosition);
+
 function renderDoc() {
   const doc = $("#doc");
   const sections = allSections();
@@ -583,6 +708,7 @@ function renderDoc() {
   }
   const shown = docViews().find((v) => v.classList.contains("active"));
   if (pageScrolling) anchor = null;
+  else if (anchor && anchor.restore) { /* the saved position, placed after this render */ }
   else if (!anchor || anchor.view !== shown || !anchorNode(anchor)) anchor = shown && shown.scrollTop ? readingAnchor(shown) : null;
   parkFrames();
   // A question box at the end of a section is re-attached on each render: keep its focus.
@@ -606,6 +732,10 @@ function renderDoc() {
   }
   placeFrames();
   holdAnchor();
+  if (anchor && anchor.restore) {
+    delete anchor.restore;
+    if (!anchorNode(anchor)) anchor = null; // the element is gone: the tab opens at its top
+  }
   anchorWatch.disconnect();
   for (const view of docViews()) for (const child of view.children) anchorWatch.observe(child);
   frames.forEach((f, id) => postTerms(id, f));
@@ -840,6 +970,7 @@ function setItemOpen(id, open) {
   description.hidden = !open;
   if (open) renderMermaid(description);
   positionPopover();
+  savePosition();
 }
 
 function typesetMath(root) {
@@ -1263,6 +1394,11 @@ function applyHighlights() {
 
 const BLOCKS = "p, li, td, th, pre, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, .math.block, .mermaid";
 
+// The source of a formula or a diagram, which counts as one word; null for any other element.
+const atomOf = (n) => n.matches(".math") ? n.dataset.tex ?? n.textContent
+                    : n.matches(".mermaid") ? n.dataset.src
+                    : n.matches("pre > code.language-mermaid") ? n.textContent : null;
+
 /* The words of `root`, each with the DOM range it covers. A formula or a diagram is one
    word (its source), so a re-typeset formula compares equal to its TeX. The same
    function reads the detached read version and the live, annotated section. */
@@ -1274,9 +1410,7 @@ function words(root) {
   const walk = (node) => {
     for (const n of node.childNodes) {
       if (n.nodeType === 1) {
-        const atom = n.matches(".math") ? n.dataset.tex ?? n.textContent
-                   : n.matches(".mermaid") ? n.dataset.src
-                   : n.matches("pre > code.language-mermaid") ? n.textContent : null;
+        const atom = atomOf(n);
         if (atom != null) {
           end();
           const range = document.createRange();
@@ -1303,9 +1437,10 @@ function words(root) {
   return out;
 }
 
-/* Which words of `b` are not in `a` (`inserted`), and which words of `b` follow a run
-   of words of `a` that is gone (`deleted`). Longest common subsequence, after trimming
-   the common head and tail; a middle too large to compare counts as rewritten. */
+/* Which words of `b` are not in `a` (`inserted`), which words of `b` follow a run of
+   words of `a` that is gone (`deleted`), and for each word of `a` the index of its pair
+   in `b`, -1 when it has none (`pairs`). Longest common subsequence, after trimming the
+   common head and tail; a middle too large to compare counts as rewritten. */
 function diffWords(a, b) {
   let lo = 0;
   while (lo < a.length && lo < b.length && a[lo] === b[lo]) lo++;
@@ -1313,10 +1448,13 @@ function diffWords(a, b) {
   while (ea > lo && eb > lo && a[ea - 1] === b[eb - 1]) { ea--; eb--; }
   const n = ea - lo, m = eb - lo;
   const inserted = new Set(), deleted = new Set();
+  const pairs = new Int32Array(a.length).fill(-1);
+  for (let k = 0; k < lo; k++) pairs[k] = k;
+  for (let k = ea; k < a.length; k++) pairs[k] = k - ea + eb;
   if (n * m > 4e6) {
     for (let j = lo; j < eb; j++) inserted.add(j);
     if (n) deleted.add(Math.min(lo, b.length - 1));
-    return { inserted, deleted };
+    return { inserted, deleted, pairs };
   }
   const L = new Int32Array((n + 1) * (m + 1)); // L[i][j]: LCS of a[lo+i..ea) and b[lo+j..eb)
   for (let i = n - 1; i >= 0; i--) {
@@ -1327,11 +1465,11 @@ function diffWords(a, b) {
   }
   let i = 0, j = 0;
   while (i < n || j < m) {
-    if (i < n && j < m && a[lo + i] === b[lo + j]) { i++; j++; }
+    if (i < n && j < m && a[lo + i] === b[lo + j]) { pairs[lo + i] = lo + j; i++; j++; }
     else if (j < m && (i === n || L[i * (m + 1) + j + 1] >= L[(i + 1) * (m + 1) + j])) inserted.add(lo + j++);
     else { deleted.add(Math.min(lo + j, b.length - 1)); i++; }
   }
-  return { inserted, deleted };
+  return { inserted, deleted, pairs };
 }
 
 /* The ranges of inserted words of each .changed block, and the block the pointer is over:
