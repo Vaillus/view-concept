@@ -564,8 +564,13 @@ const KEY_LENGTH = 80;
 const bodyOf = (node) => node.querySelector(":scope > .body, :scope > td > .sec > .body");
 /* A block's words and text, cut the way the change highlights cut them (words): a formula
    counts as its TeX and a diagram as its source, so a re-typeset formula or a drawn SVG
-   keeps the block's key and words. */
-const blockWords = (b) => words(b).map((w) => w.text);
+   keeps the block's key and words. A block that is itself a formula or a diagram (a
+   display formula, a drawn diagram, or the `pre` of its source before the drawing) is
+   that one word: words() reads only below the element it is given. */
+function blockWords(b) {
+  const atom = atomOf(b) ?? (b.matches("pre") ? b.querySelector(":scope > code.language-mermaid") : null)?.textContent;
+  return atom != null ? [`\u0000${collapse(atom)}`] : words(b).map((w) => w.text);
+}
 const blockText = (b) => blockWords(b).join(" ");
 
 // The words of a body's blocks, each with the rank of its block.
@@ -1389,6 +1394,11 @@ function applyHighlights() {
 
 const BLOCKS = "p, li, td, th, pre, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, .math.block, .mermaid";
 
+// The source of a formula or a diagram, which counts as one word; null for any other element.
+const atomOf = (n) => n.matches(".math") ? n.dataset.tex ?? n.textContent
+                    : n.matches(".mermaid") ? n.dataset.src
+                    : n.matches("pre > code.language-mermaid") ? n.textContent : null;
+
 /* The words of `root`, each with the DOM range it covers. A formula or a diagram is one
    word (its source), so a re-typeset formula compares equal to its TeX. The same
    function reads the detached read version and the live, annotated section. */
@@ -1400,9 +1410,7 @@ function words(root) {
   const walk = (node) => {
     for (const n of node.childNodes) {
       if (n.nodeType === 1) {
-        const atom = n.matches(".math") ? n.dataset.tex ?? n.textContent
-                   : n.matches(".mermaid") ? n.dataset.src
-                   : n.matches("pre > code.language-mermaid") ? n.textContent : null;
+        const atom = atomOf(n);
         if (atom != null) {
           end();
           const range = document.createRange();
