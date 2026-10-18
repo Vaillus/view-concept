@@ -409,6 +409,10 @@ def test_a_batch_clears_the_drafts_it_carried(client, session):
         "drafts": [{"id": "a2", "section": "s1", "quote": "", "prefix": "", "text": "two"}],
         "note": "",
     }
+    # A sent draft is gone like a deleted one: a late edit to it does not bring it back.
+    late = client.put(f"{url}/a1", json={"section": "s1", "text": "one, edited"})
+    assert late.json() == {"saved": False}
+    assert [d["id"] for d in client.get(url).json()["drafts"]] == ["a2"]
 
 
 def test_a_browsers_old_drafts_move_after_those_there(client, session):

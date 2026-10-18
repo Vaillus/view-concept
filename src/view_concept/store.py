@@ -1083,10 +1083,12 @@ class Session:
             _write_json(self.drafts_path, data)
 
     def clear_sent_drafts(self, ids: list[str]) -> None:
-        """After a batch: the drafts it carried and the note are gone from every page."""
+        """After a batch: the drafts it carried and the note are gone from every page. A sent
+        draft counts as deleted, so an edit to it arriving later is dropped."""
         with _DRAFTS_LOCK:
             data = self.read_drafts()
             data["drafts"] = [d for d in data["drafts"] if d.get("id") not in ids]
+            data["deleted"] = [*data["deleted"], *(i for i in ids if i not in data["deleted"])]
             data["note"] = ""
             _write_json(self.drafts_path, data)
 
