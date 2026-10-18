@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import frame, launch, metrics, publish, threads
+from . import frame, gate, launch, metrics, publish, threads
 from .render import md
 from .store import Session, SessionError, list_sessions
 
@@ -485,7 +485,19 @@ def unpublish_session(slug: str) -> dict[str, bool]:
     return {"ok": True}
 
 
-def run(host: str, port: int) -> None:
+def run(host: str, port: int, remote: int | None = None) -> None:
+    """Serve the page on the local port `port` and, behind the tailnet gate, on the remote
+    port `remote` (gate.py), both in this one process: a batch sent through either reaches
+    the same sessions."""
     import uvicorn
 
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    remote = gate.remote_port() if remote is None else remote
+    if remote == port:
+        raise SystemExit(f"VIEW_CONCEPT_REMOTE_PORT must differ from the local port ({port})")
+    target = gate.TailnetGate(app, remote, gate.owner_login())
+    config = uvicorn.Config(target, host=host, port=port, log_level="warning")
+    sockets = [
+        config.bind_socket(),
+        uvicorn.Config(target, host=host, port=remote).bind_socket(),
+    ]
+    uvicorn.Server(config).run(sockets=sockets)
