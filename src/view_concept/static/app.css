@@ -467,6 +467,9 @@ body.sb-collapsed .sidebar { display: none; }
 .sb-dot::before { content: "○"; font-size: 9px; color: var(--dim); }
 .sb-dot.on::before { content: "●"; color: var(--ok); }
 .sb-empty { padding: 8px 4px; }
+/* a pending launch: started from the launcher, its session not opened yet */
+.sb-pending { color: var(--accent); font-style: italic; cursor: default; }
+.sb-pending.stale { color: var(--flag); }
 
 /* the new-feature dialog */
 .launcher { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-start; justify-content: center;

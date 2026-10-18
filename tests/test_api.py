@@ -311,12 +311,41 @@ def test_focus_counts_the_open_pages(client):
 def test_launch_opens_a_terminal_in_the_project(client, tmp_path, monkeypatch):
     opened = []
     monkeypatch.setattr(server.launch, "open_terminal", lambda *a: opened.append(a))
+    monkeypatch.setattr(server.launch, "LAUNCHES", tmp_path / "launches.json")
     body = {"project": str(tmp_path), "request": "add a sidebar", "worktree": "Session sidebar"}
     r = client.post("/api/launch", json=body)
-    assert r.json()["command"] == "claude -w session-sidebar '/view-branch add a sidebar'"
+    assert r.json()["command"] == (
+        "claude --permission-mode auto -w session-sidebar '/view-branch add a sidebar'"
+    )
     assert opened == [(str(tmp_path), r.json()["command"])]
     r = client.post("/api/launch", json={**body, "skill": "explain"})
     assert r.status_code == 400 and len(opened) == 1
+
+
+def test_a_pending_launch_shows_until_its_session_exists(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(server.launch, "open_terminal", lambda *a: None)
+    monkeypatch.setattr(server.launch, "LAUNCHES", tmp_path / "launches.json")
+    rows: list[dict] = []
+    monkeypatch.setattr(server, "list_sessions", lambda: rows)
+    project = tmp_path / "proj"
+    project.mkdir()
+    r = client.post("/api/launch", json={"project": str(project), "request": "explain the gate"})
+    lid = r.json()["launch"]["id"]
+    got = client.get("/api/launches").json()
+    assert [x["request"] for x in got["launches"]] == ["explain the gate"]
+    assert got["pending_for"] == 300
+    at = got["launches"][0]["at"]
+    # A session of another project, or one created before the launch, leaves it pending.
+    rows.append({"slug": "other", "project": "/elsewhere", "created_at": "9999"})
+    rows.append({"slug": "old", "project": str(project.resolve()), "created_at": "2000"})
+    assert [x["id"] for x in client.get("/api/launches").json()["launches"]] == [lid]
+    # The first session created in its project after it takes its place.
+    rows.append({"slug": "new", "project": str(project.resolve()), "created_at": at + "1"})
+    assert client.get("/api/launches").json()["launches"] == []
+    # × removes one.
+    r = client.post("/api/launch", json={"project": str(project), "request": "again"})
+    assert client.delete(f"/api/launches/{r.json()['launch']['id']}").status_code == 200
+    assert client.get("/api/launches").json()["launches"] == []
 
 
 def test_state_carries_what_the_banner_is_computed_from(client, session):

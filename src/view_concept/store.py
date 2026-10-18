@@ -1831,6 +1831,10 @@ def list_sessions(root: Path | None = None) -> list[dict[str, Any]]:
         except SessionError:
             plan = {"title": d.name}
         mtime = max(st[1] or 0 for st in s.signature())
+        # When the session folder was made: a pending launch gives way to the first
+        # session created in its project after it (launch.py).
+        st = d.stat()
+        born = getattr(st, "st_birthtime", st.st_ctime)
         pending = sum(
             1 for b in s.read_comments()["batches"] for c in b["comments"] if c["status"] == "sent"
         )
@@ -1845,6 +1849,7 @@ def list_sessions(root: Path | None = None) -> list[dict[str, Any]]:
                 "repo": plan.get("repo", ""),
                 "project": project_of(plan.get("repo", "")),
                 "listening": s.is_listening(),
+                "created_at": datetime.fromtimestamp(born, UTC).isoformat(timespec="milliseconds"),
             }
         )
     return sorted(out, key=lambda r: r["updated"], reverse=True)

@@ -5,7 +5,11 @@
    them, « active » repeats the sessions whose agent is listening, with their project,
    to switch between the features in progress. Opening
    a session navigates this tab. « + » starts a new feature in a project: the server
-   opens a terminal there and starts the agent on a skill.
+   opens a terminal there and starts the agent on a skill, in auto mode. From the tap on
+   Start until the agent opens the session, the launch shows under its project as a
+   pending launch, on every page: « starting », then « not started · check the Mac » once
+   the server's PENDING_FOR went by; × removes it. The server drops it when the first
+   session of its project created after it appears.
 
    It also holds the page's global event stream: `sessions` reloads the list, and `focus`
    (sent by `view-concept open`) moves the tab the user was last on to that session,
@@ -23,6 +27,8 @@
     del(k) { try { localStorage.removeItem(k); } catch (e) { /* private mode */ } },
   };
   let rows = [];
+  let launches = [];      // the pending launches (launch.py)
+  let pendingFor = 300;   // seconds before a pending launch reads « not started »
   let skills = ["view-branch"];
 
   const h = (tag, attrs = {}, ...kids) => {
@@ -54,9 +60,11 @@
     toast.timer = setTimeout(() => (t.hidden = true), 8000);
   }
 
-  /* Projects in order of their latest session (rows come newest first). */
+  /* Projects in order of their latest session (rows come newest first); a project with
+     only a pending launch comes first. */
   function groups() {
     const by = new Map();
+    for (const l of launches) if (!rows.some((r) => r.project === l.project)) by.set(l.project, []);
     for (const r of rows) {
       if (!by.has(r.project)) by.set(r.project, []);
       by.get(r.project).push(r);
@@ -76,6 +84,18 @@
     return a;
   }
 
+  function pendingItem(l) {
+    const stale = (Date.now() - Date.parse(l.at)) / 1000 >= pendingFor;
+    return h("div", { class: "sb-item sb-pending" + (stale ? " stale" : ""), title: `${l.skill} · ${l.request}` },
+      h("span", { class: "sb-title", text: `${stale ? "not started · check the Mac" : "starting"} · ${l.request}` }),
+      h("button", { class: "sb-add", title: "Remove", text: "×", onclick: async (e) => {
+        e.stopPropagation();
+        launches = launches.filter((x) => x.id !== l.id);
+        render();
+        try { await fetch(`/api/launches/${encodeURIComponent(l.id)}`, { method: "DELETE" }); } catch (err) { /* offline */ }
+      } }));
+  }
+
   function render() {
     const list = h("div", { class: "sb-list" });
     const active = rows.filter((r) => r.listening);
@@ -89,6 +109,7 @@
         h("span", { class: "sb-name", text: project ? base(project) : "explanations" }));
       if (project) head.append(h("button", { class: "sb-add", title: `New feature in ${project}`, text: "+", onclick: () => openLauncher(project) }));
       list.append(head);
+      for (const l of launches.filter((x) => x.project === project)) list.append(pendingItem(l));
       for (const r of items) list.append(item(r, false));
     }
     if (!rows.length) list.append(h("p", { class: "dim sb-empty", text: "No session yet." }));
@@ -101,9 +122,17 @@
   }
 
   async function load() {
-    try { rows = await (await fetch("/api/sessions")).json(); } catch (e) { return; }
+    try {
+      const [r, l] = await Promise.all([fetch("/api/sessions"), fetch("/api/launches")]);
+      rows = await r.json();
+      const body = await l.json();
+      launches = body.launches || [];
+      pendingFor = body.pending_for || pendingFor;
+    } catch (e) { return; }
     render();
   }
+  // « starting » turns into « not started » with no event from the server.
+  setInterval(() => { if (launches.length) render(); }, 30000);
 
   /* ---- new feature ---- */
 
@@ -119,7 +148,7 @@
     const useTree = h("input", { type: "checkbox" });
     const tree = h("input", { class: "field", placeholder: "worktree name (from the request if empty)", spellcheck: "false", disabled: true });
     useTree.addEventListener("change", () => { tree.disabled = !useTree.checked; });
-    const go = h("button", { class: "btn primary", text: "Start in Ghostty" });
+    const go = h("button", { class: "btn primary", text: "Start" });
     const close = () => box.remove();
     async function start() {
       const text = request.value.trim();
@@ -135,7 +164,8 @@
       go.disabled = false;
       if (!r.ok) { err.textContent = body.detail; err.hidden = false; return; }
       close();
-      toast(`Started in Ghostty: ${body.command}. The page shows the session once the agent opens it.`);
+      if (body.launch) { launches = [...launches, body.launch]; render(); }
+      toast("Started on the Mac: it shows in the sidebar as « starting » until its agent opens the session.");
     }
     go.addEventListener("click", start);
     request.addEventListener("keydown", (e) => {

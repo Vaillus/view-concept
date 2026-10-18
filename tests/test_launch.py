@@ -6,7 +6,9 @@ from view_concept.store import SessionError
 
 def test_command_quotes_the_request_for_the_shell():
     line = launch.command("view-refactor", "triage `src/` ; it's messy")
-    assert line == "claude '/view-refactor triage `src/` ; it'\"'\"'s messy'"
+    assert line == (
+        "claude --permission-mode auto '/view-refactor triage `src/` ; it'\"'\"'s messy'"
+    )
 
 
 def test_command_needs_a_known_skill_and_a_request():

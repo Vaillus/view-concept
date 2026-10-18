@@ -96,20 +96,25 @@ _pages: set[asyncio.Queue[str]] = set()
 @app.get("/api/events")
 async def global_events(request: Request) -> StreamingResponse:
     """What every open page hears, whatever session it shows: `sessions` when the session
-    list changed (the sidebar reloads it) and `focus` when a session should be shown."""
+    list or the pending launches changed (the sidebar reloads them) and `focus` when a
+    session should be shown."""
     queue: asyncio.Queue[str] = asyncio.Queue()
     _pages.add(queue)
 
+    def snapshot() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        rows = list_sessions()
+        return rows, launch.pending(rows)
+
     async def stream():
         try:
-            last = await asyncio.to_thread(list_sessions)
+            last = await asyncio.to_thread(snapshot)
             yield "event: hello\ndata: {}\n\n"
             while not await request.is_disconnected():
                 try:
                     slug = await asyncio.wait_for(queue.get(), 2)
                     yield f"event: focus\ndata: {json.dumps({'slug': slug})}\n\n"
                 except TimeoutError:
-                    rows = await asyncio.to_thread(list_sessions)
+                    rows = await asyncio.to_thread(snapshot)
                     yield "event: sessions\ndata: {}\n\n" if rows != last else ": ping\n\n"
                     last = rows
         finally:
@@ -143,15 +148,29 @@ def skills() -> list[str]:
 
 
 @app.post("/api/launch")
-def launch_session(body: LaunchIn) -> dict[str, str]:
+def launch_session(body: LaunchIn) -> dict[str, Any]:
     """Start a new agent session in a project: a terminal window opens there and starts
-    Claude Code on the skill; the session shows in the page once the agent opens it."""
+    Claude Code on the skill, in auto mode. From now until the agent opens the session,
+    every page's sidebar shows it as a pending launch (launch.py)."""
     try:
         line = launch.command(body.skill, body.request, body.worktree)
         launch.open_terminal(body.project, line)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
-    return {"command": line}
+    return {"command": line, "launch": launch.add_pending(body.project, body.request, body.skill)}
+
+
+@app.get("/api/launches")
+def launches() -> dict[str, Any]:
+    """The pending launches, and after how many seconds one reads « not started »."""
+    return {"launches": launch.pending(list_sessions()), "pending_for": launch.PENDING_FOR}
+
+
+@app.delete("/api/launches/{lid}")
+def drop_launch(lid: str) -> dict[str, bool]:
+    """× on a pending launch: it leaves every page's sidebar."""
+    launch.remove_pending(lid)
+    return {"ok": True}
 
 
 @app.get("/api/s/{slug}")
