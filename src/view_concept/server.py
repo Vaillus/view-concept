@@ -4,8 +4,11 @@ runs side threads."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
+import sys
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import frame, gate, launch, metrics, publish, threads
+from . import frame, gate, launch, metrics, publish, push, threads
 from .render import md
 from .store import Session, SessionError, list_sessions
 
@@ -28,7 +31,29 @@ VERDICTS: dict[str, list[dict[str, str]]] = yaml.safe_load(
 # A session created before workflows existed was a branch review or had no items.
 LEGACY_WORKFLOW = "view-branch"
 
-app = FastAPI(title="view-concept")
+# How often the server looks for sessions that started waiting for the user (push.py).
+NOTICE_EVERY = 5.0
+
+
+async def _notice_loop() -> None:
+    while True:
+        await asyncio.sleep(NOTICE_EVERY)
+        try:
+            await asyncio.to_thread(push.check_and_send)
+        except Exception as e:  # a bad session file or the network: try again next time
+            print(f"view-concept: notices: {e}", file=sys.stderr)
+
+
+@contextlib.asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    task = asyncio.create_task(_notice_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+
+
+app = FastAPI(title="view-concept", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
@@ -75,6 +100,48 @@ MANIFEST = {
 @app.get("/manifest.webmanifest")
 def manifest() -> Response:
     return Response(json.dumps(MANIFEST), media_type="application/manifest+json")
+
+
+# ---- the notice when the agent is done (push.py) ----
+
+
+@app.get("/sw.js")
+def service_worker() -> FileResponse:
+    """The home-screen app's service worker: it receives the notices while the app is
+    closed. Served from the root, so it covers every page."""
+    return FileResponse(
+        STATIC / "sw.js",
+        media_type="text/javascript",
+        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/api/push/key")
+def push_key() -> dict[str, str]:
+    try:
+        return {"key": push.public_key()}
+    except push.PushError as e:
+        raise HTTPException(503, str(e)) from e
+
+
+class UnsubscribeIn(BaseModel):
+    endpoint: str
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(body: dict[str, Any]) -> dict[str, bool]:
+    """Turn notices on for a phone: keep its subscription."""
+    try:
+        push.subscribe(body)
+    except push.PushError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True}
+
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(body: UnsubscribeIn) -> dict[str, bool]:
+    push.unsubscribe(body.endpoint)
+    return {"ok": True}
 
 
 @app.get("/s/{slug}")

@@ -2641,6 +2641,58 @@ $("#unpublish").addEventListener("click", async () => {
   }
 });
 
+/* ---------------- notices ----------------
+   The home-screen app can show a notice when a session starts waiting for you (push.py),
+   on the lock screen too. « notices » in the ⋯ menu turns them on for this phone: the
+   phone asks for your permission, the app installs its service worker (/sw.js) and gives
+   the server a subscription; every session of the server then notifies this phone. Only
+   the home-screen app offers it: a page open in the browser (an iPhone's, the Mac's)
+   cannot receive notices. Tapped again, it turns them off. */
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const canNotify = () => standalone() && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const b64 = (s) => {
+  const raw = atob((s + "=".repeat((4 - (s.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+};
+
+async function noticeSubscription() {
+  const reg = await navigator.serviceWorker.getRegistration("/");
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+
+async function renderNotices() {
+  const btn = $("#notices");
+  btn.hidden = !canNotify();
+  if (btn.hidden) return;
+  const on = Notification.permission === "granted" && !!(await noticeSubscription().catch(() => null));
+  btn.textContent = on ? "notices: on" : "notices: off";
+  btn.title = on ? "This phone gets a notice when a session waits for you; tap to turn them off"
+                 : "Get a notice on this phone when a session waits for you";
+  btn.dataset.on = on ? "1" : "";
+}
+
+$("#notices").addEventListener("click", async () => {
+  const btn = $("#notices");
+  try {
+    if (btn.dataset.on) {
+      const sub = await noticeSubscription();
+      if (sub) { await postJSON("/api/push/unsubscribe", { endpoint: sub.endpoint }); await sub.unsubscribe(); }
+      toast("Notices off on this phone");
+    } else {
+      if (await Notification.requestPermission() !== "granted") { toast("Notices are not allowed on this phone"); return; }
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      await navigator.serviceWorker.ready;
+      const { key } = await (await fetch("/api/push/key")).json();
+      const sub = (await reg.pushManager.getSubscription())
+        || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
+      await postJSON("/api/push/subscribe", sub.toJSON());
+      toast("Notices on: this phone hears when a session waits for you");
+    }
+  } catch (e) { toast(`Notices: ${e.message}`, 6000); }
+  renderNotices();
+});
+renderNotices();
+
 /* The tip under a word: a lexicon entry's (`term`, its index) or a plain text (`text`). */
 function showTip(text, term, r) {
   const tip = $("#tip");
