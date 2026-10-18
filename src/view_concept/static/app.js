@@ -1694,7 +1694,7 @@ $("#sel-actions .ask").addEventListener("click", () => {
    its new words, until a tap elsewhere; on a side thread's passage, the thread. A term
    inside a thread's passage shows its tip; the rest of the passage opens the thread.
    A tap anywhere else in the page, or in a section frame, clears the paint (the frame
-   posts its taps: the tap message). */
+   posts its taps: the tap message), and a scroll of any pane hides the tip. */
 document.addEventListener("click", (e) => {
   if (!isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop, #tip")) return;
   const sel = getSelection();
@@ -1716,7 +1716,10 @@ function tapElsewhere(tapped) {
   if (tapped && hoveredChange) paintChange(null);
   frames.forEach((f) => { if (f !== tapped && f.contentWindow) f.contentWindow.postMessage({ viewConcept: "tap-elsewhere" }, "*"); });
 }
-for (const view of docViews()) view.addEventListener("scroll", () => { if (isTouch()) $("#tip").hidden = true; }, { passive: true });
+// Scroll events do not bubble: listen in the capture phase to hear every pane's.
+document.addEventListener("scroll", (e) => {
+  if (isTouch() && !(e.target.closest && e.target.closest("#tip"))) $("#tip").hidden = true;
+}, { capture: true, passive: true });
 
 /* The composer writes either a draft comment ("comment") or the first message of a
    new side thread ("ask"). */
