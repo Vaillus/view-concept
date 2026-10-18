@@ -45,6 +45,10 @@
      it sits, or nothing once the pointer leaves it, so the page shows that term's tip.
      Under touch controls, the word tapped, or nothing on a tap elsewhere or a scroll;
      a term tapped again is posted again, since the page may have hidden its tip.
+   - The tap (frame -> page) and the tap elsewhere (page -> frame), under touch controls
+     only: the frame says it was tapped, so the page clears the paint of a changed passage
+     in its own text and has every other frame clear its paint; a tap on the page's own
+     text has every frame clear it.
 
    The frame script also runs the component kit's tabs (`.tabs`, see frame.css): a click
    on a `.tab` selects it and shows its panel, the n-th `.tab-panel` child of its `.tabs`,
@@ -424,6 +428,7 @@
     if (!touch) return;
     var sel = getSelection();
     if (sel && !sel.isCollapsed) return;
+    post({ viewConcept: "tap" });
     pointer = { x: e.clientX, y: e.clientY };
     paintChanges(e.target);
     var h = hit(termRanges, e.clientX, e.clientY);
@@ -441,5 +446,6 @@
     else if (d.viewConcept === "changes" && Array.isArray(d.changes)) { changes = d.changes; highlight(); }
     else if (d.viewConcept === "terms" && Array.isArray(d.terms)) { terms = d.terms; hover(null); highlight(); }
     else if (d.viewConcept === "reveal") reveal(d.quote, d.prefix);
+    else if (d.viewConcept === "tap-elsewhere" && touch) { pointer = null; paintChanges(null); }
   });
 })();

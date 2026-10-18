@@ -1228,6 +1228,7 @@ window.addEventListener("message", (e) => {
   else if (d.viewConcept === "placed") framePlaced(f, d);
   else if (d.viewConcept === "thread-click") frameThreadClick(id, f, d);
   else if (d.viewConcept === "term-hover") frameTermHover(f, d);
+  else if (d.viewConcept === "tap") tapElsewhere(f);
 });
 
 /* A rect of the frame's viewport, in the page's viewport. */
@@ -1691,7 +1692,9 @@ $("#sel-actions .ask").addEventListener("click", () => {
    Under touch controls a tap does what a resting pointer does with a mouse: on an
    underlined term, its tip (a tap elsewhere or a scroll hides it); on a changed block,
    its new words, until a tap elsewhere; on a side thread's passage, the thread. A term
-   inside a thread's passage shows its tip; the rest of the passage opens the thread. */
+   inside a thread's passage shows its tip; the rest of the passage opens the thread.
+   A tap anywhere else in the page, or in a section frame, clears the paint (the frame
+   posts its taps: the tap message). */
 document.addEventListener("click", (e) => {
   if (!isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop, #tip")) return;
   const sel = getSelection();
@@ -1699,15 +1702,20 @@ document.addEventListener("click", (e) => {
   const t = e.target.closest && e.target.closest("[data-tip], [data-term]");
   if (t) showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect());
   else $("#tip").hidden = true;
-  if (e.target.closest(".view")) {
-    const b = changedBlock(e.target);
-    if (b !== hoveredChange) paintChange(b);
-  }
+  const b = changedBlock(e.target);
+  if (b !== hoveredChange) paintChange(b);
+  tapElsewhere(null);
   if (!t && e.target.closest(".view")) {
     const th = threadAt(e.clientX, e.clientY);
     if (th) openPopover(th.id);
   }
 });
+// A tap outside the section frame `tapped` (null: on the page itself): the other frames
+// clear their paint, and so does the page when the tap was in a frame.
+function tapElsewhere(tapped) {
+  if (tapped && hoveredChange) paintChange(null);
+  frames.forEach((f) => { if (f !== tapped && f.contentWindow) f.contentWindow.postMessage({ viewConcept: "tap-elsewhere" }, "*"); });
+}
 for (const view of docViews()) view.addEventListener("scroll", () => { if (isTouch()) $("#tip").hidden = true; }, { passive: true });
 
 /* The composer writes either a draft comment ("comment") or the first message of a
