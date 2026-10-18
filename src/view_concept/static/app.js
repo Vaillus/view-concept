@@ -125,6 +125,15 @@ const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
    it, and the review pane is the review tab, after code. */
 const NARROW = matchMedia("(max-width: 699.98px)");
 const isNarrow = () => NARROW.matches;
+/* Touch controls: the device's main pointer cannot hover (a finger on a phone or a
+   tablet), chosen from the input device, never from the width (app.css reads the same
+   query). What waits for a resting pointer elsewhere shows by default or answers a tap:
+   « + comment » buttons always shown, dimmed (app.css); a term's tip, the new words of a
+   changed passage and a side thread on a tap (see "taps"); links that would open VS
+   Code on the Mac are plain code; a selection is commented from the selection bar; key
+   hints name no shortcut. */
+const TOUCH = matchMedia("(hover: none)");
+const isTouch = () => TOUCH.matches;
 // The Metrics tab (metrics.js) draws a branch review's runs: other workflows have no role agents.
 const hasMetricsTab = () => state.workflow === "view-branch" && !isNarrow();
 const docViews = () => [$("#doc"), $("#refactor")];
@@ -1052,6 +1061,7 @@ const EXTS = "py|pyi|js|mjs|ts|tsx|jsx|vue|svelte|md|json|jsonl|yaml|yml|toml|in
 const CITE_RE = new RegExp(`^((?:[\\w.@-]+/)*[\\w@-][\\w.@-]*\\.(?:${EXTS}))(?::(\\d+)(?:-\\d+)?)?$`);
 
 function vscodeHref(target) {
+  if (isTouch()) return null; // VS Code runs on the Mac, out of a phone's reach: plain code
   const m = CITE_RE.exec(target.trim());
   const repo = state.plan.repo;
   if (!m || !repo) return null;
@@ -1231,16 +1241,12 @@ function pageRect(f, r) {
 /* The selection message: a passage selected in an HTML section gets the box a passage of
    a Markdown section gets, anchored the same way (section id, quote, prefix). */
 function frameSelection(id, f, d) {
-  const btn = $("#sel-actions");
   if (!d.quote || !d.rect) {
-    if (pendingSelection && pendingSelection.section === id) { btn.hidden = true; pendingSelection = null; }
+    if (pendingSelection && pendingSelection.section === id) showSelection(null);
     return;
   }
   const rect = pageRect(f, d.rect);
-  pendingSelection = { section: id, quote: collapse(String(d.quote)), prefix: collapse(String(d.prefix || "")), rect };
-  btn.hidden = false;
-  btn.style.top = `${window.scrollY + rect.bottom + 6}px`;
-  btn.style.left = `${Math.max(8, rect.left)}px`;
+  showSelection({ section: id, quote: collapse(String(d.quote)), prefix: collapse(String(d.prefix || "")), rect });
 }
 
 /* The anchors message: the passages the drafts, the sent comments and the side threads
@@ -1527,10 +1533,11 @@ const changedBlock = (node) => {
 
 for (const view of docViews()) {
   view.addEventListener("mouseover", (e) => {
+    if (isTouch()) return; // a tap paints it (see "taps")
     const b = changedBlock(e.target);
     if (b !== hoveredChange) paintChange(b);
   });
-  view.addEventListener("mouseleave", () => { if (hoveredChange) paintChange(null); });
+  view.addEventListener("mouseleave", () => { if (hoveredChange && !isTouch()) paintChange(null); });
 }
 
 function markUpdates() {
@@ -1560,8 +1567,9 @@ function markUpdates() {
       }
     });
   }
-  // The blocks were redrawn: paint the one under the pointer now, if any.
-  const under = [...document.querySelectorAll(":hover")].pop();
+  // The blocks were redrawn: paint the one under the pointer now, if any (a tap's paint
+  // goes with the block it was on).
+  const under = isTouch() ? null : [...document.querySelectorAll(":hover")].pop();
   paintChange(changedBlock(under));
   frames.forEach((f, id) => postChanges(id, f));
 }
@@ -1622,32 +1630,85 @@ function currentSelection() {
   return { section: sec.dataset.id, quote, prefix, rect: range.getBoundingClientRect() };
 }
 
+/* The page reads the selection each time it changes: a finger releases no mouse button
+   (the phone selects a word on a long press, then grows the selection as its handles are
+   dragged). With a mouse, « + comment » and « ask » show just under the selection; under
+   touch controls they sit in the selection bar, fixed at the bottom of the screen
+   (app.css), out of reach of the phone's own menu and handles. Clearing the selection
+   hides them. A button takes the selection as it stood before the tap, even when the
+   phone clears it on the tap. A section frame posts its selection the same way
+   (frameSelection). */
+let barPressed = 0; // when a finger last went down on the selection bar
+
+function showSelection(s) {
+  const btn = $("#sel-actions");
+  if (!s) {
+    // The phone may clear the selection as the bar is tapped: the tap still takes it.
+    if (Date.now() - barPressed < 800) return;
+    btn.hidden = true;
+    pendingSelection = null;
+    return;
+  }
+  pendingSelection = s;
+  btn.hidden = false;
+  btn.style.top = `${window.scrollY + s.rect.bottom + 6}px`;
+  btn.style.left = `${Math.max(8, s.rect.left)}px`;
+}
+
+let selectionTimer = null;
+document.addEventListener("selectionchange", () => {
+  if (document.activeElement && document.activeElement.closest("textarea, input")) return;
+  clearTimeout(selectionTimer);
+  selectionTimer = setTimeout(() => {
+    const s = currentSelection();
+    // A frame's selection lives in the frame: the page's own empty one does not clear it.
+    if (s || !pendingSelection || !frames.has(pendingSelection.section)) showSelection(s);
+  }, 0);
+});
+
 document.addEventListener("mouseup", (e) => {
-  if (e.target.closest("#composer, #sel-actions, #thread-pop")) return;
+  if (isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop")) return;
   setTimeout(() => {
     const s = currentSelection();
-    const btn = $("#sel-actions");
+    showSelection(s);
     if (!s) {
-      btn.hidden = true;
-      pendingSelection = null;
       const t = threadAt(e.clientX, e.clientY);
       if (t) openPopover(t.id);
-      return;
     }
-    pendingSelection = s;
-    btn.hidden = false;
-    btn.style.top = `${window.scrollY + s.rect.bottom + 6}px`;
-    btn.style.left = `${Math.max(8, s.rect.left)}px`;
   }, 0);
 });
 
 $("#sel-actions").addEventListener("mousedown", (e) => e.preventDefault());
+$("#sel-actions").addEventListener("pointerdown", () => { barPressed = Date.now(); });
 $("#sel-actions .comment").addEventListener("click", () => {
   if (pendingSelection) openComposer(pendingSelection);
 });
 $("#sel-actions .ask").addEventListener("click", () => {
   if (pendingSelection) openComposer(pendingSelection, "ask");
 });
+
+/* ---------------- taps ----------------
+   Under touch controls a tap does what a resting pointer does with a mouse: on an
+   underlined term, its tip (a tap elsewhere or a scroll hides it); on a changed block,
+   its new words, until a tap elsewhere; on a side thread's passage, the thread. A term
+   inside a thread's passage shows its tip; the rest of the passage opens the thread. */
+document.addEventListener("click", (e) => {
+  if (!isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop, #tip")) return;
+  const sel = getSelection();
+  if (sel.rangeCount && !sel.isCollapsed) return;
+  const t = e.target.closest && e.target.closest("[data-tip], [data-term]");
+  if (t) showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect());
+  else $("#tip").hidden = true;
+  if (e.target.closest(".view")) {
+    const b = changedBlock(e.target);
+    if (b !== hoveredChange) paintChange(b);
+  }
+  if (!t && e.target.closest(".view")) {
+    const th = threadAt(e.clientX, e.clientY);
+    if (th) openPopover(th.id);
+  }
+});
+for (const view of docViews()) view.addEventListener("scroll", () => { if (isTouch()) $("#tip").hidden = true; }, { passive: true });
 
 /* The composer writes either a draft comment ("comment") or the first message of a
    new side thread ("ask"). */
@@ -1663,9 +1724,10 @@ function openComposer(target, mode = "comment") {
     : "general question, no passage";
   $(".add", c).textContent = mode === "ask" ? "Ask" : "Add";
   $("#no-parent").hidden = mode !== "ask" || threadsState.forkable;
+  // Under touch controls the hints name no shortcut: a phone keyboard has no ⌘.
   $("textarea", c).placeholder = mode === "ask"
-    ? "Your question for a side thread  (↵ to ask, ⇧↵ for a new line, Esc to cancel)"
-    : "Your comment  (⌘↵ to add, Esc to cancel)";
+    ? (isTouch() ? "Your question for a side thread" : "Your question for a side thread  (↵ to ask, ⇧↵ for a new line, Esc to cancel)")
+    : (isTouch() ? "Your comment" : "Your comment  (⌘↵ to add, Esc to cancel)");
   const rect = target.rect || document.getElementById(`sec-${target.section}`).getBoundingClientRect();
   c.style.top = `${window.scrollY + Math.min(rect.bottom + 6, innerHeight - 220)}px`;
   c.style.left = `${Math.min(Math.max(8, rect.left), innerWidth - 380)}px`;
@@ -1713,8 +1775,9 @@ function addDraft() {
 
 $("#composer .add").addEventListener("click", submitComposer);
 $("#composer .cancel").addEventListener("click", closeComposer);
-// In a thread, Enter sends and Shift+Enter breaks the line; a comment keeps ⌘↵.
-const sendsOnEnter = (e) => e.key === "Enter" && !e.shiftKey && !e.isComposing;
+// In a thread, Enter sends and Shift+Enter breaks the line; a comment keeps ⌘↵. Under
+// touch controls Enter breaks the line (a phone keyboard's only way to) and the button sends.
+const sendsOnEnter = (e) => !isTouch() && e.key === "Enter" && !e.shiftKey && !e.isComposing;
 
 $("#composer textarea").addEventListener("keydown", (e) => {
   const ask = $("#composer")._mode === "ask";
@@ -2387,7 +2450,7 @@ docViews().forEach((v) => v.addEventListener("mousemove", (e) => {
 
 function threadCard(t) {
   if (cards.has(t.id)) return cards.get(t.id);
-  const ta = el("textarea", { class: "c-text", rows: "2", placeholder: "Reply  (↵ to send, ⇧↵ for a new line, Esc to close)" });
+  const ta = el("textarea", { class: "c-text", rows: "2", placeholder: isTouch() ? "Reply" : "Reply  (↵ to send, ⇧↵ for a new line, Esc to close)" });
   const card = {
     root: el("div", { class: "thread-card" }),
     head: el("div", { class: "t-head" }),
@@ -2595,6 +2658,7 @@ function showTip(text, term, r) {
 }
 
 document.addEventListener("mouseover", (e) => {
+  if (isTouch()) return; // a tap shows it (see "taps")
   const t = e.target.closest("[data-tip], [data-term]");
   if (!t) { $("#tip").hidden = true; return; }
   showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect());

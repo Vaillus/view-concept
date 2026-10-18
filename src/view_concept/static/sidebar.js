@@ -113,7 +113,9 @@
     const err = h("p", { class: "error", hidden: true });
     const folder = h("input", { class: "field", list: "sb-projects", value: project || projects[0] || "", placeholder: "/path/to/project", spellcheck: "false" });
     const skill = h("select", { class: "field" }, ...skills.map((s) => h("option", { value: s, text: s })));
-    const request = h("textarea", { rows: "4", placeholder: "What the feature is  (⌘↵ to start)" });
+    // Under touch controls (no hover: a phone) the hint names no shortcut.
+    const touch = matchMedia("(hover: none)").matches;
+    const request = h("textarea", { rows: "4", placeholder: touch ? "What the feature is" : "What the feature is  (⌘↵ to start)" });
     const useTree = h("input", { type: "checkbox" });
     const tree = h("input", { class: "field", placeholder: "worktree name (from the request if empty)", spellcheck: "false", disabled: true });
     useTree.addEventListener("change", () => { tree.disabled = !useTree.checked; });
