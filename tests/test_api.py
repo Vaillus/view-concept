@@ -311,7 +311,6 @@ def test_focus_counts_the_open_pages(client):
 def test_launch_opens_a_terminal_in_the_project(client, tmp_path, monkeypatch):
     opened = []
     monkeypatch.setattr(server.launch, "open_terminal", lambda *a: opened.append(a))
-    monkeypatch.setattr(server.launch, "LAUNCHES", tmp_path / "launches.json")
     body = {"project": str(tmp_path), "request": "add a sidebar", "worktree": "Session sidebar"}
     r = client.post("/api/launch", json=body)
     assert r.json()["command"] == (
@@ -324,7 +323,6 @@ def test_launch_opens_a_terminal_in_the_project(client, tmp_path, monkeypatch):
 
 def test_a_pending_launch_shows_until_its_session_exists(client, tmp_path, monkeypatch):
     monkeypatch.setattr(server.launch, "open_terminal", lambda *a: None)
-    monkeypatch.setattr(server.launch, "LAUNCHES", tmp_path / "launches.json")
     rows: list[dict] = []
     monkeypatch.setattr(server, "list_sessions", lambda: rows)
     project = tmp_path / "proj"
