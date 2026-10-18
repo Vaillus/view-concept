@@ -121,7 +121,8 @@ function tipAt(e) {
   showTip(Number(t.dataset.term), t.getBoundingClientRect());
 }
 document.addEventListener("mouseover", (e) => { if (!isTouch()) tipAt(e); });
-document.addEventListener("click", (e) => { if (isTouch()) tipAt(e); });
+// A tap inside the tip leaves it, as in app.js.
+document.addEventListener("click", (e) => { if (isTouch() && !e.target.closest("#tip")) tipAt(e); });
 addEventListener("scroll", () => { if (isTouch()) document.getElementById("tip").hidden = true; }, { passive: true });
 
 /* Section frames (an HTML section, see frame.py): each takes the height its content posts,

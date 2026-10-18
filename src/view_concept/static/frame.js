@@ -43,7 +43,8 @@
      of the section is changed, so its scripts find their text as they wrote it.
    - The term hover (frame -> page): the underlined word the pointer rests on and where
      it sits, or nothing once the pointer leaves it, so the page shows that term's tip.
-     Under touch controls, the word tapped, or nothing on a tap elsewhere or a scroll.
+     Under touch controls, the word tapped, or nothing on a tap elsewhere or a scroll;
+     a term tapped again is posted again, since the page may have hidden its tip.
 
    The frame script also runs the component kit's tabs (`.tabs`, see frame.css): a click
    on a `.tab` selects it and shows its panel, the n-th `.tab-panel` child of its `.tabs`,
@@ -426,6 +427,7 @@
     pointer = { x: e.clientX, y: e.clientY };
     paintChanges(e.target);
     var h = hit(termRanges, e.clientX, e.clientY);
+    hovered = null; // the page may have hidden the tip since: post the term on every tap
     hover(h && h[0], h && h[1]);
     if (!h) threadClick(e.clientX, e.clientY);
   });
