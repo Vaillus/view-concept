@@ -52,6 +52,31 @@ def home() -> FileResponse:
     return FileResponse(STATIC / "home.html")
 
 
+# The home-screen app: the page added to a phone's home screen opens from its own icon,
+# full screen (no address bar, no toolbar), on the home page and its list of sessions.
+# No offline copy: away from the server, the phone shows its own page for a site it
+# cannot reach. The icon is « vc » in the accent colour on the default theme's background.
+MANIFEST = {
+    "name": "view-concept",
+    "short_name": "view-concept",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#1a1b26",
+    "theme_color": "#1a1b26",
+    "icons": [
+        {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+        {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"},
+        {"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml"},
+    ],
+}
+
+
+@app.get("/manifest.webmanifest")
+def manifest() -> Response:
+    return Response(json.dumps(MANIFEST), media_type="application/manifest+json")
+
+
 @app.get("/s/{slug}")
 def session_page(slug: str) -> FileResponse:
     get_session(slug)

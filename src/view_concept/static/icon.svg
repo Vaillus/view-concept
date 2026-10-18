@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- The home-screen app's icon: « vc » in the accent colour on the default theme's
+       background (Tokyo Night, themes.css). icon-<size>.png are this drawing, rendered. -->
+  <rect width="512" height="512" fill="#1a1b26"/>
+  <text x="256" y="300" text-anchor="middle" font-family="Menlo, 'DejaVu Sans Mono', monospace"
+        font-size="230" font-weight="bold" fill="#7aa2f7">vc</text>
+</svg>

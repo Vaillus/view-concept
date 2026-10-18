@@ -63,3 +63,17 @@ def test_ports_and_owner_come_from_the_environment(monkeypatch):
     monkeypatch.setenv("VIEW_CONCEPT_REMOTE_PORT", "6000")
     monkeypatch.setenv("VIEW_CONCEPT_OWNER_LOGIN", OWNER)
     assert gate.remote_port() == 6000 and gate.owner_login() == OWNER
+
+
+def test_home_screen_app_files_answer_behind_the_gate(clients):
+    remote, _ = clients
+    login = {gate.LOGIN_HEADER.decode(): OWNER}
+    assert remote.get("/manifest.webmanifest").status_code == 403
+    r = remote.get("/manifest.webmanifest", headers=login)
+    assert r.status_code == 200 and r.headers["content-type"] == "application/manifest+json"
+    manifest = r.json()
+    assert manifest["display"] == "standalone" and manifest["start_url"] == "/"
+    for icon in manifest["icons"]:
+        assert remote.get(icon["src"]).status_code == 403
+        assert remote.get(icon["src"], headers=login).status_code == 200
+    assert remote.get("/static/icon-180.png", headers=login).status_code == 200
