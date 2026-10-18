@@ -681,6 +681,6 @@ def run(host: str, port: int, remote: int | None = None) -> None:
     config = uvicorn.Config(target, host=host, port=port, log_level="warning")
     sockets = [
         config.bind_socket(),
-        uvicorn.Config(target, host=host, port=remote).bind_socket(),
+        uvicorn.Config(target, host=host, port=remote, log_level="warning").bind_socket(),
     ]
     uvicorn.Server(config).run(sockets=sockets)
