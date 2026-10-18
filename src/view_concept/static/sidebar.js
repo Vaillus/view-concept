@@ -172,15 +172,28 @@
     });
   }
 
-  /* ---- collapse ---- */
+  /* ---- collapse ----
+     On a wide window ☰ shows or hides the sidebar beside the page, remembered in this
+     browser. In the narrow layout (app.css, under 700px) the sidebar starts closed at every
+     load and ☰ opens it over the page; choosing a session or tapping beside it closes it. */
 
   const toggle = document.getElementById("sidebar-toggle");
+  const narrow = matchMedia("(max-width: 699.98px)");
   const setCollapsed = (on) => {
     document.body.classList.toggle("sb-collapsed", on);
     store.set(COLLAPSED, on ? "1" : "");
   };
-  setCollapsed(store.get(COLLAPSED) === "1");
-  toggle?.addEventListener("click", () => setCollapsed(!document.body.classList.contains("sb-collapsed")));
+  const setOpen = (on) => document.body.classList.toggle("sb-open", on);
+  document.body.classList.toggle("sb-collapsed", store.get(COLLAPSED) === "1");
+  toggle?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (narrow.matches) setOpen(!document.body.classList.contains("sb-open"));
+    else setCollapsed(!document.body.classList.contains("sb-collapsed"));
+  });
+  document.addEventListener("click", (e) => {
+    if (document.body.classList.contains("sb-open") && (!nav.contains(e.target) || e.target.closest(".sb-item"))) setOpen(false);
+  });
+  narrow.addEventListener("change", () => setOpen(false));
 
   fetch("/api/skills").then((r) => r.json()).then((s) => { skills = s; }).catch(() => {});
   load();

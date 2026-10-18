@@ -29,7 +29,7 @@ let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
 let drafts = [];          // the drafts file's drafts (see "drafts"), the box being typed in kept as typed
 let pendingSelection = null;
-let tab = null;          // "plan" | "doc" | "refactor" | "metrics"
+let tab = null;          // "plan" | "doc" | "refactor" | "metrics" | "review" (narrow layout)
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
 let popThread = null;          // id of the thread shown in the popover
@@ -120,8 +120,13 @@ const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
 const tabOf = (id) => (inRefactoringPart(id) ? "refactor" : "doc");
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
+/* The narrow layout: the page in one column whenever its window is under 700px wide
+   (app.css holds the same threshold), whatever the device. The metrics tab is gone from
+   it, and the review pane is the review tab, after code. */
+const NARROW = matchMedia("(max-width: 699.98px)");
+const isNarrow = () => NARROW.matches;
 // The Metrics tab (metrics.js) draws a branch review's runs: other workflows have no role agents.
-const hasMetricsTab = () => state.workflow === "view-branch";
+const hasMetricsTab = () => state.workflow === "view-branch" && !isNarrow();
 const docViews = () => [$("#doc"), $("#refactor")];
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
@@ -159,12 +164,15 @@ function render() {
 function setTab(name) {
   if (name === "refactor" && !hasRefactorTab()) name = "doc";
   if (name === "metrics" && !hasMetricsTab()) name = "doc";
+  if (name === "review" && !isNarrow()) name = "doc";
   releaseAnchor(); // the page is about to move the view, or show another one
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === name));
+  document.body.classList.toggle("on-review", name === "review");
+  if (name === "review") { const pane = $(".review"); if (reviewAtEnd) pane.scrollTop = pane.scrollHeight; }
   $("#sel-actions").hidden = true;
-  renderMermaid($(`.view[data-view="${name}"]`));
+  if (name !== "review") renderMermaid($(`.view[data-view="${name}"]`));
   positionPopover();
   if (name === "metrics") refreshMetrics();
   savePosition();
@@ -202,6 +210,30 @@ function followSession() {
 }
 
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+/* Crossing the threshold: the tab a layout lacks gives way to the explanation. */
+NARROW.addEventListener("change", () => {
+  if (!state) return;
+  closeMenu();
+  $('.tab[data-tab="metrics"]').hidden = !hasMetricsTab();
+  if ((tab === "review" && !isNarrow()) || (tab === "metrics" && isNarrow())) setTab("doc");
+  setReviewWidth(isNarrow() ? null : loadJSON(WIDTH_KEY, null));
+});
+
+/* The ⋯ menu of the narrow layout: the header's buttons, open on a tap of ⋯, closed by
+   a tap on one of them or anywhere else. */
+const menu = $("#header-menu"), menuToggle = $("#menu-toggle");
+function closeMenu() { menu.classList.remove("open"); menuToggle.setAttribute("aria-expanded", "false"); }
+menuToggle.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const open = !menu.classList.contains("open");
+  menu.classList.toggle("open", open);
+  menuToggle.setAttribute("aria-expanded", String(open));
+});
+document.addEventListener("click", (e) => {
+  if (!menu.classList.contains("open")) return;
+  if (!e.target.closest("#header-menu") || e.target.closest("button, a")) closeMenu();
+});
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "1") setTab("plan");
@@ -218,7 +250,9 @@ document.addEventListener("keydown", (e) => {
 function renderListening() {
   const l = $("#listening");
   l.className = `listening ${state.listening ? "on" : "off"}`;
-  l.textContent = state.listening ? "● Agent listening" : "○ Agent not listening";
+  // The narrow layout shows the dot alone (the listening dot).
+  l.replaceChildren(el("span", { class: "l-dot", text: state.listening ? "●" : "○" }),
+    el("span", { class: "l-text", text: state.listening ? " Agent listening" : " Agent not listening" }));
 }
 // What a successful send says when no watch reads it: the batch waits in the inbox.
 const NOT_LISTENING = "The agent isn't listening: write anything in the terminal and it will read this batch";
@@ -1642,6 +1676,22 @@ function openComposer(target, mode = "comment") {
 
 function closeComposer() { $("#composer").hidden = true; }
 
+/* The keyboard's height, as --keyboard: in the narrow layout the composer and a side
+   thread dock across the bottom of the screen, above it. A phone browser that does not
+   shrink the page for its keyboard still shrinks the visual viewport. */
+function trackKeyboard() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const update = () => {
+    const covered = Math.max(0, innerHeight - (vv.height + vv.offsetTop));
+    document.documentElement.style.setProperty("--keyboard", `${Math.round(covered)}px`);
+  };
+  vv.addEventListener("resize", update);
+  vv.addEventListener("scroll", update);
+  update();
+}
+trackKeyboard();
+
 function submitComposer() {
   if ($("#composer")._mode === "ask") askThread();
   else addDraft();
@@ -1906,6 +1956,8 @@ function quoteLine(c) {
 function renderReview() {
   renderWaiting();
   $("#draft-count").textContent = drafts.length ? `· ${drafts.length} draft${drafts.length > 1 ? "s" : ""}` : "";
+  // The review tab of the narrow layout carries the count of drafts, in sight from every tab.
+  $('.tab[data-tab="review"]').textContent = drafts.length ? `review (${drafts.length})` : "review";
   renderDrafts();
   updateSend();
 
@@ -2144,7 +2196,7 @@ function setReviewWidth(px) {
   positionPopover();
 }
 
-setReviewWidth(loadJSON(WIDTH_KEY, null));
+setReviewWidth(isNarrow() ? null : loadJSON(WIDTH_KEY, null));
 divider.addEventListener("pointerdown", (e) => {
   e.preventDefault();
   divider.setPointerCapture(e.pointerId);
@@ -2163,7 +2215,7 @@ divider.addEventListener("pointerup", (e) => {
 });
 divider.addEventListener("dblclick", () => { saveJSON(WIDTH_KEY, null); setReviewWidth(null); });
 // A smaller window keeps the pane within 70 % of it.
-addEventListener("resize", () => setReviewWidth(loadJSON(WIDTH_KEY, null)));
+addEventListener("resize", () => { if (!isNarrow()) setReviewWidth(loadJSON(WIDTH_KEY, null)); });
 
 /* ---------------- side threads ----------------
    A thread opens in a popover on its passage. One is shown at a time; a click anywhere
@@ -2307,6 +2359,7 @@ function renderPopover() {
 function positionPopover() {
   const pop = $("#thread-pop");
   if (!popThread || pop.hidden) return;
+  if (isNarrow()) return; // docked across the bottom (app.css)
   const r = anchorRect(popThread);
   const visible = r && r.width > 0 && r.bottom > 0 && r.top < innerHeight;
   pop.style.visibility = visible ? "visible" : "hidden";
