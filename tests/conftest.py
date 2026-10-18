@@ -24,3 +24,12 @@ def _launches_file(tmp_path, monkeypatch):
     from view_concept import launch
 
     monkeypatch.setattr(launch, "LAUNCHES", tmp_path / "launches.json")
+
+
+@pytest.fixture(autouse=True)
+def _push_file(tmp_path, monkeypatch):
+    """Notices read the test's push file and sessions folder, never the user's home."""
+    from view_concept import push
+
+    monkeypatch.setattr(push, "PUSH", tmp_path / "push.json")
+    monkeypatch.setattr(push, "SESSIONS", tmp_path / "sessions")
