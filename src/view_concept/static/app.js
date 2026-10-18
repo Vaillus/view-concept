@@ -18,6 +18,8 @@
 "use strict";
 
 const SLUG = decodeURIComponent(location.pathname.split("/").pop());
+// Where a browser kept its drafts and note before the drafts file (see "drafts"): moved
+// to the session folder the first time this browser opens the session.
 const DRAFTS_KEY = `view-concept:drafts:${SLUG}`;
 const NOTE_KEY = `view-concept:note:${SLUG}`;
 const POSITION_KEY = `view-concept:position:${SLUG}`; // the saved position (see "saved position")
@@ -25,7 +27,7 @@ const WIDTH_KEY = "view-concept:review-width"; // per browser, for every session
 
 let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
-let drafts = loadJSON(DRAFTS_KEY, []);
+let drafts = [];          // the drafts file's drafts (see "drafts"), the box being typed in kept as typed
 let pendingSelection = null;
 let tab = null;          // "plan" | "doc" | "refactor" | "metrics"
 let lastPhase = null;
@@ -85,6 +87,7 @@ function connect() {
   es.addEventListener("hello", () => { live.textContent = "live"; live.className = "live on"; });
   es.addEventListener("changed", () => load());
   es.addEventListener("threads", () => loadThreads());
+  es.addEventListener("drafts", () => loadDrafts());
   es.addEventListener("listening", (e) => {
     if (!state) return;
     state.listening = JSON.parse(e.data).listening;
@@ -1649,8 +1652,9 @@ function addDraft() {
   const text = $("textarea", c).value.trim();
   if (!text) return;
   const { section, quote, prefix } = c._target;
-  drafts.push({ id: crypto.randomUUID(), section, quote, prefix, text });
-  saveJSON(DRAFTS_KEY, drafts);
+  const d = { id: crypto.randomUUID(), section, quote, prefix, text };
+  drafts.push(d);
+  saveDraft(d);
   closeComposer();
   getSelection().removeAllRanges();
   renderReview();
@@ -1902,16 +1906,7 @@ function quoteLine(c) {
 function renderReview() {
   renderWaiting();
   $("#draft-count").textContent = drafts.length ? `· ${drafts.length} draft${drafts.length > 1 ? "s" : ""}` : "";
-  $("#drafts").replaceChildren(...drafts.map((d) => {
-    const ta = el("textarea", { class: "c-text", rows: "2",
-                                placeholder: d.thread ? "What should change, after this thread? (optional)" : "" });
-    ta.value = d.text;
-    ta.addEventListener("input", () => { d.text = ta.value; saveJSON(DRAFTS_KEY, drafts); updateSend(); });
-    return el("div", { class: "comment draft" },
-      quoteLine(d), ta,
-      el("button", { class: "c-del", text: "×", title: "Delete",
-                     onclick: () => { drafts = drafts.filter((x) => x !== d); saveJSON(DRAFTS_KEY, drafts); renderReview(); applyHighlights(); renderPopover(); } }));
-  }));
+  renderDrafts();
   updateSend();
 
   const batches = state ? state.comments.batches : [];
@@ -1966,12 +1961,133 @@ function updateSend() {
   if (state) renderStatus();
 }
 
-$("#note").value = loadJSON(NOTE_KEY, "");
-$("#note").addEventListener("input", () => { saveJSON(NOTE_KEY, $("#note").value); updateSend(); });
+$("#note").addEventListener("input", () => { saveNote(); updateSend(); });
+$("#note").addEventListener("blur", () => { if (noteTimer) saveNote(true); else loadDrafts(); });
 $("#note").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
 });
 $("#send").addEventListener("click", () => send());
+
+/* ---------------- drafts ----------------
+   The drafts and the general note live in the session folder (drafts.json), not in the
+   browser: every page open on the session, on any device, shows the same ones. Each
+   change this page makes is saved at once (a typed text a moment after the last
+   keystroke, and when its box is left); the server tells the other pages (event
+   "drafts"), which fetch the file and redraw the review. The last edit of a draft wins:
+   while you type in a draft's box (or the note), an edit from another page waits, and
+   shows when you leave the box, unless you typed after it. A draft deleted on one page is
+   gone on every page; an edit to it arriving later is dropped by the server. */
+
+const SAVE_AFTER = 300; // ms after the last keystroke
+const saveTimers = new Map(); // draft id -> its pending save
+const unsaved = new Set(); // ids of drafts added here whose first save has not returned
+const deletedHere = new Set(); // ids of drafts deleted from this page
+const draftNodes = new Map(); // draft id -> its box in the review, built once
+let noteTimer = null;
+
+const draftBody = ({ section, quote, prefix, text, thread }) => ({ section, quote, prefix, text, thread: thread || "" });
+
+async function saveDraft(d, now = true) {
+  clearTimeout(saveTimers.get(d.id));
+  saveTimers.delete(d.id);
+  if (!now) { saveTimers.set(d.id, setTimeout(() => saveDraft(d), SAVE_AFTER)); return; }
+  unsaved.add(d.id);
+  try {
+    const r = await postJSON(`/api/s/${SLUG}/drafts/${encodeURIComponent(d.id)}`, draftBody(d), "PUT");
+    if (!r.saved && !deletedHere.has(d.id)) {
+      drafts = drafts.filter((x) => x.id !== d.id);
+      toast("This draft was deleted on another page");
+      afterDrafts();
+    }
+  } catch (e) { toast(`Could not save the draft: ${e.message}`); }
+  unsaved.delete(d.id);
+}
+
+async function deleteDraft(d) {
+  clearTimeout(saveTimers.get(d.id));
+  saveTimers.delete(d.id);
+  deletedHere.add(d.id);
+  drafts = drafts.filter((x) => x.id !== d.id);
+  afterDrafts();
+  try { await postJSON(`/api/s/${SLUG}/drafts/${encodeURIComponent(d.id)}`, {}, "DELETE"); }
+  catch (e) { toast(`Could not delete the draft: ${e.message}`); }
+}
+
+async function saveNote(now = false) {
+  clearTimeout(noteTimer);
+  noteTimer = null;
+  if (!now) { noteTimer = setTimeout(() => saveNote(true), SAVE_AFTER); return; }
+  try { await postJSON(`/api/s/${SLUG}/note`, { note: $("#note").value }, "PUT"); }
+  catch (e) { toast(`Could not save the note: ${e.message}`); }
+}
+
+// The draft whose box has the focus, if any: its text stays as typed.
+const editingDraft = () => document.activeElement?.closest?.("#drafts .draft")?.dataset.draft || null;
+
+/* Takes the drafts file in: the server's drafts, in its order, but the one being typed
+   in keeps its text, and one added here whose save has not returned stays. */
+async function loadDrafts() {
+  let data;
+  try {
+    const r = await fetch(`/api/s/${SLUG}/drafts`);
+    if (!r.ok) return;
+    data = await r.json();
+  } catch (e) { return; }
+  const editing = editingDraft();
+  const mine = new Map(drafts.map((d) => [d.id, d]));
+  const next = data.drafts.map((d) => {
+    const here = mine.get(d.id);
+    if (here && (d.id === editing || saveTimers.has(d.id))) return here;
+    return here ? Object.assign(here, d) : d;
+  });
+  for (const d of drafts) if (unsaved.has(d.id) && !next.some((x) => x.id === d.id)) next.push(d);
+  drafts = next;
+  const note = $("#note");
+  if (document.activeElement !== note && !noteTimer) note.value = data.note;
+  afterDrafts();
+}
+
+function afterDrafts() {
+  renderReview();
+  if (state) { applyHighlights(); renderPopover(); }
+}
+
+/* The drafts in the review, each box kept across redraws: one being typed in is never
+   re-attached (that would take its focus), and keeps the text typed. */
+function renderDrafts() {
+  const box = $("#drafts");
+  const editing = editingDraft();
+  for (const id of draftNodes.keys()) if (!drafts.some((d) => d.id === id)) { draftNodes.get(id).remove(); draftNodes.delete(id); }
+  drafts.forEach((d, k) => {
+    let node = draftNodes.get(d.id);
+    if (!node) {
+      const ta = el("textarea", { class: "c-text", rows: "2",
+                                  placeholder: d.thread ? "What should change, after this thread? (optional)" : "" });
+      ta.addEventListener("input", () => { node._draft.text = ta.value; saveDraft(node._draft, false); updateSend(); });
+      // Leaving the box: a pending keystroke is saved (it wins), else the file's text shows.
+      ta.addEventListener("blur", () => { if (saveTimers.has(node._draft.id)) saveDraft(node._draft); else loadDrafts(); });
+      node = el("div", { class: "comment draft", "data-draft": d.id }, quoteLine(d), ta,
+        el("button", { class: "c-del", text: "×", title: "Delete", onclick: () => deleteDraft(node._draft) }));
+      draftNodes.set(d.id, node);
+    }
+    node._draft = d;
+    node.replaceChild(quoteLine(d), node.firstChild);
+    const ta = $("textarea", node);
+    if (d.id !== editing && ta.value !== d.text) ta.value = d.text;
+    if (box.children[k] !== node) box.insertBefore(node, box.children[k] || null);
+  });
+}
+
+/* The drafts and the note this browser kept before the drafts file go to the session
+   folder, after those already there, the first time it opens the session. */
+async function moveBrowserDrafts() {
+  const old = loadJSON(DRAFTS_KEY, []), note = loadJSON(NOTE_KEY, "");
+  if (!(Array.isArray(old) && old.length) && !String(note || "").trim()) return;
+  try {
+    await postJSON(`/api/s/${SLUG}/drafts/import`, { drafts: Array.isArray(old) ? old : [], note: String(note || "") });
+    try { localStorage.removeItem(DRAFTS_KEY); localStorage.removeItem(NOTE_KEY); } catch (e) { /* private mode */ }
+  } catch (e) { toast(`Could not move this browser's drafts: ${e.message}`); }
+}
 
 /* A batch from « Send », an approval button, or a scope block button (`button`). */
 const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped",
@@ -1982,6 +2098,11 @@ async function send(action = "", button = null) {
   const btn = button || (approval ? buttonOf(approval) : $("#send"));
   if (btn.disabled) return;
   btn.disabled = true;
+  // The batch carries the texts as typed: a save still pending would bring a sent draft back.
+  const pending = drafts.filter((d) => saveTimers.has(d.id));
+  for (const d of pending) { clearTimeout(saveTimers.get(d.id)); saveTimers.delete(d.id); }
+  clearTimeout(noteTimer);
+  noteTimer = null;
   const r = await fetch(`/api/s/${SLUG}/batch`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -1989,15 +2110,21 @@ async function send(action = "", button = null) {
       action,
       note: $("#note").value,
       comments: drafts.map(({ section, quote, prefix, text, thread }) => ({ section, quote, prefix, text, thread })),
+      drafts: drafts.map((d) => d.id),
     }),
   });
   btn.disabled = false;
-  if (!r.ok) { toast(`Send failed: ${(await r.json()).detail}`); updateSend(); return; }
+  if (!r.ok) {
+    toast(`Send failed: ${(await r.json()).detail}`);
+    pending.forEach((d) => saveDraft(d));
+    saveNote(true);
+    updateSend();
+    return;
+  }
   const b = await r.json();
+  // The server cleared the drafts the batch carried and the note, on every page.
   drafts = [];
-  saveJSON(DRAFTS_KEY, drafts);
   $("#note").value = "";
-  saveJSON(NOTE_KEY, "");
   await load();
   sentToast(approval ? approval.toast : SCOPE_TOASTS[action] || `Sent ${b.id} to the session`);
 }
@@ -2291,8 +2418,7 @@ async function deleteThread(tid) {
   try {
     await postJSON(`/api/s/${SLUG}/threads/${tid}`, {}, "DELETE");
   } catch (e) { toast(`Could not delete: ${e.message}`); return; }
-  drafts = drafts.filter((d) => d.thread !== tid);
-  saveJSON(DRAFTS_KEY, drafts);
+  for (const d of drafts.filter((x) => x.thread === tid)) deleteDraft(d);
   closePopover();
   renderReview();
   await loadThreads();
@@ -2303,8 +2429,9 @@ async function deleteThread(tid) {
    text is optional: without one, the thread's conclusion is the comment. */
 function threadToBatch(tid) {
   const t = threadOf(tid);
-  drafts.push({ id: crypto.randomUUID(), section: t.section, quote: t.quote, prefix: t.prefix, text: "", thread: tid });
-  saveJSON(DRAFTS_KEY, drafts);
+  const d = { id: crypto.randomUUID(), section: t.section, quote: t.quote, prefix: t.prefix, text: "", thread: tid };
+  drafts.push(d);
+  saveDraft(d);
   renderReview();
   applyHighlights();
   renderPopover();
@@ -2421,4 +2548,4 @@ document.addEventListener("mouseover", (e) => {
 });
 
 // ?static skips the live stream (headless rendering never finishes while it is open).
-load().then(loadThreads).then(() => { if (!new URLSearchParams(location.search).has("static")) connect(); });
+moveBrowserDrafts().then(load).then(loadDrafts).then(loadThreads).then(() => { if (!new URLSearchParams(location.search).has("static")) connect(); });

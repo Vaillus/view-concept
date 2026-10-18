@@ -343,3 +343,60 @@ def test_metrics_serve_branch_reviews_only(client, session, tmp_path, monkeypatc
     assert m["runs"] == [] and m["quality"]["comments"] == 1
     assert [b["id"] for b in m["batches"]] == ["b1"]
     assert m["compare"]["variants"][0]["reviews"][0]["current"] is True
+
+
+def test_drafts_are_shared_through_the_session_folder(client, session):
+    url = "/api/s/kv-cache/drafts"
+    assert client.get(url).json() == {"drafts": [], "note": ""}
+    a = {"section": "s1", "quote": "L'attention", "prefix": "", "text": "Also on the Mac?"}
+    assert client.put(f"{url}/a1", json=a).json() == {"saved": True}
+    assert client.put(f"{url}/b2", json={**a, "text": "B", "thread": "t1"}).json()["saved"]
+    # The last edit wins, whichever page made it; the order stays.
+    client.put(f"{url}/a1", json={**a, "text": "Fine for me."})
+    client.put(f"{url}/a1", json={**a, "text": "Fine, but show it."})
+    client.put("/api/s/kv-cache/note", json={"note": "general"})
+    got = client.get(url).json()
+    assert [(d["id"], d["text"]) for d in got["drafts"]] == [
+        ("a1", "Fine, but show it."),
+        ("b2", "B"),
+    ]
+    assert got["drafts"][1]["thread"] == "t1" and "thread" not in got["drafts"][0]
+    assert got["note"] == "general"
+    # A draft deleted on one page is gone on both; an edit to it arriving later is dropped.
+    assert client.delete(f"{url}/b2").status_code == 200
+    assert client.put(f"{url}/b2", json={**a, "text": "late"}).json() == {"saved": False}
+    assert [d["id"] for d in client.get(url).json()["drafts"]] == ["a1"]
+    assert client.put(f"{url}/bad%20id", json=a).status_code == 400
+
+
+def test_a_batch_clears_the_drafts_it_carried(client, session):
+    url = "/api/s/kv-cache/drafts"
+    client.put(f"{url}/a1", json={"section": "s1", "text": "one"})
+    client.put(f"{url}/a2", json={"section": "s1", "text": "two"})
+    client.put("/api/s/kv-cache/note", json={"note": "n"})
+    body = {"comments": [{"section": "s1", "text": "one"}], "note": "n", "drafts": ["a1"]}
+    assert client.post("/api/s/kv-cache/batch", json=body).status_code == 200
+    assert client.get(url).json() == {
+        "drafts": [{"id": "a2", "section": "s1", "quote": "", "prefix": "", "text": "two"}],
+        "note": "",
+    }
+
+
+def test_a_browsers_old_drafts_move_after_those_there(client, session):
+    url = "/api/s/kv-cache/drafts"
+    client.put(f"{url}/a1", json={"section": "s1", "text": "here"})
+    client.put("/api/s/kv-cache/note", json={"note": "first"})
+    old = [{"id": "a1", "text": "dup"}, {"id": "o1", "section": "s2", "text": "old", "x": 1}]
+    r = client.post(f"{url}/import", json={"drafts": old, "note": "second"})
+    assert r.status_code == 200
+    got = client.get(url).json()
+    assert [(d["id"], d["text"]) for d in got["drafts"]] == [("a1", "here"), ("o1", "old")]
+    assert got["note"] == "first\n\nsecond"
+
+
+def test_drafts_are_not_the_agents_activity(client, session):
+    before = session.last_activity()
+    sig = session.signature()
+    client.put("/api/s/kv-cache/drafts/a1", json={"section": "s1", "text": "x"})
+    assert session.last_activity() == before and session.signature() == sig
+    assert session.drafts_signature() != ()

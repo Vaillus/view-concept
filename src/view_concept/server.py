@@ -263,6 +263,7 @@ async def events(slug: str, request: Request) -> StreamingResponse:
 
     async def stream():
         last, last_threads = s.signature(), s.thread_signature()
+        last_drafts = s.drafts_signature()
         listening = s.is_listening()
         yield "event: hello\ndata: {}\n\n"
         ticks = 0
@@ -272,6 +273,9 @@ async def events(slug: str, request: Request) -> StreamingResponse:
             if sig != last:
                 last = sig
                 yield "event: changed\ndata: {}\n\n"
+            if (sig_drafts := s.drafts_signature()) != last_drafts:
+                last_drafts = sig_drafts
+                yield "event: drafts\ndata: {}\n\n"
             if sig_threads != last_threads:
                 last_threads = sig_threads
                 yield "event: threads\ndata: {}\n\n"
@@ -300,15 +304,83 @@ class BatchIn(BaseModel):
     comments: list[CommentIn] = []
     note: str = ""
     action: str = ""
+    # The ids of the drafts the batch carries: once sent, they leave the drafts file.
+    drafts: list[str] = []
 
 
 @app.post("/api/s/{slug}/batch")
 def send_batch(slug: str, body: BatchIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
-        return s.add_batch([c.model_dump() for c in body.comments], body.note, body.action)
+        batch = s.add_batch([c.model_dump() for c in body.comments], body.note, body.action)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
+    s.clear_sent_drafts(body.drafts)
+    return batch
+
+
+# ---- the drafts file (store.py): what every page open on the session shows ----
+
+
+class DraftIn(BaseModel):
+    section: str = ""
+    quote: str = ""
+    prefix: str = ""
+    text: str = ""
+    thread: str = ""
+
+
+class NoteIn(BaseModel):
+    note: str = ""
+
+
+class DraftsImportIn(BaseModel):
+    drafts: list[dict[str, Any]] = []
+    note: str = ""
+
+
+@app.get("/api/s/{slug}/drafts")
+def drafts(slug: str) -> dict[str, Any]:
+    s = get_session(slug)
+    try:
+        data = s.read_drafts()
+    except SessionError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"drafts": data["drafts"], "note": data["note"]}
+
+
+@app.put("/api/s/{slug}/drafts/{did}")
+def save_draft(slug: str, did: str, body: DraftIn) -> dict[str, bool]:
+    """Add or edit a draft: the last edit wins. `saved` is false when the draft was
+    deleted meanwhile (on another page), and the edit is dropped."""
+    s = get_session(slug)
+    try:
+        return {"saved": s.save_draft({**body.model_dump(), "id": did})}
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.delete("/api/s/{slug}/drafts/{did}")
+def delete_draft(slug: str, did: str) -> dict[str, bool]:
+    get_session(slug).delete_drafts([did])
+    return {"ok": True}
+
+
+@app.put("/api/s/{slug}/note")
+def save_note(slug: str, body: NoteIn) -> dict[str, bool]:
+    get_session(slug).save_note(body.note)
+    return {"ok": True}
+
+
+@app.post("/api/s/{slug}/drafts/import")
+def import_drafts(slug: str, body: DraftsImportIn) -> dict[str, bool]:
+    """Move the drafts and the note a browser kept before the drafts file."""
+    s = get_session(slug)
+    try:
+        s.import_drafts(body.drafts, body.note)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True}
 
 
 class AnswerIn(BaseModel):
