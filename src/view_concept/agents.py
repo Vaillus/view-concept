@@ -34,7 +34,18 @@ CODEX_ENV = "VIEW_CONCEPT_CODEX"
 JAZZ_ENV = "VIEW_CONCEPT_JAZZ"
 
 AGENTS = ("claude", "codex", "jazz", "command")
-READ_ONLY_TOOLS = ["Read", "Grep", "Glob"]
+THREAD_TOOLS = ["Read", "Grep", "Glob", "WebSearch", "WebFetch", "Bash"]
+# What a Claude thread may run: reads anywhere, the web, and shell commands that only
+# read (git history, the view-concept commands that print). `dontAsk` refuses the rest.
+THREAD_ALLOWED = [
+    "Read",
+    "Grep",
+    "Glob",
+    "WebSearch",
+    "WebFetch",
+    *(f"Bash(git {c}:*)" for c in ("log", "show", "diff", "blame", "status", "ls-files")),
+    *(f"Bash(view-concept {c}:*)" for c in ("context", "changes", "pending", "list")),
+]
 
 
 @dataclass
@@ -94,7 +105,7 @@ class ClaudeBackend(Backend):
         args = [os.environ.get(CLAUDE_ENV, "claude"), "-p", "--output-format", "stream-json"]
         args += ["--verbose", "--include-partial-messages", "--strict-mcp-config"]
         args += ["--permission-mode", "dontAsk"]
-        args += ["--tools", *READ_ONLY_TOOLS, "--allowedTools", *READ_ONLY_TOOLS]
+        args += ["--tools", *THREAD_TOOLS, "--allowedTools", *THREAD_ALLOWED]
         args += ["--add-dir", str(s.dir)]
         if thread["agent_session"]:
             args += ["--resume", thread["agent_session"]]
