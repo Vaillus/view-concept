@@ -110,12 +110,20 @@ function showTip(i, r) {
   tip.style.left = `${window.scrollX + Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8))}px`;
 }
 
-/* A tap on a phone fires mouseover too, so the tip shows there as well. */
-document.addEventListener("mouseover", (e) => {
-  const t = e.target.closest("[data-term]");
+/* With a mouse, the tip shows while the pointer rests on the term. Under touch controls
+   (the device's main pointer cannot hover, as app.js reads it) a tap on the term shows
+   it, and a tap elsewhere or a scroll hides it. */
+const TOUCH = matchMedia("(hover: none)");
+const isTouch = () => TOUCH.matches;
+function tipAt(e) {
+  const t = e.target.closest && e.target.closest("[data-term]");
   if (!t) { document.getElementById("tip").hidden = true; return; }
   showTip(Number(t.dataset.term), t.getBoundingClientRect());
-});
+}
+document.addEventListener("mouseover", (e) => { if (!isTouch()) tipAt(e); });
+// A tap inside the tip leaves it, as in app.js.
+document.addEventListener("click", (e) => { if (isTouch() && !e.target.closest("#tip")) tipAt(e); });
+addEventListener("scroll", () => { if (isTouch()) document.getElementById("tip").hidden = true; }, { passive: true });
 
 /* Section frames (an HTML section, see frame.py): each takes the height its content posts,
    and is told the page's theme at load and whenever it changes. The terms message gives

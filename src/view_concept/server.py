@@ -4,8 +4,11 @@ runs side threads."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
+import sys
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import frame, launch, metrics, publish, threads
+from . import frame, gate, launch, metrics, publish, push, threads
 from .render import md
 from .store import Session, SessionError, list_sessions
 
@@ -28,7 +31,29 @@ VERDICTS: dict[str, list[dict[str, str]]] = yaml.safe_load(
 # A session created before workflows existed was a branch review or had no items.
 LEGACY_WORKFLOW = "view-branch"
 
-app = FastAPI(title="view-concept")
+# How often the server looks for sessions that started waiting for the user (push.py).
+NOTICE_EVERY = 5.0
+
+
+async def _notice_loop() -> None:
+    while True:
+        await asyncio.sleep(NOTICE_EVERY)
+        try:
+            await asyncio.to_thread(push.check_and_send)
+        except Exception as e:  # a bad session file or the network: try again next time
+            print(f"view-concept: notices: {e}", file=sys.stderr)
+
+
+@contextlib.asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    task = asyncio.create_task(_notice_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+
+
+app = FastAPI(title="view-concept", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
@@ -52,6 +77,73 @@ def home() -> FileResponse:
     return FileResponse(STATIC / "home.html")
 
 
+# The home-screen app: the page added to a phone's home screen opens from its own icon,
+# full screen (no address bar, no toolbar), on the home page and its list of sessions.
+# No offline copy: away from the server, the phone shows its own page for a site it
+# cannot reach. The icon is « vc » in the accent colour on the default theme's background.
+MANIFEST = {
+    "name": "view-concept",
+    "short_name": "view-concept",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#1a1b26",
+    "theme_color": "#1a1b26",
+    "icons": [
+        {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+        {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"},
+        {"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml"},
+    ],
+}
+
+
+@app.get("/manifest.webmanifest")
+def manifest() -> Response:
+    return Response(json.dumps(MANIFEST), media_type="application/manifest+json")
+
+
+# ---- the notice when the agent is done (push.py) ----
+
+
+@app.get("/sw.js")
+def service_worker() -> FileResponse:
+    """The home-screen app's service worker: it receives the notices while the app is
+    closed. Served from the root, so it covers every page."""
+    return FileResponse(
+        STATIC / "sw.js",
+        media_type="text/javascript",
+        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/api/push/key")
+def push_key() -> dict[str, str]:
+    try:
+        return {"key": push.public_key()}
+    except push.PushError as e:
+        raise HTTPException(503, str(e)) from e
+
+
+class UnsubscribeIn(BaseModel):
+    endpoint: str
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(body: dict[str, Any]) -> dict[str, bool]:
+    """Turn notices on for a phone: keep its subscription."""
+    try:
+        push.subscribe(body)
+    except push.PushError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True}
+
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(body: UnsubscribeIn) -> dict[str, bool]:
+    push.unsubscribe(body.endpoint)
+    return {"ok": True}
+
+
 @app.get("/s/{slug}")
 def session_page(slug: str) -> FileResponse:
     get_session(slug)
@@ -71,20 +163,25 @@ _pages: set[asyncio.Queue[str]] = set()
 @app.get("/api/events")
 async def global_events(request: Request) -> StreamingResponse:
     """What every open page hears, whatever session it shows: `sessions` when the session
-    list changed (the sidebar reloads it) and `focus` when a session should be shown."""
+    list or the pending launches changed (the sidebar reloads them) and `focus` when a
+    session should be shown."""
     queue: asyncio.Queue[str] = asyncio.Queue()
     _pages.add(queue)
 
+    def snapshot() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        rows = list_sessions()
+        return rows, launch.pending(rows)
+
     async def stream():
         try:
-            last = await asyncio.to_thread(list_sessions)
+            last = await asyncio.to_thread(snapshot)
             yield "event: hello\ndata: {}\n\n"
             while not await request.is_disconnected():
                 try:
                     slug = await asyncio.wait_for(queue.get(), 2)
                     yield f"event: focus\ndata: {json.dumps({'slug': slug})}\n\n"
                 except TimeoutError:
-                    rows = await asyncio.to_thread(list_sessions)
+                    rows = await asyncio.to_thread(snapshot)
                     yield "event: sessions\ndata: {}\n\n" if rows != last else ": ping\n\n"
                     last = rows
         finally:
@@ -118,15 +215,29 @@ def skills() -> list[str]:
 
 
 @app.post("/api/launch")
-def launch_session(body: LaunchIn) -> dict[str, str]:
+def launch_session(body: LaunchIn) -> dict[str, Any]:
     """Start a new agent session in a project: a terminal window opens there and starts
-    Claude Code on the skill; the session shows in the page once the agent opens it."""
+    Claude Code on the skill, in auto mode. From now until the agent opens the session,
+    every page's sidebar shows it as a pending launch (launch.py)."""
     try:
         line = launch.command(body.skill, body.request, body.worktree)
         launch.open_terminal(body.project, line)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
-    return {"command": line}
+    return {"command": line, "launch": launch.add_pending(body.project, body.request, body.skill)}
+
+
+@app.get("/api/launches")
+def launches() -> dict[str, Any]:
+    """The pending launches, and after how many seconds one reads « not started »."""
+    return {"launches": launch.pending(list_sessions()), "pending_for": launch.PENDING_FOR}
+
+
+@app.delete("/api/launches/{lid}")
+def drop_launch(lid: str) -> dict[str, bool]:
+    """× on a pending launch: it leaves every page's sidebar."""
+    launch.remove_pending(lid)
+    return {"ok": True}
 
 
 @app.get("/api/s/{slug}")
@@ -263,6 +374,7 @@ async def events(slug: str, request: Request) -> StreamingResponse:
 
     async def stream():
         last, last_threads = s.signature(), s.thread_signature()
+        last_drafts = s.drafts_signature()
         listening = s.is_listening()
         yield "event: hello\ndata: {}\n\n"
         ticks = 0
@@ -272,6 +384,9 @@ async def events(slug: str, request: Request) -> StreamingResponse:
             if sig != last:
                 last = sig
                 yield "event: changed\ndata: {}\n\n"
+            if (sig_drafts := s.drafts_signature()) != last_drafts:
+                last_drafts = sig_drafts
+                yield "event: drafts\ndata: {}\n\n"
             if sig_threads != last_threads:
                 last_threads = sig_threads
                 yield "event: threads\ndata: {}\n\n"
@@ -300,15 +415,83 @@ class BatchIn(BaseModel):
     comments: list[CommentIn] = []
     note: str = ""
     action: str = ""
+    # The ids of the drafts the batch carries: once sent, they leave the drafts file.
+    drafts: list[str] = []
 
 
 @app.post("/api/s/{slug}/batch")
 def send_batch(slug: str, body: BatchIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
-        return s.add_batch([c.model_dump() for c in body.comments], body.note, body.action)
+        batch = s.add_batch([c.model_dump() for c in body.comments], body.note, body.action)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
+    s.clear_sent_drafts(body.drafts)
+    return batch
+
+
+# ---- the drafts file (store.py): what every page open on the session shows ----
+
+
+class DraftIn(BaseModel):
+    section: str = ""
+    quote: str = ""
+    prefix: str = ""
+    text: str = ""
+    thread: str = ""
+
+
+class NoteIn(BaseModel):
+    note: str = ""
+
+
+class DraftsImportIn(BaseModel):
+    drafts: list[dict[str, Any]] = []
+    note: str = ""
+
+
+@app.get("/api/s/{slug}/drafts")
+def drafts(slug: str) -> dict[str, Any]:
+    s = get_session(slug)
+    try:
+        data = s.read_drafts()
+    except SessionError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"drafts": data["drafts"], "note": data["note"]}
+
+
+@app.put("/api/s/{slug}/drafts/{did}")
+def save_draft(slug: str, did: str, body: DraftIn) -> dict[str, bool]:
+    """Add or edit a draft: the last edit wins. `saved` is false when the draft was
+    deleted meanwhile (on another page), and the edit is dropped."""
+    s = get_session(slug)
+    try:
+        return {"saved": s.save_draft({**body.model_dump(), "id": did})}
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.delete("/api/s/{slug}/drafts/{did}")
+def delete_draft(slug: str, did: str) -> dict[str, bool]:
+    get_session(slug).delete_drafts([did])
+    return {"ok": True}
+
+
+@app.put("/api/s/{slug}/note")
+def save_note(slug: str, body: NoteIn) -> dict[str, bool]:
+    get_session(slug).save_note(body.note)
+    return {"ok": True}
+
+
+@app.post("/api/s/{slug}/drafts/import")
+def import_drafts(slug: str, body: DraftsImportIn) -> dict[str, bool]:
+    """Move the drafts and the note a browser kept before the drafts file."""
+    s = get_session(slug)
+    try:
+        s.import_drafts(body.drafts, body.note)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True}
 
 
 class AnswerIn(BaseModel):
@@ -485,7 +668,19 @@ def unpublish_session(slug: str) -> dict[str, bool]:
     return {"ok": True}
 
 
-def run(host: str, port: int) -> None:
+def run(host: str, port: int, remote: int | None = None) -> None:
+    """Serve the page on the local port `port` and, behind the tailnet gate, on the remote
+    port `remote` (gate.py), both in this one process: a batch sent through either reaches
+    the same sessions."""
     import uvicorn
 
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    remote = gate.remote_port() if remote is None else remote
+    if remote == port:
+        raise SystemExit(f"VIEW_CONCEPT_REMOTE_PORT must differ from the local port ({port})")
+    target = gate.TailnetGate(app, remote, gate.owner_login())
+    config = uvicorn.Config(target, host=host, port=port, log_level="warning")
+    sockets = [
+        config.bind_socket(),
+        uvicorn.Config(target, host=host, port=remote, log_level="warning").bind_socket(),
+    ]
+    uvicorn.Server(config).run(sockets=sockets)

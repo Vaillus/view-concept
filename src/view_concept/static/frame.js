@@ -11,10 +11,11 @@
      takes the page's default: Catppuccin Latte in light mode, Tokyo Night in dark mode.
    - The height (frame -> page): posted whenever the content's height changes, so the
      frame takes that height.
-   - The selection (frame -> page): when the reader selects text in the section, the
-     quoted text and the few characters before it (the anchor a passage of a Markdown
-     section gets), with where the selection sits in the frame; an empty quote when the
-     selection is gone. The page opens the same box to comment or to ask on it.
+   - The selection (frame -> page): each time the reader's selection in the section
+     changes (a finger's handles, as a mouse's drag), the quoted text and the few
+     characters before it (the anchor a passage of a Markdown section gets), with where
+     the selection sits in the frame; an empty quote when the selection is gone. The page
+     opens the same box to comment or to ask on it.
    - The anchors (page -> frame), answered by "placed" (frame -> page): the passages the
      page's drafts, sent comments and side threads quote in this section. Each is
      highlighted, and highlighted again when a script of the section redraws its text.
@@ -27,18 +28,27 @@
      the page's.
    - The thread click (frame -> page): a click, with nothing selected, on a passage
      highlighted for a side thread gives the thread's id and where the passage sits, so
-     the page opens that thread on it.
+     the page opens that thread on it. Under touch controls (the device's main pointer
+     cannot hover) a tap on an underlined term in that passage shows the term's tip
+     instead (the term hover), and a tap on the rest of it opens the thread.
    - The changes (page -> frame): the passages an agent added since the last batch or
      « mark read ». The page finds them by comparing the section's visible text now and
      then; the frame highlights a passage only while the pointer is over a block holding
      it (the block of its start or of its end, so a passage over two blocks shows whole
-     when either is hovered); the page's bar marks the whole frame.
+     when either is hovered), or, under touch controls, from a tap on that block until a
+     tap elsewhere; the page's bar marks the whole frame.
    - The terms (page -> frame): the lexicon terms, the one this section is the home of,
      and the words the vocabulary audit flags in it. The frame underlines each
      occurrence by painting a style over the word, as it paints the anchors: no element
      of the section is changed, so its scripts find their text as they wrote it.
    - The term hover (frame -> page): the underlined word the pointer rests on and where
      it sits, or nothing once the pointer leaves it, so the page shows that term's tip.
+     Under touch controls, the word tapped, or nothing on a tap elsewhere or a scroll;
+     a term tapped again is posted again, since the page may have hidden its tip.
+   - The tap (frame -> page) and the tap elsewhere (page -> frame), under touch controls
+     only: the frame says it was tapped, so the page clears the paint of a changed passage
+     in its own text and has every other frame clear its paint; a tap on the page's own
+     text has every frame clear it.
 
    The frame script also runs the component kit's tabs (`.tabs`, see frame.css): a click
    on a `.tab` selects it and shows its panel, the n-th `.tab-panel` child of its `.tabs`,
@@ -62,6 +72,8 @@
     root.setAttribute("data-theme", dark ? "tokyo-night" : "catppuccin-latte");
   }
   var framed = parent !== window;
+  // Touch controls: the device's main pointer cannot hover (a finger), as the page reads it.
+  var touch = window.matchMedia ? matchMedia("(hover: none)").matches : false;
   function post(message) { if (framed) parent.postMessage(message, "*"); }
 
   /* ---- the height ---- */
@@ -202,15 +214,28 @@
     return { quote: quote, prefix: collapse(index.text.slice(0, k)).slice(-32),
              rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom } };
   }
+  // Posted on every change of the selection: a finger releases no mouse button.
+  var lastQuote = null;
+  function postSelection() {
+    var s = selection();
+    if (!s && !selected) return null;
+    var key = s ? s.prefix + "\n" + s.quote + "\n" + s.rect.top + "," + s.rect.left : "";
+    if (key === lastQuote) return s;
+    lastQuote = key;
+    selected = !!s;
+    post(s ? { viewConcept: "selection", quote: s.quote, prefix: s.prefix, rect: s.rect }
+           : { viewConcept: "selection", quote: "" });
+    return s;
+  }
+  var selectionTimer = null;
+  document.addEventListener("selectionchange", function () {
+    clearTimeout(selectionTimer);
+    selectionTimer = setTimeout(postSelection, 0);
+  });
   addEventListener("mouseup", function (e) {
     setTimeout(function () {
-      var s = selection();
-      if (s || selected) {
-        selected = !!s;
-        post(s ? { viewConcept: "selection", quote: s.quote, prefix: s.prefix, rect: s.rect }
-               : { viewConcept: "selection", quote: "" });
-      }
-      if (!s) threadClick(e.clientX, e.clientY);
+      var s = postSelection();
+      if (!s && !touch) threadClick(e.clientX, e.clientY);
     }, 0);
   });
 
@@ -381,12 +406,15 @@
 
   /* ---- the term hover ---- */
   var hovered = null;
-  function hover(t, rect) {
-    if (t === hovered) return;
+  // `always`: post even when the term is unchanged (a tap, since the page may have
+  // hidden the tip since the last one).
+  function hover(t, rect, always) {
+    if (t === hovered && !always) return;
     hovered = t;
     post(t ? { viewConcept: "term-hover", key: t.key, rect: rectOf(rect) } : { viewConcept: "term-hover", key: null });
   }
   addEventListener("mousemove", function (e) {
+    if (touch) return;
     pointer = { x: e.clientX, y: e.clientY };
     paintChanges(e.target);
     var h = hit(termRanges, e.clientX, e.clientY);
@@ -394,7 +422,21 @@
     // The passage of a thread is clickable: say so with the cursor.
     root.style.cursor = hit(threadRanges, e.clientX, e.clientY) ? "pointer" : "";
   });
-  document.addEventListener("mouseleave", function () { hover(null); pointer = null; paintChanges(null); });
+  document.addEventListener("mouseleave", function () { if (!touch) { hover(null); pointer = null; paintChanges(null); } });
+  // Under touch controls a tap does what a resting pointer does: on a term, its tip; on a
+  // changed block, its new words, until a tap elsewhere; on a side thread's passage (off
+  // its terms), the thread.
+  addEventListener("click", function (e) {
+    if (!touch) return;
+    var sel = getSelection();
+    if (sel && !sel.isCollapsed) return;
+    post({ viewConcept: "tap" });
+    pointer = { x: e.clientX, y: e.clientY };
+    paintChanges(e.target);
+    var h = hit(termRanges, e.clientX, e.clientY);
+    hover(h && h[0], h && h[1], true);
+    if (!h) threadClick(e.clientX, e.clientY);
+  });
   addEventListener("scroll", function () { hover(null); });
 
   addEventListener("message", function (e) {
@@ -405,5 +447,6 @@
     else if (d.viewConcept === "changes" && Array.isArray(d.changes)) { changes = d.changes; highlight(); }
     else if (d.viewConcept === "terms" && Array.isArray(d.terms)) { terms = d.terms; hover(null); highlight(); }
     else if (d.viewConcept === "reveal") reveal(d.quote, d.prefix);
+    else if (d.viewConcept === "tap-elsewhere" && touch) { pointer = null; paintChanges(null); }
   });
 })();

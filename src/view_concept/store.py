@@ -30,6 +30,7 @@ reach the agent session through the inbox.
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text   (server)
+        drafts.json     the drafts and the general note, shared by every page (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
 
@@ -140,6 +141,15 @@ the highlights show what it changed for that batch. The first text of a section 
 first baseline, recorded when the page first loads it, so a first write is never an
 update.
 
+drafts.json holds the drafts of the session (the comments written in the page that wait
+for Send) and the general note, so every page open on the session, on any device, shows
+the same ones. Each change a page makes (a draft added, edited or deleted, the note)
+writes it, and the server tells the other pages (the session's live updates, event
+`drafts`). The last edit of a draft wins, whichever page made it; a deleted draft's id
+stays in `deleted`, so an edit to it arriving later is dropped. A batch clears the drafts
+it carried and the note. Like seen.json, it is the page's write: it never counts as the
+agent's activity.
+
 A branch review's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
 at} (written by `pr`). The page links it at the top and at the end of the code tab.
 
@@ -163,6 +173,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import unicodedata
 from datetime import UTC, date, datetime
@@ -220,6 +231,11 @@ DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 # The role agents a branch review's coordinator starts; a variant sets a model per role.
 AGENT_ROLES = ("planner", "writer", "implementer", "reviewer")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
+# A draft's id: the page makes it (a UUID). Its fields, as a batch comment takes them.
+DRAFT_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread")
+# The pages of every session write the drafts file from the server's threadpool.
+_DRAFTS_LOCK = threading.Lock()
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -422,6 +438,10 @@ class Session:
     @property
     def seen_path(self) -> Path:
         return self.dir / "seen.json"
+
+    @property
+    def drafts_path(self) -> Path:
+        return self.dir / "drafts.json"
 
     @property
     def threads_dir(self) -> Path:
@@ -995,6 +1015,88 @@ class Session:
         seen.update(sections)
         _write_json(self.seen_path, seen)
 
+    # ---- the drafts file ----
+    def read_drafts(self) -> dict[str, Any]:
+        """The drafts file: {drafts: [{id, section, quote, prefix, text, thread?}], note,
+        deleted: [ids]}. The page writes it, every page open on the session reads it."""
+        data = _read_json(self.drafts_path, {})
+        return {
+            "drafts": list(data.get("drafts", [])),
+            "note": str(data.get("note", "")),
+            "deleted": list(data.get("deleted", [])),
+        }
+
+    def save_draft(self, draft: dict[str, Any]) -> bool:
+        """Add or replace draft `draft["id"]`: the last edit wins, whichever page made it.
+        An edit to a deleted draft is dropped: returns False."""
+        did = str(draft.get("id", ""))
+        if not DRAFT_ID_RE.match(did):
+            raise SessionError(f"invalid draft id {did!r}")
+        with _DRAFTS_LOCK:
+            data = self.read_drafts()
+            if did in data["deleted"]:
+                return False
+            entry = {k: str(draft.get(k) or "") for k in DRAFT_FIELDS}
+            entry["id"] = did
+            if not entry["thread"]:
+                del entry["thread"]
+            at = next((i for i, d in enumerate(data["drafts"]) if d.get("id") == did), None)
+            if at is None:
+                data["drafts"].append(entry)
+            else:
+                data["drafts"][at] = entry
+            _write_json(self.drafts_path, data)
+            return True
+
+    def delete_drafts(self, ids: list[str]) -> None:
+        """Delete drafts `ids` on every page: an edit to one arriving later is dropped."""
+        with _DRAFTS_LOCK:
+            data = self.read_drafts()
+            data["drafts"] = [d for d in data["drafts"] if d.get("id") not in ids]
+            data["deleted"] = [*data["deleted"], *(i for i in ids if i not in data["deleted"])]
+            _write_json(self.drafts_path, data)
+
+    def save_note(self, note: str) -> None:
+        with _DRAFTS_LOCK:
+            data = self.read_drafts()
+            data["note"] = note
+            _write_json(self.drafts_path, data)
+
+    def import_drafts(self, drafts: list[dict[str, Any]], note: str) -> None:
+        """Move a browser's drafts and note kept before the drafts file: they go after those
+        already there; a draft already in the file (same id) or deleted is skipped."""
+        with _DRAFTS_LOCK:
+            data = self.read_drafts()
+            known = {d.get("id") for d in data["drafts"]} | set(data["deleted"])
+            for d in drafts:
+                did = str(d.get("id", ""))
+                if not DRAFT_ID_RE.match(did) or did in known:
+                    continue
+                entry = {k: str(d.get(k) or "") for k in DRAFT_FIELDS}
+                entry["id"] = did
+                if not entry["thread"]:
+                    del entry["thread"]
+                data["drafts"].append(entry)
+                known.add(did)
+            if note.strip():
+                data["note"] = "\n\n".join(n for n in (data["note"].strip(), note.strip()) if n)
+            _write_json(self.drafts_path, data)
+
+    def clear_sent_drafts(self, ids: list[str]) -> None:
+        """After a batch: the drafts it carried and the note are gone from every page. A sent
+        draft counts as deleted, so an edit to it arriving later is dropped."""
+        with _DRAFTS_LOCK:
+            data = self.read_drafts()
+            data["drafts"] = [d for d in data["drafts"] if d.get("id") not in ids]
+            data["deleted"] = [*data["deleted"], *(i for i in ids if i not in data["deleted"])]
+            data["note"] = ""
+            _write_json(self.drafts_path, data)
+
+    def drafts_signature(self) -> tuple:
+        """Changes whenever the drafts file changes; kept apart from `signature` so a draft
+        typed on another page redraws the review, not the explanation."""
+        return _stat_signature([self.drafts_path])
+
     def read_status(self) -> dict[str, Any]:
         return _read_json(self.status_path, {"phase": "idle"})
 
@@ -1128,7 +1230,7 @@ class Session:
 
     def last_activity(self) -> str:
         """When the agent last wrote a session file, "" when never. Only what the agent
-        writes counts: the page's own writes (a batch, an answer, seen.json) and the
+        writes counts: the page's own writes (a batch, an answer, seen.json, drafts.json) and the
         watch's heartbeat do not; questions count by when they were asked, comments by
         when they were resolved."""
         paths = [
@@ -1731,6 +1833,10 @@ def list_sessions(root: Path | None = None) -> list[dict[str, Any]]:
         except SessionError:
             plan = {"title": d.name}
         mtime = max(st[1] or 0 for st in s.signature())
+        # When the session folder was made: a pending launch gives way to the first
+        # session created in its project after it (launch.py).
+        st = d.stat()
+        born = getattr(st, "st_birthtime", st.st_ctime)
         pending = sum(
             1 for b in s.read_comments()["batches"] for c in b["comments"] if c["status"] == "sent"
         )
@@ -1745,6 +1851,7 @@ def list_sessions(root: Path | None = None) -> list[dict[str, Any]]:
                 "repo": plan.get("repo", ""),
                 "project": project_of(plan.get("repo", "")),
                 "listening": s.is_listening(),
+                "created_at": datetime.fromtimestamp(born, UTC).isoformat(timespec="milliseconds"),
             }
         )
     return sorted(out, key=lambda r: r["updated"], reverse=True)

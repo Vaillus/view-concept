@@ -313,10 +313,37 @@ def test_launch_opens_a_terminal_in_the_project(client, tmp_path, monkeypatch):
     monkeypatch.setattr(server.launch, "open_terminal", lambda *a: opened.append(a))
     body = {"project": str(tmp_path), "request": "add a sidebar", "worktree": "Session sidebar"}
     r = client.post("/api/launch", json=body)
-    assert r.json()["command"] == "claude -w session-sidebar '/view-branch add a sidebar'"
+    assert r.json()["command"] == (
+        "claude --permission-mode auto -w session-sidebar '/view-branch add a sidebar'"
+    )
     assert opened == [(str(tmp_path), r.json()["command"])]
     r = client.post("/api/launch", json={**body, "skill": "explain"})
     assert r.status_code == 400 and len(opened) == 1
+
+
+def test_a_pending_launch_shows_until_its_session_exists(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(server.launch, "open_terminal", lambda *a: None)
+    rows: list[dict] = []
+    monkeypatch.setattr(server, "list_sessions", lambda: rows)
+    project = tmp_path / "proj"
+    project.mkdir()
+    r = client.post("/api/launch", json={"project": str(project), "request": "explain the gate"})
+    lid = r.json()["launch"]["id"]
+    got = client.get("/api/launches").json()
+    assert [x["request"] for x in got["launches"]] == ["explain the gate"]
+    assert got["pending_for"] == 300
+    at = got["launches"][0]["at"]
+    # A session of another project, or one created before the launch, leaves it pending.
+    rows.append({"slug": "other", "project": "/elsewhere", "created_at": "9999"})
+    rows.append({"slug": "old", "project": str(project.resolve()), "created_at": "2000"})
+    assert [x["id"] for x in client.get("/api/launches").json()["launches"]] == [lid]
+    # The first session created in its project after it takes its place.
+    rows.append({"slug": "new", "project": str(project.resolve()), "created_at": at + "1"})
+    assert client.get("/api/launches").json()["launches"] == []
+    # × removes one.
+    r = client.post("/api/launch", json={"project": str(project), "request": "again"})
+    assert client.delete(f"/api/launches/{r.json()['launch']['id']}").status_code == 200
+    assert client.get("/api/launches").json()["launches"] == []
 
 
 def test_state_carries_what_the_banner_is_computed_from(client, session):
@@ -343,3 +370,64 @@ def test_metrics_serve_branch_reviews_only(client, session, tmp_path, monkeypatc
     assert m["runs"] == [] and m["quality"]["comments"] == 1
     assert [b["id"] for b in m["batches"]] == ["b1"]
     assert m["compare"]["variants"][0]["reviews"][0]["current"] is True
+
+
+def test_drafts_are_shared_through_the_session_folder(client, session):
+    url = "/api/s/kv-cache/drafts"
+    assert client.get(url).json() == {"drafts": [], "note": ""}
+    a = {"section": "s1", "quote": "L'attention", "prefix": "", "text": "Also on the Mac?"}
+    assert client.put(f"{url}/a1", json=a).json() == {"saved": True}
+    assert client.put(f"{url}/b2", json={**a, "text": "B", "thread": "t1"}).json()["saved"]
+    # The last edit wins, whichever page made it; the order stays.
+    client.put(f"{url}/a1", json={**a, "text": "Fine for me."})
+    client.put(f"{url}/a1", json={**a, "text": "Fine, but show it."})
+    client.put("/api/s/kv-cache/note", json={"note": "general"})
+    got = client.get(url).json()
+    assert [(d["id"], d["text"]) for d in got["drafts"]] == [
+        ("a1", "Fine, but show it."),
+        ("b2", "B"),
+    ]
+    assert got["drafts"][1]["thread"] == "t1" and "thread" not in got["drafts"][0]
+    assert got["note"] == "general"
+    # A draft deleted on one page is gone on both; an edit to it arriving later is dropped.
+    assert client.delete(f"{url}/b2").status_code == 200
+    assert client.put(f"{url}/b2", json={**a, "text": "late"}).json() == {"saved": False}
+    assert [d["id"] for d in client.get(url).json()["drafts"]] == ["a1"]
+    assert client.put(f"{url}/bad%20id", json=a).status_code == 400
+
+
+def test_a_batch_clears_the_drafts_it_carried(client, session):
+    url = "/api/s/kv-cache/drafts"
+    client.put(f"{url}/a1", json={"section": "s1", "text": "one"})
+    client.put(f"{url}/a2", json={"section": "s1", "text": "two"})
+    client.put("/api/s/kv-cache/note", json={"note": "n"})
+    body = {"comments": [{"section": "s1", "text": "one"}], "note": "n", "drafts": ["a1"]}
+    assert client.post("/api/s/kv-cache/batch", json=body).status_code == 200
+    assert client.get(url).json() == {
+        "drafts": [{"id": "a2", "section": "s1", "quote": "", "prefix": "", "text": "two"}],
+        "note": "",
+    }
+    # A sent draft is gone like a deleted one: a late edit to it does not bring it back.
+    late = client.put(f"{url}/a1", json={"section": "s1", "text": "one, edited"})
+    assert late.json() == {"saved": False}
+    assert [d["id"] for d in client.get(url).json()["drafts"]] == ["a2"]
+
+
+def test_a_browsers_old_drafts_move_after_those_there(client, session):
+    url = "/api/s/kv-cache/drafts"
+    client.put(f"{url}/a1", json={"section": "s1", "text": "here"})
+    client.put("/api/s/kv-cache/note", json={"note": "first"})
+    old = [{"id": "a1", "text": "dup"}, {"id": "o1", "section": "s2", "text": "old", "x": 1}]
+    r = client.post(f"{url}/import", json={"drafts": old, "note": "second"})
+    assert r.status_code == 200
+    got = client.get(url).json()
+    assert [(d["id"], d["text"]) for d in got["drafts"]] == [("a1", "here"), ("o1", "old")]
+    assert got["note"] == "first\n\nsecond"
+
+
+def test_drafts_are_not_the_agents_activity(client, session):
+    before = session.last_activity()
+    sig = session.signature()
+    client.put("/api/s/kv-cache/drafts/a1", json={"section": "s1", "text": "x"})
+    assert session.last_activity() == before and session.signature() == sig
+    assert session.drafts_signature() != ()

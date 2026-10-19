@@ -86,6 +86,18 @@ Codex needs to write `~/.view-concept` and start a local server, so run it with 
 
 Start a new session and type the command to check.
 
+## From the phone
+
+The page also opens on a phone, through [Tailscale](https://tailscale.com), on a second port of the same server that refuses anyone but you:
+
+1. Put your Tailscale login in your shell profile, so the server an agent's command starts reads it: `export VIEW_CONCEPT_OWNER_LOGIN=you@example.com`. Run `view-concept stop` if a server is already up.
+2. Once: `tailscale serve --bg 5081` exposes the remote port to your tailnet over HTTPS.
+3. On the phone, with Tailscale on, open `https://<your-mac>.<your-tailnet>.ts.net/`: the page in one column, with taps for what hovers on the Mac and a bar at the bottom to comment on a selection. Drafts are shared with the Mac.
+4. « Add to Home Screen » from the share menu: the page opens from its own icon, full screen, on the list of sessions. « + » on a project starts a session on the Mac, in auto mode.
+5. In the app, « ⋯ » then « notices »: the phone gets a notice when a session starts waiting for you.
+
+Details in [`docs/reference.md`](docs/reference.md#from-the-phone).
+
 ## Further reading
 
 - [`docs/reference.md`](docs/reference.md): commands, session files, page controls, publishing, configuration.

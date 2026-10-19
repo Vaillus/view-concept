@@ -18,6 +18,8 @@
 "use strict";
 
 const SLUG = decodeURIComponent(location.pathname.split("/").pop());
+// Where a browser kept its drafts and note before the drafts file (see "drafts"): moved
+// to the session folder the first time this browser opens the session.
 const DRAFTS_KEY = `view-concept:drafts:${SLUG}`;
 const NOTE_KEY = `view-concept:note:${SLUG}`;
 const POSITION_KEY = `view-concept:position:${SLUG}`; // the saved position (see "saved position")
@@ -25,9 +27,9 @@ const WIDTH_KEY = "view-concept:review-width"; // per browser, for every session
 
 let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
-let drafts = loadJSON(DRAFTS_KEY, []);
+let drafts = [];          // the drafts file's drafts (see "drafts"), the box being typed in kept as typed
 let pendingSelection = null;
-let tab = null;          // "plan" | "doc" | "refactor" | "metrics"
+let tab = null;          // "plan" | "doc" | "refactor" | "metrics" | "review" (narrow layout)
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
 let popThread = null;          // id of the thread shown in the popover
@@ -85,6 +87,7 @@ function connect() {
   es.addEventListener("hello", () => { live.textContent = "live"; live.className = "live on"; });
   es.addEventListener("changed", () => load());
   es.addEventListener("threads", () => loadThreads());
+  es.addEventListener("drafts", () => loadDrafts());
   es.addEventListener("listening", (e) => {
     if (!state) return;
     state.listening = JSON.parse(e.data).listening;
@@ -117,8 +120,22 @@ const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
 const tabOf = (id) => (inRefactoringPart(id) ? "refactor" : "doc");
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
+/* The narrow layout: the page in one column whenever its window is under 700px wide
+   (app.css holds the same threshold), whatever the device. The metrics tab is gone from
+   it, and the review pane is the review tab, after code. */
+const NARROW = matchMedia("(max-width: 699.98px)");
+const isNarrow = () => NARROW.matches;
+/* Touch controls: the device's main pointer cannot hover (a finger on a phone or a
+   tablet), chosen from the input device, never from the width (app.css reads the same
+   query). What waits for a resting pointer elsewhere shows by default or answers a tap:
+   « + comment » buttons always shown, dimmed (app.css); a term's tip, the new words of a
+   changed passage and a side thread on a tap (see "taps"); links that would open VS
+   Code on the Mac are plain code; a selection is commented from the selection bar; key
+   hints name no shortcut. */
+const TOUCH = matchMedia("(hover: none)");
+const isTouch = () => TOUCH.matches;
 // The Metrics tab (metrics.js) draws a branch review's runs: other workflows have no role agents.
-const hasMetricsTab = () => state.workflow === "view-branch";
+const hasMetricsTab = () => state.workflow === "view-branch" && !isNarrow();
 const docViews = () => [$("#doc"), $("#refactor")];
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
@@ -156,12 +173,15 @@ function render() {
 function setTab(name) {
   if (name === "refactor" && !hasRefactorTab()) name = "doc";
   if (name === "metrics" && !hasMetricsTab()) name = "doc";
+  if (name === "review" && !isNarrow()) name = "doc";
   releaseAnchor(); // the page is about to move the view, or show another one
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === name));
+  document.body.classList.toggle("on-review", name === "review");
+  if (name === "review") { const pane = $(".review"); if (reviewAtEnd) pane.scrollTop = pane.scrollHeight; }
   $("#sel-actions").hidden = true;
-  renderMermaid($(`.view[data-view="${name}"]`));
+  if (name !== "review") renderMermaid($(`.view[data-view="${name}"]`));
   positionPopover();
   if (name === "metrics") refreshMetrics();
   savePosition();
@@ -199,6 +219,30 @@ function followSession() {
 }
 
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+/* Crossing the threshold: the tab a layout lacks gives way to the explanation. */
+NARROW.addEventListener("change", () => {
+  if (!state) return;
+  closeMenu();
+  $('.tab[data-tab="metrics"]').hidden = !hasMetricsTab();
+  if ((tab === "review" && !isNarrow()) || (tab === "metrics" && isNarrow())) setTab("doc");
+  setReviewWidth(isNarrow() ? null : loadJSON(WIDTH_KEY, null));
+});
+
+/* The ⋯ menu of the narrow layout: the header's buttons, open on a tap of ⋯, closed by
+   a tap on one of them or anywhere else. */
+const menu = $("#header-menu"), menuToggle = $("#menu-toggle");
+function closeMenu() { menu.classList.remove("open"); menuToggle.setAttribute("aria-expanded", "false"); }
+menuToggle.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const open = !menu.classList.contains("open");
+  menu.classList.toggle("open", open);
+  menuToggle.setAttribute("aria-expanded", String(open));
+});
+document.addEventListener("click", (e) => {
+  if (!menu.classList.contains("open")) return;
+  if (!e.target.closest("#header-menu") || e.target.closest("button, a")) closeMenu();
+});
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "1") setTab("plan");
@@ -215,7 +259,9 @@ document.addEventListener("keydown", (e) => {
 function renderListening() {
   const l = $("#listening");
   l.className = `listening ${state.listening ? "on" : "off"}`;
-  l.textContent = state.listening ? "● Agent listening" : "○ Agent not listening";
+  // The narrow layout shows the dot alone (the listening dot).
+  l.replaceChildren(el("span", { class: "l-dot", text: state.listening ? "●" : "○" }),
+    el("span", { class: "l-text", text: state.listening ? " Agent listening" : " Agent not listening" }));
 }
 // What a successful send says when no watch reads it: the batch waits in the inbox.
 const NOT_LISTENING = "The agent isn't listening: write anything in the terminal and it will read this batch";
@@ -1015,6 +1061,7 @@ const EXTS = "py|pyi|js|mjs|ts|tsx|jsx|vue|svelte|md|json|jsonl|yaml|yml|toml|in
 const CITE_RE = new RegExp(`^((?:[\\w.@-]+/)*[\\w@-][\\w.@-]*\\.(?:${EXTS}))(?::(\\d+)(?:-\\d+)?)?$`);
 
 function vscodeHref(target) {
+  if (isTouch()) return null; // VS Code runs on the Mac, out of a phone's reach: plain code
   const m = CITE_RE.exec(target.trim());
   const repo = state.plan.repo;
   if (!m || !repo) return null;
@@ -1181,6 +1228,7 @@ window.addEventListener("message", (e) => {
   else if (d.viewConcept === "placed") framePlaced(f, d);
   else if (d.viewConcept === "thread-click") frameThreadClick(id, f, d);
   else if (d.viewConcept === "term-hover") frameTermHover(f, d);
+  else if (d.viewConcept === "tap") tapElsewhere(f);
 });
 
 /* A rect of the frame's viewport, in the page's viewport. */
@@ -1194,16 +1242,12 @@ function pageRect(f, r) {
 /* The selection message: a passage selected in an HTML section gets the box a passage of
    a Markdown section gets, anchored the same way (section id, quote, prefix). */
 function frameSelection(id, f, d) {
-  const btn = $("#sel-actions");
   if (!d.quote || !d.rect) {
-    if (pendingSelection && pendingSelection.section === id) { btn.hidden = true; pendingSelection = null; }
+    if (pendingSelection && pendingSelection.section === id) showSelection(null);
     return;
   }
   const rect = pageRect(f, d.rect);
-  pendingSelection = { section: id, quote: collapse(String(d.quote)), prefix: collapse(String(d.prefix || "")), rect };
-  btn.hidden = false;
-  btn.style.top = `${window.scrollY + rect.bottom + 6}px`;
-  btn.style.left = `${Math.max(8, rect.left)}px`;
+  showSelection({ section: id, quote: collapse(String(d.quote)), prefix: collapse(String(d.prefix || "")), rect });
 }
 
 /* The anchors message: the passages the drafts, the sent comments and the side threads
@@ -1490,10 +1534,11 @@ const changedBlock = (node) => {
 
 for (const view of docViews()) {
   view.addEventListener("mouseover", (e) => {
+    if (isTouch()) return; // a tap paints it (see "taps")
     const b = changedBlock(e.target);
     if (b !== hoveredChange) paintChange(b);
   });
-  view.addEventListener("mouseleave", () => { if (hoveredChange) paintChange(null); });
+  view.addEventListener("mouseleave", () => { if (hoveredChange && !isTouch()) paintChange(null); });
 }
 
 function markUpdates() {
@@ -1523,8 +1568,9 @@ function markUpdates() {
       }
     });
   }
-  // The blocks were redrawn: paint the one under the pointer now, if any.
-  const under = [...document.querySelectorAll(":hover")].pop();
+  // The blocks were redrawn: paint the one under the pointer now, if any (a tap's paint
+  // goes with the block it was on).
+  const under = isTouch() ? null : [...document.querySelectorAll(":hover")].pop();
   paintChange(changedBlock(under));
   frames.forEach((f, id) => postChanges(id, f));
 }
@@ -1585,32 +1631,95 @@ function currentSelection() {
   return { section: sec.dataset.id, quote, prefix, rect: range.getBoundingClientRect() };
 }
 
+/* The page reads the selection each time it changes: a finger releases no mouse button
+   (the phone selects a word on a long press, then grows the selection as its handles are
+   dragged). With a mouse, « + comment » and « ask » show just under the selection; under
+   touch controls they sit in the selection bar, fixed at the bottom of the screen
+   (app.css), out of reach of the phone's own menu and handles. Clearing the selection
+   hides them. A button takes the selection as it stood before the tap, even when the
+   phone clears it on the tap. A section frame posts its selection the same way
+   (frameSelection). */
+let barPressed = 0; // when a finger last went down on the selection bar
+
+function showSelection(s) {
+  const btn = $("#sel-actions");
+  if (!s) {
+    // The phone may clear the selection as the bar is tapped: the tap still takes it.
+    if (Date.now() - barPressed < 800) return;
+    btn.hidden = true;
+    pendingSelection = null;
+    return;
+  }
+  pendingSelection = s;
+  btn.hidden = false;
+  btn.style.top = `${window.scrollY + s.rect.bottom + 6}px`;
+  btn.style.left = `${Math.max(8, s.rect.left)}px`;
+}
+
+let selectionTimer = null;
+document.addEventListener("selectionchange", () => {
+  if (document.activeElement && document.activeElement.closest("textarea, input")) return;
+  clearTimeout(selectionTimer);
+  selectionTimer = setTimeout(() => {
+    const s = currentSelection();
+    // A frame's selection lives in the frame: the page's own empty one does not clear it.
+    if (s || !pendingSelection || !frames.has(pendingSelection.section)) showSelection(s);
+  }, 0);
+});
+
 document.addEventListener("mouseup", (e) => {
-  if (e.target.closest("#composer, #sel-actions, #thread-pop")) return;
+  if (isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop")) return;
   setTimeout(() => {
     const s = currentSelection();
-    const btn = $("#sel-actions");
+    showSelection(s);
     if (!s) {
-      btn.hidden = true;
-      pendingSelection = null;
       const t = threadAt(e.clientX, e.clientY);
       if (t) openPopover(t.id);
-      return;
     }
-    pendingSelection = s;
-    btn.hidden = false;
-    btn.style.top = `${window.scrollY + s.rect.bottom + 6}px`;
-    btn.style.left = `${Math.max(8, s.rect.left)}px`;
   }, 0);
 });
 
 $("#sel-actions").addEventListener("mousedown", (e) => e.preventDefault());
+$("#sel-actions").addEventListener("pointerdown", () => { barPressed = Date.now(); });
 $("#sel-actions .comment").addEventListener("click", () => {
   if (pendingSelection) openComposer(pendingSelection);
 });
 $("#sel-actions .ask").addEventListener("click", () => {
   if (pendingSelection) openComposer(pendingSelection, "ask");
 });
+
+/* ---------------- taps ----------------
+   Under touch controls a tap does what a resting pointer does with a mouse: on an
+   underlined term, its tip (a tap elsewhere or a scroll hides it); on a changed block,
+   its new words, until a tap elsewhere; on a side thread's passage, the thread. A term
+   inside a thread's passage shows its tip; the rest of the passage opens the thread.
+   A tap anywhere else in the page, or in a section frame, clears the paint (the frame
+   posts its taps: the tap message), and a scroll of any pane hides the tip. */
+document.addEventListener("click", (e) => {
+  if (!isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop, #tip")) return;
+  const sel = getSelection();
+  if (sel.rangeCount && !sel.isCollapsed) return;
+  const t = e.target.closest && e.target.closest("[data-tip], [data-term]");
+  if (t) showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect());
+  else $("#tip").hidden = true;
+  const b = changedBlock(e.target);
+  if (b !== hoveredChange) paintChange(b);
+  tapElsewhere(null);
+  if (!t && e.target.closest(".view")) {
+    const th = threadAt(e.clientX, e.clientY);
+    if (th) openPopover(th.id);
+  }
+});
+// A tap outside the section frame `tapped` (null: on the page itself): the other frames
+// clear their paint, and so does the page when the tap was in a frame.
+function tapElsewhere(tapped) {
+  if (tapped && hoveredChange) paintChange(null);
+  frames.forEach((f) => { if (f !== tapped && f.contentWindow) f.contentWindow.postMessage({ viewConcept: "tap-elsewhere" }, "*"); });
+}
+// Scroll events do not bubble: listen in the capture phase to hear every pane's.
+document.addEventListener("scroll", (e) => {
+  if (isTouch() && !(e.target.closest && e.target.closest("#tip"))) $("#tip").hidden = true;
+}, { capture: true, passive: true });
 
 /* The composer writes either a draft comment ("comment") or the first message of a
    new side thread ("ask"). */
@@ -1626,9 +1735,10 @@ function openComposer(target, mode = "comment") {
     : "general question, no passage";
   $(".add", c).textContent = mode === "ask" ? "Ask" : "Add";
   $("#no-parent").hidden = mode !== "ask" || threadsState.forkable;
+  // Under touch controls the hints name no shortcut: a phone keyboard has no ⌘.
   $("textarea", c).placeholder = mode === "ask"
-    ? "Your question for a side thread  (↵ to ask, ⇧↵ for a new line, Esc to cancel)"
-    : "Your comment  (⌘↵ to add, Esc to cancel)";
+    ? (isTouch() ? "Your question for a side thread" : "Your question for a side thread  (↵ to ask, ⇧↵ for a new line, Esc to cancel)")
+    : (isTouch() ? "Your comment" : "Your comment  (⌘↵ to add, Esc to cancel)");
   const rect = target.rect || document.getElementById(`sec-${target.section}`).getBoundingClientRect();
   c.style.top = `${window.scrollY + Math.min(rect.bottom + 6, innerHeight - 220)}px`;
   c.style.left = `${Math.min(Math.max(8, rect.left), innerWidth - 380)}px`;
@@ -1638,6 +1748,22 @@ function openComposer(target, mode = "comment") {
 }
 
 function closeComposer() { $("#composer").hidden = true; }
+
+/* The keyboard's height, as --keyboard: in the narrow layout the composer and a side
+   thread dock across the bottom of the screen, above it. A phone browser that does not
+   shrink the page for its keyboard still shrinks the visual viewport. */
+function trackKeyboard() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const update = () => {
+    const covered = Math.max(0, innerHeight - (vv.height + vv.offsetTop));
+    document.documentElement.style.setProperty("--keyboard", `${Math.round(covered)}px`);
+  };
+  vv.addEventListener("resize", update);
+  vv.addEventListener("scroll", update);
+  update();
+}
+trackKeyboard();
 
 function submitComposer() {
   if ($("#composer")._mode === "ask") askThread();
@@ -1649,8 +1775,9 @@ function addDraft() {
   const text = $("textarea", c).value.trim();
   if (!text) return;
   const { section, quote, prefix } = c._target;
-  drafts.push({ id: crypto.randomUUID(), section, quote, prefix, text });
-  saveJSON(DRAFTS_KEY, drafts);
+  const d = { id: crypto.randomUUID(), section, quote, prefix, text };
+  drafts.push(d);
+  saveDraft(d);
   closeComposer();
   getSelection().removeAllRanges();
   renderReview();
@@ -1659,8 +1786,9 @@ function addDraft() {
 
 $("#composer .add").addEventListener("click", submitComposer);
 $("#composer .cancel").addEventListener("click", closeComposer);
-// In a thread, Enter sends and Shift+Enter breaks the line; a comment keeps ⌘↵.
-const sendsOnEnter = (e) => e.key === "Enter" && !e.shiftKey && !e.isComposing;
+// In a thread, Enter sends and Shift+Enter breaks the line; a comment keeps ⌘↵. Under
+// touch controls Enter breaks the line (a phone keyboard's only way to) and the button sends.
+const sendsOnEnter = (e) => !isTouch() && e.key === "Enter" && !e.shiftKey && !e.isComposing;
 
 $("#composer textarea").addEventListener("keydown", (e) => {
   const ask = $("#composer")._mode === "ask";
@@ -1902,16 +2030,9 @@ function quoteLine(c) {
 function renderReview() {
   renderWaiting();
   $("#draft-count").textContent = drafts.length ? `· ${drafts.length} draft${drafts.length > 1 ? "s" : ""}` : "";
-  $("#drafts").replaceChildren(...drafts.map((d) => {
-    const ta = el("textarea", { class: "c-text", rows: "2",
-                                placeholder: d.thread ? "What should change, after this thread? (optional)" : "" });
-    ta.value = d.text;
-    ta.addEventListener("input", () => { d.text = ta.value; saveJSON(DRAFTS_KEY, drafts); updateSend(); });
-    return el("div", { class: "comment draft" },
-      quoteLine(d), ta,
-      el("button", { class: "c-del", text: "×", title: "Delete",
-                     onclick: () => { drafts = drafts.filter((x) => x !== d); saveJSON(DRAFTS_KEY, drafts); renderReview(); applyHighlights(); renderPopover(); } }));
-  }));
+  // The review tab of the narrow layout carries the count of drafts, in sight from every tab.
+  $('.tab[data-tab="review"]').textContent = drafts.length ? `review (${drafts.length})` : "review";
+  renderDrafts();
   updateSend();
 
   const batches = state ? state.comments.batches : [];
@@ -1966,12 +2087,133 @@ function updateSend() {
   if (state) renderStatus();
 }
 
-$("#note").value = loadJSON(NOTE_KEY, "");
-$("#note").addEventListener("input", () => { saveJSON(NOTE_KEY, $("#note").value); updateSend(); });
+$("#note").addEventListener("input", () => { saveNote(); updateSend(); });
+$("#note").addEventListener("blur", () => { if (noteTimer) saveNote(true); else loadDrafts(); });
 $("#note").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
 });
 $("#send").addEventListener("click", () => send());
+
+/* ---------------- drafts ----------------
+   The drafts and the general note live in the session folder (drafts.json), not in the
+   browser: every page open on the session, on any device, shows the same ones. Each
+   change this page makes is saved at once (a typed text a moment after the last
+   keystroke, and when its box is left); the server tells the other pages (event
+   "drafts"), which fetch the file and redraw the review. The last edit of a draft wins:
+   while you type in a draft's box (or the note), an edit from another page waits, and
+   shows when you leave the box, unless you typed after it. A draft deleted on one page is
+   gone on every page; an edit to it arriving later is dropped by the server. */
+
+const SAVE_AFTER = 300; // ms after the last keystroke
+const saveTimers = new Map(); // draft id -> its pending save
+const unsaved = new Set(); // ids of drafts added here whose first save has not returned
+const deletedHere = new Set(); // ids of drafts deleted from this page
+const draftNodes = new Map(); // draft id -> its box in the review, built once
+let noteTimer = null;
+
+const draftBody = ({ section, quote, prefix, text, thread }) => ({ section, quote, prefix, text, thread: thread || "" });
+
+async function saveDraft(d, now = true) {
+  clearTimeout(saveTimers.get(d.id));
+  saveTimers.delete(d.id);
+  if (!now) { saveTimers.set(d.id, setTimeout(() => saveDraft(d), SAVE_AFTER)); return; }
+  unsaved.add(d.id);
+  try {
+    const r = await postJSON(`/api/s/${SLUG}/drafts/${encodeURIComponent(d.id)}`, draftBody(d), "PUT");
+    if (!r.saved && !deletedHere.has(d.id)) {
+      drafts = drafts.filter((x) => x.id !== d.id);
+      toast("This draft was deleted on another page");
+      afterDrafts();
+    }
+  } catch (e) { toast(`Could not save the draft: ${e.message}`); }
+  unsaved.delete(d.id);
+}
+
+async function deleteDraft(d) {
+  clearTimeout(saveTimers.get(d.id));
+  saveTimers.delete(d.id);
+  deletedHere.add(d.id);
+  drafts = drafts.filter((x) => x.id !== d.id);
+  afterDrafts();
+  try { await postJSON(`/api/s/${SLUG}/drafts/${encodeURIComponent(d.id)}`, {}, "DELETE"); }
+  catch (e) { toast(`Could not delete the draft: ${e.message}`); }
+}
+
+async function saveNote(now = false) {
+  clearTimeout(noteTimer);
+  noteTimer = null;
+  if (!now) { noteTimer = setTimeout(() => saveNote(true), SAVE_AFTER); return; }
+  try { await postJSON(`/api/s/${SLUG}/note`, { note: $("#note").value }, "PUT"); }
+  catch (e) { toast(`Could not save the note: ${e.message}`); }
+}
+
+// The draft whose box has the focus, if any: its text stays as typed.
+const editingDraft = () => document.activeElement?.closest?.("#drafts .draft")?.dataset.draft || null;
+
+/* Takes the drafts file in: the server's drafts, in its order, but the one being typed
+   in keeps its text, and one added here whose save has not returned stays. */
+async function loadDrafts() {
+  let data;
+  try {
+    const r = await fetch(`/api/s/${SLUG}/drafts`);
+    if (!r.ok) return;
+    data = await r.json();
+  } catch (e) { return; }
+  const editing = editingDraft();
+  const mine = new Map(drafts.map((d) => [d.id, d]));
+  const next = data.drafts.map((d) => {
+    const here = mine.get(d.id);
+    if (here && (d.id === editing || saveTimers.has(d.id))) return here;
+    return here ? Object.assign(here, d) : d;
+  });
+  for (const d of drafts) if (unsaved.has(d.id) && !next.some((x) => x.id === d.id)) next.push(d);
+  drafts = next;
+  const note = $("#note");
+  if (document.activeElement !== note && !noteTimer) note.value = data.note;
+  afterDrafts();
+}
+
+function afterDrafts() {
+  renderReview();
+  if (state) { applyHighlights(); renderPopover(); }
+}
+
+/* The drafts in the review, each box kept across redraws: one being typed in is never
+   re-attached (that would take its focus), and keeps the text typed. */
+function renderDrafts() {
+  const box = $("#drafts");
+  const editing = editingDraft();
+  for (const id of draftNodes.keys()) if (!drafts.some((d) => d.id === id)) { draftNodes.get(id).remove(); draftNodes.delete(id); }
+  drafts.forEach((d, k) => {
+    let node = draftNodes.get(d.id);
+    if (!node) {
+      const ta = el("textarea", { class: "c-text", rows: "2",
+                                  placeholder: d.thread ? "What should change, after this thread? (optional)" : "" });
+      ta.addEventListener("input", () => { node._draft.text = ta.value; saveDraft(node._draft, false); updateSend(); });
+      // Leaving the box: a pending keystroke is saved (it wins), else the file's text shows.
+      ta.addEventListener("blur", () => { if (saveTimers.has(node._draft.id)) saveDraft(node._draft); else loadDrafts(); });
+      node = el("div", { class: "comment draft", "data-draft": d.id }, quoteLine(d), ta,
+        el("button", { class: "c-del", text: "×", title: "Delete", onclick: () => deleteDraft(node._draft) }));
+      draftNodes.set(d.id, node);
+    }
+    node._draft = d;
+    node.replaceChild(quoteLine(d), node.firstChild);
+    const ta = $("textarea", node);
+    if (d.id !== editing && ta.value !== d.text) ta.value = d.text;
+    if (box.children[k] !== node) box.insertBefore(node, box.children[k] || null);
+  });
+}
+
+/* The drafts and the note this browser kept before the drafts file go to the session
+   folder, after those already there, the first time it opens the session. */
+async function moveBrowserDrafts() {
+  const old = loadJSON(DRAFTS_KEY, []), note = loadJSON(NOTE_KEY, "");
+  if (!(Array.isArray(old) && old.length) && !String(note || "").trim()) return;
+  try {
+    await postJSON(`/api/s/${SLUG}/drafts/import`, { drafts: Array.isArray(old) ? old : [], note: String(note || "") });
+    try { localStorage.removeItem(DRAFTS_KEY); localStorage.removeItem(NOTE_KEY); } catch (e) { /* private mode */ }
+  } catch (e) { toast(`Could not move this browser's drafts: ${e.message}`); }
+}
 
 /* A batch from « Send », an approval button, or a scope block button (`button`). */
 const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped",
@@ -1982,6 +2224,11 @@ async function send(action = "", button = null) {
   const btn = button || (approval ? buttonOf(approval) : $("#send"));
   if (btn.disabled) return;
   btn.disabled = true;
+  // The batch carries the texts as typed: a save still pending would bring a sent draft back.
+  const pending = drafts.filter((d) => saveTimers.has(d.id));
+  for (const d of pending) { clearTimeout(saveTimers.get(d.id)); saveTimers.delete(d.id); }
+  clearTimeout(noteTimer);
+  noteTimer = null;
   const r = await fetch(`/api/s/${SLUG}/batch`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -1989,15 +2236,21 @@ async function send(action = "", button = null) {
       action,
       note: $("#note").value,
       comments: drafts.map(({ section, quote, prefix, text, thread }) => ({ section, quote, prefix, text, thread })),
+      drafts: drafts.map((d) => d.id),
     }),
   });
   btn.disabled = false;
-  if (!r.ok) { toast(`Send failed: ${(await r.json()).detail}`); updateSend(); return; }
+  if (!r.ok) {
+    toast(`Send failed: ${(await r.json()).detail}`);
+    pending.forEach((d) => saveDraft(d));
+    saveNote(true);
+    updateSend();
+    return;
+  }
   const b = await r.json();
+  // The server cleared the drafts the batch carried and the note, on every page.
   drafts = [];
-  saveJSON(DRAFTS_KEY, drafts);
   $("#note").value = "";
-  saveJSON(NOTE_KEY, "");
   await load();
   sentToast(approval ? approval.toast : SCOPE_TOASTS[action] || `Sent ${b.id} to the session`);
 }
@@ -2017,7 +2270,7 @@ function setReviewWidth(px) {
   positionPopover();
 }
 
-setReviewWidth(loadJSON(WIDTH_KEY, null));
+setReviewWidth(isNarrow() ? null : loadJSON(WIDTH_KEY, null));
 divider.addEventListener("pointerdown", (e) => {
   e.preventDefault();
   divider.setPointerCapture(e.pointerId);
@@ -2036,7 +2289,7 @@ divider.addEventListener("pointerup", (e) => {
 });
 divider.addEventListener("dblclick", () => { saveJSON(WIDTH_KEY, null); setReviewWidth(null); });
 // A smaller window keeps the pane within 70 % of it.
-addEventListener("resize", () => setReviewWidth(loadJSON(WIDTH_KEY, null)));
+addEventListener("resize", () => { if (!isNarrow()) setReviewWidth(loadJSON(WIDTH_KEY, null)); });
 
 /* ---------------- side threads ----------------
    A thread opens in a popover on its passage. One is shown at a time; a click anywhere
@@ -2180,6 +2433,7 @@ function renderPopover() {
 function positionPopover() {
   const pop = $("#thread-pop");
   if (!popThread || pop.hidden) return;
+  if (isNarrow()) return; // docked across the bottom (app.css)
   const r = anchorRect(popThread);
   const visible = r && r.width > 0 && r.bottom > 0 && r.top < innerHeight;
   pop.style.visibility = visible ? "visible" : "hidden";
@@ -2207,7 +2461,7 @@ docViews().forEach((v) => v.addEventListener("mousemove", (e) => {
 
 function threadCard(t) {
   if (cards.has(t.id)) return cards.get(t.id);
-  const ta = el("textarea", { class: "c-text", rows: "2", placeholder: "Reply  (↵ to send, ⇧↵ for a new line, Esc to close)" });
+  const ta = el("textarea", { class: "c-text", rows: "2", placeholder: isTouch() ? "Reply" : "Reply  (↵ to send, ⇧↵ for a new line, Esc to close)" });
   const card = {
     root: el("div", { class: "thread-card" }),
     head: el("div", { class: "t-head" }),
@@ -2291,8 +2545,7 @@ async function deleteThread(tid) {
   try {
     await postJSON(`/api/s/${SLUG}/threads/${tid}`, {}, "DELETE");
   } catch (e) { toast(`Could not delete: ${e.message}`); return; }
-  drafts = drafts.filter((d) => d.thread !== tid);
-  saveJSON(DRAFTS_KEY, drafts);
+  for (const d of drafts.filter((x) => x.thread === tid)) deleteDraft(d);
   closePopover();
   renderReview();
   await loadThreads();
@@ -2303,8 +2556,9 @@ async function deleteThread(tid) {
    text is optional: without one, the thread's conclusion is the comment. */
 function threadToBatch(tid) {
   const t = threadOf(tid);
-  drafts.push({ id: crypto.randomUUID(), section: t.section, quote: t.quote, prefix: t.prefix, text: "", thread: tid });
-  saveJSON(DRAFTS_KEY, drafts);
+  const d = { id: crypto.randomUUID(), section: t.section, quote: t.quote, prefix: t.prefix, text: "", thread: tid };
+  drafts.push(d);
+  saveDraft(d);
   renderReview();
   applyHighlights();
   renderPopover();
@@ -2398,6 +2652,58 @@ $("#unpublish").addEventListener("click", async () => {
   }
 });
 
+/* ---------------- notices ----------------
+   The home-screen app can show a notice when a session starts waiting for you (push.py),
+   on the lock screen too. « notices » in the ⋯ menu turns them on for this phone: the
+   phone asks for your permission, the app installs its service worker (/sw.js) and gives
+   the server a subscription; every session of the server then notifies this phone. Only
+   the home-screen app offers it: a page open in the browser (an iPhone's, the Mac's)
+   cannot receive notices. Tapped again, it turns them off. */
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const canNotify = () => standalone() && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const b64 = (s) => {
+  const raw = atob((s + "=".repeat((4 - (s.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+};
+
+async function noticeSubscription() {
+  const reg = await navigator.serviceWorker.getRegistration("/");
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+
+async function renderNotices() {
+  const btn = $("#notices");
+  btn.hidden = !canNotify();
+  if (btn.hidden) return;
+  const on = Notification.permission === "granted" && !!(await noticeSubscription().catch(() => null));
+  btn.textContent = on ? "notices: on" : "notices: off";
+  btn.title = on ? "This phone gets a notice when a session waits for you; tap to turn them off"
+                 : "Get a notice on this phone when a session waits for you";
+  btn.dataset.on = on ? "1" : "";
+}
+
+$("#notices").addEventListener("click", async () => {
+  const btn = $("#notices");
+  try {
+    if (btn.dataset.on) {
+      const sub = await noticeSubscription();
+      if (sub) { await postJSON("/api/push/unsubscribe", { endpoint: sub.endpoint }); await sub.unsubscribe(); }
+      toast("Notices off on this phone");
+    } else {
+      if (await Notification.requestPermission() !== "granted") { toast("Notices are not allowed on this phone"); return; }
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      await navigator.serviceWorker.ready;
+      const { key } = await (await fetch("/api/push/key")).json();
+      const sub = (await reg.pushManager.getSubscription())
+        || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
+      await postJSON("/api/push/subscribe", sub.toJSON());
+      toast("Notices on: this phone hears when a session waits for you");
+    }
+  } catch (e) { toast(`Notices: ${e.message}`, 6000); }
+  renderNotices();
+});
+renderNotices();
+
 /* The tip under a word: a lexicon entry's (`term`, its index) or a plain text (`text`). */
 function showTip(text, term, r) {
   const tip = $("#tip");
@@ -2415,10 +2721,11 @@ function showTip(text, term, r) {
 }
 
 document.addEventListener("mouseover", (e) => {
+  if (isTouch()) return; // a tap shows it (see "taps")
   const t = e.target.closest("[data-tip], [data-term]");
   if (!t) { $("#tip").hidden = true; return; }
   showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect());
 });
 
 // ?static skips the live stream (headless rendering never finishes while it is open).
-load().then(loadThreads).then(() => { if (!new URLSearchParams(location.search).has("static")) connect(); });
+moveBrowserDrafts().then(load).then(loadDrafts).then(loadThreads).then(() => { if (!new URLSearchParams(location.search).has("static")) connect(); });

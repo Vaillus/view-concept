@@ -16,3 +16,20 @@ def session(tmp_path):
     (s.sections_dir / "s2.md").write_text("Le cache.")
     (s.sections_dir / "s1.md").write_text("L'attention.")
     return s
+
+
+@pytest.fixture(autouse=True)
+def _launches_file(tmp_path, monkeypatch):
+    """Pending launches go to a file of the test, never to the user's home."""
+    from view_concept import launch
+
+    monkeypatch.setattr(launch, "LAUNCHES", tmp_path / "launches.json")
+
+
+@pytest.fixture(autouse=True)
+def _push_file(tmp_path, monkeypatch):
+    """Notices read the test's push file and sessions folder, never the user's home."""
+    from view_concept import push
+
+    monkeypatch.setattr(push, "PUSH", tmp_path / "push.json")
+    monkeypatch.setattr(push, "SESSIONS", tmp_path / "sessions")

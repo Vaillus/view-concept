@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>view-concept</title>
+<!-- the home-screen app (server.py MANIFEST) -->
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="view-concept">
 <script src="/static/theme.js"></script>
 <link rel="stylesheet" href="/static/themes.css">
 <link rel="stylesheet" href="/static/terminal.css">
@@ -18,12 +26,17 @@
   <span id="phase" class="phase" hidden></span>
   <span id="live" class="live off" title="Live updates from the session">offline</span>
   <span id="listening" class="listening off" title="Whether a watch is running for this session: it reads what you send">○ Agent not listening</span>
-  <span id="general-threads" class="t-chips"></span>
-  <a id="pr-link" class="btn" target="_blank" rel="noopener" hidden></a>
-  <button id="new-thread" class="btn" title="Open a side thread not tied to a passage">ask</button>
-  <button id="export" class="btn">Export to vault</button>
-  <button id="publish" class="btn" hidden></button>
-  <button id="unpublish" class="btn" hidden>Unpublish</button>
+  <button id="menu-toggle" class="menu-toggle" title="More" aria-haspopup="true" aria-expanded="false">⋯</button>
+  <!-- The header's buttons: in the top bar on a wide window, in the ⋯ menu in the narrow layout. -->
+  <div id="header-menu" class="header-menu">
+    <span id="general-threads" class="t-chips"></span>
+    <a id="pr-link" class="btn" target="_blank" rel="noopener" hidden></a>
+    <button id="new-thread" class="btn" title="Open a side thread not tied to a passage">ask</button>
+    <button id="export" class="btn">Export to vault</button>
+    <button id="publish" class="btn" hidden></button>
+    <button id="unpublish" class="btn" hidden>Unpublish</button>
+    <button id="notices" class="btn" hidden>notices</button>
+  </div>
 </header>
 
 <div class="shell">
@@ -34,6 +47,7 @@
       <button class="tab" data-tab="plan" title="Plan (1)">plan</button>
       <button class="tab" data-tab="doc" title="Explanation (2)">explanation</button>
       <button class="tab" data-tab="refactor" title="Code (3)" hidden>code</button>
+      <button class="tab narrow-only" data-tab="review" title="Review">review</button>
       <button class="tab" data-tab="metrics" title="Metrics (4)" hidden>metrics</button>
     </nav>
     <div id="plan-view" class="view plan" data-view="plan">
