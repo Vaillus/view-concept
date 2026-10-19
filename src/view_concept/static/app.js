@@ -24,6 +24,7 @@ const DRAFTS_KEY = `view-concept:drafts:${SLUG}`;
 const NOTE_KEY = `view-concept:note:${SLUG}`;
 const POSITION_KEY = `view-concept:position:${SLUG}`; // the saved position (see "saved position")
 const WIDTH_KEY = "view-concept:review-width"; // per browser, for every session
+const THREAD_SIZE_KEY = "view-concept:thread-size"; // the same: {width, height} of a thread
 
 let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
@@ -2425,7 +2426,7 @@ function renderPopover() {
   if (!t) { closePopover(); return; }
   const card = threadCard(t);
   patchCard(t, card);
-  if (pop.firstChild !== card.root) pop.replaceChildren(card.root); // re-attaching would blur the reply box
+  if (pop.firstChild !== card.root) pop.replaceChildren(card.root, threadGrip); // re-attaching would blur the reply box
   pop.hidden = false;
   positionPopover();
 }
@@ -2445,6 +2446,43 @@ function positionPopover() {
   pop.style.top = `${Math.max(8, Math.min(top, innerHeight - h - 8))}px`;
   pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
 }
+
+/* The popover's bottom right corner is a grip: dragging it sets the thread's width and
+   height, kept within the window and remembered in this browser for every thread. A
+   double-click goes back to the default size. The docked thread of the narrow layout
+   has no grip (app.css). */
+const threadGrip = el("div", { class: "t-grip", title: "drag to resize, double-click to reset" });
+
+function setThreadSize(size) {
+  const pop = $("#thread-pop");
+  const sized = !!size && !isNarrow();
+  pop.classList.toggle("sized", sized);
+  if (!sized) { pop.style.width = pop.style.height = ""; return; }
+  const r = pop.getBoundingClientRect();
+  pop.style.width = `${Math.round(Math.max(280, Math.min(size.width, innerWidth - r.left - 8)))}px`;
+  pop.style.height = `${Math.round(Math.max(160, Math.min(size.height, innerHeight - r.top - 8)))}px`;
+}
+
+setThreadSize(loadJSON(THREAD_SIZE_KEY, null));
+threadGrip.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  threadGrip.setPointerCapture(e.pointerId);
+  document.body.classList.add("resizing-corner");
+});
+threadGrip.addEventListener("pointermove", (e) => {
+  if (!threadGrip.hasPointerCapture(e.pointerId)) return;
+  const r = $("#thread-pop").getBoundingClientRect();
+  setThreadSize({ width: e.clientX - r.left, height: e.clientY - r.top });
+});
+threadGrip.addEventListener("pointerup", (e) => {
+  if (!threadGrip.hasPointerCapture(e.pointerId)) return;
+  threadGrip.releasePointerCapture(e.pointerId);
+  document.body.classList.remove("resizing-corner");
+  const r = $("#thread-pop").getBoundingClientRect();
+  saveJSON(THREAD_SIZE_KEY, { width: r.width, height: r.height });
+  positionPopover();
+});
+threadGrip.addEventListener("dblclick", () => { saveJSON(THREAD_SIZE_KEY, null); setThreadSize(null); positionPopover(); });
 
 document.querySelectorAll(".view").forEach((v) => v.addEventListener("scroll", positionPopover, { passive: true }));
 addEventListener("resize", positionPopover);

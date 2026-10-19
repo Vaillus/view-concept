@@ -286,6 +286,14 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .t-chip.error { background: var(--flagbg); color: var(--flag); }
 .thread-pop { position: fixed; z-index: 11; width: 440px; max-width: calc(100vw - 16px); background: var(--bg);
               border: 1px solid var(--alt); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+/* Sized by its grip (app.js): the messages take the height the head and foot leave. */
+.thread-pop.sized { overflow: hidden; }
+.thread-pop.sized .thread-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.thread-pop.sized .t-msgs { flex: 1; min-height: 0; max-height: none; }
+.t-grip { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; cursor: nwse-resize; touch-action: none;
+          background: linear-gradient(135deg, transparent 50%, var(--alt) 50%, var(--alt) 60%, transparent 60%,
+                                      transparent 75%, var(--alt) 75%, var(--alt) 85%, transparent 85%); }
+body.resizing-corner { cursor: nwse-resize; user-select: none; }
 .t-head { display: flex; flex-direction: column; gap: 2px; }
 .t-title { font-size: 12px; display: flex; align-items: center; gap: 6px; }
 .t-close { margin-left: auto; background: none; border: 0; padding: 0 4px; color: var(--dim); font-size: 14px; line-height: 16px; }
@@ -539,7 +547,8 @@ body.sb-collapsed .sidebar { display: none; }
      its height, from app.js). */
   .composer, .thread-pop { position: fixed; left: 0 !important; right: 0; top: auto !important; width: auto; max-width: none;
                            bottom: var(--keyboard, 0px); border-width: 1px 0 0; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
-  .thread-pop { max-height: 70vh; visibility: visible !important; }
+  .thread-pop { max-height: 70vh; visibility: visible !important; height: auto !important; }
+  .t-grip { display: none; }
   .t-msgs { max-height: 40vh; }
   .tip { max-width: calc(100vw - 16px); }
 }
