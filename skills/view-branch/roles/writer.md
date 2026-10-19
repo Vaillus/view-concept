@@ -65,8 +65,14 @@ not a tour.
 - **Never tell the user back what they told you.** A comment or an answer
   changes the model as if it had been written that way from the first pass:
   no section mentions it, nor what the section said before. The initial
-  request is never retold. From its first lines the reader knows what the
-  section is about; no first sentence is prescribed.
+  request is never retold.
+- **Open on the subject.** Every section but an overview section opens with
+  a paragraph of two or three sentences, before any definition, table or
+  figure. In order, it states the problem or fact the section answers, in
+  terms the reader already has (when it follows from an earlier section,
+  name that section); what the model does about it, the decision taken or
+  the choice the section weighs; and, in one sentence, what the section
+  shows to support it.
 - **Honour the lexicon.** Use each defined term by its name, never a
   paraphrase of it. A core concept gets its definition in its home section
   and is used freely after; a peripheral concept gets its tip and no

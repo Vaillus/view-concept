@@ -17,9 +17,8 @@ The model starts from the concepts the repo's docs already define; the
 modeling part covers only what the branch adds or changes.
 
 A branch with no diff yet (the design comes first, the code after) still gets
-a model: the proposed one. Say so in the model sheet, and mark each concept
-you propose yourself, as opposed to one the user asked for, so the user reads
-the modeling part as a proposal to approve, not a description to check.
+a model: the proposed one. Mark each concept you propose yourself, as
+opposed to one the user asked for, so the user reads the modeling part as a proposal to approve, not a description to check.
 
 ## The reader
 
@@ -89,9 +88,9 @@ The skeleton:
    the page or the output, a diagram) and keep the text short; the form is
    yours to choose. Lay out the subjects the next sections discuss, and
    where each sits in the change, without repeating the outline's `earns`.
-   Never retell the request. When the branch has no diff yet, say here that
-   the model is a proposal. The sheet holds no to-do list (see point 5)
-   and no list of the defaults taken: each one is written at the end of the section it touches
+   Never retell the request, nor state whether the code exists yet
+   (« nothing is coded on this branch yet »). The sheet holds no to-do list
+   (see point 5) and no list of the defaults taken: each one is written at the end of the section it touches
    (see **The question test**), and one that touches no section, only a line
    of the to-do list, is written in that line.
 2. **One section per point new to the user** (see **The reader**) that
