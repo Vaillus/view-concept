@@ -20,8 +20,10 @@ question's options; another agent writes the answer in a fixed text form, read b
 The answer the user sends names the question's threads.
 
 Threads are read-only, whatever the agent: its read-only tool set or sandbox, no approvals
-asked. A change the discussion leads to goes to the main session as a comment of the next
-batch (the comment carries the thread id).
+asked. Read-only still reaches far: on Claude a thread reads any file, searches and reads
+the web, and runs the shell commands that only read (git history, the view-concept
+commands that print). A change the discussion leads to goes to the main session as a
+comment of the next batch (the comment carries the thread id).
 """
 
 from __future__ import annotations
@@ -291,8 +293,10 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
         f"[view-concept side thread {thread['id']}]",
         f"The user opened a side thread from the view-concept page of the session"
         f" {s.slug!r} ({s.dir}). {origin}",
-        "- Answer and discuss. Your tools are read-only: do not try to edit files or"
-        " run view-concept commands, and do not resolve comments.",
+        "- Answer and discuss. Your tools are read-only: you may read any file, search"
+        " the web, read git history (log, show, diff, blame) and run the view-concept"
+        " commands that print (context, changes, pending, list), but do not try to"
+        " edit files or run other commands, and do not resolve comments.",
         f"- This is a conversation, not a section of the {doc}: answer in a few sentences"
         " of plain prose, without tables, headings or bullet lists unless the user asks"
         " for them.",

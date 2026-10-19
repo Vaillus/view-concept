@@ -72,7 +72,11 @@ def test_first_turn_forks_the_main_session(session, fake_claude):
     (call,) = calls(fake_claude)
     assert call["args"][call["args"].index("--resume") + 1] == "main-1"
     assert "--fork-session" in call["args"]
-    assert call["args"][call["args"].index("--tools") + 1 :][:3] == ["Read", "Grep", "Glob"]
+    tools = call["args"][call["args"].index("--tools") + 1 :]
+    assert tools[:6] == ["Read", "Grep", "Glob", "WebSearch", "WebFetch", "Bash"]
+    allowed = call["args"][call["args"].index("--allowedTools") + 1 :]
+    assert "Bash(git log:*)" in allowed and "Bash(view-concept context:*)" in allowed
+    assert "Bash" not in allowed
     assert "§2 Cache (s2): « Le cache »" in call["prompt"]
     assert call["prompt"].endswith("why a cache?")
 
