@@ -406,8 +406,10 @@
 
   /* ---- the term hover ---- */
   var hovered = null;
-  function hover(t, rect) {
-    if (t === hovered) return;
+  // `always`: post even when the term is unchanged (a tap, since the page may have
+  // hidden the tip since the last one).
+  function hover(t, rect, always) {
+    if (t === hovered && !always) return;
     hovered = t;
     post(t ? { viewConcept: "term-hover", key: t.key, rect: rectOf(rect) } : { viewConcept: "term-hover", key: null });
   }
@@ -432,8 +434,7 @@
     pointer = { x: e.clientX, y: e.clientY };
     paintChanges(e.target);
     var h = hit(termRanges, e.clientX, e.clientY);
-    hovered = null; // the page may have hidden the tip since: post the term on every tap
-    hover(h && h[0], h && h[1]);
+    hover(h && h[0], h && h[1], true);
     if (!h) threadClick(e.clientX, e.clientY);
   });
   addEventListener("scroll", function () { hover(null); });
