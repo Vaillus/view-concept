@@ -287,7 +287,9 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .thread-pop { position: fixed; z-index: 11; width: 440px; max-width: calc(100vw - 16px); background: var(--bg);
               border: 1px solid var(--alt); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .t-head { display: flex; flex-direction: column; gap: 2px; }
-.t-title { font-size: 12px; }
+.t-title { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.t-close { margin-left: auto; background: none; border: 0; padding: 0 4px; color: var(--dim); font-size: 14px; line-height: 16px; }
+@media (hover: hover) { .t-close:hover { color: var(--ink); } }
 .t-head .c-quote { margin-bottom: 0; }
 .t-msgs { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
 .t-msg { font-size: 13px; line-height: 20px; }

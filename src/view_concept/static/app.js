@@ -2292,9 +2292,9 @@ divider.addEventListener("dblclick", () => { saveJSON(WIDTH_KEY, null); setRevie
 addEventListener("resize", () => { if (!isNarrow()) setReviewWidth(loadJSON(WIDTH_KEY, null)); });
 
 /* ---------------- side threads ----------------
-   A thread opens in a popover on its passage. One is shown at a time; a click anywhere
-   else closes it, and a click on the passage (highlighted) opens it again. A thread with
-   no passage to sit on (a whole-section thread, a general one, or one whose passage was
+   A thread opens in a popover on its passage. One is shown at a time; its × button, Esc
+   or a click anywhere else closes it (the thread stays), and a click on the passage
+   (highlighted) opens it again. A thread with no passage to sit on (a whole-section thread, a general one, or one whose passage was
    rewritten) gets a chip instead: in its section's heading, in the top bar for a
    general one, or in its question's box for a thread opened on an agent question. The popover follows its anchor when the view scrolls, and hides while the
    anchor is out of sight.
@@ -2492,7 +2492,9 @@ function patchCard(t, card) {
     el("div", { class: "t-title" },
       el("span", { class: "num", text: t.id }),
       running ? el("span", { class: "badge accent writing", text: t.activity || "running" })
-      : t.state === "error" ? el("span", { class: "badge flag", text: "error" }) : null),
+      : t.state === "error" ? el("span", { class: "badge flag", text: "error" }) : null,
+      el("button", { class: "t-close", text: "×", title: "Close (the thread stays, reopen it from its passage or chip)",
+                     onclick: closePopover })),
     quoteLine(t));
   card.error.hidden = !t.error;
   card.error.textContent = t.error;
