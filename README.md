@@ -49,7 +49,7 @@ To speed the workflow up, the Metrics tab of a branch review shows where its tim
 
 ![The Code tab of a branch review: one verdict per item, then the structure chart](docs/screenshots/branch-review.png)
 
-`/view-docs` reviews docs alone, on a scope you give (a folder, files, or a subject such as « everything about the install »), on a `docs/<slug>` branch of its own. The page shows only the Doc tab. The agent corrects at once what the code contradicts (a path, a command or a function the repo no longer has), flags what another session's model contradicts when you name one, rewrites the docs on each comment batch, and « Create PR » opens the pull request.
+`/view-docs` reviews docs alone, on a scope you give (a folder, files, or a subject such as « everything about the install »), on a `docs/<slug>` branch of its own. The page shows only the Doc tab. The agent corrects at once what the code contradicts (a path, a command or a function the repo no longer has). When a branch review of the repo has a model that touches the scope, the agent finds it at its first run, takes it as its **reference model** and flags what that model contradicts; most often there is none, and the docs are measured against the code alone. The agent rewrites the docs on each comment batch, and « Create PR » opens the pull request.
 
 `/view-refactor` works the same way on existing code: each item gets a triage verdict (`keep`, `move`, `split`, `merge`, `throw`, `separate-pr`), then the agent applies it on the current branch or splits it into PRs reviewed with `/view-branch`.
 
