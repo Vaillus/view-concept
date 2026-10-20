@@ -252,6 +252,13 @@ a.cite code { color: var(--info); background: var(--infobg); }
    and scroll to it: the bar is drawn inside its right edge */
 .sec .body :is(pre, .math.block).based { box-shadow: inset -3px 0 var(--info); }
 .sec .body :is(pre, .math.block).based::after { content: none; }
+/* the words a doc has that the base branch did not: painted under every other highlight */
+::highlight(ev-base) { background-color: var(--infobg); }
+/* a doc edited by hand: its Markdown in a text box, in place of its text */
+.doc-editor { display: flex; flex-direction: column; gap: 6px; }
+.doc-edit-text { min-height: 60vh; font-size: 13px; line-height: 1.5; tab-size: 2; }
+.doc-edit-note { margin: 0; font-size: 12px; color: var(--warn); }
+.doc-edit-actions { display: flex; gap: 6px; }
 /* a stale passage: a doc passage the model contradicts */
 ::highlight(ev-stale) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }
 
