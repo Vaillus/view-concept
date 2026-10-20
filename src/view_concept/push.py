@@ -40,7 +40,7 @@ APPROVALS = {
     "awaiting-approval": ("approve-plan", "plan ready · waiting for your approval"),
     "awaiting-model": ("approve-model", "model ready · waiting for your approval"),
     "awaiting-docs": ("write-docs", "code carries the model · waiting for « Write docs »"),
-    "awaiting-pr": ("create-pr", "refactoring written · waiting for « Create PR »"),
+    "awaiting-pr": ("create-pr", "docs written · waiting for « Create PR »"),
 }
 
 
