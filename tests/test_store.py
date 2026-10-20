@@ -1014,3 +1014,23 @@ def test_a_comment_on_a_doc_is_printed_with_its_path(docs_review):
     text = format_batch("doc-tab", b, [])
     assert "[c1] (doc docs/reference.md) « the keys 1, 2, 3 and 4 »\n    5 keys" in text
     assert "[c2] (doc set) « README.md »\n    remove it" in text
+
+
+def test_a_stale_passage_shows_while_its_quote_is_in_the_doc(docs_review):
+    s = docs_review
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.add_stale("README.md", "The keys", "five now")
+    s.add_doc("README.md", "the install")
+    with pytest.raises(SessionError, match="quote is not in"):
+        s.add_stale("README.md", "The tabs", "five now")
+    flag = s.add_stale("README.md", "The keys\n1 to 4", "five keys now", section="sheet")
+    assert flag["id"] == "s1" and flag["section"] == "sheet"
+    assert [f["id"] for f in s.shown_stale()] == ["s1"]
+    (s.repo_dir() / "README.md").write_text("The keys 1 to 5.")
+    assert s.shown_stale() == [] and len(s.read_stale()) == 1
+    assert s.add_stale("README.md", "1 to 5", "fine")["id"] == "s2"
+    s.drop_stale(["s1"])
+    assert [f["id"] for f in s.read_stale()] == ["s2"]
+    assert s.add_stale("README.md", "keys", "again")["id"] == "s3"
+    with pytest.raises(SessionError, match="no stale passage s9"):
+        s.drop_stale(["s9"])

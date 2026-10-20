@@ -36,6 +36,7 @@ reach the agent session through the inbox.
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
         doc-set.json    the doc set: the repo docs the Doc tab shows, each with its reason,
                         and the docs the user removed                    (`doc-set`)
+        stale.json      the stale passages: doc passages the model contradicts  (`stale`)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
@@ -168,6 +169,12 @@ fingerprint and `check`, which read the outline's sections only. The base mark c
 a doc's worktree file (uncommitted changes included) with the same doc at the merge base
 of the branch and its base branch (`merge_base`, `base_text`); a doc absent there was
 created on the branch.
+
+A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
+doc (its path), quote (the passage's exact text in the file), section (the model section
+it contradicts, a reference model's, or ""), note (one line: why), at}. The reviewer
+flags them (`stale`), and drops one fixed or dismissed. A flag whose quote is no longer
+found in its doc's current text is not shown, and stays in the file.
 
 A branch review's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
 at} (written by `pr`). The page links it at the top and at the end of the code tab.
@@ -478,6 +485,10 @@ class Session:
     @property
     def doc_set_path(self) -> Path:
         return self.dir / "doc-set.json"
+
+    @property
+    def stale_path(self) -> Path:
+        return self.dir / "stale.json"
 
     def media_folder(self, sid: str) -> Path:
         """The media folder of section `sid`: sections/<sid>/."""
@@ -1120,6 +1131,56 @@ class Session:
         """The docs that exist, keyed as their highlight baseline is: `doc:<path>`."""
         return {DOC_KEY + p: t for p, t in self.read_docs().items() if t is not None}
 
+    # ---- stale passages ----
+    def read_stale(self) -> list[dict[str, Any]]:
+        """Every stale passage flagged, shown or not: [{id, doc, quote, section, note, at}]."""
+        return _read_json(self.stale_path, [])
+
+    def shown_stale(self, docs: dict[str, str | None] | None = None) -> list[dict[str, Any]]:
+        """The stale passages the page shows: those whose quote is still found in their
+        doc's current text (`docs`, the doc set's texts, read when not given). A flag whose
+        passage changed, or whose doc left the doc set, is not shown, and stays in the
+        file."""
+        docs = self.read_docs() if docs is None else docs
+        return [
+            f
+            for f in self.read_stale()
+            if (text := docs.get(f.get("doc", ""))) is not None and _found(f.get("quote", ""), text)
+        ]
+
+    def add_stale(self, doc: str, quote: str, note: str, section: str = "") -> dict[str, Any]:
+        """Flag a stale passage of a doc of the doc set: `quote` is the passage's exact
+        text in the file, `section` the model section it contradicts (or a reference
+        model's), `note` one line saying why."""
+        doc = doc_path(doc)
+        text = self.read_docs().get(doc, None)
+        if doc not in {d["path"] for d in self.read_doc_set()["docs"]}:
+            raise SessionError(f"{doc} is not in the doc set")
+        if not quote.strip() or not note.strip():
+            raise SessionError("a stale passage needs its quote and a note")
+        if text is None or not _found(quote, text):
+            raise SessionError(f"the quote is not in {doc}: copy the passage as the file has it")
+        flags = self.read_stale()
+        n = max((int(f["id"][1:]) for f in flags if str(f.get("id", ""))[1:].isdigit()), default=0)
+        flag = {
+            "id": f"s{n + 1}",
+            "doc": doc,
+            "quote": quote.strip(),
+            "section": section.strip(),
+            "note": " ".join(note.split()),
+            "at": now_iso(),
+        }
+        _write_json(self.stale_path, [*flags, flag])
+        return flag
+
+    def drop_stale(self, ids: list[str]) -> None:
+        """Remove stale passages, fixed or dismissed."""
+        flags = self.read_stale()
+        unknown = sorted(set(ids) - {f.get("id") for f in flags})
+        if unknown:
+            raise SessionError(f"no stale passage {', '.join(unknown)}")
+        _write_json(self.stale_path, [f for f in flags if f.get("id") not in ids])
+
     def merge_base(self) -> str:
         """The commit where the branch left its base branch (plan.json `base`, else main):
         `git merge-base <base> HEAD` in the worktree. "" when git cannot tell (no repo,
@@ -1371,6 +1432,8 @@ class Session:
             self.terminal_messages_path,
             self.code_map_path,
             self.request_path,
+            self.doc_set_path,
+            self.stale_path,
             *self.section_files().values(),
         ]
         times = [iso_time(t) for p in paths if (t := _mtime(p))]
@@ -1448,7 +1511,7 @@ class Session:
         if self.sections_dir.is_dir():
             paths += sorted([*self.sections_dir.glob("*.md"), *self.sections_dir.glob("*.html")])
         # The docs of the doc set are files of the worktree: an edit there re-renders too.
-        paths.append(self.doc_set_path)
+        paths += [self.doc_set_path, self.stale_path]
         with contextlib.suppress(SessionError):
             paths += self.doc_files()
         return _stat_signature(paths)
@@ -2024,6 +2087,12 @@ def project_of(repo: str) -> str:
     if common.endswith("/.git"):
         return common.removesuffix("/.git")
     return repo.split(WORKTREES_DIR, 1)[0]
+
+
+def _found(quote: str, text: str) -> bool:
+    """Whether a quoted passage is in a text, spaces and line breaks aside."""
+    quote = " ".join(quote.split())
+    return bool(quote) and quote in " ".join(text.split())
 
 
 def _git(repo: Path, *args: str) -> str | None:

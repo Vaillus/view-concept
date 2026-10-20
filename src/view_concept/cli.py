@@ -357,6 +357,29 @@ def cmd_doc_set(a: argparse.Namespace) -> None:
         print(f"removed by the user: {', '.join(data['removed'])}")
 
 
+def cmd_stale(a: argparse.Namespace) -> None:
+    """Flag a stale passage, drop flags, or, with no argument, print the flags shown."""
+    s = _existing(a.slug)
+    if a.drop:
+        if a.doc:
+            raise SessionError("--drop takes stale passage ids only")
+        s.drop_stale(a.drop)
+        print(f"dropped {', '.join(a.drop)}")
+        return
+    if a.doc:
+        if not a.quote or not a.note:
+            raise SessionError('stale takes a doc, a quote and a note: <doc> "<quote>" "<note>"')
+        print(s.add_stale(a.doc, a.quote, a.note, a.section or "")["id"])
+        return
+    flags = s.shown_stale()
+    for f in flags:
+        quote = " ".join(f["quote"].split())
+        section = f" (section {f['section']})" if f.get("section") else ""
+        print(f"{f['id']} {f['doc']} « {quote} »{section}: {f['note']}")
+    if not flags:
+        print("(no stale passage shown)")
+
+
 def cmd_variant(a: argparse.Namespace) -> None:
     """Name the setup a session runs with and the model of each role, or, with no name,
     print it: the coordinator passes a role's model when it starts that role's agent."""
@@ -641,6 +664,17 @@ def main() -> None:
         "user (a refresh never adds it back); add takes it back in",
     )
     q.set_defaults(fn=cmd_doc_set)
+
+    q = sub.add_parser(
+        "stale", help="flag a doc passage the model contradicts, drop flags, or print them"
+    )
+    q.add_argument("slug")
+    q.add_argument("doc", nargs="?", help="the doc's path, a doc of the doc set")
+    q.add_argument("quote", nargs="?", help="the passage, exactly as the file has it")
+    q.add_argument("note", nargs="?", help="one line: why the model contradicts it")
+    q.add_argument("--section", help="the model section it contradicts")
+    q.add_argument("--drop", nargs="+", metavar="ID", help="remove flags (fixed or dismissed)")
+    q.set_defaults(fn=cmd_stale)
 
     q = sub.add_parser("context", help="print the context a subagent or a side thread starts from")
     q.add_argument("slug")

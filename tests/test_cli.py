@@ -352,3 +352,19 @@ def test_doc_set_adds_removes_and_prints_the_docs(tmp_path):
     ]
     r = view_concept(tmp_path, "doc-set", "gate", "add", "../x.md", "out")
     assert r.returncode == 1 and "inside the repo" in r.stderr
+
+
+def test_stale_flags_prints_and_drops_passages(tmp_path):
+    (tmp_path / "README.md").write_text("The keys 1 to 4.\n")
+    r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "keys").returncode == 0
+    flag = ("README.md", "keys 1 to 4", "five", "--section", "s")
+    r = view_concept(tmp_path, "stale", "gate", *flag)
+    assert r.returncode == 0 and r.stdout.strip() == "s1", r.stderr
+    r = view_concept(tmp_path, "stale", "gate")
+    assert r.stdout.strip() == "s1 README.md « keys 1 to 4 » (section s): five"
+    assert view_concept(tmp_path, "stale", "gate", "--drop", "s1").returncode == 0
+    assert view_concept(tmp_path, "stale", "gate").stdout.strip() == "(no stale passage shown)"
+    r = view_concept(tmp_path, "stale", "gate", "README.md", "absent", "five")
+    assert r.returncode == 1 and "quote is not in" in r.stderr

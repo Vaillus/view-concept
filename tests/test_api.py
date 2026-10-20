@@ -507,3 +507,12 @@ def test_the_base_mark_compares_a_doc_with_the_merge_base(client, doc_review):
 def test_no_base_mark_when_git_cannot_tell(client, doc_review):
     view = client.get("/api/s/doc-tab").json()["docs"]["views"]["docs/reference.md"]
     assert view["base_html"] is None and view["new"] is False
+
+
+def test_state_counts_the_stale_passages_shown(client, doc_review):
+    doc_review.add_stale("docs/reference.md", "The keys 1 to 4.", "five keys", "sheet")
+    docs = client.get("/api/s/doc-tab").json()["docs"]
+    assert docs["set"][0]["stale"] == 1 and docs["set"][1]["stale"] == 0
+    assert docs["stale"] == [{"id": "s1", "doc": "docs/reference.md",
+                              "quote": "The keys 1 to 4.", "section": "sheet",
+                              "note": "five keys"}]  # fmt: skip

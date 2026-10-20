@@ -298,8 +298,9 @@ def state(slug: str) -> dict[str, Any]:
 
 
 def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> dict[str, Any]:
-    """The Doc tab as the page reads it: {set: [{path, reason}], removed, views: {path:
-    view}}. A doc's view is its section view (the file rendered as Markdown, `updated`
+    """The Doc tab as the page reads it: {set: [{path, reason, stale (how many of its
+    stale passages are shown)}], removed, views: {path: view}, stale (the stale passages
+    shown)}. A doc's view is its section view (the file rendered as Markdown, `updated`
     against its highlight baseline `doc:<path>`) with `exists` and the base mark's input:
     `base_html`, the doc at the merge base rendered (None when it was not there, or when
     git cannot tell), and `new`, whether the branch created it. A doc missing from the
@@ -318,10 +319,22 @@ def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> 
             "base_html": md.render(base) if base is not None else None,
             "new": bool(commit) and base is None,
         }
+    stale = [
+        {k: f.get(k, "") for k in ("id", "doc", "quote", "section", "note")}
+        for f in s.shown_stale(docs)
+    ]
     return {
-        "set": [{"path": d["path"], "reason": d.get("reason", "")} for d in data["docs"]],
+        "set": [
+            {
+                "path": d["path"],
+                "reason": d.get("reason", ""),
+                "stale": sum(f["doc"] == d["path"] for f in stale),
+            }
+            for d in data["docs"]
+        ],
         "removed": data["removed"],
         "views": views,
+        "stale": stale,
     }
 
 
