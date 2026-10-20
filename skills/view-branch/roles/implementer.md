@@ -47,6 +47,7 @@ nothing, change nothing.
 | comment ids (`c12`) | The user asked for these code changes. |
 | « Write docs » | The doc pass (see **The doc pass**). |
 | comment ids on a doc (`(doc <path>)` or `(doc set)` in the batch) | The user asked for these changes to a doc or to the doc set (see **The doc pass**). |
+| « write repo lexicon » (`action: write-lexicon`) | Write the repo lexicon, in the doc pass or, when it came after, in this run (see **The doc pass**, step 2). |
 
 The trigger can hold several of these at once: do them all in the run.
 
@@ -150,11 +151,28 @@ concept or a line of the to-do list is implemented in one of them.
    branch concerns), and remove each doc left with no reason, `view-concept
    doc-set <slug> remove <path>`. Docstrings and code comments stay out. A
    doc the user removed stays out: the command refuses it.
-2. **Rewrite each doc** of the doc set from the model: the concepts and
+2. **Write the lexicons**, before any other doc:
+   1. the repo lexicon, `.agents/lexicon.md`, when it is missing. Its format:
+      a `# <repo name>` title, a `## Reader` part holding the reader line
+      (the field the docs' reader knows, and that they have never opened
+      this repo), then a `## Terms` part, one entry per term, `**Term**:`
+      and its definition on the next line. Draft the reader line from the
+      root `README.md`, the root `CLAUDE.md` and the package description,
+      and an entry for each term several folders' docs share;
+   2. then each term of the review's lexicon that the branch adds, renames,
+      changes or removes and that the docs of several folders use: add,
+      rewrite, rename or remove its entry, its definition the review
+      lexicon's, in the **closest lexicon whose folder holds every folder
+      using it**, the repo lexicon when no folder lexicon does. Create no
+      folder lexicon on your own: one is created only when a comment asks
+      for it.
+3. **Rewrite each doc** of the doc set from the model: the concepts and
    their rules as they now stand, under the lexicon's names, without the
-   before/after comparison the modeling part makes. Apply the comments on a
-   doc's text that the trigger holds (they waited for the doc pass).
-3. **One commit** for the doc pass, whose message names the docs it
+   before/after comparison the modeling part makes. A repo term a lexicon
+   defines is defined at its first use in a doc in that entry's words; no
+   doc links to a lexicon. Apply the comments on a doc's text that the
+   trigger holds (they waited for the doc pass).
+4. **One commit** for the doc pass, whose message names the docs it
    rewrote.
 
 After the doc pass, you keep the docs:
@@ -169,7 +187,15 @@ After the doc pass, you keep the docs:
   lists the flags with their ids);
 - a comment on the doc set list (`(doc set)`) adds or removes a doc:
   `view-concept doc-set <slug> add <path> "<reason>" --user` or `remove
-  <path> --user`, the `--user` saying the user asked for it.
+  <path> --user`, the `--user` saying the user asked for it;
+- a comment correcting an entry of a lexicon also rewrites the clause of
+  each README that copies the entry (the README's definition of the term,
+  in the entry's old words), and adds that README to the doc set. A comment
+  taking a **candidate** (a repo term several folders use that no lexicon
+  on their path defines) adds its entry; a comment asking for a folder
+  lexicon creates it, with the entries it names;
+- « write repo lexicon » after the doc pass writes the repo lexicon as step
+  2 says, in its own commit.
 
 Resolve each comment on a doc or the doc set you handled: `view-concept
 resolve <slug> <ids> --reply "<one line: what changed>"`.

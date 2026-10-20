@@ -291,6 +291,19 @@ you change what is false or missing, and leave what is right as it is.
 - **Copy rules**, on trial: no aside set off by em-dashes, no « not X, but
   Y », no colon before a punchline, no « worth noting ».
 
+## The repo lexicon
+
+The repo lexicon, `.agents/lexicon.md` at the repo root, is a file for the
+agents that write the repo's docs. Its format: a `# <repo name>` title, a
+`## Reader` part holding the reader line (the field the docs' reader knows,
+and that they have never opened this repo), then a `## Terms` part, one
+entry per term, `**Term**:` and its definition on the next line. A folder
+lexicon has the same format. To write a missing repo lexicon, draft the
+reader line from the root `README.md`, the root `CLAUDE.md` and the package
+description, and an entry for each term several folders' docs share; the
+user then corrects it in the Doc tab like any doc. Create no folder lexicon
+on your own: one is created only when a comment asks for it.
+
 ## Comment batches
 
 When the user clicks « Send », « Create PR » or « Update PR », or
@@ -331,6 +344,9 @@ asks for what its name says and nothing else:
 - **`create-pr`** asks for the PR (« Create PR »), or for its update once it
   is open (« Update PR »): see **Create PR**. Apply the batch's comments
   first.
+- **`write-lexicon`** (« write repo lexicon », on the repo lexicon's entry
+  in the Doc tab while the file is missing) asks you to write the repo
+  lexicon at once: see **The repo lexicon**.
 - **Without an action**, a batch carries comments only.
 
 Then, for every batch, in the same turn:
@@ -339,7 +355,13 @@ Then, for every batch, in the same turn:
 2. Apply each comment at once: a comment on a doc rewrites that doc in the
    worktree (see **Writing a doc**); a comment on the list adds or removes a
    doc with `--user`. A comment that says a flagged passage is right drops
-   its flag (`view-concept stale <slug> --drop <id>`). A doc that enters the
+   its flag (`view-concept stale <slug> --drop <id>`). A comment correcting
+   a lexicon entry also rewrites the clause of each README that copies the
+   entry (the README's definition of the term, in the entry's old words),
+   and adds that README to the doc set; a comment taking a **candidate** (a
+   repo term several folders use that no lexicon on their path defines)
+   adds its entry; a comment asking for a folder lexicon creates it, with
+   the entries it names. A doc that enters the
    doc set, or that you rewrite, gets both checks of **Stale passages**. An
    answer or a comment about the reference model is applied as **The
    reference model** says.
