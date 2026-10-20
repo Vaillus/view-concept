@@ -383,16 +383,20 @@ function renderPr() {
     a.textContent = a === prEnd ? `Open ${prLabel(pr.url)} ↗` : `${prLabel(pr.url)} ↗`;
   }
 }
-/* A docs review that takes another session's model as reference model links that session
-   in the top bar; it opens in another browser tab. */
+/* A docs review that takes a branch review's model as reference model links that session
+   in the top bar, with the reason the agent kept it next to the link; it opens in another
+   browser tab. No reference, the ordinary case, shows neither. */
 function renderReference() {
   const ref = docsOf().reference;
   const a = $("#reference-link");
+  const why = $("#reference-reason");
   a.hidden = !ref;
+  why.hidden = !(ref && ref.reason);
   if (!ref) return;
   a.href = ref.url || `/s/${encodeURIComponent(ref.slug)}`;
   a.textContent = `reference: ${ref.title || ref.slug} ↗`;
   a.title = `The reference model: session ${ref.slug}`;
+  why.textContent = why.title = ref.reason || "";
 }
 
 const APPROVALS = {

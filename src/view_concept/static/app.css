@@ -36,6 +36,9 @@ a.btn { color: var(--ink); text-decoration: none; text-align: center; }
 /* The header's buttons sit in the top bar on a wide window; the narrow layout puts them
    in the ⋯ menu (see the end of this file). */
 .header-menu { display: contents; }
+/* Why the agent kept the reference model, next to its link (a docs review). */
+.reference-reason { color: var(--muted); font-size: 12px; max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reference-reason[hidden] { display: none; }
 .menu-toggle { display: none; background: none; border: 0; padding: 0 6px; color: var(--muted); font-size: 16px; }
 .narrow-only { display: none; }
 
@@ -551,6 +554,7 @@ body.sb-collapsed .sidebar { display: none; }
   .header-menu.open .t-chips { flex-wrap: wrap; }
   .header-menu.open .t-chips:empty { display: none; }
   .header-menu .btn { padding: 6px 10px; text-align: left; }
+  .header-menu.open .reference-reason { white-space: normal; max-width: none; }
 
   .sidebar { display: none; }
   body.sb-open .sidebar { display: block; position: fixed; z-index: 25; top: 0; bottom: 0; left: 0;
