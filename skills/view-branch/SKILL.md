@@ -488,12 +488,18 @@ user removed is recorded as removed, and `add` refuses it from then on unless
 the user asks for it back (`--user` again). No agent adds back a doc the user
 removed.
 
-A doc enters the doc set by four rules, the first two mechanical, the last two
-found by reading:
+A doc enters the doc set by four rules, the first two read from the diff,
+the last two found by reading:
 
 1. a doc the branch already changed;
-2. the `README.md` and the `CLAUDE.md` of each folder the branch touches and
-   of its parents, up to the repo root;
+2. the `README.md` of the folder that holds a **structural change**: a folder,
+   or a file its README lists (an entry script, a study, a module), that the
+   branch adds, removes, renames or moves. The README enters whether or not
+   it mentions the change yet, since the change it misses is what this rule
+   catches; one level up only, not to the repo root. A **content change**
+   (an import, a refactor, a fix inside a file whose role stays the same)
+   brings in no README by being next to it, and no `CLAUDE.md` enters by
+   being next to a change: only rules 1, 3 and 4 bring them in;
 3. a doc that cites a path the branch touches;
 4. a doc that describes a concept of the model.
 
