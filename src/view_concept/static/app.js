@@ -149,10 +149,15 @@ const hasDocTab = () => isDocsReview() || docsOf().set.length > 0;
 // The tab a missing tab gives way to: the Doc tab in a docs review, the model tab otherwise.
 const homeTab = () => (isDocsReview() ? "doc" : "model");
 // A comment, a draft or a side thread on a doc's text is anchored on the section id
-// "doc:<path>"; one on the doc set list on "doc-set".
+// "doc:<path>"; one on the doc set list on DOC_SET, "doc:" alone. No section id starts
+// with "doc:" (the server refuses it), so neither anchor names a section.
 const DOC_PREFIX = "doc:";
-const docPathOf = (id) => (String(id || "").startsWith(DOC_PREFIX) ? String(id).slice(DOC_PREFIX.length) : null);
-const isDocAnchor = (id) => id === "doc-set" || docPathOf(id) !== null;
+const DOC_SET = DOC_PREFIX;
+const docPathOf = (id) => {
+  const s = String(id || "");
+  return s.startsWith(DOC_PREFIX) && s !== DOC_SET ? s.slice(DOC_PREFIX.length) : null;
+};
+const isDocAnchor = (id) => String(id || "").startsWith(DOC_PREFIX);
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
 const isUpdated = (id) => !!(state.sections[id] || {}).updated;
@@ -905,7 +910,7 @@ function sectionBlock(s, { bare = false } = {}) {
 /* ---------------- the Doc tab ----------------
    The repo docs the branch concerns (`state.docs`, from the server): the doc set, the list
    of docs an agent keeps (path, the reason it is listed, its count of stale passages),
-   commentable as the section "doc-set"; under it a bar of doc titles, and one doc shown at
+   commentable as the section DOC_SET ("doc:"); under it a bar of doc titles, and one doc shown at
    a time. The doc shown is a doc section: the file read from the worktree, drawn as a
    section block (`section: "doc:<path>"`) that is commented, asked about and highlighted
    like a section of the model, with « updated · mark read » on the key "doc:<path>". A title
@@ -958,8 +963,8 @@ function docSetBlock(docs) {
   const list = el("ul", { class: "doc-set" }, ...docs.set.map((d) => el("li", {},
     el("button", { class: "doc-open", text: d.path, title: "Show this doc", onclick: () => openDoc(d.path) }),
     d.reason ? ` — ${d.reason}` : "", staleBadge(staleCount(docs, d)), missingBadge(docs.views[d.path] || {}))));
-  return el("section", { class: "sec doc-set-sec", id: "sec-doc-set", "data-id": "doc-set" },
-    docHeading("doc-set", "doc set", false, "doc set"),
+  return el("section", { class: "sec doc-set-sec", id: `sec-${DOC_SET}`, "data-id": DOC_SET },
+    docHeading(DOC_SET, "doc set", false, "doc set"),
     el("div", { class: "body" }, list,
       docs.removed.length ? el("p", { class: "dim doc-removed", text: `removed by you: ${docs.removed.join(", ")}` }) : null));
 }
@@ -2031,7 +2036,7 @@ function openComposer(target, mode = "comment") {
   c._mode = mode;
   $(".composer-quote", c).textContent = target.question ? `agent question ${target.question}`
     : target.quote ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
-    : target.section === "doc-set" ? "the doc set"
+    : target.section === DOC_SET ? "the doc set"
     : docPathOf(target.section) !== null ? `whole doc ${docPathOf(target.section)}`
     : target.section ? `whole section §${numberOf(target.section)} ${titleOf(target.section)}`
     : "general question, no passage";
@@ -2324,7 +2329,7 @@ $(".review").addEventListener("scroll", (e) => {
 
 // Where a comment sits: its section's number, « doc set », or the file name of its doc.
 function whereOf(id) {
-  if (id === "doc-set") return "doc set";
+  if (id === DOC_SET) return "doc set";
   const p = docPathOf(id);
   return p !== null ? p.slice(p.lastIndexOf("/") + 1) : `§${numberOf(id)}`;
 }

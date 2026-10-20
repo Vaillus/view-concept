@@ -13,7 +13,7 @@ its reply streams into threads/<id>.json, which the server's event stream watche
 other session files. `agents.py` holds what differs between agents.
 
 A thread opened on a doc of the Doc tab (section `doc:<path>`) gets that doc's text, read
-from the worktree, in place of a section; one on the doc set list (`doc-set`) gets the doc
+from the worktree, in place of a section; one on the doc set list (`doc:` alone) gets the doc
 set.
 
 A thread opened on an agent question (`question`) helps the user understand it before
@@ -272,14 +272,14 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
     doc = "review" if plan.get("workflow") in reviews else "explanation"
     sec = thread["section"]
     qid = thread.get("question", "")
-    on_doc = sec.startswith(DOC_KEY) or sec == DOC_SET_ANCHOR
+    on_doc = sec.startswith(DOC_KEY)  # a doc, or the doc set (DOC_SET_ANCHOR)
     if qid:
         anchor = _question_anchor(s, qid, number, titles)
     elif sec:
-        if sec.startswith(DOC_KEY):
-            where = f"the doc {sec.removeprefix(DOC_KEY)} (a file of the repository)"
-        elif sec == DOC_SET_ANCHOR:
+        if sec == DOC_SET_ANCHOR:
             where = "the doc set (the list of repo docs the Doc tab shows)"
+        elif sec.startswith(DOC_KEY):
+            where = f"the doc {sec.removeprefix(DOC_KEY)} (a file of the repository)"
         else:
             where = f"§{number.get(sec, '?')} {titles.get(sec, sec)} ({sec})"
         anchor = f"{where}: « {thread['quote']} »" if thread["quote"] else f"the whole of {where}"

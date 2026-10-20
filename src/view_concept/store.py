@@ -166,7 +166,7 @@ file read from the worktree at each render, never copied into the session, so th
 own edits show as the agent's do; a doc missing there reads as missing. Its highlight
 baseline is kept in seen.json under `doc:<path>` and moves with every batch, like a
 section's. A comment, a draft or a side thread on a doc's text is anchored to `doc:<path>`
-(a batch prints it `(doc <path>)`), one on the doc set list to `doc-set`. The doc
+(a batch prints it `(doc <path>)`), one on the doc set list to `doc:` alone. The doc
 sections stay out of the published page, the vault export, the publish
 fingerprint and `check`, which read the outline's sections only. The base mark compares
 a doc's worktree file (uncommitted changes included) with the same doc at the merge base
@@ -277,9 +277,10 @@ DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread")
 _DRAFTS_LOCK = threading.Lock()
 # The key prefix of a doc's highlight baseline in seen.json, and of the anchor of a comment,
 # a draft or a side thread on its text: `doc:<path>`. A comment on the doc set list is
-# anchored to DOC_SET_ANCHOR.
+# anchored to DOC_SET_ANCHOR, `doc:` alone: no doc path is empty, and no section id may
+# start with `doc:` (write_plan refuses it), so the anchor never names a section.
 DOC_KEY = "doc:"
-DOC_SET_ANCHOR = "doc-set"
+DOC_SET_ANCHOR = DOC_KEY
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -581,6 +582,12 @@ class Session:
                 raise SessionError("every outline entry needs an id and a title")
             if len(set(ids)) != len(ids):
                 raise SessionError("outline ids must be unique")
+            taken = [i for i in ids if i.startswith(DOC_KEY)]
+            if taken:
+                raise SessionError(
+                    f"outline ids may not start with {DOC_KEY!r}, the Doc tab's anchors: "
+                    + ", ".join(taken)
+                )
             long = [sec["id"] for sec in outline if len(str(sec.get("earns", ""))) > EARNS_MAX]
             if long:
                 raise SessionError(
@@ -2287,10 +2294,10 @@ def format_comment(c: dict[str, Any], number: dict[str, int]) -> str:
     """One comment of a batch: where it is anchored (a section, a doc of the Doc tab by its
     path, the doc set list), its text, the thread it comes from."""
     sec = c["section"]
-    if sec.startswith(DOC_KEY):
-        where = f"(doc {sec.removeprefix(DOC_KEY)})"
-    elif sec == DOC_SET_ANCHOR:
+    if sec == DOC_SET_ANCHOR:
         where = "(doc set)"
+    elif sec.startswith(DOC_KEY):
+        where = f"(doc {sec.removeprefix(DOC_KEY)})"
     else:
         where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
     quote = " ".join(c["quote"].split())

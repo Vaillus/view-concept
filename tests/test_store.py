@@ -961,6 +961,19 @@ def test_a_doc_the_user_removed_comes_back_only_when_the_user_asks(docs_review):
                                 "removed": []}  # fmt: skip
 
 
+def test_the_doc_set_anchor_names_no_section(docs_review):
+    s = docs_review
+    with pytest.raises(SessionError, match="may not start with 'doc:'"):
+        s.write_plan(outline=[{"id": "doc:x", "title": "X"}])
+    s.write_plan(outline=[{"id": "doc-set", "title": "Who keeps the doc list"}])
+    b = s.add_batch([
+        {"section": "doc-set", "quote": "", "text": "on the section"},
+        {"section": "doc:", "quote": "", "text": "on the list"},
+    ])  # fmt: skip
+    text = format_batch("doc-tab", b, s.read_plan()["outline"])
+    assert "[c1] §1 (doc-set)" in text and "[c2] (doc set)" in text
+
+
 def test_an_agent_removes_a_doc_without_recording_it(docs_review):
     s = docs_review
     s.add_doc("README.md", "the install")
@@ -1009,7 +1022,7 @@ def test_a_comment_on_a_doc_is_printed_with_its_path(docs_review):
     s = docs_review
     b = s.add_batch([
         {"section": "doc:docs/reference.md", "quote": "the keys 1, 2,\n3 and 4", "text": "5 keys"},
-        {"section": "doc-set", "quote": "README.md", "text": "remove it"},
+        {"section": "doc:", "quote": "README.md", "text": "remove it"},
     ])  # fmt: skip
     text = format_batch("doc-tab", b, [])
     assert "[c1] (doc docs/reference.md) « the keys 1, 2, 3 and 4 »\n    5 keys" in text

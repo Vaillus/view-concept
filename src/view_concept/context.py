@@ -30,7 +30,7 @@ Roles:
   model. Gets every section.
 - `thread`: a side thread, read-only. Gets the section its passage belongs to; it reads
   the others on demand. A passage of the Doc tab gets its doc, read from the worktree
-  (`doc:<path>`), or the doc set (`doc-set`), in place of a section.
+  (`doc:<path>`), or the doc set (`doc:` alone), in place of a section.
 
 An HTML section is loaded by its visible text, the words a reader sees in it, not its HTML
 source; its heading names its file, for an agent that needs the source.
@@ -114,7 +114,7 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
         out += ["", head]
         out += _sections(outline, sections, None, wanted, html)
     elif role == "thread" and section:
-        if section.startswith(DOC_KEY) or section == DOC_SET_ANCHOR:
+        if section.startswith(DOC_KEY):  # a doc, or the doc set (DOC_SET_ANCHOR)
             out += ["", *doc_passage(s, section)]
         else:
             sec = _sections(outline, sections, section, html=html)
