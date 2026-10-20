@@ -224,7 +224,7 @@ a.cite code { color: var(--info); background: var(--infobg); }
 /* ---- the Doc tab: the doc set, the bar of doc titles, the doc shown (app.js) ---- */
 .doc-set { list-style: none; margin: 0; padding: 0; }
 .doc-set li { padding: 2px 0; }
-.doc-set .badge { margin-left: 6px; }
+.doc-set .badge, .doc-set .doc-lexicon { margin-left: 6px; }
 .doc-open { background: none; border: 0; padding: 0; color: var(--info); }
 @media (hover: hover) { .doc-open:hover { text-decoration: underline; } }
 .doc-removed { font-size: 12px; margin: 6px 0 0; }

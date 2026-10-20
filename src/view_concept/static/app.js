@@ -434,7 +434,7 @@ function approvalPending() {
 const BATCH_WHAT = { answer: "answered", "go-on": "going on", "approve-plan": "plan approved",
                      "approve-model": "model approved", "write-docs": "docs requested", "create-pr": "PR requested", plan: "scoping ended",
                      grill: "grill", "stop-grill": "grill stopped",
-                     "rewrite-readme": "README rewrite requested" };
+                     "rewrite-readme": "README rewrite requested", "write-lexicon": "repo lexicon requested" };
 const BATCH_STAGE = { sent: "in the inbox", received: "the agent has it" };
 
 function batchProgress() {
@@ -933,9 +933,13 @@ function sectionBlock(s, { bare = false } = {}) {
    swaps its text for its Markdown in a text box (see "editing a doc"). While the doc in
    sight is a README.md (in the worktree or missing), a line of its own under the bar of
    doc titles holds « rewrite <path> with write-readme »: it sends a rewrite request (a
-   batch whose action is "rewrite-readme", carrying the path) at once, with the drafts. */
+   batch whose action is "rewrite-readme", carrying the path) at once, with the drafts.
+   While the repo lexicon (REPO_LEXICON) is in the doc set and missing from the worktree,
+   its doc set entry holds « write repo lexicon », which sends a "write-lexicon" batch the
+   same way. */
 
 let shownDoc = null; // path of the doc shown in the Doc tab
+const REPO_LEXICON = ".agents/lexicon.md"; // store.py's REPO_LEXICON
 
 function renderDocTab(ending) {
   const view = $("#doc");
@@ -973,7 +977,8 @@ function docHeading(id, label, updated, what, edit = null) {
 function docSetBlock(docs) {
   const list = el("ul", { class: "doc-set" }, ...docs.set.map((d) => el("li", {},
     el("button", { class: "doc-open", text: d.path, title: "Show this doc", onclick: () => openDoc(d.path) }),
-    d.reason ? ` — ${d.reason}` : "", staleBadge(staleCount(docs, d)), missingBadge(docs.views[d.path] || {}))));
+    d.reason ? ` — ${d.reason}` : "", staleBadge(staleCount(docs, d)), missingBadge(docs.views[d.path] || {}),
+    lexiconButton(d.path, docs.views[d.path] || {}))));
   return el("section", { class: "sec doc-set-sec", id: `sec-${DOC_SET}`, "data-id": DOC_SET },
     docHeading(DOC_SET, "doc set", false, "doc set"),
     el("div", { class: "body" }, list,
@@ -989,6 +994,14 @@ function docBar(docs) {
       d.path, staleBadge(staleCount(docs, d)),
       docEdit && docEdit.path === d.path ? el("span", { class: "badge", text: "editing", title: "Your edit of this doc is not saved yet" }) : null);
   }));
+}
+
+// « write repo lexicon »: on the repo lexicon's doc set entry, while it is missing.
+function lexiconButton(path, v) {
+  if (path !== REPO_LEXICON || v.exists !== false) return null;
+  return el("button", { class: "btn doc-lexicon", text: "write repo lexicon",
+                        title: "Ask the agent that owns the docs to write the repo lexicon (your drafts go with it)",
+                        onclick: (e) => send("write-lexicon", e.currentTarget) });
 }
 
 // The rewrite request's line: drawn only while the doc in sight is named README.md.
@@ -2667,7 +2680,8 @@ async function moveBrowserDrafts() {
 const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped",
                        "go-on": "The writer goes on" };
 // The toast of a request sent from the Doc tab, from the `extra` it was sent with.
-const DOC_TOASTS = { "rewrite-readme": (extra) => `Rewrite of ${extra.path} requested` };
+const DOC_TOASTS = { "rewrite-readme": (extra) => `Rewrite of ${extra.path} requested`,
+                     "write-lexicon": () => "Repo lexicon requested" };
 
 async function send(action = "", button = null, extra = {}) {
   const approval = Object.values(APPROVALS).find((a) => a.action === action);

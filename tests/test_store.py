@@ -1,6 +1,7 @@
 import json
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -1112,6 +1113,23 @@ def test_a_rewrite_request_names_a_readme_of_the_doc_set(docs_review):
     with pytest.raises(SessionError, match="rewrite-readme only"):
         s.add_batch([{"text": "shorter"}], path="README.md")
     assert s.read_comments()["batches"] == []
+
+
+def test_write_lexicon_until_the_repo_lexicon_exists(docs_review):
+    s = docs_review
+    b = s.add_batch([], action="write-lexicon")
+    assert (
+        format_batch("doc-tab", b, [])
+        .splitlines()[1]
+        .startswith(
+            "action: write-lexicon (the user asked to write the repo lexicon, .agents/lexicon.md"
+        )
+    )
+    lexicon = Path(s.read_plan()["repo"]) / ".agents" / "lexicon.md"
+    lexicon.parent.mkdir()
+    lexicon.write_text("# Lexicon\n")
+    with pytest.raises(SessionError, match="lexicon.md exists"):
+        s.add_batch([], action="write-lexicon")
 
 
 def test_awaiting_docs_is_a_phase(session):

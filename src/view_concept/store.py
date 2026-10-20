@@ -174,7 +174,10 @@ of the branch and its base branch (`merge_base`, `base_text`); a doc absent ther
 created on the branch. A rewrite request is a batch whose action is "rewrite-readme",
 sent by the button under the bar of doc titles while a README.md of the doc set is in
 sight: it carries that README's `path` (present in the worktree or not yet), and asks
-the agent that owns the docs to write it again with the write-readme skill.
+the agent that owns the docs to write it again with the write-readme skill. While the
+repo lexicon (REPO_LEXICON: the reader line and the terms the repo's folders share, for
+agents) is missing from the worktree, « write repo lexicon » on its doc set entry sends a
+batch whose action is "write-lexicon"; it is refused once the file exists.
 
 A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
 doc (its path), quote (the passage's exact text in the file), section (the model section
@@ -262,6 +265,7 @@ ACTIONS = (
     "stop-grill",
     "go-on",
     "rewrite-readme",
+    "write-lexicon",
 )
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
@@ -286,6 +290,8 @@ _DRAFTS_LOCK = threading.Lock()
 # anchored to DOC_SET_ANCHOR, `doc:` alone: no doc path is empty, and no section id may
 # start with `doc:` (write_plan refuses it), so the anchor never names a section.
 DOC_KEY = "doc:"
+# The repo lexicon, relative to the repo root: what a "write-lexicon" batch asks to write.
+REPO_LEXICON = ".agents/lexicon.md"
 DOC_SET_ANCHOR = DOC_KEY
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
@@ -1807,7 +1813,9 @@ class Session:
         asked the writer of a branch review to go on past a pause, leaving its questions
         open, and "rewrite-readme" that they asked for the README at `path` (a doc of the
         doc set named README.md, in the worktree or not yet) to be written again with
-        write-readme. `path` goes with "rewrite-readme" only, which needs it."""
+        write-readme, and "write-lexicon" that they asked for the repo lexicon
+        (REPO_LEXICON), refused once the file exists. `path` goes with "rewrite-readme"
+        only, which needs it."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         if (action == "answer") != bool(answers):
@@ -1818,6 +1826,8 @@ class Session:
             raise SessionError("a path goes with the action rewrite-readme only")
         if action == "rewrite-readme":
             path = self._readme_to_rewrite(path)
+        if action == "write-lexicon" and (lex := self.doc_file(REPO_LEXICON)) and lex.is_file():
+            raise SessionError(f"{REPO_LEXICON} exists: correct it in the Doc tab")
         note = note.strip()
         # A comment from a side thread may have no text: the thread's conclusion is the comment.
         comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
@@ -2345,6 +2355,11 @@ def format_batch(
         lines.append(
             f"action: rewrite-readme {batch.get('path', '')} (the user asked to write this "
             "README again with write-readme)"
+        )
+    if batch.get("action") == "write-lexicon":
+        lines.append(
+            f"action: write-lexicon (the user asked to write the repo lexicon, {REPO_LEXICON}: "
+            "its reader line and the terms the repo's folders share)"
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")
