@@ -218,6 +218,35 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .rv-involves a { color: var(--ink-dim); }
 @media (hover: hover) { .rv-involves a:hover { color: var(--accent); } }
 
+/* ---- the Doc tab: the doc set, the bar of doc titles, the doc shown (app.js) ---- */
+.doc-set { list-style: none; margin: 0; padding: 0; }
+.doc-set li { padding: 2px 0; }
+.doc-set .badge { margin-left: 6px; }
+.doc-open { background: none; border: 0; padding: 0; color: var(--info); }
+@media (hover: hover) { .doc-open:hover { text-decoration: underline; } }
+.doc-removed { font-size: 12px; margin: 6px 0 0; }
+.doc-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); display: flex; flex-wrap: wrap; gap: 4px;
+           padding: 10px 0 8px; border-bottom: 1px solid var(--line); }
+.doc-title { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--line);
+             padding: 1px 8px; font-size: 12px; color: var(--ink-dim); }
+@media (hover: hover) { .doc-title:hover { color: var(--ink); border-color: var(--line-strong); } }
+.doc-title.active { color: var(--accent); border-color: var(--accent); }
+.doc-title.missing { color: var(--dim); font-style: italic; }
+.doc-title .badge { margin-left: 0; }
+/* a doc rewritten since its highlight baseline */
+.doc-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.doc-sec h2 code { background: none; padding: 0; }
+.doc-sec .body h1 { font-size: 17px; margin: 16px 0 8px; }
+.doc-sec.missing h2 { color: var(--muted); }
+/* the base mark: a block that differs from the base branch, a bar in the right margin */
+.sec .body .based { position: relative; }
+.sec .body .based::after { content: ""; position: absolute; right: -14px; top: 0; bottom: 0; width: 3px; background: var(--info); }
+.sec .body :is(td, th).based { position: static; box-shadow: inset -3px 0 var(--info); }
+.sec .body :is(td, th).based::after { content: none; }
+.sec .body :is(td, th).changed.based { box-shadow: inset 3px 0 var(--ok), inset -3px 0 var(--info); }
+/* a stale passage: a doc passage the model contradicts */
+::highlight(ev-stale) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }
+
 /* ---- review pane ---- */
 .review { overflow-y: auto; min-height: 0; border-left: 1px solid var(--line); padding: 0 12px 24px; display: flex; flex-direction: column; gap: 8px; }
 .review > * { flex-shrink: 0; }
