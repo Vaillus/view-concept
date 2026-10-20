@@ -968,3 +968,38 @@ def test_an_agent_removes_a_doc_without_recording_it(docs_review):
     assert s.read_doc_set() == {"docs": [], "removed": []}
     with pytest.raises(SessionError, match="not in the doc set"):
         s.remove_doc("README.md")
+
+
+def test_a_doc_is_read_from_the_worktree_and_missing_reads_as_none(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/new.md", "created by the branch")
+    assert s.read_docs() == {"README.md": "# Tool\n\nThe keys 1 to 4.\n", "docs/new.md": None}
+    (s.repo_dir() / "README.md").write_text("edited in an editor")
+    assert s.read_docs()["README.md"] == "edited in an editor"
+    assert s.doc_texts() == {"doc:README.md": "edited in an editor"}
+
+
+def test_a_doc_without_a_repo_reads_as_missing(session):
+    session.add_doc("README.md", "the install")
+    assert session.read_docs() == {"README.md": None}
+
+
+def test_editing_a_doc_changes_the_signature(docs_review):
+    s = docs_review
+    before = s.signature()
+    s.add_doc("README.md", "the install")
+    listed = s.signature()
+    assert listed != before
+    readme = s.repo_dir() / "README.md"
+    readme.write_text("a longer text than before")
+    assert s.signature() != listed
+
+
+def test_a_batch_moves_the_docs_baselines_keyed_by_path(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    assert s.read_seen(s.doc_texts()) == {"doc:README.md": "# Tool\n\nThe keys 1 to 4.\n"}
+    (s.repo_dir() / "README.md").write_text("rewritten")
+    s.add_batch([{"section": "doc:README.md", "quote": "keys", "text": "1 to 5"}])
+    assert json.loads(s.seen_path.read_text())["doc:README.md"] == "rewritten"

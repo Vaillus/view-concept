@@ -29,7 +29,8 @@ reach the agent session through the inbox.
         deliveries.jsonl  when each batch was handed to the agent  (`watch`, `wait`)
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
-        seen.json       the highlight baseline: each section's text   (server)
+        seen.json       the highlight baseline: each section's text, each doc's under
+                        `doc:<path>`                                       (server)
         drafts.json     the drafts and the general note, shared by every page (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
@@ -156,7 +157,12 @@ The doc set is the list of repo docs the Doc tab shows: {docs: [{path, reason}],
 removed: [paths]}. `path` is relative to the repo root (plan.json `repo`), `reason` the one
 line that says why the doc is listed. An agent keeps it (`doc-set add` and `remove`); a
 doc the user removed by a comment goes to `removed`, and an agent's refresh never adds it
-back unless the user asks (`--user`).
+back unless the user asks (`--user`). A doc of the set is a doc section: its text is the
+file read from the worktree at each render, never copied into the session, so the user's
+own edits show as the agent's do; a doc missing there reads as missing. Its highlight
+baseline is kept in seen.json under `doc:<path>` and moves with every batch, like a
+section's. The doc sections stay out of the published page, the vault export, the publish
+fingerprint and `check`, which read the outline's sections only.
 
 A branch review's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
 at} (written by `pr`). The page links it at the top and at the end of the code tab.
@@ -244,6 +250,11 @@ DRAFT_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread")
 # The pages of every session write the drafts file from the server's threadpool.
 _DRAFTS_LOCK = threading.Lock()
+# The key prefix of a doc's highlight baseline in seen.json, and of the anchor of a comment,
+# a draft or a side thread on its text: `doc:<path>`. A comment on the doc set list is
+# anchored to DOC_SET_ANCHOR.
+DOC_KEY = "doc:"
+DOC_SET_ANCHOR = "doc-set"
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -1069,6 +1080,46 @@ class Session:
             data["removed"].append(path)
         _write_json(self.doc_set_path, data)
 
+    def repo_dir(self) -> Path | None:
+        """The worktree a code session works in (plan.json `repo`), None without one."""
+        repo = self.read_plan().get("repo")
+        return Path(repo) if repo else None
+
+    def doc_file(self, path: str) -> Path | None:
+        """Where doc `path` lives in the worktree, None when the session has no repo or the
+        path leads out of it (a symbolic link included). The file may not exist."""
+        repo = self.repo_dir()
+        if repo is None:
+            return None
+        root = repo.resolve()
+        try:
+            file = (root / doc_path(path)).resolve()
+        except SessionError:  # a path written into doc-set.json by hand
+            return None
+        return file if file.is_relative_to(root) else None
+
+    def read_docs(self) -> dict[str, str | None]:
+        """The text of each doc of the doc set, read from the worktree on every call (no
+        copy in the session), in the doc set's order: None for a doc missing there."""
+        out: dict[str, str | None] = {}
+        for d in self.read_doc_set()["docs"]:
+            file = self.doc_file(d["path"])
+            out[d["path"]] = (
+                file.read_text(encoding="utf-8", errors="replace")
+                if file is not None and file.is_file()
+                else None
+            )
+        return out
+
+    def doc_texts(self) -> dict[str, str]:
+        """The docs that exist, keyed as their highlight baseline is: `doc:<path>`."""
+        return {DOC_KEY + p: t for p, t in self.read_docs().items() if t is not None}
+
+    def doc_files(self) -> list[Path]:
+        """The worktree file of each doc of the doc set, for `signature`."""
+        files = (self.doc_file(d["path"]) for d in self.read_doc_set()["docs"])
+        return [f for f in files if f is not None]
+
     # ---- the drafts file ----
     def read_drafts(self) -> dict[str, Any]:
         """The drafts file: {drafts: [{id, section, quote, prefix, text, thread?}], note,
@@ -1373,6 +1424,10 @@ class Session:
         ]
         if self.sections_dir.is_dir():
             paths += sorted([*self.sections_dir.glob("*.md"), *self.sections_dir.glob("*.html")])
+        # The docs of the doc set are files of the worktree: an edit there re-renders too.
+        paths.append(self.doc_set_path)
+        with contextlib.suppress(SessionError):
+            paths += self.doc_files()
         return _stat_signature(paths)
 
     def thread_signature(self) -> tuple:
@@ -1554,8 +1609,9 @@ class Session:
         _write_json(self.comments_path, data)
         with self.inbox_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(batch, ensure_ascii=False) + "\n")
-        # Highlights show what changed since the last batch: every baseline moves here.
-        self.mark_seen(self.read_sections())
+        # Highlights show what changed since the last batch: every baseline moves here,
+        # the docs' included.
+        self.mark_seen({**self.read_sections(), **self.doc_texts()})
         if action == "plan":
             self._skip_open_questions(batch["sent"])
         return batch

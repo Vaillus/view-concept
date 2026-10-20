@@ -431,3 +431,50 @@ def test_drafts_are_not_the_agents_activity(client, session):
     client.put("/api/s/kv-cache/drafts/a1", json={"section": "s1", "text": "x"})
     assert session.last_activity() == before and session.signature() == sig
     assert session.drafts_signature() != ()
+
+
+@pytest.fixture
+def doc_review(session):
+    """A branch review next to the test session, on a repo with one doc in its doc set."""
+    repo = session.dir.parent / "repo"
+    (repo / "docs" / "img").mkdir(parents=True)
+    (repo / "docs" / "reference.md").write_text("# Reference\n\nThe keys 1 to 4.\n")
+    (repo / "docs" / "img" / "tabs.png").write_bytes(b"png")
+    s = Session("doc-tab", session.dir.parent)
+    s.create("Doc tab", kind="code", repo=str(repo), base="main")
+    s.add_doc("docs/reference.md", "the tabs and keys")
+    s.add_doc("docs/missing.md", "created later")
+    return s
+
+
+def test_state_carries_the_doc_set_and_each_doc(client, doc_review):
+    docs = client.get("/api/s/doc-tab").json()["docs"]
+    assert docs["set"][0]["path"] == "docs/reference.md"
+    assert docs["set"][0]["reason"] == "the tabs and keys"
+    assert docs["removed"] == []
+    view = docs["views"]["docs/reference.md"]
+    assert view["exists"] is True and view["updated"] is False
+    assert view["html"] == "<h1>Reference</h1>\n<p>The keys 1 to 4.</p>\n"
+    assert docs["views"]["docs/missing.md"] == {"exists": False}
+    assert client.get("/api/s/kv-cache").json()["docs"]["set"] == []
+
+
+def test_a_rewritten_doc_is_updated_until_marked_read(client, doc_review):
+    doc = doc_review.repo_dir() / "docs" / "reference.md"
+    client.get("/api/s/doc-tab")  # the first text is the first baseline
+    doc.write_text("# Reference\n\nThe keys 1 to 5.\n")
+    view = client.get("/api/s/doc-tab").json()["docs"]["views"]["docs/reference.md"]
+    assert view["updated"] is True and "1 to 4" in view["seen_html"]
+    md = "# Reference\n\nThe keys 1 to 5.\n"
+    r = client.post("/api/s/doc-tab/seen", json={"sections": {"doc:docs/reference.md": md}})
+    assert r.status_code == 200
+    view = client.get("/api/s/doc-tab").json()["docs"]["views"]["docs/reference.md"]
+    assert view["updated"] is False
+
+
+def test_the_page_serves_a_repo_file_a_doc_points_to(client, doc_review):
+    assert client.get("/s/doc-tab/repo/docs/img/tabs.png").content == b"png"
+    assert client.get("/s/doc-tab/repo/docs/img/none.png").status_code == 404
+    assert client.get("/s/doc-tab/repo/.git/config").status_code == 404
+    assert client.get("/s/doc-tab/repo/..%2Fsessions%2Fdoc-tab%2Fplan.json").status_code == 404
+    assert client.get("/s/kv-cache/repo/README.md").status_code == 404

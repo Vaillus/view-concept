@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 from . import frame, gate, launch, metrics, publish, push, threads
 from .render import md
-from .store import Session, SessionError, list_sessions
+from .store import DOC_KEY, Session, SessionError, list_sessions
 
 STATIC = Path(__file__).parent / "static"
 # The verdicts an item can get, by session workflow, each list in the review table's order:
@@ -257,8 +257,11 @@ def state(slug: str) -> dict[str, Any]:
         unimplemented = [d["id"] for d in s.unimplemented_changes()]
         questions = s.read_questions()
         grilling = s.is_grilling()
-        seen = s.read_seen(sections)
+        docs = s.read_docs()
+        doc_texts = {DOC_KEY + p: t for p, t in docs.items() if t is not None}
+        seen = s.read_seen({**sections, **doc_texts})
         published = published_view(s)
+        doc_tab = docs_view(s, docs, seen)
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
     # The hover text of a term: its developed `tip` when the agent wrote one, else the
@@ -289,6 +292,27 @@ def state(slug: str) -> dict[str, Any]:
         "grilling": grilling,
         "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),
         "published": published,
+        # The Doc tab: the doc set and each doc read from the worktree.
+        "docs": doc_tab,
+    }
+
+
+def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> dict[str, Any]:
+    """The Doc tab as the page reads it: {set: [{path, reason}], removed, views: {path:
+    view}}. A doc's view is its section view (the file rendered as Markdown, `updated`
+    against its highlight baseline `doc:<path>`) with `exists`; a doc missing from the
+    worktree is `{exists: false}` only."""
+    data = s.read_doc_set()
+    views: dict[str, dict[str, Any]] = {}
+    for path, text in docs.items():
+        if text is None:
+            views[path] = {"exists": False}
+            continue
+        views[path] = {"exists": True, **section_view(text, seen.get(DOC_KEY + path, text))}
+    return {
+        "set": [{"path": d["path"], "reason": d.get("reason", "")} for d in data["docs"]],
+        "removed": data["removed"],
+        "views": views,
     }
 
 
@@ -638,6 +662,17 @@ def section_media(slug: str, sid: str, path: str) -> FileResponse:
     file = (folder / path).resolve()
     if sid not in s.html_sections() or not file.is_relative_to(folder) or not file.is_file():
         raise HTTPException(404, f"no media file {sid}/{path}")
+    return FileResponse(file, headers=FRAME_SANDBOX_HEADER)
+
+
+@app.get("/s/{slug}/repo/{path:path}")
+def repo_file(slug: str, path: str) -> FileResponse:
+    """A file of the session's repo: the images and links a doc gives by a relative path,
+    which the page resolves against the doc's folder. Nothing outside the repo, nothing of
+    its .git folder."""
+    file = get_session(slug).doc_file(path)
+    if file is None or ".git" in Path(path).parts or not file.is_file():
+        raise HTTPException(404, f"no repo file {path}")
     return FileResponse(file, headers=FRAME_SANDBOX_HEADER)
 
 
