@@ -29,6 +29,10 @@ Follow `planning-rules.md` for everything you write.
 ## A first run (no trigger)
 
 1. Read, in this order:
+   - the repo lexicon, `.agents/lexicon.md` at the repo root, then each
+     folder lexicon (`<folder>/.agents/lexicon.md`) above a folder the
+     branch touches, when they exist (see **The lexicon** in
+     `planning-rules.md`);
    - the repo's docs: README files, a `docs/` folder, module docstrings that
      describe concepts;
    - the code the feature is about: the modules the initial request names or

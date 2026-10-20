@@ -172,6 +172,26 @@ No location details in a `definition` or a `tip` (a file, a key, a section
 number): a file the reader needs goes in the home section's prose. A `tip`
 does not repeat what other entries define.
 
+**The repo's lexicons.** A repo may define its terms once for all its docs,
+in files for agents: the **repo lexicon**, `.agents/lexicon.md` at the repo
+root, which opens on the reader line (the field the docs' reader knows) and
+then defines once each term the repo's folders share, and **folder
+lexicons**, a `.agents/lexicon.md` in a folder below the root, in the same
+format, for the terms only the folders under it share. Read the repo
+lexicon first, then each folder lexicon above a folder the branch touches;
+where two of them on one path define a term, the one closest to the folder
+wins. A repo term one of them defines keeps that entry's name:
+
+- when the branch does not change it, it is a peripheral concept, its
+  `definition` (and its `tip`) the entry's definition;
+- when the branch changes it, it is a core concept, defined again by its
+  home section; the doc pass then writes the new definition into the
+  lexicon.
+
+Two folder lexicons on different paths that define one term differently
+give two lexicon entries, each named with its folder (« gate
+(dataset_tools/) »).
+
 ## The change history
 
 Log every change of the model at once, one entry each:

@@ -279,7 +279,10 @@ you change what is false or missing, and leave what is right as it is.
   history (« formerly », « since the rewrite ») and no before/after.
 - **Terms.** A term that is not plain language is defined at its first use
   in the doc, and called by one name after. With a reference model, use its
-  lexicon's names.
+  lexicon's names. A repo term the repo lexicon or a folder lexicon above
+  the doc's folder defines keeps that entry's name, and its definition is
+  the entry's, word for word, the closest lexicon winning; no doc links to a
+  lexicon.
 - **Show rather than tell.** A command with its output, a real file, a
   short example, where they make the point faster than a paragraph. Never
   let a metaphor stand in for a mechanism you can show.
