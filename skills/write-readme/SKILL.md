@@ -172,8 +172,7 @@ The **never-include list** names what fails the test every time; drop it
 without weighing each sentence:
 
 - history: how the folder came to be, what it replaced, which PR changed it;
-- open discussions: options under consideration, ideas, to-dos;
-- rules restated from elsewhere: a rule another doc or the code states.
+- open discussions: options under consideration, ideas, to-dos.
 
 The one exception is a **migration note**: a dated passage saying how to
 read the outputs made before a change (old names, old defaults). It stays,
