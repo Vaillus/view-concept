@@ -183,7 +183,7 @@ the lexicon, the sections or the code yourself:
 | Agent | Owns | Role file |
 |---|---|---|
 | **planner** | the outline and the lexicon, during scoping, and the first code map | `roles/planner.md` |
-| **writer** | the modeling part (its sections), the to-do list, and the outline and the lexicon from « Write model » on | `roles/writer.md` |
+| **writer** | the modeling part (its sections), the to-do list, the first doc set, and the outline and the lexicon from « Write model » on | `roles/writer.md` |
 | **implementer** | the code on the branch and the repo's docs, and the code map, from « Approve model » on | `roles/implementer.md` |
 | **reviewer** | the refactoring part but the to-do list: the code checked against the model, item by item | `roles/reviewer.md` |
 
@@ -460,6 +460,55 @@ check` reports a pair).
   works as in a Markdown section: term underlines and their tips, change
   highlights, comments and side threads on a passage. Its visible text (outside its scripts and styles) still
   counts for `view-concept check`.
+
+### The doc set and the Doc tab
+
+The **doc set** is the list of the repo's doc files the branch concerns, each
+with a one-line reason it is listed. It lives in `doc-set.json` in the
+session folder, and the agents write it only through `view-concept doc-set`,
+never by hand:
+
+```bash
+view-concept doc-set <slug>                                 # prints it
+view-concept doc-set <slug> add <path> "<reason>" [--user]  # adds a doc, or changes its reason
+view-concept doc-set <slug> remove <path> [--user]          # removes a doc
+```
+
+A path is relative to the repo root and may name a doc the branch will
+create. `--user` marks a change the user asked for in a comment: a doc the
+user removed is recorded as removed, and `add` refuses it from then on unless
+the user asks for it back (`--user` again). No agent adds back a doc the user
+removed.
+
+A doc enters the doc set by four rules, the first two mechanical, the last two
+found by reading:
+
+1. a doc the branch already changed;
+2. the `README.md` and the `CLAUDE.md` of each folder the branch touches and
+   of its parents, up to the repo root;
+3. a doc that cites a path the branch touches;
+4. a doc that describes a concept of the model.
+
+Before the code exists, a path the branch touches is where the model will
+land, which the code map says. Docstrings and code comments are not docs and
+stay out of the doc set.
+
+Two agents keep it, at the two moments it changes: the **writer** writes the
+first one with the model and corrects it on the user's comments until the
+doc pass; the **implementer** refreshes it on the real diff at the start of
+the doc pass (see **The doc pass**) and keeps it from then on.
+
+The page shows the doc set in the **Doc tab**, after the code tab, once it
+exists: the list, each doc with its reason, then one doc at a time, read
+from the worktree at each render, so the user's own edits and the agents'
+rewrites show alike. The lexicon terms are underlined in each doc. A doc
+carries two marks: the **base mark**, a blue bar in the right margin of each
+block that differs from the same doc on the base branch (the whole text for a
+doc the branch creates), and the green highlight of what changed since the
+user's last batch. The user comments on a doc's text as on a section, and the
+batch prints the comment with the doc's path in place of a section
+(`[c12] (doc docs/reference.md) « … »`); a comment on the list prints
+`[c13] (doc set) « … »`.
 
 ### Model consolidation — the modeling part
 

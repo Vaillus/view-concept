@@ -97,9 +97,13 @@ The skeleton:
    passes the **section test**: it holds a decision the user makes or must
    make, or a consequence they will notice. Order them by the concepts they
    touch, so the points about one concept sit together. A point that fails
-   the test (a doc that is out of date, which source a part of the branch
-   came from, how the tests are built, code nothing in the app shows) gets
-   no section: it is a line of the to-do list (point 5), which the implementer carries and the reviewer checks.
+   the test (which source a part of the branch came from, how the tests are
+   built, code nothing in the app shows) gets no section: it is a line of the
+   to-do list (point 5), which the implementer carries and the reviewer
+   checks. A doc that is out of date is neither a section nor a to-do line:
+   it is in the **doc set**, the list of the repo's docs the branch
+   concerns, which the writer writes with the model and the implementer's
+   doc pass rewrites.
 3. **A section per concept only when it needs one**: the user did not state
    its rules, they take more than its lexicon entry can say, and it passes
    the same section test. A concept the user named and described gets none:
