@@ -30,7 +30,7 @@ let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
 let drafts = [];          // the drafts file's drafts (see "drafts"), the box being typed in kept as typed
 let pendingSelection = null;
-let tab = null;          // "plan" | "doc" | "refactor" | "metrics" | "review" (narrow layout)
+let tab = null;          // "plan" | "model" | "refactor" | "metrics" | "review" (narrow layout)
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
 let popThread = null;          // id of the thread shown in the popover
@@ -72,7 +72,7 @@ const ready = (d) => d.text.trim() || d.thread;
 async function load() {
   const r = await fetch(`/api/s/${SLUG}`);
   if (!r.ok) {
-    $("#doc").replaceChildren(el("p", { class: "error", text: `Could not load: ${(await r.json()).detail}` }));
+    $("#model").replaceChildren(el("p", { class: "error", text: `Could not load: ${(await r.json()).detail}` }));
     return;
   }
   const next = await r.json();
@@ -114,12 +114,12 @@ const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).titl
 
 /* The refactoring part of a branch review, written in the refactoring step, is made of
    refactor sections (sections with "part": "refactoring"): they are read in their own
-   tab, the code tab (id "refactor"); every other section is an explanation section, in the explanation (in
-   a branch review, the modeling part). Both tabs are rendered into their own view, with
+   tab, the code tab (id "refactor"); every other section is an explanation section, in the
+   explanation tab (id "model": in a branch review the Model tab, the modeling part). Both tabs are rendered into their own view, with
    the same section blocks. Sessions written before the rename mark them "part": 2. */
 const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
-const tabOf = (id) => (inRefactoringPart(id) ? "refactor" : "doc");
+const tabOf = (id) => (inRefactoringPart(id) ? "refactor" : "model");
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
 /* The narrow layout: the page in one column whenever its window is under 700px wide
    (app.css holds the same threshold), whatever the device. The metrics tab is gone from
@@ -137,7 +137,7 @@ const TOUCH = matchMedia("(hover: none)");
 const isTouch = () => TOUCH.matches;
 // The Metrics tab (metrics.js) draws a branch review's runs: other workflows have no role agents.
 const hasMetricsTab = () => state.workflow === "view-branch" && !isNarrow();
-const docViews = () => [$("#doc"), $("#refactor")];
+const docViews = () => [$("#model"), $("#refactor")];
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
 const isUpdated = (id) => !!(state.sections[id] || {}).updated;
@@ -155,7 +155,7 @@ function render() {
   renderStatus();
   followSession();
   renderPlan();
-  renderDoc();
+  renderSections();
   renderReview();
   renderPopover(); // a sent batch changes what the open thread offers
 }
@@ -169,12 +169,16 @@ function render() {
    model waiting for approval does not move it, nor does a PR waiting to be created:
    « Approve model » sits at the end of the explanation, where the model is read, and
    « Create PR » at the end of the code tab. A branch review also has the Metrics tab,
-   which fetches its numbers when shown and again on each state update while shown. */
+   which fetches its numbers when shown and again on each state update while shown.
+   Tab ids and keys: 1 "plan", 2 "model" (the explanation, named « model » in a branch
+   review), 3 "refactor" (code), 4 "metrics". */
 
 function setTab(name) {
-  if (name === "refactor" && !hasRefactorTab()) name = "doc";
-  if (name === "metrics" && !hasMetricsTab()) name = "doc";
-  if (name === "review" && !isNarrow()) name = "doc";
+  // A tab id this page has no view for (a position saved by an older page): the model tab.
+  if (name !== "review" && !$(`.view[data-view="${CSS.escape(String(name))}"]`)) name = "model";
+  if (name === "refactor" && !hasRefactorTab()) name = "model";
+  if (name === "metrics" && !hasMetricsTab()) name = "model";
+  if (name === "review" && !isNarrow()) name = "model";
   releaseAnchor(); // the page is about to move the view, or show another one
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
@@ -195,7 +199,7 @@ function followSession() {
   const phase = shownPhase();
   const onPlan = ["scoping", "awaiting-approval"].includes(phase);
   if (tab === null) {
-    if (!restorePosition()) setTab(Object.keys(state.sections).length && !onPlan ? "doc" : "plan");
+    if (!restorePosition()) setTab(Object.keys(state.sections).length && !onPlan ? "model" : "plan");
     positionReady = true;
   } else if (phase !== lastPhase) {
     if (onPlan) setTab("plan");
@@ -204,13 +208,13 @@ function followSession() {
   }
   lastPhase = phase;
   $('.tab[data-tab="refactor"]').hidden = !hasRefactorTab();
-  if (tab === "refactor" && !hasRefactorTab()) setTab("doc");
+  if (tab === "refactor" && !hasRefactorTab()) setTab("model");
   $('.tab[data-tab="metrics"]').hidden = !hasMetricsTab();
-  if (tab === "metrics" && !hasMetricsTab()) setTab("doc");
+  if (tab === "metrics" && !hasMetricsTab()) setTab("model");
   // In a branch review, the explanation is the modeling part, so its tab is named after the model.
-  const docLabel = state.workflow === "view-branch" ? "model" : "explanation";
-  $('.tab[data-tab="doc"]').title = `${docLabel[0].toUpperCase()}${docLabel.slice(1)} (2)`;
-  for (const [name, label] of [["doc", docLabel], ["refactor", "code"]]) {
+  const modelLabel = state.workflow === "view-branch" ? "model" : "explanation";
+  $('.tab[data-tab="model"]').title = `${modelLabel[0].toUpperCase()}${modelLabel.slice(1)} (2)`;
+  for (const [name, label] of [["model", modelLabel], ["refactor", "code"]]) {
     const n = Object.keys(state.sections).filter((id) => isUpdated(id) && tabOf(id) === name).length;
     const writing = !!writingId() && tabOf(writingId()) === name;
     $(`.tab[data-tab="${name}"]`).replaceChildren(...[label,
@@ -226,7 +230,7 @@ NARROW.addEventListener("change", () => {
   if (!state) return;
   closeMenu();
   $('.tab[data-tab="metrics"]').hidden = !hasMetricsTab();
-  if ((tab === "review" && !isNarrow()) || (tab === "metrics" && isNarrow())) setTab("doc");
+  if ((tab === "review" && !isNarrow()) || (tab === "metrics" && isNarrow())) setTab("model");
   setReviewWidth(isNarrow() ? null : loadJSON(WIDTH_KEY, null));
 });
 
@@ -247,7 +251,7 @@ document.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "1") setTab("plan");
-  if (e.key === "2") setTab("doc");
+  if (e.key === "2") setTab("model");
   if (e.key === "3" && hasRefactorTab()) setTab("refactor");
   if (e.key === "4" && hasMetricsTab()) setTab("metrics");
 });
@@ -320,7 +324,7 @@ const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "a
    « Approve model » sits at the end of the explanation, after the last section of the modeling part,
    where the model is read; « Create PR » at the end of the code tab. The page does not
    switch tabs for them. */
-const docButton = el("button", { id: "doc-approve", class: "btn primary approve doc-approve", hidden: true });
+const modelButton = el("button", { id: "model-approve", class: "btn primary approve doc-approve", hidden: true });
 const prButton = el("button", { id: "pr-create", class: "btn primary approve doc-approve", hidden: true });
 // Once the agent opened the PR (plan.json's `pr`), the page links it in the top bar and at
 // the end of the code tab, under « Create PR » (« Update PR » from then on).
@@ -340,7 +344,7 @@ function renderPr() {
 const APPROVALS = {
   "awaiting-approval": { action: "approve-plan", label: "Approve plan", toast: "Plan approved",
                          ready: "plan ready · waiting for your approval", sent: "plan approved · the agent is starting" },
-  "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved", button: docButton,
+  "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved", button: modelButton,
                       ready: "model ready · waiting for your approval", sent: "model approved · the agent is implementing" },
   "awaiting-pr": { action: "create-pr", label: "Create PR", toast: "PR requested", button: prButton,
                    ready: "refactoring written · waiting for you to create the PR",
@@ -457,7 +461,7 @@ function renderStatus() {
   p.className = `phase ${b.active ? "active" : ""} ${b.ask ? "ask" : ""}`;
   p.textContent = [b.text, b.active && !b.ask ? quietNotice() : ""].filter(Boolean).join(" · ");
 
-  $("#approve").hidden = docButton.hidden = prButton.hidden = true;
+  $("#approve").hidden = modelButton.hidden = prButton.hidden = true;
   if (!approval) return;
   const btn = buttonOf(approval);
   btn.hidden = approvalPending();
@@ -466,7 +470,7 @@ function renderStatus() {
   btn.textContent = n ? `${label} + send ${n} comment${n > 1 ? "s" : ""}` : label;
 }
 
-for (const b of [$("#approve"), docButton, prButton]) b.addEventListener("click", () => {
+for (const b of [$("#approve"), modelButton, prButton]) b.addEventListener("click", () => {
   const approval = APPROVALS[state.status.phase];
   if (approval) send(approval.action);
 });
@@ -745,11 +749,11 @@ for (const view of docViews()) {
 }
 addEventListener("pagehide", savePosition);
 
-function renderDoc() {
-  const doc = $("#doc");
+function renderSections() {
+  const model = $("#model");
   const sections = allSections();
   if (!sections.length) {
-    doc.replaceChildren(el("p", { class: "dim empty", text: "Waiting for the plan…" }));
+    model.replaceChildren(el("p", { class: "dim empty", text: "Waiting for the plan…" }));
     $("#refactor").replaceChildren();
     return;
   }
@@ -762,7 +766,7 @@ function renderDoc() {
   const active = document.activeElement;
   const keep = active && active.closest && active.closest(".sec-questions")
     ? [active, active.selectionStart, active.selectionEnd] : null;
-  doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map((s) => sectionBlock(s)), docButton);
+  model.replaceChildren(...sections.filter((s) => tabOf(s.id) === "model").map((s) => sectionBlock(s)), modelButton);
   $("#refactor").replaceChildren(...[lagLine()].filter(Boolean),
     ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), prButton, prEnd);
   for (const view of docViews()) {
@@ -1621,7 +1625,7 @@ function currentSelection() {
   const range = sel.getRangeAt(0);
   const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
   const sec = start.closest(".sec");
-  if (!sec || !sec.closest("#doc, #refactor")) return null;
+  if (!sec || !sec.closest("#model, #refactor")) return null;
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;
