@@ -1,4 +1,5 @@
-"""Command line: what the view-concept, view-branch and view-refactor skills call from the agent."""
+"""Command line: what the view-concept, view-branch, view-refactor and view-docs skills call
+from the agent."""
 
 from __future__ import annotations
 
@@ -325,6 +326,88 @@ def cmd_pr(a: argparse.Namespace) -> None:
     print(f"PR recorded: {s.set_pr(a.url)['url']}")
 
 
+def _existing(slug: str) -> Session:
+    s = Session(slug)
+    if not s.exists():
+        raise SessionError(f"no session {slug!r}")
+    return s
+
+
+def cmd_doc_set(a: argparse.Namespace) -> None:
+    """Add or remove a doc of the doc set, or, with no operation, print it."""
+    s = _existing(a.slug)
+    if a.op == "add":
+        if not a.path or not a.reason:
+            raise SessionError('doc-set add takes a path and a reason: add <path> "<reason>"')
+        print(f"added {s.add_doc(a.path, a.reason, a.user)['path']}")
+        return
+    if a.op == "remove":
+        if not a.path or a.reason:
+            raise SessionError("doc-set remove takes one path")
+        s.remove_doc(a.path, a.user)
+        print(f"removed {a.path}" + (" (by the user: not added back)" if a.user else ""))
+        return
+    if a.path or a.reason or a.user:
+        raise SessionError("give an operation: add or remove")
+    data = s.read_doc_set()
+    for d in data["docs"]:
+        print(f"{d['path']} — {d.get('reason', '')}")
+    if not data["docs"]:
+        print("(no doc set yet)")
+    if data["removed"]:
+        print(f"removed by the user: {', '.join(data['removed'])}")
+
+
+def cmd_stale(a: argparse.Namespace) -> None:
+    """Flag a stale passage, drop flags, or, with no argument, print the flags shown."""
+    s = _existing(a.slug)
+    if a.drop:
+        if a.doc:
+            raise SessionError("--drop takes stale passage ids only")
+        s.drop_stale(a.drop)
+        print(f"dropped {', '.join(a.drop)}")
+        return
+    if a.doc:
+        if not a.quote or not a.note:
+            raise SessionError('stale takes a doc, a quote and a note: <doc> "<quote>" "<note>"')
+        print(s.add_stale(a.doc, a.quote, a.note, a.section or "")["id"])
+        return
+    flags = s.shown_stale()
+    for f in flags:
+        quote = " ".join(f["quote"].split())
+        section = f" (section {f['section']})" if f.get("section") else ""
+        print(f"{f['id']} {f['doc']} « {quote} »{section}: {f['note']}")
+    if not flags:
+        print("(no stale passage shown)")
+
+
+def cmd_reference(a: argparse.Namespace) -> None:
+    """Set or clear the reference model, list its candidates, or, with none of these,
+    print it."""
+    s = _existing(a.slug)
+    if sum(map(bool, (a.other, a.clear, a.candidates))) > 1:
+        raise SessionError("give a session, --clear or --candidates, one at a time")
+    if a.candidates:
+        rows = s.reference_candidates()
+        for c in rows:
+            print(f"{c['slug']} · {c['title']} · updated {c['updated']}")
+            print(f"  sections: {' / '.join(c['sections']) or '(none)'}")
+            print(f"  terms: {', '.join(c['terms']) or '(none)'}")
+        if not rows:
+            print("(no branch review of this repo)")
+        return
+    if a.clear or a.other:
+        ref = s.set_reference("" if a.clear else a.other, a.reason or "")
+        print(f"reference model: {ref['slug']} — {ref['reason']}" if ref else "no reference model")
+        return
+    model = s.reference_model()
+    if not model:
+        print("no reference model")
+        return
+    reason = f" — {model['reason']}" if model["reason"] else ""
+    print(f"reference model: {model['slug']} ({model['title']}){reason}")
+
+
 def cmd_variant(a: argparse.Namespace) -> None:
     """Name the setup a session runs with and the model of each role, or, with no name,
     print it: the coordinator passes a role's model when it starts that role's agent."""
@@ -596,6 +679,45 @@ def main() -> None:
         "a role left out keeps the coordinator's model",
     )
     q.set_defaults(fn=cmd_variant)
+
+    q = sub.add_parser("doc-set", help="print the doc set, or add or remove one of its docs")
+    q.add_argument("slug")
+    q.add_argument("op", nargs="?", choices=("add", "remove"))
+    q.add_argument("path", nargs="?", help="the doc's path, relative to the repo root")
+    q.add_argument("reason", nargs="?", help="with add: one line, why the doc is listed")
+    q.add_argument(
+        "--user",
+        action="store_true",
+        help="the user asked for it in a comment: remove records the doc as removed by the "
+        "user (a refresh never adds it back); add takes it back in",
+    )
+    q.set_defaults(fn=cmd_doc_set)
+
+    q = sub.add_parser(
+        "stale", help="flag a doc passage the model contradicts, drop flags, or print them"
+    )
+    q.add_argument("slug")
+    q.add_argument("doc", nargs="?", help="the doc's path, a doc of the doc set")
+    q.add_argument("quote", nargs="?", help="the passage, exactly as the file has it")
+    q.add_argument("note", nargs="?", help="one line: why the model contradicts it")
+    q.add_argument("--section", help="the model section it contradicts")
+    q.add_argument("--drop", nargs="+", metavar="ID", help="remove flags (fixed or dismissed)")
+    q.set_defaults(fn=cmd_stale)
+
+    q = sub.add_parser(
+        "reference",
+        help="take a branch review's model as the reference model of a docs review, or clear it",
+    )
+    q.add_argument("slug")
+    q.add_argument("other", nargs="?", help="the slug of a branch review of the same repo")
+    q.add_argument("--reason", help="one line: why this model is the reference (with a session)")
+    q.add_argument("--clear", action="store_true", help="remove the reference model")
+    q.add_argument(
+        "--candidates",
+        action="store_true",
+        help="list the repo's branch reviews, with their sections and terms",
+    )
+    q.set_defaults(fn=cmd_reference)
 
     q = sub.add_parser("context", help="print the context a subagent or a side thread starts from")
     q.add_argument("slug")

@@ -31,6 +31,8 @@
   <div id="header-menu" class="header-menu">
     <span id="general-threads" class="t-chips"></span>
     <a id="pr-link" class="btn" target="_blank" rel="noopener" hidden></a>
+    <a id="reference-link" class="btn" target="_blank" rel="noopener" hidden></a>
+    <span id="reference-reason" class="reference-reason" hidden></span>
     <button id="new-thread" class="btn" title="Open a side thread not tied to a passage">ask</button>
     <button id="export" class="btn">Export to vault</button>
     <button id="publish" class="btn" hidden></button>
@@ -45,10 +47,11 @@
   <section class="workspace">
     <nav class="tabs">
       <button class="tab" data-tab="plan" title="Plan (1)">plan</button>
-      <button class="tab" data-tab="doc" title="Explanation (2)">explanation</button>
+      <button class="tab" data-tab="model" title="Explanation (2)">explanation</button>
       <button class="tab" data-tab="refactor" title="Code (3)" hidden>code</button>
+      <button class="tab" data-tab="doc" title="Doc (4)" hidden>doc</button>
       <button class="tab narrow-only" data-tab="review" title="Review">review</button>
-      <button class="tab" data-tab="metrics" title="Metrics (4)" hidden>metrics</button>
+      <button class="tab" data-tab="metrics" title="Metrics (5)" hidden>metrics</button>
     </nav>
     <div id="plan-view" class="view plan" data-view="plan">
       <div class="plan-inner">
@@ -74,8 +77,9 @@
         <ol id="changes" class="changes"></ol>
       </div>
     </div>
-    <article id="doc" class="view doc" data-view="doc"></article>
+    <article id="model" class="view doc" data-view="model"></article>
     <article id="refactor" class="view doc refactor" data-view="refactor"></article>
+    <article id="doc" class="view doc docs" data-view="doc"></article>
     <article id="metrics" class="view metrics" data-view="metrics"></article>
   </section>
 

@@ -80,3 +80,13 @@ def test_send_hands_the_notice_to_every_phone(push_file, monkeypatch):
     n = push.send({"slug": "s", "title": "t", "body": "b"}, push_file)
     assert n == 1 and sent[0][0] == SUB["endpoint"]
     assert [s["endpoint"] for s in push._load(push_file)["subscriptions"]] == [SUB["endpoint"]]
+
+
+def test_the_wait_for_write_docs_is_notified(session):
+    session.write_status("awaiting-docs")
+    w = push.waiting(session)
+    assert w is not None
+    key, text = w
+    assert key.startswith("awaiting-docs@") and "« Write docs »" in text
+    session.add_batch([], "", "write-docs", then_pr=True)
+    assert push.waiting(session) is None

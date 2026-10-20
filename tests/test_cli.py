@@ -333,3 +333,59 @@ def test_variant_names_the_setup_and_a_model_per_role(tmp_path):
     assert r.returncode == 1 and "unknown role helper" in r.stderr
     r = view_concept(tmp_path, "variant", "speed", "odd", "--model", "writer")
     assert r.returncode == 1 and "role=model" in r.stderr
+
+
+def test_doc_set_adds_removes_and_prints_the_docs(tmp_path):
+    r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate", "add", "docs/reference.md", "the tabs")
+    assert r.returncode == 0 and r.stdout.strip() == "added docs/reference.md", r.stderr
+    assert view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "install").returncode == 0
+    r = view_concept(tmp_path, "doc-set", "gate", "remove", "README.md", "--user")
+    assert r.returncode == 0, r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "install")
+    assert r.returncode == 1 and "removed by the user" in r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate")
+    assert r.stdout.splitlines() == [
+        "docs/reference.md — the tabs",
+        "removed by the user: README.md",
+    ]
+    r = view_concept(tmp_path, "doc-set", "gate", "add", "../x.md", "out")
+    assert r.returncode == 1 and "inside the repo" in r.stderr
+
+
+def test_stale_flags_prints_and_drops_passages(tmp_path):
+    (tmp_path / "README.md").write_text("The keys 1 to 4.\n")
+    r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "keys").returncode == 0
+    flag = ("README.md", "keys 1 to 4", "five", "--section", "s")
+    r = view_concept(tmp_path, "stale", "gate", *flag)
+    assert r.returncode == 0 and r.stdout.strip() == "s1", r.stderr
+    r = view_concept(tmp_path, "stale", "gate")
+    assert r.stdout.strip() == "s1 README.md « keys 1 to 4 » (section s): five"
+    assert view_concept(tmp_path, "stale", "gate", "--drop", "s1").returncode == 0
+    assert view_concept(tmp_path, "stale", "gate").stdout.strip() == "(no stale passage shown)"
+    r = view_concept(tmp_path, "stale", "gate", "README.md", "absent", "five")
+    assert r.returncode == 1 and "quote is not in" in r.stderr
+
+
+def test_reference_sets_prints_and_clears_the_reference_model(tmp_path):
+    for title, workflow in (("Gate", "view-branch"), ("Docs", "view-docs")):
+        args = ("new", title, "--kind", "code", "--repo", str(tmp_path), "--workflow", workflow)
+        assert view_concept(tmp_path, *args).returncode == 0
+    r = view_concept(tmp_path, "reference", "docs", "--candidates")
+    assert r.returncode == 0 and r.stdout.splitlines()[0].startswith("gate · Gate · updated ")
+    r = view_concept(tmp_path, "reference", "docs", "gate")
+    assert r.returncode == 1 and "needs its reason" in r.stderr
+    r = view_concept(tmp_path, "reference", "docs", "gate", "--reason", "adds a skill")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "reference model: gate — adds a skill"
+    r = view_concept(tmp_path, "reference", "docs")
+    assert r.stdout.strip() == "reference model: gate (Gate) — adds a skill"
+    assert view_concept(tmp_path, "reference", "docs", "--clear").returncode == 0
+    assert view_concept(tmp_path, "reference", "docs").stdout.strip() == "no reference model"
+    r = view_concept(tmp_path, "reference", "docs", "nope", "--reason", "x")
+    assert r.returncode == 1 and "no other session" in r.stderr
+    r = view_concept(tmp_path, "reference", "docs", "gate", "--clear")
+    assert r.returncode == 1 and "one at a time" in r.stderr

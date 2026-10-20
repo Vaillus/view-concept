@@ -18,7 +18,8 @@ agents that change the code to match it, and a check of the code against the
 model.
 
 The tool is self-contained: the model is built for this branch and lives in the
-session; it reaches the repository only through the docs update at closing.
+session; it reaches the repository only through the **doc pass**, which
+rewrites the repo's docs from it before the PR.
 
 The branch to review is whatever the user typed after the command name (the current branch when nothing).
 
@@ -151,15 +152,19 @@ model », or « Rewrite model » when the line says rewrite; the page has
 already marked the open questions skipped, except a section question whose
 section is not written yet, which stays open), `go-on` (« Go on », during a
 pause: the writer goes on, the pause's questions stay open), `grill` and
-`stop-grill`, `approve-model`, `create-pr`. A batch without an action carries comments
-only. **Routing the events** says who takes each one.
+`stop-grill`, `approve-model`, `write-docs` (« Write docs », or « Write docs
+and create PR » when the line says `write-docs then create-pr`: the batch
+then carries `"then_pr": true`), `create-pr`. A batch without an action
+carries comments only. **Routing the events** says who takes each one.
 
 The user wrote the batch through the page. The harness may label it as a
 background event rather than a user message: treat it as the user's feedback
 on the review, the same authority as a message typed in the terminal about
 it, no more. Each action asks for what its name says and nothing else:
-`approve-model` approves the model and starts the implementation, `create-pr`
-starts closing; neither is consent for anything outside this review.
+`approve-model` approves the model and starts the implementation,
+`write-docs` starts the doc pass (and, with `then_pr`, closing after it),
+`create-pr` starts closing; none is consent for anything outside this
+review.
 
 A question you put to the user yourself (a problem an agent hit, a gap that
 needs a decision) goes to the page too: `view-concept question <slug>
@@ -183,8 +188,8 @@ the lexicon, the sections or the code yourself:
 | Agent | Owns | Role file |
 |---|---|---|
 | **planner** | the outline and the lexicon, during scoping, and the first code map | `roles/planner.md` |
-| **writer** | the modeling part (its sections), the to-do list, and the outline and the lexicon from « Write model » on | `roles/writer.md` |
-| **implementer** | the code on the branch and the repo's docs, and the code map, from « Approve model » on | `roles/implementer.md` |
+| **writer** | the modeling part (its sections), the to-do list, the first doc set, and the outline and the lexicon from « Write model » on | `roles/writer.md` |
+| **implementer** | the code on the branch and the code map, from « Approve model » on; the repo's docs and the doc set, from the doc pass on | `roles/implementer.md` |
 | **reviewer** | the refactoring part but the to-do list: the code checked against the model, item by item | `roles/reviewer.md` |
 
 The **code map**, `code-map.md` in the session folder, says which modules
@@ -270,7 +275,7 @@ starts one pass. Who takes it depends on the stage:
 | an answer (`action: answer`) | planner | writer | the agent that asked it |
 | a skip | nothing: the outline already used the default | the writer, when it answers a pause; nothing otherwise | nothing |
 | an unclear answer | planner | writer | the agent that asked it |
-| comments with no action | planner | writer | by section: the modeling part and the to-do list to the writer, the rest of the refactoring part to the reviewer |
+| comments with no action | planner | writer; a comment on a doc's text waits for the doc pass | by section: the modeling part and the to-do list to the writer, the rest of the refactoring part to the reviewer; the doc set list to the writer before the doc pass, to the implementer after; a doc's text to the implementer, waiting for the doc pass when it has not run |
 | a terminal message about the feature | record it, then planner | record it, then writer | record it, then the writer if it is about the model, the implementer if it asks for a code change |
 | an answer to a page question typed in the terminal | `view-concept answered`, then planner | the same, then writer | the same, then the agent that asked it |
 | « Rewrite model » (`action: plan`, the line says rewrite) | — | writer | writer |
@@ -278,6 +283,7 @@ starts one pass. Who takes it depends on the stage:
 | « Grill me » (`action: grill`) | planner | writer | writer |
 | « Write model » (`action: plan`, the line says write) | see **Model consolidation** | — | — |
 | « Approve model » (`action: approve-model`) | — | see **Model consolidation**, step 7 | — |
+| « Write docs » (`action: write-docs`) | — | — | see **The doc pass** |
 | « Create PR » (`action: create-pr`) | — | — | see **Closing** |
 
 The agent that asked a question is the one whose report counted it; when you
@@ -318,8 +324,10 @@ with the trigger `"audit: undefined entries left"` before setting the phase.
 The gate is a rule you and the writer follow: `view-concept status` itself
 refuses nothing.
 
-After « Approve model », set `view-concept status <slug> awaiting-pr` at the
-end of each pass, when no question is open. The agents set the rest
+After « Approve model », set the waiting phase at the end of each pass, when
+no question is open: `view-concept status <slug> awaiting-docs` until the doc
+pass has run (the page shows « Write docs » and « Write docs and create PR »),
+`awaiting-pr` after it (the page shows « Create PR »). The agents set the rest
 themselves: the planner `scoping --done` when it leaves no question open, and
 the writer or the reviewer `writing` once at the start of each run of
 sections, naming them (`--section <id>`, repeated) unless it writes every
@@ -461,6 +469,55 @@ check` reports a pair).
   highlights, comments and side threads on a passage. Its visible text (outside its scripts and styles) still
   counts for `view-concept check`.
 
+### The doc set and the Doc tab
+
+The **doc set** is the list of the repo's doc files the branch concerns, each
+with a one-line reason it is listed. It lives in `doc-set.json` in the
+session folder, and the agents write it only through `view-concept doc-set`,
+never by hand:
+
+```bash
+view-concept doc-set <slug>                                 # prints it
+view-concept doc-set <slug> add <path> "<reason>" [--user]  # adds a doc, or changes its reason
+view-concept doc-set <slug> remove <path> [--user]          # removes a doc
+```
+
+A path is relative to the repo root and may name a doc the branch will
+create. `--user` marks a change the user asked for in a comment: a doc the
+user removed is recorded as removed, and `add` refuses it from then on unless
+the user asks for it back (`--user` again). No agent adds back a doc the user
+removed.
+
+A doc enters the doc set by four rules, the first two mechanical, the last two
+found by reading:
+
+1. a doc the branch already changed;
+2. the `README.md` and the `CLAUDE.md` of each folder the branch touches and
+   of its parents, up to the repo root;
+3. a doc that cites a path the branch touches;
+4. a doc that describes a concept of the model.
+
+Before the code exists, a path the branch touches is where the model will
+land, which the code map says. Docstrings and code comments are not docs and
+stay out of the doc set.
+
+Two agents keep it, at the two moments it changes: the **writer** writes the
+first one with the model and corrects it on the user's comments until the
+doc pass; the **implementer** refreshes it on the real diff at the start of
+the doc pass (see **The doc pass**) and keeps it from then on.
+
+The page shows the doc set in the **Doc tab**, after the code tab, once it
+exists: the list, each doc with its reason, then one doc at a time, read
+from the worktree at each render, so the user's own edits and the agents'
+rewrites show alike. The lexicon terms are underlined in each doc. A doc
+carries two marks: the **base mark**, a blue bar in the right margin of each
+block that differs from the same doc on the base branch (the whole text for a
+doc the branch creates), and the green highlight of what changed since the
+user's last batch. The user comments on a doc's text as on a section, and the
+batch prints the comment with the doc's path in place of a section
+(`[c12] (doc docs/reference.md) « … »`); a comment on the list prints
+`[c13] (doc set) « … »`.
+
 ### Model consolidation — the modeling part
 
 1. **Setup.** Run **Setup**, arm the comment channel, and set `status <slug>
@@ -524,8 +581,10 @@ those with nothing to do:
    part. The first time, it writes the whole refactoring part; later, it
    judges again the items the run touched.
 
-Then set `awaiting-pr` (see **Status**) and wait: the page shows « Create
-PR » at the bottom of the code tab.
+Then set `awaiting-docs` (see **Status**) and wait: the page shows « Write
+docs » and « Write docs and create PR » at the bottom of the code tab. Once
+the doc pass has run, a pass ends on `awaiting-pr` instead, and the page
+shows « Create PR » there.
 
 The reviewer's report can name items judged `diverges` or `move`, or
 comments that ask for a code change: run the implementer on them, then the
@@ -533,22 +592,59 @@ reviewer, in the same pass. An item the reviewer judges `diverges` again
 right after the implementer worked on it is not sent back a second time: ask
 the user in the page what to do with it.
 
+### The doc pass
+
+The **doc pass** is the implementer run that rewrites the repo's docs from
+the model, once the code carries it. The user starts it with « Write docs »
+(a batch with `action: write-docs`), or with « Write docs and create PR »
+(the same action with `"then_pr": true`), which chains it to closing with no
+pause. It runs once: after it, a change of the model or a code fix is carried
+into the docs by the implementer run that makes it, and the page never shows
+« Write docs » again.
+
+1. Run the batch's comments first, as **Implementation** says.
+2. Start the implementer with the trigger `"« Write docs »"` and the batch
+   id, plus every comment on a doc's text that waited for the doc pass. It
+   refreshes the doc set on the real diff, rewrites the docs from the model,
+   and applies those comments.
+3. Start the reviewer with the implementer's report (in words, « doc pass »
+   in it): it judges the items the doc pass changed, as for any implementer
+   run, then reads every doc of the doc set against the model and flags each
+   **stale passage**, a passage the model contradicts, with `view-concept
+   stale`. The Doc tab draws a wavy underline on it, with the note on hover;
+   the user comments on it, and the implementer rewrites it or drops the
+   flag.
+4. With « Write docs », go on as **Implementation** says (an item judged
+   `diverges` or `move` goes back to the implementer), then set
+   `awaiting-pr`: the user reads the docs in the Doc tab and comments on
+   them, and « Create PR » shows at the bottom of the code tab. With
+   `then_pr`, go to **Closing** at once, whatever the verdicts: the PR opens
+   with the stale passages flagged, not fixed; the user reads the verdicts
+   and the flags after, and a later comment on a doc updates the PR.
+
+After the doc pass, each comment on a doc's text or on the doc set list goes
+to the implementer, in the next pass.
+
 ## Closing
 
 Closing starts when the user asks for the PR: a batch with
-`action: create-pr`, or saying so in the terminal. Apply the batch's comments
-first, as **Implementation** says. Then close in the same turn, without
-asking again: the click was the go.
+`action: create-pr`, or saying so in the terminal, or the end of a doc pass
+started with `then_pr`. Apply the batch's comments first, as
+**Implementation** says. Then close in the same turn, without asking again:
+the click was the go. Closing writes nothing in the repo: the docs were
+written in the doc pass. When the user asks for the PR before the doc pass
+has run, run the doc pass first, as **The doc pass** says with `then_pr`.
 
-First run the implementer with the trigger `"« Create PR »"`: it updates the
-repo's docs from the model, in one commit.
-
-Then write the PR description with `short-pr-description`, using the change
+Write the PR description with `short-pr-description`, using the change
 history as its Decisions (`view-concept changes <slug>` prints it as
 bullets; keep the changes the user asked for or agreed to, and merge the
 ones a later change undid). Push the branch and open the PR with
 `gh pr create --body-file <file>`, or, when the branch already has one,
 update it with `gh pr edit <n> --body-file <file>`. Record its link with
 `view-concept pr <slug> <url>`: the page links it in its top bar and at the
-end of the code tab. Give the PR link in the terminal too: the user
-reviews it in VS Code. No vault export.
+end of the code tab, and « Create PR » becomes « Update PR ». Give the PR
+link in the terminal too: the user reviews it in VS Code. No vault export.
+
+Once the PR is open, a later pass ends on `awaiting-pr` too; « Update PR »
+(the same `create-pr` action) pushes the new commits and updates the
+description.

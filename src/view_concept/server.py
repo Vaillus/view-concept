@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 from . import frame, gate, launch, metrics, publish, push, threads
 from .render import md
-from .store import Session, SessionError, list_sessions
+from .store import DOC_KEY, Session, SessionError, list_sessions
 
 STATIC = Path(__file__).parent / "static"
 # The verdicts an item can get, by session workflow, each list in the review table's order:
@@ -257,8 +257,11 @@ def state(slug: str) -> dict[str, Any]:
         unimplemented = [d["id"] for d in s.unimplemented_changes()]
         questions = s.read_questions()
         grilling = s.is_grilling()
-        seen = s.read_seen(sections)
+        docs = s.read_docs()
+        doc_texts = {DOC_KEY + p: t for p, t in docs.items() if t is not None}
+        seen = s.read_seen({**sections, **doc_texts})
         published = published_view(s)
+        doc_tab = docs_view(s, docs, seen)
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
     # The hover text of a term: its developed `tip` when the agent wrote one, else the
@@ -289,7 +292,65 @@ def state(slug: str) -> dict[str, Any]:
         "grilling": grilling,
         "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),
         "published": published,
+        # The Doc tab: the doc set and each doc read from the worktree.
+        "docs": doc_tab,
     }
+
+
+def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> dict[str, Any]:
+    """The Doc tab as the page reads it: {set: [{path, reason, stale (how many of its
+    stale passages are shown)}], removed, views: {path: view}, stale (the stale passages
+    shown), reference (the reference model, or None)}. A doc's view is its section view
+    (the file rendered as Markdown, `updated` against its highlight baseline
+    `doc:<path>`) with `exists` and the base mark's input: `base_html`, the doc at the
+    merge base rendered (None when it was not there, or when git cannot tell), and `new`,
+    whether the branch created it. A doc missing from the worktree is `{exists: false}`
+    only."""
+    data = s.read_doc_set()
+    commit = s.merge_base() if any(t is not None for t in docs.values()) else ""
+    views: dict[str, dict[str, Any]] = {}
+    for path, text in docs.items():
+        if text is None:
+            views[path] = {"exists": False}
+            continue
+        base = s.base_text(path, commit) if commit else None
+        views[path] = {
+            "exists": True,
+            **section_view(text, seen.get(DOC_KEY + path, text)),
+            "base_html": md.render(base) if base else None,
+            "new": base == "",
+        }
+    stale = [
+        {k: f.get(k, "") for k in ("id", "doc", "quote", "section", "note")}
+        for f in s.shown_stale(docs)
+    ]
+    return {
+        "set": [
+            {
+                "path": d["path"],
+                "reason": d.get("reason", ""),
+                "stale": sum(f["doc"] == d["path"] for f in stale),
+            }
+            for d in data["docs"]
+        ],
+        "removed": data["removed"],
+        "views": views,
+        "stale": stale,
+        "reference": reference_view(s),
+    }
+
+
+def reference_view(s: Session) -> dict[str, Any] | None:
+    """The reference model as the page reads it: {slug, title, url (its session's page),
+    lexicon (each term with its hover text rendered, `tip_html`)}; None without one."""
+    ref = s.reference_model()
+    if ref is None:
+        return None
+    lexicon = [
+        {**t, "tip_html": md.renderInline(str(t.get("tip") or t.get("definition") or ""))}
+        for t in ref["lexicon"]
+    ]
+    return {**ref, "url": f"/s/{ref['slug']}", "lexicon": lexicon}
 
 
 def published_view(s: Session) -> dict[str, Any] | None:
@@ -415,6 +476,8 @@ class BatchIn(BaseModel):
     comments: list[CommentIn] = []
     note: str = ""
     action: str = ""
+    # « Write docs and create PR »: the doc pass, then the PR with no pause (write-docs only).
+    then_pr: bool = False
     # The ids of the drafts the batch carries: once sent, they leave the drafts file.
     drafts: list[str] = []
 
@@ -423,7 +486,8 @@ class BatchIn(BaseModel):
 def send_batch(slug: str, body: BatchIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
-        batch = s.add_batch([c.model_dump() for c in body.comments], body.note, body.action)
+        comments = [c.model_dump() for c in body.comments]
+        batch = s.add_batch(comments, body.note, body.action, then_pr=body.then_pr)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
     s.clear_sent_drafts(body.drafts)
@@ -638,6 +702,28 @@ def section_media(slug: str, sid: str, path: str) -> FileResponse:
     file = (folder / path).resolve()
     if sid not in s.html_sections() or not file.is_relative_to(folder) or not file.is_file():
         raise HTTPException(404, f"no media file {sid}/{path}")
+    return FileResponse(file, headers=FRAME_SANDBOX_HEADER)
+
+
+def _under_git(file: Path, root: Path) -> bool:
+    """Whether `file` (resolved, under `root`) is in a .git folder of the repo, whatever
+    the case of its spelling."""
+    return any(part.lower() == ".git" for part in file.relative_to(root).parts)
+
+
+@app.get("/s/{slug}/repo/{path:path}")
+def repo_file(slug: str, path: str) -> FileResponse:
+    """A file of the session's repo: the images and links a doc gives by a relative path,
+    which the page resolves against the doc's folder. Nothing outside the repo, nothing of
+    its .git folder."""
+    s = get_session(slug)
+    file = s.doc_file(path)
+    repo = s.repo_dir()
+    # Tested on the resolved file, not the URL's spelling: on a case-insensitive file
+    # system `.GIT/config` is the .git folder's config.
+    in_git = repo is not None and file is not None and _under_git(file, repo.resolve())
+    if file is None or in_git or not file.is_file():
+        raise HTTPException(404, f"no repo file {path}")
     return FileResponse(file, headers=FRAME_SANDBOX_HEADER)
 
 

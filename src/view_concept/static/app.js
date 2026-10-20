@@ -1,9 +1,10 @@
 /* view-concept — the session page.
 
    Tabs share the main space: the plan (the scope block with the agent questions, outline,
-   lexicon, change history), the explanation (one block per explanation section) and, in a
-   branch review that has reached the refactoring step, the code tab (the refactor
-   sections, the refactoring part); the review pane (a conversation: sent batches and answered agent
+   lexicon, change history), the explanation (one block per explanation section; the Model
+   tab of a branch review), in a branch review that has reached the refactoring step the
+   code tab (the refactor sections, the refactoring part), and once a doc set exists the
+   Doc tab (the repo docs the branch concerns, see "the Doc tab"); the review pane (a conversation: sent batches and answered agent
    questions, a line counting the open ones, then the draft comments) stays on the
    right. The page never edits the explanation: the agent writes the files, the server
    streams "changed", the page re-fetches. The page writes batches of comments, and side
@@ -30,7 +31,7 @@ let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
 let drafts = [];          // the drafts file's drafts (see "drafts"), the box being typed in kept as typed
 let pendingSelection = null;
-let tab = null;          // "plan" | "doc" | "refactor" | "metrics" | "review" (narrow layout)
+let tab = null;          // "plan" | "model" | "refactor" | "doc" | "metrics" | "review" (narrow layout)
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
 let popThread = null;          // id of the thread shown in the popover
@@ -72,7 +73,7 @@ const ready = (d) => d.text.trim() || d.thread;
 async function load() {
   const r = await fetch(`/api/s/${SLUG}`);
   if (!r.ok) {
-    $("#doc").replaceChildren(el("p", { class: "error", text: `Could not load: ${(await r.json()).detail}` }));
+    $("#model").replaceChildren(el("p", { class: "error", text: `Could not load: ${(await r.json()).detail}` }));
     return;
   }
   const next = await r.json();
@@ -114,12 +115,12 @@ const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).titl
 
 /* The refactoring part of a branch review, written in the refactoring step, is made of
    refactor sections (sections with "part": "refactoring"): they are read in their own
-   tab, the code tab (id "refactor"); every other section is an explanation section, in the explanation (in
-   a branch review, the modeling part). Both tabs are rendered into their own view, with
+   tab, the code tab (id "refactor"); every other section is an explanation section, in the
+   explanation tab (id "model": in a branch review the Model tab, the modeling part). Both tabs are rendered into their own view, with
    the same section blocks. Sessions written before the rename mark them "part": 2. */
 const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
-const tabOf = (id) => (inRefactoringPart(id) ? "refactor" : "doc");
+const tabOf = (id) => (isDocAnchor(id) ? "doc" : inRefactoringPart(id) ? "refactor" : "model");
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
 /* The narrow layout: the page in one column whenever its window is under 700px wide
    (app.css holds the same threshold), whatever the device. The metrics tab is gone from
@@ -137,7 +138,26 @@ const TOUCH = matchMedia("(hover: none)");
 const isTouch = () => TOUCH.matches;
 // The Metrics tab (metrics.js) draws a branch review's runs: other workflows have no role agents.
 const hasMetricsTab = () => state.workflow === "view-branch" && !isNarrow();
-const docViews = () => [$("#doc"), $("#refactor")];
+const docViews = () => [$("#model"), $("#refactor"), $("#doc")];
+/* The Doc tab (id "doc"): the repo docs the branch concerns, from `state.docs` (see "the
+   Doc tab"). It shows once the doc set is written; a docs review (workflow view-docs)
+   shows it alone, from the start. A server that sends no `docs` counts as no doc set. */
+const NO_DOCS = { set: [], views: {}, stale: [], removed: [], reference: null };
+const docsOf = () => ({ ...NO_DOCS, ...((state && state.docs) || {}) });
+const isDocsReview = () => !!state && state.workflow === "view-docs";
+const hasDocTab = () => isDocsReview() || docsOf().set.length > 0;
+// The tab a missing tab gives way to: the Doc tab in a docs review, the model tab otherwise.
+const homeTab = () => (isDocsReview() ? "doc" : "model");
+// A comment, a draft or a side thread on a doc's text is anchored on the section id
+// "doc:<path>"; one on the doc set list on DOC_SET, "doc:" alone. No section id starts
+// with "doc:" (the server refuses it), so neither anchor names a section.
+const DOC_PREFIX = "doc:";
+const DOC_SET = DOC_PREFIX;
+const docPathOf = (id) => {
+  const s = String(id || "");
+  return s.startsWith(DOC_PREFIX) && s !== DOC_SET ? s.slice(DOC_PREFIX.length) : null;
+};
+const isDocAnchor = (id) => String(id || "").startsWith(DOC_PREFIX);
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
 const isUpdated = (id) => !!(state.sections[id] || {}).updated;
@@ -152,29 +172,39 @@ function render() {
   renderListening();
   renderPublish();
   renderPr();
+  renderReference();
   renderStatus();
   followSession();
   renderPlan();
-  renderDoc();
+  renderSections();
   renderReview();
   renderPopover(); // a sent batch changes what the open thread offers
 }
 
 /* ---------------- tabs ----------------
-   The plan, the explanation and the code tab share one space; one is shown at a
-   time. The code tab exists only once a section is in the refactoring part. The tab follows the
+   The plan, the explanation, the code tab and the Doc tab share one space; one is shown
+   at a time. The code tab exists only once a section is in the refactoring part, the Doc
+   tab once the doc set is written (in a docs review it is the only tab, and the others
+   are hidden). The tab follows the
    session at the moments that matter — scoping starting (its questions are in the scope
    block, on the Plan tab), the plan waiting for approval, the writing starting (in the
    tab of the section being written) — and otherwise stays where the user put it. A
    model waiting for approval does not move it, nor does a PR waiting to be created:
    « Approve model » sits at the end of the explanation, where the model is read, and
    « Create PR » at the end of the code tab. A branch review also has the Metrics tab,
-   which fetches its numbers when shown and again on each state update while shown. */
+   which fetches its numbers when shown and again on each state update while shown.
+   Tab ids and keys: 1 "plan", 2 "model" (the explanation, named « model » in a branch
+   review), 3 "refactor" (code), 4 "doc", 5 "metrics". In the narrow layout the Doc tab
+   comes after code, before review. */
 
 function setTab(name) {
-  if (name === "refactor" && !hasRefactorTab()) name = "doc";
-  if (name === "metrics" && !hasMetricsTab()) name = "doc";
-  if (name === "review" && !isNarrow()) name = "doc";
+  // A tab id this page has no view for (a position saved by an older page): the model tab.
+  if (name !== "review" && !$(`.view[data-view="${CSS.escape(String(name))}"]`)) name = "model";
+  if (name === "refactor" && !hasRefactorTab()) name = homeTab();
+  if (name === "doc" && !hasDocTab()) name = homeTab();
+  if (name === "metrics" && !hasMetricsTab()) name = homeTab();
+  if (name === "review" && !isNarrow()) name = homeTab();
+  if (isDocsReview() && name !== "review") name = "doc"; // the Doc tab alone
   releaseAnchor(); // the page is about to move the view, or show another one
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
@@ -195,28 +225,36 @@ function followSession() {
   const phase = shownPhase();
   const onPlan = ["scoping", "awaiting-approval"].includes(phase);
   if (tab === null) {
-    if (!restorePosition()) setTab(Object.keys(state.sections).length && !onPlan ? "doc" : "plan");
+    if (!restorePosition()) setTab(isDocsReview() ? "doc" : Object.keys(state.sections).length && !onPlan ? "model" : "plan");
     positionReady = true;
-  } else if (phase !== lastPhase) {
+  } else if (phase !== lastPhase && !isDocsReview()) {
     if (onPlan) setTab("plan");
     // A run opens on the tab of the set's first section not written yet.
     if (phase === "writing") setTab(tabOf(writingId() || (writingRun() || { set: [""] }).set[0]));
   }
   lastPhase = phase;
   $('.tab[data-tab="refactor"]').hidden = !hasRefactorTab();
-  if (tab === "refactor" && !hasRefactorTab()) setTab("doc");
+  if (tab === "refactor" && !hasRefactorTab()) setTab(homeTab());
+  $('.tab[data-tab="doc"]').hidden = !hasDocTab();
+  if (tab === "doc" && !hasDocTab()) setTab(homeTab());
   $('.tab[data-tab="metrics"]').hidden = !hasMetricsTab();
-  if (tab === "metrics" && !hasMetricsTab()) setTab("doc");
+  if (tab === "metrics" && !hasMetricsTab()) setTab(homeTab());
+  for (const name of ["plan", "model"]) $(`.tab[data-tab="${name}"]`).hidden = isDocsReview();
+  if (isDocsReview() && tab !== "doc" && tab !== "review") setTab("doc");
   // In a branch review, the explanation is the modeling part, so its tab is named after the model.
-  const docLabel = state.workflow === "view-branch" ? "model" : "explanation";
-  $('.tab[data-tab="doc"]').title = `${docLabel[0].toUpperCase()}${docLabel.slice(1)} (2)`;
-  for (const [name, label] of [["doc", docLabel], ["refactor", "code"]]) {
+  const modelLabel = state.workflow === "view-branch" ? "model" : "explanation";
+  $('.tab[data-tab="model"]').title = `${modelLabel[0].toUpperCase()}${modelLabel.slice(1)} (2)`;
+  for (const [name, label] of [["model", modelLabel], ["refactor", "code"]]) {
     const n = Object.keys(state.sections).filter((id) => isUpdated(id) && tabOf(id) === name).length;
     const writing = !!writingId() && tabOf(writingId()) === name;
     $(`.tab[data-tab="${name}"]`).replaceChildren(...[label,
       n ? el("span", { class: "badge new", text: `${n} updated` }) : null,
       writing ? el("span", { class: "badge accent writing", text: "writing" }) : null].filter(Boolean));
   }
+  // The Doc tab's badge counts the docs rewritten since their highlight baseline.
+  const docs = docsOf();
+  const n = docs.set.filter((d) => (docs.views[d.path] || {}).updated).length;
+  $('.tab[data-tab="doc"]').replaceChildren(...["doc", n ? el("span", { class: "badge new", text: `${n} updated` }) : null].filter(Boolean));
 }
 
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -226,7 +264,7 @@ NARROW.addEventListener("change", () => {
   if (!state) return;
   closeMenu();
   $('.tab[data-tab="metrics"]').hidden = !hasMetricsTab();
-  if ((tab === "review" && !isNarrow()) || (tab === "metrics" && isNarrow())) setTab("doc");
+  if ((tab === "review" && !isNarrow()) || (tab === "metrics" && isNarrow())) setTab(homeTab());
   setReviewWidth(isNarrow() ? null : loadJSON(WIDTH_KEY, null));
 });
 
@@ -245,11 +283,12 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest("#header-menu") || e.target.closest("button, a")) closeMenu();
 });
 document.addEventListener("keydown", (e) => {
-  if (e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (!state || e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "1") setTab("plan");
-  if (e.key === "2") setTab("doc");
+  if (e.key === "2") setTab("model");
   if (e.key === "3" && hasRefactorTab()) setTab("refactor");
-  if (e.key === "4" && hasMetricsTab()) setTab("metrics");
+  if (e.key === "4" && hasDocTab()) setTab("doc");
+  if (e.key === "5" && hasMetricsTab()) setTab("metrics");
 });
 
 /* ---------------- status + approvals ---------------- */
@@ -310,18 +349,25 @@ function writingLabel() {
    scope block (see "agent questions" below), so it has no button here. */
 const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "answered · the agent is reading it" };
 
-/* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
+/* Four phases wait for the user: the plan of an explanation ("awaiting-approval"), the
    model of a branch review at the end of model consolidation ("awaiting-model", set by the
-   view-branch skill only), and the opening of its PR once refactoring is written
-   ("awaiting-pr", view-branch too).
+   view-branch skill only), the doc pass once the code carries the model ("awaiting-docs",
+   view-branch too), and the opening of its PR ("awaiting-pr", view-branch and view-docs).
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until the agent moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it.
    « Approve model » sits at the end of the explanation, after the last section of the modeling part,
-   where the model is read; « Create PR » at the end of the code tab. The page does not
-   switch tabs for them. */
-const docButton = el("button", { id: "doc-approve", class: "btn primary approve doc-approve", hidden: true });
+   where the model is read; « Write docs » (action "write-docs") and « Write docs and create
+   PR » (the same action with `then_pr: true` in the batch: the doc pass, the reviewer's run
+   and the PR with no pause) at the end of the code tab; « Create PR » at the end of the
+   code tab, at the end of the Doc tab in a docs review. The page does not switch tabs for
+   them. */
+const modelButton = el("button", { id: "model-approve", class: "btn primary approve doc-approve", hidden: true });
 const prButton = el("button", { id: "pr-create", class: "btn primary approve doc-approve", hidden: true });
+const docsButton = el("button", { id: "docs-write", class: "btn primary approve doc-approve", hidden: true,
+                                  title: "The doc pass: the implementer refreshes the doc set and rewrites the docs from the model" });
+const docsPrButton = el("button", { id: "docs-write-pr", class: "btn approve doc-approve", hidden: true,
+                                    title: "The doc pass, the reviewer's run on the doc items and stale passages, then the PR, with no pause" });
 // Once the agent opened the PR (plan.json's `pr`), the page links it in the top bar and at
 // the end of the code tab, under « Create PR » (« Update PR » from then on).
 const prEnd = el("a", { id: "pr-end", class: "btn doc-approve", target: "_blank", rel: "noopener", hidden: true });
@@ -337,11 +383,33 @@ function renderPr() {
     a.textContent = a === prEnd ? `Open ${prLabel(pr.url)} ↗` : `${prLabel(pr.url)} ↗`;
   }
 }
+/* A docs review that takes a branch review's model as reference model links that session
+   in the top bar, with the reason the agent kept it next to the link; it opens in another
+   browser tab. No reference, the ordinary case, shows neither. */
+function renderReference() {
+  const ref = docsOf().reference;
+  const a = $("#reference-link");
+  const why = $("#reference-reason");
+  a.hidden = !ref;
+  why.hidden = !(ref && ref.reason);
+  if (!ref) return;
+  a.href = ref.url || `/s/${encodeURIComponent(ref.slug)}`;
+  a.textContent = `reference: ${ref.title || ref.slug} ↗`;
+  a.title = `The reference model: session ${ref.slug}`;
+  why.textContent = why.title = ref.reason || "";
+}
+
 const APPROVALS = {
   "awaiting-approval": { action: "approve-plan", label: "Approve plan", toast: "Plan approved",
                          ready: "plan ready · waiting for your approval", sent: "plan approved · the agent is starting" },
-  "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved", button: docButton,
+  "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved", button: modelButton,
                       ready: "model ready · waiting for your approval", sent: "model approved · the agent is implementing" },
+  "awaiting-docs": { action: "write-docs", label: "Write docs", toast: "Docs requested", button: docsButton,
+                     ready: "code carries the model · waiting for you to write the docs",
+                     sent: "docs requested · the implementer is writing them",
+                     // The second button: the same action, the PR chained after the doc pass.
+                     also: { button: docsPrButton, label: "Write docs and create PR", toast: "Docs and PR requested",
+                             extra: { then_pr: true }, sent: "docs and PR requested · the implementer is writing the docs" } },
   "awaiting-pr": { action: "create-pr", label: "Create PR", toast: "PR requested", button: prButton,
                    ready: "refactoring written · waiting for you to create the PR",
                    sent: "PR requested · the agent is opening it" },
@@ -364,14 +432,17 @@ function approvalPending() {
    phase's wording; then the phase takes over, and the wordings the page used to fix at
    the click (« model approved · the agent is implementing »…) are true. */
 const BATCH_WHAT = { answer: "answered", "go-on": "going on", "approve-plan": "plan approved",
-                     "approve-model": "model approved", "create-pr": "PR requested", plan: "scoping ended",
+                     "approve-model": "model approved", "write-docs": "docs requested", "create-pr": "PR requested", plan: "scoping ended",
                      grill: "grill", "stop-grill": "grill stopped" };
 const BATCH_STAGE = { sent: "in the inbox", received: "the agent has it" };
 
 function batchProgress() {
   const b = state.batch;
   if (!b || !BATCH_STAGE[b.stage]) return "";
-  return `${b.action ? BATCH_WHAT[b.action] || b.action : "comments"} · ${BATCH_STAGE[b.stage]}`;
+  // A « Write docs and create PR » batch carries then_pr (the batch in comments.json).
+  const chained = b.action === "write-docs" && state.comments.batches.some((x) => x.id === b.id && x.then_pr);
+  const what = chained ? "docs and PR requested" : b.action ? BATCH_WHAT[b.action] || b.action : "comments";
+  return `${what} · ${BATCH_STAGE[b.stage]}`;
 }
 
 /* The inactivity notice: a phase at work keeps its moving label until another phase is
@@ -423,7 +494,7 @@ function banner() {
            : repliedInScoping() ? "reading your reply"
            : "scoping the question",
     planning: "drafting the plan",
-    ...(approval ? { [phase]: approvalPending() ? approval.sent : approval.ready } : {}),
+    ...(approval ? { [phase]: approvalPending() ? approvalSent(approval) : approvalReady(approval) } : {}),
     ...(prReady ? { [phase]: `${prLabel(state.plan.pr.url)} ready · open it from the top bar` } : {}),
     "awaiting-answer": goOnPending() ? "going on · the writer is writing the next sections"
                      : openQuestions().length ? QUESTION_LABELS.ready : QUESTION_LABELS.sent,
@@ -442,6 +513,13 @@ function banner() {
    if later): the agent is reading your answers or comments, until it asks again or
    declares scoping done. With nothing sent since, the banner keeps « scoping the
    question ». Same-second times count as after, as in approvalPending. */
+// The banner while a phase's batch is on its way: « Write docs and create PR » has its own.
+const approvalSent = (approval) =>
+  (approval.also && lastBatchOf(approval.action).then_pr ? approval.also.sent : approval.sent);
+// A docs review waits for « Create PR » once its docs are written, with no refactoring.
+const approvalReady = (approval) =>
+  (approval.action === "create-pr" && isDocsReview() ? "docs written · waiting for you to create the PR" : approval.ready);
+
 function repliedInScoping() {
   const asked = (state.questions || []).flatMap((q) => [q.asked, q.reasked]).filter(Boolean);
   const since = [...asked, state.status.since || ""].reduce((a, b) => (b > a ? b : a), "");
@@ -457,18 +535,26 @@ function renderStatus() {
   p.className = `phase ${b.active ? "active" : ""} ${b.ask ? "ask" : ""}`;
   p.textContent = [b.text, b.active && !b.ask ? quietNotice() : ""].filter(Boolean).join(" · ");
 
-  $("#approve").hidden = docButton.hidden = prButton.hidden = true;
+  $("#approve").hidden = modelButton.hidden = prButton.hidden = docsButton.hidden = docsPrButton.hidden = true;
   if (!approval) return;
+  const n = drafts.filter(ready).length;
+  const withDrafts = (label) => (n ? `${label} + send ${n} comment${n > 1 ? "s" : ""}` : label);
   const btn = buttonOf(approval);
   btn.hidden = approvalPending();
-  const label = phase === "awaiting-pr" && state.plan.pr ? "Update PR" : approval.label;
-  const n = drafts.filter(ready).length;
-  btn.textContent = n ? `${label} + send ${n} comment${n > 1 ? "s" : ""}` : label;
+  btn.textContent = withDrafts(phase === "awaiting-pr" && state.plan.pr ? "Update PR" : approval.label);
+  if (approval.also) {
+    approval.also.button.hidden = approvalPending();
+    approval.also.button.textContent = withDrafts(approval.also.label);
+  }
 }
 
-for (const b of [$("#approve"), docButton, prButton]) b.addEventListener("click", () => {
+for (const b of [$("#approve"), modelButton, prButton, docsButton]) b.addEventListener("click", () => {
   const approval = APPROVALS[state.status.phase];
   if (approval) send(approval.action);
+});
+docsPrButton.addEventListener("click", () => {
+  const approval = APPROVALS[state.status.phase];
+  if (approval && approval.also) send(approval.action, approval.also.button, approval.also.extra);
 });
 
 function renderPlan() {
@@ -706,8 +792,8 @@ for (const view of docViews()) {
 /* ---------------- saved position ----------------
    What the page keeps of the reader's place in this session, in this browser's storage
    (one per session, like the drafts): the open tab, the reading anchor of the view shown
-   (with its block key; the Plan and Metrics tabs keep only the tab), and the open item
-   entries of the code tab. Written at the end of a scroll, at a change of tab, when an
+   (with its block key; the Plan and Metrics tabs keep only the tab), the open item
+   entries of the code tab, and the doc shown in the Doc tab. Written at the end of a scroll, at a change of tab, when an
    item entry opens or closes, and when the page goes away; put back at every load of the
    session (a click in the sessions list, `view-concept open`, a reload). */
 
@@ -722,6 +808,7 @@ function savePosition() {
     tab,
     anchor: a && { view: view.dataset.view, key: a.key, block: a.block, offset: a.offset, text: a.text, words: a.words, ranks: a.ranks },
     open: [...openItems],
+    doc: shownDoc,
   });
 }
 
@@ -731,6 +818,7 @@ function restorePosition() {
   const saved = loadJSON(POSITION_KEY, null);
   if (!saved || !saved.tab) return false;
   for (const id of saved.open || []) openItems.add(id);
+  if (saved.doc) shownDoc = saved.doc;
   setTab(saved.tab);
   const view = docViews().find((v) => v.dataset.view === tab);
   if (view && saved.anchor && saved.anchor.view === tab) anchor = { ...saved.anchor, view, restore: true };
@@ -745,14 +833,9 @@ for (const view of docViews()) {
 }
 addEventListener("pagehide", savePosition);
 
-function renderDoc() {
-  const doc = $("#doc");
+function renderSections() {
+  const model = $("#model");
   const sections = allSections();
-  if (!sections.length) {
-    doc.replaceChildren(el("p", { class: "dim empty", text: "Waiting for the plan…" }));
-    $("#refactor").replaceChildren();
-    return;
-  }
   const shown = docViews().find((v) => v.classList.contains("active"));
   if (pageScrolling) anchor = null;
   else if (anchor && anchor.restore) { /* the saved position, placed after this render */ }
@@ -760,17 +843,27 @@ function renderDoc() {
   parkFrames();
   // A question box at the end of a section is re-attached on each render: keep its focus.
   const active = document.activeElement;
-  const keep = active && active.closest && active.closest(".sec-questions")
+  // (the scope block too: a docs review shows it at the top of the Doc tab, re-attached)
+  const keep = active && active.closest && active.closest(".sec-questions, #scope")
     ? [active, active.selectionStart, active.selectionEnd] : null;
-  doc.replaceChildren(...sections.filter((s) => tabOf(s.id) === "doc").map((s) => sectionBlock(s)), docButton);
-  $("#refactor").replaceChildren(...[lagLine()].filter(Boolean),
-    ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), prButton, prEnd);
+  // « Create PR » ends the code tab, or the Doc tab in a docs review.
+  const prEnding = [prButton, prEnd];
+  if (!sections.length) {
+    model.replaceChildren(el("p", { class: "dim empty", text: "Waiting for the plan…" }));
+    $("#refactor").replaceChildren();
+  } else {
+    model.replaceChildren(...sections.filter((s) => tabOf(s.id) === "model").map((s) => sectionBlock(s)), modelButton);
+    $("#refactor").replaceChildren(...[lagLine()].filter(Boolean),
+      ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), docsButton, docsPrButton,
+      ...(isDocsReview() ? [] : prEnding));
+  }
+  renderDocTab(isDocsReview() ? prEnding : []);
   for (const view of docViews()) {
     typesetMath(view);
     linkCitations(view);
     renderMermaid(view);
-    annotateAudit(view);
-    annotateLexicon(view);
+    if (view.id === "doc") annotateDocTerms(view);
+    else { annotateAudit(view); annotateLexicon(view); }
     annotateQuestions(view);
   }
   if (keep && keep[0].isConnected && document.activeElement !== keep[0]) {
@@ -817,6 +910,185 @@ function sectionBlock(s, { bare = false } = {}) {
       ? [el("div", { class: "sec-questions" }, ...sectionQuestions(s.id).map(questionCard),
             ...(paused() ? [goOnButton()] : []))] : []));
 }
+
+/* ---------------- the Doc tab ----------------
+   The repo docs the branch concerns (`state.docs`, from the server): the doc set, the list
+   of docs an agent keeps (path, the reason it is listed, its count of stale passages),
+   commentable as the section DOC_SET ("doc:"); under it a bar of doc titles, and one doc shown at
+   a time. The doc shown is a doc section: the file read from the worktree, drawn as a
+   section block (`section: "doc:<path>"`) that is commented, asked about and highlighted
+   like a section of the model, with « updated · mark read » on the key "doc:<path>". A title
+   in the bar carries a green dot when its doc was rewritten since its highlight baseline.
+   Two marks: the green bar and words of the change highlights (markUpdates), and the base
+   mark, a bar in the right margin of every block whose text is not among the blocks of the
+   doc at the merge base (`base_html`), every block for a doc created on the branch (`new`);
+   whole blocks, no words on hover (markBase). Stale passages get a wavy underline whose
+   hover shows the note (applyHighlights, "stale passages"). Lexicon terms are underlined,
+   none as its definition: the model's lexicon, or in a docs review the reference model's
+   (annotateDocTerms). Relative images and links load from the worktree,
+   /s/<slug>/repo/<doc dir>/<relative>. A docs review adds its agent questions (the scope
+   block) above the doc set, and « Create PR » at the end. */
+
+let shownDoc = null; // path of the doc shown in the Doc tab
+
+function renderDocTab(ending) {
+  const view = $("#doc");
+  const docs = docsOf();
+  // In a docs review the scope block (its agent questions) sits at the top of the Doc tab.
+  const top = isDocsReview() ? [$("#scope")] : [];
+  if (!docs.set.length) {
+    view.replaceChildren(...top, isDocsReview() ? el("p", { class: "dim empty", text: "Waiting for the doc set…" }) : "", ...ending);
+    return;
+  }
+  if (!docs.set.some((d) => d.path === shownDoc)) shownDoc = docs.set[0].path;
+  view.replaceChildren(...top, docSetBlock(docs), docBar(docs), docBlock(shownDoc, docs.views[shownDoc] || {}), ...ending);
+}
+
+const staleCount = (docs, d) => d.stale ?? docs.stale.filter((s) => s.doc === d.path).length;
+const staleBadge = (n) => (n ? el("span", { class: "badge tone-warn", text: `${n} stale` }) : null);
+const missingBadge = (v) => (v.exists === false ? el("span", { class: "badge", text: "missing" }) : null);
+
+// The heading of a doc set or doc block: its label, its thread chips, then « mark read »
+// when updated and the comment buttons, as in a section block.
+function docHeading(id, label, updated, what) {
+  return el("h2", {}, label,
+    el("span", { class: "t-chips", "data-section": id }),
+    updated
+      ? el("button", { class: "badge new", text: "updated · mark read", title: `Mark this ${what} as read: its highlights go away`,
+                       onclick: (e) => { e.stopPropagation(); markSeen([id]); } })
+      : null,
+    el("button", { class: "sec-comment", text: `+ comment ${what}`, title: `Comment on the whole ${what}`,
+                   onclick: () => openComposer({ section: id, quote: "", prefix: "" }) }),
+    el("button", { class: "sec-comment ask", text: "ask", title: `Open a side thread about this ${what}`,
+                   onclick: () => openComposer({ section: id, quote: "", prefix: "" }, "ask") }));
+}
+
+function docSetBlock(docs) {
+  const list = el("ul", { class: "doc-set" }, ...docs.set.map((d) => el("li", {},
+    el("button", { class: "doc-open", text: d.path, title: "Show this doc", onclick: () => openDoc(d.path) }),
+    d.reason ? ` — ${d.reason}` : "", staleBadge(staleCount(docs, d)), missingBadge(docs.views[d.path] || {}))));
+  return el("section", { class: "sec doc-set-sec", id: `sec-${DOC_SET}`, "data-id": DOC_SET },
+    docHeading(DOC_SET, "doc set", false, "doc set"),
+    el("div", { class: "body" }, list,
+      docs.removed.length ? el("p", { class: "dim doc-removed", text: `removed by you: ${docs.removed.join(", ")}` }) : null));
+}
+
+function docBar(docs) {
+  return el("div", { class: "doc-bar" }, ...docs.set.map((d) => {
+    const v = docs.views[d.path] || {};
+    return el("button", { class: `doc-title ${d.path === shownDoc ? "active" : ""} ${v.exists === false ? "missing" : ""}`,
+                          title: d.reason || d.path, onclick: () => openDoc(d.path) },
+      v.updated ? el("span", { class: "doc-dot", title: "Rewritten since your last batch" }) : null,
+      d.path, staleBadge(staleCount(docs, d)));
+  }));
+}
+
+function docBlock(path, v) {
+  const id = DOC_PREFIX + path;
+  const body = el("div", { class: "body" });
+  if (v.exists) {
+    body.innerHTML = v.html || "";
+    resolveRepoLinks(body, path);
+  } else body.append(el("p", { class: "dim", text: "Missing: this doc is not in the worktree." }));
+  return el("section", { class: `sec doc-sec ${v.exists ? "" : "missing"} ${v.updated ? "updated" : ""}`, id: `sec-${id}`, "data-id": id },
+    docHeading(id, el("code", { text: path }), !!v.updated, "doc"), body);
+}
+
+/* A doc gives its images and links by a path relative to its own folder: they load from
+   the worktree through the server. An absolute URL, a root path or an anchor stays. */
+function resolveRepoLinks(body, path) {
+  const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
+  const resolve = (raw) => {
+    if (!raw || /^([a-z][\w+.-]*:|\/|#)/i.test(raw)) return null;
+    const u = new URL(raw, `http://repo/${dir}`);
+    return `/s/${encodeURIComponent(SLUG)}/repo${u.pathname}${u.search}${u.hash}`;
+  };
+  body.querySelectorAll("img[src]").forEach((img) => {
+    const r = resolve(img.getAttribute("src"));
+    if (r) img.setAttribute("src", r);
+  });
+  body.querySelectorAll("a[href]").forEach((a) => {
+    const r = resolve(a.getAttribute("href"));
+    if (r) { a.setAttribute("href", r); a.target = "_blank"; a.rel = "noopener"; }
+  });
+}
+
+// Shows the doc `path` in the Doc tab, from its top.
+function openDoc(path) {
+  if (path === shownDoc) return;
+  shownDoc = path;
+  releaseAnchor();
+  renderSections();
+  const b = document.getElementById(`sec-${DOC_PREFIX}${path}`);
+  const view = $("#doc");
+  if (b && b.getBoundingClientRect().top < view.getBoundingClientRect().top) view.scrollTop += b.getBoundingClientRect().top - view.getBoundingClientRect().top - 40;
+  savePosition();
+}
+
+/* Opens the tab of section `id`; for a doc, the Doc tab on that doc. Following a comment or
+   a side thread anchored in another doc opens that doc. */
+function openSection(id) {
+  if (tab !== tabOf(id)) setTab(tabOf(id));
+  const path = docPathOf(id);
+  if (path !== null && path !== shownDoc && docsOf().set.some((d) => d.path === path)) {
+    shownDoc = path;
+    releaseAnchor();
+    renderSections();
+    savePosition();
+  }
+}
+
+// The lexicon underlined in the docs: the model's, or the reference model's in a docs review.
+const docLexicon = () => (isDocsReview() ? ((docsOf().reference || {}).lexicon || []) : state.plan.lexicon);
+// The lexicon a term span's index points into (data-lex="ref": the reference model's).
+const lexiconOf = (n) => (n.dataset.lex === "ref" ? ((docsOf().reference || {}).lexicon || []) : state.plan.lexicon);
+
+/* Every occurrence of a lexicon term in the doc shown gets the plain underline and its tip;
+   none is marked as its definition, which stays in the term's home section. */
+function annotateDocTerms(view) {
+  const body = view.querySelector(".doc-sec .body");
+  if (!body) return;
+  const ref = isDocsReview();
+  docLexicon().forEach((t, i) => wrapTerm(body, t.term, () =>
+    el("span", { class: "term", "data-term": i, ...(ref ? { "data-lex": "ref" } : {}) })));
+}
+
+/* ---------------- stale passages ----------------
+   A stale passage is a passage of a doc that the model contradicts, flagged by an agent
+   (`state.docs.stale`: doc, quote, the section it contradicts, a note). The quote is the
+   text as in the file: found in the doc shown as is, else with its Markdown marks taken
+   out. It gets a wavy underline (a highlight, so it may run across words of any markup),
+   and the pointer over it, or a tap, shows the note. */
+let staleRanges = []; // [entry, range] of every stale passage found in the doc shown
+
+function findStale(s) {
+  const id = DOC_PREFIX + s.doc;
+  const plain = String(s.quote || "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[`*]/g, "");
+  return findQuote(id, s.quote, "") || findQuote(id, plain, "");
+}
+
+function staleAt(x, y) {
+  for (const [s, r] of staleRanges) {
+    for (const b of r.getClientRects()) {
+      if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) return [s, b];
+    }
+  }
+  return null;
+}
+
+function staleNote(s) {
+  const sec = s.section || "";
+  const where = !sec ? "" : state.plan.outline.some((o) => o.id === sec) ? `§${numberOf(sec)} ${titleOf(sec)}` : sec;
+  return `stale${where ? ` · contradicts ${where}` : ""}${s.note ? ` — ${s.note}` : ""}`;
+}
+
+let staleTip = false; // the tip shows a stale passage's note
+$("#doc").addEventListener("mousemove", (e) => {
+  if (isTouch() || e.target.closest("[data-tip], [data-term]")) return;
+  const hit = staleAt(e.clientX, e.clientY);
+  if (hit) { showTip(staleNote(hit[0]), null, hit[1]); staleTip = true; }
+  else if (staleTip) { $("#tip").hidden = true; staleTip = false; }
+});
 
 /* ---------------- the code tab ----------------
    A refactor section that carries item fields ("item": {files, verdict, batch?,
@@ -1416,7 +1688,9 @@ function findQuote(sectionId, quote, prefix) {
 function applyHighlights() {
   threadRanges = threadsState.threads.filter((t) => t.quote)
     .map((t) => [t, findQuote(t.section, t.quote, t.prefix)]).filter(([, r]) => r);
+  staleRanges = docsOf().stale.filter((s) => s.doc === shownDoc).map((s) => [s, findStale(s)]).filter(([, r]) => r);
   if (!window.CSS || !CSS.highlights) return;
+  CSS.highlights.set("ev-stale", new Highlight(...staleRanges.map(([, r]) => r)));
   const draftRanges = drafts.map((d) => findQuote(d.section, d.quote, d.prefix)).filter(Boolean);
   const sentRanges = state.comments.batches.flatMap((b) => b.comments)
     .filter((c) => c.status === "sent")
@@ -1435,7 +1709,9 @@ function applyHighlights() {
    list item, cell…) holding an insertion or a deletion gets a bar in the margin, always
    drawn. The words the rewrite inserted show ("ev-updated") only while the pointer is
    over their block; a block marked only for deleted words shows nothing on hover.
-   « updated · mark read » in the section heading marks the section as read. */
+   « updated · mark read » in the section heading marks the section as read. A doc of the
+   Doc tab is compared the same way (its view in `state.docs`, the key "doc:<path>"), and
+   gets the base mark too (markBase). */
 
 const BLOCKS = "p, li, td, th, pre, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, .math.block, .mermaid";
 
@@ -1545,7 +1821,10 @@ for (const view of docViews()) {
 function markUpdates() {
   document.querySelectorAll(".changed").forEach((n) => n.classList.remove("changed"));
   changeRanges = new Map();
-  for (const [id, sec] of Object.entries(state.sections)) {
+  const docs = docsOf();
+  const entries = [...Object.entries(state.sections),
+                   ...Object.entries(docs.views).filter(([, v]) => v.exists).map(([path, v]) => [DOC_PREFIX + path, v])];
+  for (const [id, sec] of entries) {
     const body = sec.updated && document.querySelector(`#sec-${CSS.escape(id)} .body`);
     if (!body) continue;
     // A section frame is out of the page's reach: its rectangle gets the change bar (it also
@@ -1574,11 +1853,38 @@ function markUpdates() {
   const under = isTouch() ? null : [...document.querySelectorAll(":hover")].pop();
   paintChange(changedBlock(under));
   frames.forEach((f, id) => postChanges(id, f));
+  markBase();
 }
+
+/* The base mark of the doc shown: each block (its own words, as the change highlights cut
+   them) whose text is not the text of a block of the doc at the merge base; every block of
+   a doc created on the branch. No base (`base_html` null and not `new`): no mark. */
+function markBase() {
+  document.querySelectorAll(".based").forEach((n) => n.classList.remove("based"));
+  const v = shownDoc && docsOf().views[shownDoc];
+  if (!v || !v.exists || (!v.new && v.base_html == null)) return;
+  const body = document.querySelector(`#sec-${CSS.escape(DOC_PREFIX + shownDoc)} .body`);
+  if (!body) return;
+  const blockTexts = (root) => {
+    const m = new Map();
+    for (const w of words(root)) if (w.block !== root) m.set(w.block, `${m.has(w.block) ? `${m.get(w.block)} ` : ""}${w.text}`);
+    return m;
+  };
+  let base = new Set();
+  if (!v.new) {
+    const before = document.createElement("div");
+    before.innerHTML = v.base_html;
+    base = new Set(blockTexts(before).values());
+  }
+  for (const [block, text] of blockTexts(body)) if (v.new || !base.has(text)) block.classList.add("based");
+}
+
+// The text a « mark read » records: a section's file, or a doc's (key "doc:<path>").
+const mdOf = (id) => (docPathOf(id) !== null ? (docsOf().views[docPathOf(id)] || {}).md || "" : state.sections[id].md);
 
 async function markSeen(ids) {
   try {
-    await postJSON(`/api/s/${SLUG}/seen`, { sections: Object.fromEntries(ids.map((id) => [id, state.sections[id].md])) });
+    await postJSON(`/api/s/${SLUG}/seen`, { sections: Object.fromEntries(ids.map((id) => [id, mdOf(id)])) });
   } catch (e) { toast(`Could not mark as read: ${e.message}`); return; }
   await load();
 }
@@ -1586,7 +1892,7 @@ async function markSeen(ids) {
 function revealQuote(c) {
   if (!c.section) return;
   if (c.quote.startsWith("plan · ")) { setTab("plan"); return; }
-  setTab(tabOf(c.section));
+  openSection(c.section);
   openItemOf(c.section);
   const f = c.quote && (state.sections[c.section] || {}).kind === "html" && frames.get(c.section);
   if (f && f.contentWindow) {
@@ -1608,7 +1914,7 @@ function revealQuote(c) {
 /* A section that is an item is reached through its item entry: the entry opens, and is
    what scrolls into view, with its description under it. */
 function scrollToSection(id) {
-  setTab(tabOf(id));
+  openSection(id);
   const s = openItemOf(id) || document.getElementById(`sec-${id}`);
   if (s) pageScroll(s.closest(".view"), () => s.scrollIntoView({ block: "start", behavior: "smooth" }));
 }
@@ -1621,7 +1927,7 @@ function currentSelection() {
   const range = sel.getRangeAt(0);
   const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
   const sec = start.closest(".sec");
-  if (!sec || !sec.closest("#doc, #refactor")) return null;
+  if (!sec || !sec.closest("#model, #refactor, #doc")) return null;
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;
@@ -1701,7 +2007,9 @@ document.addEventListener("click", (e) => {
   const sel = getSelection();
   if (sel.rangeCount && !sel.isCollapsed) return;
   const t = e.target.closest && e.target.closest("[data-tip], [data-term]");
-  if (t) showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect());
+  const stale = !t && staleAt(e.clientX, e.clientY);
+  if (t) showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect(), lexiconOf(t));
+  else if (stale) showTip(staleNote(stale[0]), null, stale[1]);
   else $("#tip").hidden = true;
   const b = changedBlock(e.target);
   if (b !== hoveredChange) paintChange(b);
@@ -1732,6 +2040,8 @@ function openComposer(target, mode = "comment") {
   c._mode = mode;
   $(".composer-quote", c).textContent = target.question ? `agent question ${target.question}`
     : target.quote ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
+    : target.section === DOC_SET ? "the doc set"
+    : docPathOf(target.section) !== null ? `whole doc ${docPathOf(target.section)}`
     : target.section ? `whole section §${numberOf(target.section)} ${titleOf(target.section)}`
     : "general question, no passage";
   $(".add", c).textContent = mode === "ask" ? "Ask" : "Add";
@@ -1827,7 +2137,9 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    section question whose section is not written yet, which stays open; once a
    plan exists it reads « Rewrite plan », and the agent revises the plan with the answers).
    In a branch review or a refactor, what is written is the model: « Write model ».
-   These three take the draft comments with them, like the approvals. */
+   These three take the draft comments with them, like the approvals.
+   A docs review (view-docs) has no Plan tab: its scope block, headed « questions », sits at
+   the top of the Doc tab while it holds a question, without these three buttons. */
 
 const openQuestions = () => (state ? state.questions || [] : []).filter((q) => q.status === "open");
 // An open question shown at the end of its anchor section, once that section is written.
@@ -1967,6 +2279,11 @@ function renderScope() {
        q.answer?.from === "terminal" ? el("span", { class: "dim", text: " (in the terminal)" }) : null),
     el("span", { class: "t-chips", "data-question": q.id }))));
   $("#scope-empty").hidden = questions.length > 0 || state.status.phase === "scoping";
+  // In a docs review the scope block sits at the top of the Doc tab, only while it has
+  // questions, and holds them alone: no scoping to end, no grill.
+  $("#scope").hidden = isDocsReview() && !questions.length;
+  $(".scope-actions").hidden = isDocsReview();
+  $(".scope-head").firstChild.nodeValue = isDocsReview() ? "questions" : "scope";
   annotateQuestions($("#scope"));
 
   const grill = $("#grill");
@@ -2014,9 +2331,16 @@ $(".review").addEventListener("scroll", (e) => {
   reviewAtEnd = p.scrollHeight - p.scrollTop - p.clientHeight < 24;
 }, { passive: true });
 
+// Where a comment sits: its section's number, « doc set », or the file name of its doc.
+function whereOf(id) {
+  if (id === DOC_SET) return "doc set";
+  const p = docPathOf(id);
+  return p !== null ? p.slice(p.lastIndexOf("/") + 1) : `§${numberOf(id)}`;
+}
+
 function quoteLine(c) {
   if (c.question) return el("div", { class: "c-quote" }, el("span", { class: "num", text: "?" }), ` agent question ${c.question}`);
-  const where = c.section ? `§${numberOf(c.section)}` : "·";
+  const where = c.section ? whereOf(c.section) : "·";
   const q = c.quote ? `« ${c.quote.length > 90 ? c.quote.slice(0, 90) + "…" : c.quote} »`
           : c.section ? "whole section" : "general";
   const open = () => {
@@ -2220,7 +2544,7 @@ async function moveBrowserDrafts() {
 const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped",
                        "go-on": "The writer goes on" };
 
-async function send(action = "", button = null) {
+async function send(action = "", button = null, extra = {}) {
   const approval = Object.values(APPROVALS).find((a) => a.action === action);
   const btn = button || (approval ? buttonOf(approval) : $("#send"));
   if (btn.disabled) return;
@@ -2235,6 +2559,7 @@ async function send(action = "", button = null) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       action,
+      ...(extra.then_pr ? { then_pr: true } : {}),
       note: $("#note").value,
       comments: drafts.map(({ section, quote, prefix, text, thread }) => ({ section, quote, prefix, text, thread })),
       drafts: drafts.map((d) => d.id),
@@ -2253,7 +2578,8 @@ async function send(action = "", button = null) {
   drafts = [];
   $("#note").value = "";
   await load();
-  sentToast(approval ? approval.toast : SCOPE_TOASTS[action] || `Sent ${b.id} to the session`);
+  const toastText = approval && extra.then_pr && approval.also ? approval.also.toast : approval ? approval.toast : "";
+  sentToast(toastText || SCOPE_TOASTS[action] || `Sent ${b.id} to the session`);
 }
 
 /* ---------------- divider ----------------
@@ -2407,7 +2733,7 @@ function openPopover(id) {
   const t = threadOf(id);
   if (!t) return;
   if (t.section && !t.question && !t.quote.startsWith("plan · ")) {
-    if (tab !== tabOf(t.section)) setTab(tabOf(t.section));
+    openSection(t.section);
     openItemOf(t.section);
   }
   popThread = id;
@@ -2744,11 +3070,13 @@ $("#notices").addEventListener("click", async () => {
 });
 renderNotices();
 
-/* The tip under a word: a lexicon entry's (`term`, its index) or a plain text (`text`). */
-function showTip(text, term, r) {
+/* The tip under a word: a lexicon entry's (`term`, its index in `lexicon`, the model's
+   unless given) or a plain text (`text`). */
+function showTip(text, term, r, lexicon = state.plan.lexicon) {
   const tip = $("#tip");
   if (term !== null) {
-    const entry = state.plan.lexicon[term];
+    const entry = lexicon[term];
+    if (!entry) return;
     tip.replaceChildren(el("div", { class: "tip-term", text: entry.term }));
     const body = el("div", { class: "tip-body" });
     body.innerHTML = entry.tip_html;
@@ -2764,7 +3092,7 @@ document.addEventListener("mouseover", (e) => {
   if (isTouch()) return; // a tap shows it (see "taps")
   const t = e.target.closest("[data-tip], [data-term]");
   if (!t) { $("#tip").hidden = true; return; }
-  showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect());
+  showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect(), lexiconOf(t));
 });
 
 // ?static skips the live stream (headless rendering never finishes while it is open).

@@ -12,6 +12,10 @@ thread has said. Each turn is one process, run by the server in a background Pyt
 its reply streams into threads/<id>.json, which the server's event stream watches like the
 other session files. `agents.py` holds what differs between agents.
 
+A thread opened on a doc of the Doc tab (section `doc:<path>`) gets that doc's text, read
+from the worktree, in place of a section; one on the doc set list (`doc:` alone) gets the doc
+set.
+
 A thread opened on an agent question (`question`) helps the user understand it before
 answering it from its box. Its « use as answer » turn (`draft`) asks for the answer, which
 the server keeps as the reply's `draft` ({choices, text}); the page fills the question's
@@ -36,8 +40,8 @@ from pathlib import Path
 from typing import Any
 
 from .agents import Backend, TurnState, resolve
-from .context import build
-from .store import Session, SessionError, now_iso, now_iso_ms
+from .context import build, doc_passage
+from .store import DOC_KEY, DOC_SET_ANCHOR, Session, SessionError, now_iso, now_iso_ms
 
 FLUSH_EVERY = 0.25  # seconds between writes of a streaming reply
 
@@ -264,13 +268,20 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
     outline = plan["outline"]
     number = {sec["id"]: i + 1 for i, sec in enumerate(outline)}
     titles = {sec["id"]: sec.get("title", sec["id"]) for sec in outline}
-    doc = "review" if plan.get("workflow") in ("view-branch", "view-refactor") else "explanation"
+    reviews = ("view-branch", "view-refactor", "view-docs")
+    doc = "review" if plan.get("workflow") in reviews else "explanation"
     sec = thread["section"]
     qid = thread.get("question", "")
+    on_doc = sec.startswith(DOC_KEY)  # a doc, or the doc set (DOC_SET_ANCHOR)
     if qid:
         anchor = _question_anchor(s, qid, number, titles)
     elif sec:
-        where = f"§{number.get(sec, '?')} {titles.get(sec, sec)} ({sec})"
+        if sec == DOC_SET_ANCHOR:
+            where = "the doc set (the list of repo docs the Doc tab shows)"
+        elif sec.startswith(DOC_KEY):
+            where = f"the doc {sec.removeprefix(DOC_KEY)} (a file of the repository)"
+        else:
+            where = f"§{number.get(sec, '?')} {titles.get(sec, sec)} ({sec})"
         anchor = f"{where}: « {thread['quote']} »" if thread["quote"] else f"the whole of {where}"
     else:
         anchor = f"none (a general question about the {doc})"
@@ -308,6 +319,9 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
         " an HTML section.",
         f"- When the discussion leads to a change (to the {doc} or to the code),"
         " say so plainly. The user sends it to the main session from the page.",
+        "- A doc of the Doc tab is a file of the repository: its current text is that file."
+        if on_doc
+        else "",
         _vocabulary(plan["lexicon"], number, number.get(sec) if sec else None),
         f"Passage: {anchor}",
     ]
@@ -317,6 +331,9 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
             "",
             build(s, "thread", ["the user's message below, about the passage above"], sec),
         ]
+    elif on_doc and not qid:
+        # A doc is not in the session folder: the thread gets it here, read from the worktree.
+        lines += ["", *doc_passage(s, sec)]
     return "\n".join(lines)
 
 

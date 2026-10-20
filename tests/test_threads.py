@@ -412,3 +412,21 @@ def test_read_draft_keeps_real_options_only():
     multi = {**q, "multi": True}
     text = "choice: a\nchoice: b\nanswer: both,\nfor speed."
     assert threads._read_draft(text, multi) == {"choices": ["a", "b"], "text": "both, for speed."}
+
+
+def test_a_thread_on_a_doc_gets_the_doc_from_the_worktree(tmp_path):
+    from view_concept.agents import ClaudeBackend
+    from view_concept.context import build
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Tool\n\nThe keys 1 to 4.\n")
+    s = Session("gate", tmp_path)
+    s.create("The gate", "rework the gate", kind="code", repo=str(repo))
+    s.add_doc("README.md", "the install")
+    thread = {"id": "t1", "section": "doc:README.md", "quote": "The keys"}
+    text = threads._briefing(s, thread, ClaudeBackend())
+    assert "Passage: the doc README.md (a file of the repository): « The keys »" in text
+    assert "## Doc of the passage: README.md" in text and "The keys 1 to 4." in text
+    listed = build(s, "thread", ["x"], "doc:")
+    assert "## Doc set of the passage\n- README.md: the install" in listed

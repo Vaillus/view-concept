@@ -543,3 +543,12 @@ def test_a_coordinator_pass_never_stalls(review, monkeypatch):
     p = runs_of(m)["pass:b1"]
     assert max(s["end"] - s["start"] for s in p["stretches"]) > 30.0
     assert not any(s["stalled"] for s in p["stretches"]) and p["stalled"] == 0.0
+
+
+def test_a_write_docs_batch_is_labelled_by_its_button():
+    from view_concept.metrics import WAITING_PHASES, batch_label
+
+    assert batch_label({"action": "write-docs"}) == "« Write docs »"
+    label = batch_label({"action": "write-docs", "then_pr": True})
+    assert label == "« Write docs and create PR »"
+    assert "awaiting-docs" in WAITING_PHASES

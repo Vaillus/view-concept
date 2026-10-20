@@ -27,7 +27,10 @@ from typing import Any
 from .store import HOME, SessionError, _read_json, _write_json, project_of, slugify
 
 # The skills a session can start on, in the order the page offers them.
-SKILLS = ("view-branch", "view-refactor", "view-concept")
+SKILLS = ("view-branch", "view-refactor", "view-docs", "view-concept")
+# The skills that create their own branch and worktree: a launch takes no worktree for them,
+# or the session would run in one and write in the other.
+OWN_WORKTREE = ("view-docs",)
 # The permission mode every launch starts the agent in (see the module's docstring).
 PERMISSION_MODE = "auto"
 # After this many seconds with no session, a pending launch reads « not started ».
@@ -54,11 +57,14 @@ end run
 
 def command(skill: str, request: str, worktree: str = "") -> str:
     """The shell line that starts Claude Code on `skill` with the user's request. With
-    `worktree`, Claude Code first creates that git worktree and runs in it."""
+    `worktree`, Claude Code first creates that git worktree and runs in it; a skill of
+    OWN_WORKTREE refuses one."""
     if skill not in SKILLS:
         raise SessionError(f"unknown skill {skill!r}; one of {', '.join(SKILLS)}")
     if not request.strip():
         raise SessionError("describe the feature")
+    if worktree and skill in OWN_WORKTREE:
+        raise SessionError(f"{skill} creates its own worktree; start it with none")
     args = ["claude", "--permission-mode", PERMISSION_MODE]
     if worktree:
         args += ["-w", slugify(worktree)]

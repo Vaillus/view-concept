@@ -36,6 +36,9 @@ a.btn { color: var(--ink); text-decoration: none; text-align: center; }
 /* The header's buttons sit in the top bar on a wide window; the narrow layout puts them
    in the ⋯ menu (see the end of this file). */
 .header-menu { display: contents; }
+/* Why the agent kept the reference model, next to its link (a docs review). */
+.reference-reason { color: var(--muted); font-size: 12px; max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reference-reason[hidden] { display: none; }
 .menu-toggle { display: none; background: none; border: 0; padding: 0 6px; color: var(--muted); font-size: 16px; }
 .narrow-only { display: none; }
 
@@ -217,6 +220,40 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .rv-involves { font-size: 12px; margin: -4px 0 6px; }
 .rv-involves a { color: var(--ink-dim); }
 @media (hover: hover) { .rv-involves a:hover { color: var(--accent); } }
+
+/* ---- the Doc tab: the doc set, the bar of doc titles, the doc shown (app.js) ---- */
+.doc-set { list-style: none; margin: 0; padding: 0; }
+.doc-set li { padding: 2px 0; }
+.doc-set .badge { margin-left: 6px; }
+.doc-open { background: none; border: 0; padding: 0; color: var(--info); }
+@media (hover: hover) { .doc-open:hover { text-decoration: underline; } }
+.doc-removed { font-size: 12px; margin: 6px 0 0; }
+.doc-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); display: flex; flex-wrap: wrap; gap: 4px;
+           padding: 10px 0 8px; border-bottom: 1px solid var(--line); }
+.doc-title { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--line);
+             padding: 1px 8px; font-size: 12px; color: var(--ink-dim); }
+@media (hover: hover) { .doc-title:hover { color: var(--ink); border-color: var(--line-strong); } }
+.doc-title.active { color: var(--accent); border-color: var(--accent); }
+.doc-title.missing { color: var(--dim); font-style: italic; }
+.doc-title .badge { margin-left: 0; }
+/* a doc rewritten since its highlight baseline */
+.doc-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.doc-sec h2 code { background: none; padding: 0; }
+.doc-sec .body h1 { font-size: 17px; margin: 16px 0 8px; }
+.doc-sec.missing h2 { color: var(--muted); }
+#docs-write-pr { margin-top: 8px; }
+/* the base mark: a block that differs from the base branch, a bar in the right margin */
+.sec .body .based { position: relative; }
+.sec .body .based::after { content: ""; position: absolute; right: -14px; top: 0; bottom: 0; width: 3px; background: var(--info); }
+.sec .body :is(td, th).based { position: static; box-shadow: inset -3px 0 var(--info); }
+.sec .body :is(td, th).based::after { content: none; }
+.sec .body :is(td, th).changed.based { box-shadow: inset 3px 0 var(--ok), inset -3px 0 var(--info); }
+/* a block that scrolls sideways (code, display maths) would clip a bar drawn outside it
+   and scroll to it: the bar is drawn inside its right edge */
+.sec .body :is(pre, .math.block).based { box-shadow: inset -3px 0 var(--info); }
+.sec .body :is(pre, .math.block).based::after { content: none; }
+/* a stale passage: a doc passage the model contradicts */
+::highlight(ev-stale) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }
 
 /* ---- review pane ---- */
 .review { overflow-y: auto; min-height: 0; border-left: 1px solid var(--line); padding: 0 12px 24px; display: flex; flex-direction: column; gap: 8px; }
@@ -517,6 +554,7 @@ body.sb-collapsed .sidebar { display: none; }
   .header-menu.open .t-chips { flex-wrap: wrap; }
   .header-menu.open .t-chips:empty { display: none; }
   .header-menu .btn { padding: 6px 10px; text-align: left; }
+  .header-menu.open .reference-reason { white-space: normal; max-width: none; }
 
   .sidebar { display: none; }
   body.sb-open .sidebar { display: block; position: fixed; z-index: 25; top: 0; bottom: 0; left: 0;

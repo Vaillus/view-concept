@@ -6,7 +6,7 @@ reach the agent session through the inbox.
 
     <home>/sessions/<slug>/
         plan.json       title, initial_request, kind, workflow, repo, base, pr, variant,
-                        outline, lexicon
+                        reference, outline, lexicon
         sections/<id>.md  the prose of one outline section         (written by the agent)
         sections/<id>.html  an HTML section instead: a self-contained HTML document
         sections/<id>/  its media folder: media files the agent produced for it
@@ -29,10 +29,14 @@ reach the agent session through the inbox.
         deliveries.jsonl  when each batch was handed to the agent  (`watch`, `wait`)
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
-        seen.json       the highlight baseline: each section's text   (server)
+        seen.json       the highlight baseline: each section's text, each doc's under
+                        `doc:<path>`                                       (server)
         drafts.json     the drafts and the general note, shared by every page (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
+        doc-set.json    the doc set: the repo docs the Doc tab shows, each with its reason,
+                        and the docs the user removed                    (`doc-set`)
+        stale.json      the stale passages: doc passages the model contradicts  (`stale`)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
@@ -60,7 +64,10 @@ names which of the item's files a relation starts from (by default the first). O
 `kind: "finding"` and `items: [<section ids>]` is a finding across items.
 
 The session workflow, `workflow` in plan.json, is the skill that drives the session:
-view-concept, view-branch or view-refactor (a triage of existing code). It picks the
+view-concept, view-branch, view-refactor (a triage of existing code) or view-docs (a docs
+review: a repo's docs reviewed on a scope, on a branch of their own, with the Doc tab
+alone, no outline, no sections and no items; its agent sets "awaiting-pr" whenever it
+waits once the doc set exists). It picks the
 verdict set the page shows: verdicts.yaml holds one list per workflow, and each verdict
 carries the `tone` the page colours it with. A session created before workflows existed
 has no workflow and gets view-branch's list.
@@ -150,6 +157,35 @@ stays in `deleted`, so an edit to it arriving later is dropped. A batch clears t
 it carried and the note. Like seen.json, it is the page's write: it never counts as the
 agent's activity.
 
+The doc set is the list of repo docs the Doc tab shows: {docs: [{path, reason}],
+removed: [paths]}. `path` is relative to the repo root (plan.json `repo`), `reason` the one
+line that says why the doc is listed. An agent keeps it (`doc-set add` and `remove`); a
+doc the user removed by a comment goes to `removed`, and an agent's refresh never adds it
+back unless the user asks (`--user`). A doc of the set is a doc section: its text is the
+file read from the worktree at each render, never copied into the session, so the user's
+own edits show as the agent's do; a doc missing there reads as missing. Its highlight
+baseline is kept in seen.json under `doc:<path>` and moves with every batch, like a
+section's. A comment, a draft or a side thread on a doc's text is anchored to `doc:<path>`
+(a batch prints it `(doc <path>)`), one on the doc set list to `doc:` alone. The doc
+sections stay out of the published page, the vault export, the publish
+fingerprint and `check`, which read the outline's sections only. The base mark compares
+a doc's worktree file (uncommitted changes included) with the same doc at the merge base
+of the branch and its base branch (`merge_base`, `base_text`); a doc absent there was
+created on the branch.
+
+A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
+doc (its path), quote (the passage's exact text in the file), section (the model section
+it contradicts, a reference model's, or ""), note (one line: why), at}. The reviewer
+flags them (`stale`), and drops one fixed or dismissed. A flag whose quote is no longer
+found in its doc's current text is not shown, and stays in the file.
+
+A docs review may take a branch review's model as its reference model: plan.json
+`reference`, {slug (a view-branch session of the same repo), reason (one line: why the
+agent kept it, shown next to its link)} (written by `reference`, whose `--candidates`
+lists the repo's branch reviews). None is the ordinary case. Its lexicon's terms are
+underlined in the docs, and its sections are the measure of the stale passages the code
+cannot catch. It is re-read at each run, as it is then.
+
 A branch review's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
 at} (written by `pr`). The page links it at the top and at the end of the code tab.
 
@@ -178,7 +214,7 @@ import time
 import unicodedata
 from datetime import UTC, date, datetime
 from functools import cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from . import frame
@@ -192,8 +228,10 @@ VAULT_DIR = Path(
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
-# "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-pr"
-# (set by the view-branch skill once refactoring is written) « Create PR ».
+# "awaiting-model" (set by the view-branch skill only) « Approve model », "awaiting-docs" (set
+# by the view-branch skill once the code carries the model) « Write docs » and « Write docs
+# and create PR », and "awaiting-pr" (set by the view-branch skill once the docs are
+# written, by the view-docs skill whenever it waits once the doc set exists) « Create PR ».
 # "awaiting-answer" (set by `question`, outside scoping) waits on an agent question shown in
 # the scope block at the top of the Plan tab.
 PHASES = (
@@ -201,6 +239,7 @@ PHASES = (
     "planning",
     "awaiting-approval",
     "awaiting-model",
+    "awaiting-docs",
     "awaiting-pr",
     "awaiting-answer",
     "writing",
@@ -212,6 +251,7 @@ ACTIONS = (
     "",
     "approve-plan",
     "approve-model",
+    "write-docs",
     "create-pr",
     "answer",
     "plan",
@@ -223,9 +263,10 @@ ACTIONS = (
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
 # The session workflow: which skill drives the session. It picks the verdict set the page
-# shows (see verdicts.yaml). view-branch and view-refactor review code, so their sessions
-# are code sessions. A session created before workflows existed has none.
-WORKFLOWS = ("view-concept", "view-branch", "view-refactor")
+# shows (see verdicts.yaml). view-branch, view-refactor and view-docs (a docs review) work
+# on a repository, so their sessions are code sessions. A session created before workflows
+# existed has none.
+WORKFLOWS = ("view-concept", "view-branch", "view-refactor", "view-docs")
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 # The role agents a branch review's coordinator starts; a variant sets a model per role.
@@ -236,6 +277,12 @@ DRAFT_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread")
 # The pages of every session write the drafts file from the server's threadpool.
 _DRAFTS_LOCK = threading.Lock()
+# The key prefix of a doc's highlight baseline in seen.json, and of the anchor of a comment,
+# a draft or a side thread on its text: `doc:<path>`. A comment on the doc set list is
+# anchored to DOC_SET_ANCHOR, `doc:` alone: no doc path is empty, and no section id may
+# start with `doc:` (write_plan refuses it), so the anchor never names a section.
+DOC_KEY = "doc:"
+DOC_SET_ANCHOR = DOC_KEY
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -451,6 +498,14 @@ class Session:
     def published_path(self) -> Path:
         return self.dir / "published.json"
 
+    @property
+    def doc_set_path(self) -> Path:
+        return self.dir / "doc-set.json"
+
+    @property
+    def stale_path(self) -> Path:
+        return self.dir / "stale.json"
+
     def media_folder(self, sid: str) -> Path:
         """The media folder of section `sid`: sections/<sid>/."""
         if not sid or "/" in sid or sid in (".", ".."):
@@ -529,6 +584,12 @@ class Session:
                 raise SessionError("every outline entry needs an id and a title")
             if len(set(ids)) != len(ids):
                 raise SessionError("outline ids must be unique")
+            taken = [i for i in ids if i.startswith(DOC_KEY)]
+            if taken:
+                raise SessionError(
+                    f"outline ids may not start with {DOC_KEY!r}, the Doc tab's anchors: "
+                    + ", ".join(taken)
+                )
             long = [sec["id"] for sec in outline if len(str(sec.get("earns", ""))) > EARNS_MAX]
             if long:
                 raise SessionError(
@@ -563,6 +624,85 @@ class Session:
         plan["pr"] = {"url": url, "at": now_iso()}
         _write_json(self.plan_path, plan)
         return plan["pr"]
+
+    def set_reference(self, other: str, reason: str = "") -> dict[str, str]:
+        """Take session `other`'s model as the reference model (plan.json `reference`:
+        {slug, reason}): a docs review measures its docs against it. `other` is a branch
+        review of the same repo (a reference candidate), `reason` the one line the page
+        shows next to its link. An empty `other` removes the reference."""
+        plan = self.read_plan()
+        if not other:
+            plan.pop("reference", None)
+            _write_json(self.plan_path, plan)
+            return {}
+        ref = Session(other, self.dir.parent)
+        if other == self.slug or not ref.exists():
+            raise SessionError(f"no other session {other!r}")
+        there = ref.read_plan()
+        here_repo, there_repo = plan.get("repo", ""), there.get("repo", "")
+        if not here_repo or not there_repo or project_of(here_repo) != project_of(there_repo):
+            raise SessionError(f"{other} is not a session of this repo")
+        if there.get("workflow") != "view-branch":
+            raise SessionError(f"{other} is not a branch review: only one has a model")
+        reason = " ".join(reason.split())
+        if not reason:
+            raise SessionError('a reference model needs its reason: --reason "<one line>"')
+        plan["reference"] = {"slug": other, "reason": reason}
+        _write_json(self.plan_path, plan)
+        return plan["reference"]
+
+    def reference_model(self) -> dict[str, Any] | None:
+        """The reference model, re-read at each call: {slug, title, reason, lexicon} of the
+        session plan.json `reference` names; None without one, or when that session is
+        gone. A `reference` written as a bare slug has no reason."""
+        entry = self.read_plan().get("reference")
+        if isinstance(entry, str):
+            entry = {"slug": entry, "reason": ""}
+        if not isinstance(entry, dict) or not entry.get("slug"):
+            return None
+        try:
+            ref = Session(str(entry["slug"]), self.dir.parent)
+            if not ref.exists():
+                return None
+            plan = ref.read_plan()
+        except SessionError:
+            return None
+        return {
+            "slug": ref.slug,
+            "title": plan["title"],
+            "reason": str(entry.get("reason") or ""),
+            "lexicon": plan["lexicon"],
+        }
+
+    def reference_candidates(self) -> list[dict[str, Any]]:
+        """The sessions a docs review may take as reference model: the branch reviews of
+        the same repo (any worktree), newest first, each {slug, title, updated, sections
+        (its outline's titles), terms (its lexicon's terms)}, for the agent to read
+        against the doc set."""
+        project = project_of(self.read_plan().get("repo", ""))
+        if not project:
+            return []
+        out = []
+        for row in list_sessions(self.dir.parent):
+            if row["slug"] == self.slug or row["workflow"] != "view-branch":
+                continue
+            if row["project"] != project:
+                continue
+            plan = Session(row["slug"], self.dir.parent).read_plan()
+            out.append(
+                {
+                    "slug": row["slug"],
+                    "title": row["title"],
+                    "updated": row["updated"],
+                    "sections": [
+                        o.get("title", o["id"])
+                        for o in plan["outline"]
+                        if o.get("part") != "refactoring"
+                    ],
+                    "terms": [t["term"] for t in plan["lexicon"]],
+                }
+            )
+        return out
 
     def read_variant(self) -> dict[str, Any]:
         """The setup the session runs with: {name, models}, `models` mapping a role to the
@@ -1015,6 +1155,171 @@ class Session:
         seen.update(sections)
         _write_json(self.seen_path, seen)
 
+    # ---- the doc set ----
+    def read_doc_set(self) -> dict[str, Any]:
+        """The doc set: {docs: [{path, reason}], removed: [paths]}, empty without a file."""
+        data = _read_json(self.doc_set_path, {})
+        return {"docs": list(data.get("docs", [])), "removed": list(data.get("removed", []))}
+
+    def add_doc(self, path: str, reason: str, user: bool = False) -> dict[str, Any]:
+        """Add a doc to the doc set, or change its reason. A doc the user removed is
+        refused unless `user` (the user asked for it in a comment), which takes it out of
+        `removed`. The doc need not exist yet: the branch may create it."""
+        path = doc_path(path)
+        if not reason.strip():
+            raise SessionError("a doc of the doc set needs a reason")
+        data = self.read_doc_set()
+        if path in data["removed"]:
+            if not user:
+                raise SessionError(
+                    f"{path} was removed by the user: add it back only when the user asks (--user)"
+                )
+            data["removed"].remove(path)
+        entry = {"path": path, "reason": " ".join(reason.split())}
+        at = next((i for i, d in enumerate(data["docs"]) if d.get("path") == path), None)
+        if at is None:
+            data["docs"].append(entry)
+        else:
+            data["docs"][at] = entry
+        _write_json(self.doc_set_path, data)
+        return entry
+
+    def remove_doc(self, path: str, user: bool = False) -> None:
+        """Remove a doc from the doc set; `user` (the user asked in a comment) records it
+        in `removed`, so an agent's refresh never adds it back."""
+        path = doc_path(path)
+        data = self.read_doc_set()
+        listed = any(d.get("path") == path for d in data["docs"])
+        if not listed and not user:
+            raise SessionError(f"{path} is not in the doc set")
+        data["docs"] = [d for d in data["docs"] if d.get("path") != path]
+        if user and path not in data["removed"]:
+            data["removed"].append(path)
+        _write_json(self.doc_set_path, data)
+        # A doc that enters the doc set again starts with no green highlight: its baseline
+        # is set anew at its first read.
+        seen = _read_json(self.seen_path, {})
+        if seen.pop(DOC_KEY + path, None) is not None:
+            _write_json(self.seen_path, seen)
+
+    def repo_dir(self) -> Path | None:
+        """The worktree a code session works in (plan.json `repo`), None without one."""
+        repo = self.read_plan().get("repo")
+        return Path(repo) if repo else None
+
+    def doc_file(self, path: str) -> Path | None:
+        """Where doc `path` lives in the worktree, None when the session has no repo or the
+        path leads out of it (a symbolic link included). The file may not exist."""
+        repo = self.repo_dir()
+        if repo is None:
+            return None
+        root = repo.resolve()
+        try:
+            file = (root / doc_path(path)).resolve()
+        except SessionError:  # a path written into doc-set.json by hand
+            return None
+        return file if file.is_relative_to(root) else None
+
+    def read_docs(self) -> dict[str, str | None]:
+        """The text of each doc of the doc set, read from the worktree on every call (no
+        copy in the session), in the doc set's order: None for a doc missing there."""
+        out: dict[str, str | None] = {}
+        for d in self.read_doc_set()["docs"]:
+            file = self.doc_file(d["path"])
+            out[d["path"]] = (
+                file.read_text(encoding="utf-8", errors="replace")
+                if file is not None and file.is_file()
+                else None
+            )
+        return out
+
+    def doc_texts(self) -> dict[str, str]:
+        """The docs that exist, keyed as their highlight baseline is: `doc:<path>`."""
+        return {DOC_KEY + p: t for p, t in self.read_docs().items() if t is not None}
+
+    # ---- stale passages ----
+    def read_stale(self) -> list[dict[str, Any]]:
+        """Every stale passage flagged, shown or not: [{id, doc, quote, section, note, at}]."""
+        return _read_json(self.stale_path, [])
+
+    def shown_stale(self, docs: dict[str, str | None] | None = None) -> list[dict[str, Any]]:
+        """The stale passages the page shows: those whose quote is still found in their
+        doc's current text (`docs`, the doc set's texts, read when not given). A flag whose
+        passage changed, or whose doc left the doc set, is not shown, and stays in the
+        file."""
+        docs = self.read_docs() if docs is None else docs
+        return [
+            f
+            for f in self.read_stale()
+            if (text := docs.get(f.get("doc", ""))) is not None and _found(f.get("quote", ""), text)
+        ]
+
+    def add_stale(self, doc: str, quote: str, note: str, section: str = "") -> dict[str, Any]:
+        """Flag a stale passage of a doc of the doc set: `quote` is the passage's exact
+        text in the file, `section` the model section it contradicts (or a reference
+        model's), `note` one line saying why."""
+        doc = doc_path(doc)
+        text = self.read_docs().get(doc, None)
+        if doc not in {d["path"] for d in self.read_doc_set()["docs"]}:
+            raise SessionError(f"{doc} is not in the doc set")
+        if not quote.strip() or not note.strip():
+            raise SessionError("a stale passage needs its quote and a note")
+        if text is None or not _found(quote, text):
+            raise SessionError(f"the quote is not in {doc}: copy the passage as the file has it")
+        flags = self.read_stale()
+        n = max((int(f["id"][1:]) for f in flags if str(f.get("id", ""))[1:].isdigit()), default=0)
+        flag = {
+            "id": f"s{n + 1}",
+            "doc": doc,
+            "quote": quote.strip(),
+            "section": section.strip(),
+            "note": " ".join(note.split()),
+            "at": now_iso(),
+        }
+        _write_json(self.stale_path, [*flags, flag])
+        return flag
+
+    def drop_stale(self, ids: list[str]) -> None:
+        """Remove stale passages, fixed or dismissed."""
+        flags = self.read_stale()
+        unknown = sorted(set(ids) - {f.get("id") for f in flags})
+        if unknown:
+            raise SessionError(f"no stale passage {', '.join(unknown)}")
+        _write_json(self.stale_path, [f for f in flags if f.get("id") not in ids])
+
+    def merge_base(self) -> str:
+        """The commit where the branch left its base branch (plan.json `base`, else main):
+        `git merge-base <base> HEAD` in the worktree. "" when git cannot tell (no repo,
+        not a git repository, no such base): the docs then carry no base mark."""
+        repo = self.repo_dir()
+        if repo is None:
+            return ""
+        base = str(self.read_plan().get("base") or "main")
+        return (_git(repo, "merge-base", base, "HEAD") or "").strip()
+
+    def base_text(self, path: str, commit: str) -> str | None:
+        """Doc `path` (relative to the worktree) as it was at `commit` (the merge base);
+        "" when it did not exist there: a doc the branch created (an empty doc at the merge
+        base reads the same, and every block of it is new all the same). None when git
+        cannot tell (no repo, no commit, git failed or timed out): the doc then carries no
+        base mark."""
+        repo = self.repo_dir()
+        if repo is None or not commit:
+            return None
+        spec = f"{commit}:./{doc_path(path)}"
+        text = _git(repo, "show", spec)
+        if text is not None:
+            return text
+        exists = _git(repo, "cat-file", "-e", spec)
+        if exists is None and _git(repo, "cat-file", "-e", f"{commit}^{{commit}}") is not None:
+            return ""
+        return None
+
+    def doc_files(self) -> list[Path]:
+        """The worktree file of each doc of the doc set, for `signature`."""
+        files = (self.doc_file(d["path"]) for d in self.read_doc_set()["docs"])
+        return [f for f in files if f is not None]
+
     # ---- the drafts file ----
     def read_drafts(self) -> dict[str, Any]:
         """The drafts file: {drafts: [{id, section, quote, prefix, text, thread?}], note,
@@ -1243,6 +1548,8 @@ class Session:
             self.terminal_messages_path,
             self.code_map_path,
             self.request_path,
+            self.doc_set_path,
+            self.stale_path,
             *self.section_files().values(),
         ]
         times = [iso_time(t) for p in paths if (t := _mtime(p))]
@@ -1319,6 +1626,10 @@ class Session:
         ]
         if self.sections_dir.is_dir():
             paths += sorted([*self.sections_dir.glob("*.md"), *self.sections_dir.glob("*.html")])
+        # The docs of the doc set are files of the worktree: an edit there re-renders too.
+        paths += [self.doc_set_path, self.stale_path]
+        with contextlib.suppress(SessionError):
+            paths += self.doc_files()
         return _stat_signature(paths)
 
     def thread_signature(self) -> tuple:
@@ -1448,15 +1759,18 @@ class Session:
         note: str = "",
         action: str = "",
         answers: list[dict[str, Any]] | None = None,
+        then_pr: bool = False,
     ) -> dict[str, Any]:
         """Record a batch sent from the page and append it to the inbox.
 
         `action` is what the user does with the batch: "approve-plan" means the user
         approved the plan from the page, "approve-model" that they approved the model of a
-        branch review (so the implementation starts), "create-pr" that they asked the agent to
-        open the branch's PR once the refactoring is written, with the comments as last
-        corrections, "answer" that they answered, skipped or did not understand agent
-        questions (`answers`, see `answer_question`, `skip_question` and
+        branch review (so the implementation starts), "write-docs" that they started the doc
+        pass once the code carries the model (with `then_pr`, « Write docs and create PR »:
+        the doc pass, the reviewer run and the PR follow with no pause; stored only when
+        true), "create-pr" that they asked the agent to open the branch's PR, with the
+        comments as last corrections, "answer" that they answered, skipped or did not
+        understand agent questions (`answers`, see `answer_question`, `skip_question` and
         `unclear_question`), "plan" that they ended scoping (every open question is then
         marked skipped, but a section question whose section is not written yet), "grill"
         that they started a grill, "stop-grill" that they stopped it, and "go-on" that they
@@ -1466,6 +1780,8 @@ class Session:
             raise SessionError(f"unknown action {action!r}")
         if (action == "answer") != bool(answers):
             raise SessionError("an answer batch, and only one, carries answers")
+        if then_pr and action != "write-docs":
+            raise SessionError("then_pr goes with the action write-docs only")
         note = note.strip()
         # A comment from a side thread may have no text: the thread's conclusion is the comment.
         comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
@@ -1494,14 +1810,17 @@ class Session:
         }
         if answers:
             batch["answers"] = answers
+        if then_pr:
+            batch["then_pr"] = True
         if action == "plan":
             batch["rewrite"] = self.has_written()
         batches.append(batch)
         _write_json(self.comments_path, data)
         with self.inbox_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(batch, ensure_ascii=False) + "\n")
-        # Highlights show what changed since the last batch: every baseline moves here.
-        self.mark_seen(self.read_sections())
+        # Highlights show what changed since the last batch: every baseline moves here,
+        # the docs' included.
+        self.mark_seen({**self.read_sections(), **self.doc_texts()})
         if action == "plan":
             self._skip_open_questions(batch["sent"])
         return batch
@@ -1819,6 +2138,16 @@ def _externalize(text: str, vault_dir: Path, slug: str) -> str:
     return "".join(parts)
 
 
+def doc_path(path: str) -> str:
+    """A doc's path as the doc set keeps it: relative to the repo root, in POSIX form,
+    never leaving the repo."""
+    raw = path.strip().replace("\\", "/")
+    p = PurePosixPath(raw)
+    if not raw or p.is_absolute() or ".." in p.parts or str(p) in ("", "."):
+        raise SessionError(f"not a path inside the repo: {path!r}")
+    return str(p)
+
+
 def list_sessions(root: Path | None = None) -> list[dict[str, Any]]:
     root = root or SESSIONS
     out = []
@@ -1883,6 +2212,23 @@ def project_of(repo: str) -> str:
     return repo.split(WORKTREES_DIR, 1)[0]
 
 
+def _found(quote: str, text: str) -> bool:
+    """Whether a quoted passage is in a text, spaces and line breaks aside."""
+    quote = " ".join(quote.split())
+    return bool(quote) and quote in " ".join(text.split())
+
+
+def _git(repo: Path, *args: str) -> str | None:
+    """The output of a read-only git command in `repo`, None when it fails."""
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(repo), *args], capture_output=True, timeout=5, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout.decode("utf-8", errors="replace") if r.returncode == 0 else None
+
+
 def _mtime(path: Path) -> float | None:
     """A file's modification time, None when it does not exist."""
     try:
@@ -1932,6 +2278,18 @@ def format_batch(
         lines.append(
             "action: approve-model (the user approved the model from the page: "
             "start the implementation)"
+        )
+    if batch.get("action") == "write-docs" and batch.get("then_pr"):
+        lines.append(
+            "action: write-docs then create-pr (the user asked for the doc pass and the PR "
+            "with no pause: doc pass, reviewer run on the doc items and stale passages, then "
+            "open or update the PR whatever the verdicts)"
+        )
+    elif batch.get("action") == "write-docs":
+        lines.append(
+            "action: write-docs (the user asked for the doc pass: refresh the doc set, rewrite "
+            "the docs from the model, then the reviewer judges the doc items and flags stale "
+            "passages; « Create PR » follows)"
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")
@@ -1995,9 +2353,15 @@ def format_batch(
 
 
 def format_comment(c: dict[str, Any], number: dict[str, int]) -> str:
-    """One comment of a batch: where it is anchored, its text, the thread it comes from."""
+    """One comment of a batch: where it is anchored (a section, a doc of the Doc tab by its
+    path, the doc set list), its text, the thread it comes from."""
     sec = c["section"]
-    where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
+    if sec == DOC_SET_ANCHOR:
+        where = "(doc set)"
+    elif sec.startswith(DOC_KEY):
+        where = f"(doc {sec.removeprefix(DOC_KEY)})"
+    else:
+        where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
     quote = " ".join(c["quote"].split())
     lines = [f"[{c['id']}] {where} « {quote} »" if quote else f"[{c['id']}] {where}"]
     lines += [f"    {line}" for line in c["text"].splitlines()]

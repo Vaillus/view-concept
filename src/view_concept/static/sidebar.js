@@ -30,6 +30,9 @@
   let launches = [];      // the pending launches (launch.py)
   let pendingFor = 300;   // seconds before a pending launch reads « not started »
   let skills = ["view-branch"];
+  // The skills that create their own branch and worktree: the launcher offers them none
+  // (launch.py OWN_WORKTREE, which refuses one).
+  const OWN_WORKTREE = ["view-docs"];
 
   const h = (tag, attrs = {}, ...kids) => {
     const n = document.createElement(tag);
@@ -148,12 +151,17 @@
     const useTree = h("input", { type: "checkbox" });
     const tree = h("input", { class: "field", placeholder: "worktree name (from the request if empty)", spellcheck: "false", disabled: true });
     useTree.addEventListener("change", () => { tree.disabled = !useTree.checked; });
+    const treeLabel = h("label", { class: "check" }, useTree, " in a new worktree");
+    const ownTree = () => OWN_WORKTREE.includes(skill.value);
+    const showTree = () => { treeLabel.hidden = tree.hidden = ownTree(); };
+    skill.addEventListener("change", showTree);
+    showTree();
     const go = h("button", { class: "btn primary", text: "Start" });
     const close = () => box.remove();
     async function start() {
       const text = request.value.trim();
       if (!text) { request.focus(); return; }
-      const name = useTree.checked ? (tree.value.trim() || text.split(/\s+/).slice(0, 5).join(" ")) : "";
+      const name = useTree.checked && !ownTree() ? (tree.value.trim() || text.split(/\s+/).slice(0, 5).join(" ")) : "";
       go.disabled = true;
       err.hidden = true;
       const r = await fetch("/api/launch", {
@@ -178,7 +186,7 @@
         h("datalist", { id: "sb-projects" }, ...projects.map((p) => h("option", { value: p }))),
         h("label", { text: "skill" }), skill,
         h("label", { text: "request" }), request,
-        h("label", { class: "check" }, useTree, " in a new worktree"), tree,
+        treeLabel, tree,
         err,
         h("div", { class: "composer-actions" }, h("button", { class: "btn", text: "Cancel", onclick: close }), go)));
     box.addEventListener("click", (e) => { if (e.target === box) close(); });

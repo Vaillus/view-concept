@@ -914,3 +914,250 @@ def test_batch_progress_follows_the_delivery_mark(session):
     _touch(session.sections_dir / "s1.md", 3_000_000)
     progress = session.batch_progress()
     assert progress and progress["stage"] == "acted"
+
+
+# ---- the Doc tab ----
+
+
+@pytest.fixture
+def docs_review(tmp_path):
+    """A branch review on a repo (tmp_path/repo) with two docs."""
+    repo = tmp_path / "repo"
+    (repo / "docs").mkdir(parents=True)
+    (repo / "README.md").write_text("# Tool\n\nThe keys 1 to 4.\n")
+    (repo / "docs" / "reference.md").write_text("# Reference\n\nTabs and keys.\n")
+    s = Session("doc-tab", tmp_path / "sessions")
+    s.create("Doc tab", kind="code", repo=str(repo), base="main")
+    return s
+
+
+def test_the_doc_set_keeps_a_reason_per_doc(docs_review):
+    s = docs_review
+    assert s.read_doc_set() == {"docs": [], "removed": []}
+    s.add_doc("./docs/reference.md", "describes  the tabs")
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/reference.md", "describes the tabs and keys")
+    assert s.read_doc_set()["docs"] == [
+        {"path": "docs/reference.md", "reason": "describes the tabs and keys"},
+        {"path": "README.md", "reason": "the install"},
+    ]
+
+
+@pytest.mark.parametrize("path", ["/etc/passwd", "../other/README.md", "docs/../../x.md", " "])
+def test_a_doc_of_the_doc_set_stays_inside_the_repo(docs_review, path):
+    with pytest.raises(SessionError):
+        docs_review.add_doc(path, "why")
+
+
+def test_a_doc_the_user_removed_comes_back_only_when_the_user_asks(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.remove_doc("README.md", user=True)
+    assert s.read_doc_set() == {"docs": [], "removed": ["README.md"]}
+    with pytest.raises(SessionError, match="removed by the user"):
+        s.add_doc("README.md", "the install")
+    s.add_doc("README.md", "the install", user=True)
+    assert s.read_doc_set() == {"docs": [{"path": "README.md", "reason": "the install"}],
+                                "removed": []}  # fmt: skip
+
+
+def test_a_doc_back_in_the_doc_set_starts_with_no_highlight(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.read_seen(s.doc_texts())
+    s.remove_doc("README.md", user=True)
+    assert "doc:README.md" not in json.loads(s.seen_path.read_text())
+    (s.repo_dir() / "README.md").write_text("rewritten while out")
+    s.add_doc("README.md", "the install", user=True)
+    assert s.read_seen(s.doc_texts())["doc:README.md"] == "rewritten while out"
+
+
+def test_the_doc_set_anchor_names_no_section(docs_review):
+    s = docs_review
+    with pytest.raises(SessionError, match="may not start with 'doc:'"):
+        s.write_plan(outline=[{"id": "doc:x", "title": "X"}])
+    s.write_plan(outline=[{"id": "doc-set", "title": "Who keeps the doc list"}])
+    b = s.add_batch([
+        {"section": "doc-set", "quote": "", "text": "on the section"},
+        {"section": "doc:", "quote": "", "text": "on the list"},
+    ])  # fmt: skip
+    text = format_batch("doc-tab", b, s.read_plan()["outline"])
+    assert "[c1] §1 (doc-set)" in text and "[c2] (doc set)" in text
+
+
+def test_an_agent_removes_a_doc_without_recording_it(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.remove_doc("README.md")
+    assert s.read_doc_set() == {"docs": [], "removed": []}
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.remove_doc("README.md")
+
+
+def test_a_doc_is_read_from_the_worktree_and_missing_reads_as_none(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/new.md", "created by the branch")
+    assert s.read_docs() == {"README.md": "# Tool\n\nThe keys 1 to 4.\n", "docs/new.md": None}
+    (s.repo_dir() / "README.md").write_text("edited in an editor")
+    assert s.read_docs()["README.md"] == "edited in an editor"
+    assert s.doc_texts() == {"doc:README.md": "edited in an editor"}
+
+
+def test_a_doc_without_a_repo_reads_as_missing(session):
+    session.add_doc("README.md", "the install")
+    assert session.read_docs() == {"README.md": None}
+
+
+def test_editing_a_doc_changes_the_signature(docs_review):
+    s = docs_review
+    before = s.signature()
+    s.add_doc("README.md", "the install")
+    listed = s.signature()
+    assert listed != before
+    readme = s.repo_dir() / "README.md"
+    readme.write_text("a longer text than before")
+    assert s.signature() != listed
+
+
+def test_a_batch_moves_the_docs_baselines_keyed_by_path(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    assert s.read_seen(s.doc_texts()) == {"doc:README.md": "# Tool\n\nThe keys 1 to 4.\n"}
+    (s.repo_dir() / "README.md").write_text("rewritten")
+    s.add_batch([{"section": "doc:README.md", "quote": "keys", "text": "1 to 5"}])
+    assert json.loads(s.seen_path.read_text())["doc:README.md"] == "rewritten"
+
+
+def test_a_comment_on_a_doc_is_printed_with_its_path(docs_review):
+    s = docs_review
+    b = s.add_batch([
+        {"section": "doc:docs/reference.md", "quote": "the keys 1, 2,\n3 and 4", "text": "5 keys"},
+        {"section": "doc:", "quote": "README.md", "text": "remove it"},
+    ])  # fmt: skip
+    text = format_batch("doc-tab", b, [])
+    assert "[c1] (doc docs/reference.md) « the keys 1, 2, 3 and 4 »\n    5 keys" in text
+    assert "[c2] (doc set) « README.md »\n    remove it" in text
+
+
+def test_a_stale_passage_shows_while_its_quote_is_in_the_doc(docs_review):
+    s = docs_review
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.add_stale("README.md", "The keys", "five now")
+    s.add_doc("README.md", "the install")
+    with pytest.raises(SessionError, match="quote is not in"):
+        s.add_stale("README.md", "The tabs", "five now")
+    flag = s.add_stale("README.md", "The keys\n1 to 4", "five keys now", section="sheet")
+    assert flag["id"] == "s1" and flag["section"] == "sheet"
+    assert [f["id"] for f in s.shown_stale()] == ["s1"]
+    (s.repo_dir() / "README.md").write_text("The keys 1 to 5.")
+    assert s.shown_stale() == [] and len(s.read_stale()) == 1
+    assert s.add_stale("README.md", "1 to 5", "fine")["id"] == "s2"
+    s.drop_stale(["s1"])
+    assert [f["id"] for f in s.read_stale()] == ["s2"]
+    assert s.add_stale("README.md", "keys", "again")["id"] == "s3"
+    with pytest.raises(SessionError, match="no stale passage s9"):
+        s.drop_stale(["s9"])
+
+
+def test_write_docs_carries_then_pr_only_when_true(session):
+    b = session.add_batch([], action="write-docs")
+    assert "then_pr" not in b
+    assert (
+        format_batch("kv-cache", b, [])
+        .splitlines()[1]
+        .startswith("action: write-docs (the user asked for the doc pass: refresh the doc set")
+    )
+    b = session.add_batch([], action="write-docs", then_pr=True)
+    assert b["then_pr"] is True
+    assert json.loads(session.inbox_path.read_text().splitlines()[-1])["then_pr"] is True
+    assert (
+        format_batch("kv-cache", b, [])
+        .splitlines()[1]
+        .startswith("action: write-docs then create-pr (the user asked for the doc pass and the PR")
+    )
+    with pytest.raises(SessionError, match="then_pr"):
+        session.add_batch([], action="create-pr", then_pr=True)
+
+
+def test_awaiting_docs_is_a_phase(session):
+    assert session.write_status("awaiting-docs")["phase"] == "awaiting-docs"
+
+
+def test_a_docs_review_is_a_code_session_not_coordinated(tmp_path):
+    with pytest.raises(SessionError, match="code session"):
+        Session("d", tmp_path).create("D", workflow="view-docs")
+    s = Session("d", tmp_path)
+    s.create("D", kind="code", repo=str(tmp_path), workflow="view-docs")
+    assert s.read_plan()["workflow"] == "view-docs" and not s.coordinated
+
+
+def test_the_reference_model_is_a_branch_review_of_the_same_repo(docs_review, tmp_path):
+    root = docs_review.dir.parent
+    repo = docs_review.read_plan()["repo"]
+    docs = Session("install-docs", root)
+    docs.create("Install", kind="code", repo=repo, workflow="view-docs")
+    other = Session("elsewhere", root)
+    other.create("Elsewhere", kind="code", repo=str(tmp_path), workflow="view-branch")
+    triage = Session("triage", root)
+    triage.create("Triage", kind="code", repo=repo, workflow="view-refactor")
+    with pytest.raises(SessionError, match="no other session"):
+        docs.set_reference("missing", "why")
+    with pytest.raises(SessionError, match="no other session"):
+        docs.set_reference("install-docs", "why")
+    with pytest.raises(SessionError, match="not a session of this repo"):
+        docs.set_reference("elsewhere", "why")
+    with pytest.raises(SessionError, match="not a branch review"):
+        docs.set_reference("triage", "why")
+    with pytest.raises(SessionError, match="needs its reason"):
+        docs.set_reference("doc-tab", "  ")
+    ref = {"slug": "doc-tab", "reason": "adds view-docs"}
+    assert docs.set_reference("doc-tab", " adds\n view-docs ") == ref
+    assert docs.read_plan()["reference"] == ref
+    assert docs.reference_model() == {
+        "slug": "doc-tab",
+        "title": "Doc tab",
+        "reason": "adds view-docs",
+        "lexicon": [],
+    }
+    docs.set_reference("")
+    assert "reference" not in docs.read_plan() and docs.reference_model() is None
+
+
+def test_a_bare_slug_reference_has_no_reason(docs_review):
+    docs = Session("install-docs", docs_review.dir.parent)
+    docs.create("Install", kind="code", repo=docs_review.read_plan()["repo"], workflow="view-docs")
+    plan = docs.read_plan()
+    plan["reference"] = "doc-tab"
+    docs.plan_path.write_text(json.dumps(plan))
+    model = docs.reference_model()
+    assert model is not None and model["reason"] == ""
+
+
+def test_the_reference_candidates_are_the_repos_branch_reviews(docs_review, tmp_path):
+    root = docs_review.dir.parent
+    repo = docs_review.read_plan()["repo"]
+    plan = docs_review.read_plan()
+    plan["outline"] = [
+        {"id": "sheet", "title": "Sheet"},
+        {"id": "i1", "title": "store", "part": "refactoring"},
+    ]
+    plan["lexicon"] = [{"term": "doc set", "section": "sheet", "definition": "the list"}]
+    docs_review.plan_path.write_text(json.dumps(plan))
+    docs = Session("install-docs", root)
+    docs.create("Install", kind="code", repo=repo, workflow="view-docs")
+    Session("triage", root).create("Triage", kind="code", repo=repo, workflow="view-refactor")
+    Session("far", root).create("Far", kind="code", repo=str(tmp_path), workflow="view-branch")
+    rows = docs.reference_candidates()
+    assert [(r["slug"], r["sections"], r["terms"]) for r in rows] == [
+        ("doc-tab", ["Sheet"], ["doc set"])
+    ]
+
+
+def test_docs_stay_out_of_the_publish_fingerprint_and_the_check(docs_review):
+    s = docs_review
+    before = s.fingerprint()
+    s.add_doc("README.md", "the install")
+    (s.repo_dir() / "README.md").write_text("Rewritten <div>\n\nblock</div>\n")
+    assert s.fingerprint() == before
+    assert s.published_sections() == [] and s.check_sections() == []

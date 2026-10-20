@@ -69,6 +69,7 @@ WAITING_PHASES = {
     "idle",
     "awaiting-answer",
     "awaiting-model",
+    "awaiting-docs",
     "awaiting-pr",
     "awaiting-approval",
     "scoping",
@@ -878,6 +879,7 @@ def batch_label(b: dict[str, Any]) -> str:
     buttons = {
         "approve-plan": "« Approve plan »",
         "approve-model": "« Approve model »",
+        "write-docs": "« Write docs and create PR »" if b.get("then_pr") else "« Write docs »",
         "create-pr": "« Create PR »",
         "grill": "« Grill »",
         "stop-grill": "« Stop grill »",

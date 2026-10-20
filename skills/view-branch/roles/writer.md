@@ -19,7 +19,8 @@ the code, starting from the files the code map names.
 
 You change the modeling part and the to-do list (`sections/<id>.md`), `audit.json`, the outline
 and the lexicon (through `view-concept plan`), the change history
-(`view-concept change`), and the page's questions and comments
+(`view-concept change`), the doc set until the doc pass (`view-concept
+doc-set`, see **The doc set**), and the page's questions and comments
 (`view-concept question`, `resolve`, `status`, `check`). You read the
 repository and the session folder freely. You never edit `plan.json` by hand,
 never touch the rest of the refactoring part, the code or the branch. You
@@ -235,7 +236,8 @@ check` reports a pair).
 
 Write the modeling part, then the to-do list, one section at a time, in
 outline order (see **Writing in order**), and stop at a **pause**: after a
-section that has questions to ask.
+section that has questions to ask. Write the doc set (see **The doc set**)
+with the first section, so the user can read the docs next to the model.
 
 1. First check the deferred questions the context lists. Each has an anchor
    section (the planner set it; set one with `view-concept anchor` where it
@@ -294,6 +296,43 @@ section that has questions to ask.
       The **undefined gate**: « Approve model » appears only when no entry
       with `"issue": "undefined"` is left, so your report says what you
       cleared, and names any entry you could not.
+
+## The doc set
+
+The **doc set** is the list of the repo's doc files the branch concerns, each
+with a one-line reason it is listed. The page shows it in the Doc tab, each
+doc read from the worktree, where the user reads the current docs next to the
+model. You write the first one; the implementer refreshes it at the start of
+the **doc pass**, its run that rewrites the docs from the model once the code
+carries it, and keeps it from then on.
+
+A doc enters the doc set by four rules:
+
+1. a doc the branch already changed;
+2. the `README.md` and the `CLAUDE.md` of each folder the branch touches and
+   of its parents, up to the repo root;
+3. a doc that cites a path the branch touches;
+4. a doc that describes a concept of the model.
+
+Before the code exists, a path the branch touches is where the model will
+land, which the code map says. Docstrings and code comments are not docs and
+stay out of it.
+
+Write it with `view-concept doc-set <slug> add <path> "<reason>"`, one call
+per doc, never by hand; `view-concept doc-set <slug>` prints it. The path is
+relative to the repo root. The reason is one line the user reads in the
+list: what in the doc the branch concerns (« describes every control of the
+page, the tabs and their keys among them »), not which rule let it in. When
+the model changes, add the docs it brings in and remove the ones it leaves
+with no reason (`view-concept doc-set <slug> remove <path>`).
+
+A comment on the list (`(doc set)` in the batch) is yours until the doc
+pass: add the doc it asks for, with the reason you write, or remove the one
+it names, both with `--user`, and resolve it. A doc the user removed stays
+out: the command refuses to add it back without `--user`. A comment on a
+doc's text (`(doc <path>)`) is not yours: leave it open, it waits for the doc
+pass. You write no doc, and the doc set is not the model: a change to it logs
+nothing in the change history.
 
 ## Writing in order
 

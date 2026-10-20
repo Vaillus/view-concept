@@ -135,7 +135,7 @@ def set_workflow(session, workflow):
 
 
 def test_every_verdict_has_a_meaning_and_a_tone():
-    assert set(VERDICT_FILE) == {"view-branch", "view-refactor"}
+    assert set(VERDICT_FILE) == {"view-branch", "view-refactor", "view-docs"}
     for verdicts in VERDICT_FILE.values():
         assert all(v["meaning"] and v["tone"] in TONES for v in verdicts)
         assert len({v["key"] for v in verdicts}) == len(verdicts)
@@ -431,3 +431,149 @@ def test_drafts_are_not_the_agents_activity(client, session):
     client.put("/api/s/kv-cache/drafts/a1", json={"section": "s1", "text": "x"})
     assert session.last_activity() == before and session.signature() == sig
     assert session.drafts_signature() != ()
+
+
+@pytest.fixture
+def doc_review(session):
+    """A branch review next to the test session, on a repo with one doc in its doc set."""
+    repo = session.dir.parent / "repo"
+    (repo / "docs" / "img").mkdir(parents=True)
+    (repo / "docs" / "reference.md").write_text("# Reference\n\nThe keys 1 to 4.\n")
+    (repo / "docs" / "img" / "tabs.png").write_bytes(b"png")
+    s = Session("doc-tab", session.dir.parent)
+    s.create("Doc tab", kind="code", repo=str(repo), base="main")
+    s.add_doc("docs/reference.md", "the tabs and keys")
+    s.add_doc("docs/missing.md", "created later")
+    return s
+
+
+def test_state_carries_the_doc_set_and_each_doc(client, doc_review):
+    docs = client.get("/api/s/doc-tab").json()["docs"]
+    assert docs["set"][0]["path"] == "docs/reference.md"
+    assert docs["set"][0]["reason"] == "the tabs and keys"
+    assert docs["removed"] == []
+    view = docs["views"]["docs/reference.md"]
+    assert view["exists"] is True and view["updated"] is False
+    assert view["html"] == "<h1>Reference</h1>\n<p>The keys 1 to 4.</p>\n"
+    assert docs["views"]["docs/missing.md"] == {"exists": False}
+    assert client.get("/api/s/kv-cache").json()["docs"]["set"] == []
+
+
+def test_a_rewritten_doc_is_updated_until_marked_read(client, doc_review):
+    doc = doc_review.repo_dir() / "docs" / "reference.md"
+    client.get("/api/s/doc-tab")  # the first text is the first baseline
+    doc.write_text("# Reference\n\nThe keys 1 to 5.\n")
+    view = client.get("/api/s/doc-tab").json()["docs"]["views"]["docs/reference.md"]
+    assert view["updated"] is True and "1 to 4" in view["seen_html"]
+    md = "# Reference\n\nThe keys 1 to 5.\n"
+    r = client.post("/api/s/doc-tab/seen", json={"sections": {"doc:docs/reference.md": md}})
+    assert r.status_code == 200
+    view = client.get("/api/s/doc-tab").json()["docs"]["views"]["docs/reference.md"]
+    assert view["updated"] is False
+
+
+def test_the_page_serves_a_repo_file_a_doc_points_to(client, doc_review):
+    assert client.get("/s/doc-tab/repo/docs/img/tabs.png").content == b"png"
+    assert client.get("/s/doc-tab/repo/docs/img/none.png").status_code == 404
+    assert client.get("/s/doc-tab/repo/.git/config").status_code == 404
+    (doc_review.repo_dir() / ".git").mkdir()
+    (doc_review.repo_dir() / ".git" / "config").write_text("[core]")
+    assert client.get("/s/doc-tab/repo/.git/config").status_code == 404
+    assert client.get("/s/doc-tab/repo/.GIT/config").status_code == 404
+    assert client.get("/s/doc-tab/repo/..%2Fsessions%2Fdoc-tab%2Fplan.json").status_code == 404
+    assert client.get("/s/kv-cache/repo/README.md").status_code == 404
+
+
+def _git(repo, *args):
+    import subprocess
+
+    cmd = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *args]
+    subprocess.run(cmd, check=True, capture_output=True)
+
+
+def test_the_base_mark_compares_a_doc_with_the_merge_base(client, doc_review):
+    repo = doc_review.repo_dir()
+    doc = repo / "docs" / "reference.md"
+    _git(repo, "init", "-b", "main")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "base")
+    _git(repo, "switch", "-c", "feat")
+    doc.write_text("# Reference\n\nThe keys 1 to 5.\n")  # uncommitted: still compared
+    (repo / "docs" / "missing.md").write_text("Created on the branch.\n")
+    views = client.get("/api/s/doc-tab").json()["docs"]["views"]
+    ref = views["docs/reference.md"]
+    assert ref["base_html"] == "<h1>Reference</h1>\n<p>The keys 1 to 4.</p>\n"
+    assert ref["new"] is False and "1 to 5" in ref["html"]
+    assert views["docs/missing.md"]["base_html"] is None
+    assert views["docs/missing.md"]["new"] is True
+
+
+def test_the_base_mark_reads_a_worktree_below_the_git_root(client, doc_review):
+    repo = doc_review.repo_dir()
+    (repo / "docs" / "missing.md").write_text("At the base.\n")
+    _git(repo.parent, "init", "-b", "main")
+    _git(repo.parent, "add", repo.name)
+    _git(repo.parent, "commit", "-m", "base")
+    views = client.get("/api/s/doc-tab").json()["docs"]["views"]
+    assert views["docs/missing.md"]["base_html"] == "<p>At the base.</p>\n"
+    assert views["docs/missing.md"]["new"] is False
+
+
+def test_a_git_failure_is_no_base_mark(doc_review):
+    _git(doc_review.repo_dir(), "init", "-b", "main")
+    assert doc_review.base_text("docs/reference.md", "0" * 40) is None
+
+
+def test_no_base_mark_when_git_cannot_tell(client, doc_review):
+    view = client.get("/api/s/doc-tab").json()["docs"]["views"]["docs/reference.md"]
+    assert view["base_html"] is None and view["new"] is False
+
+
+def test_state_counts_the_stale_passages_shown(client, doc_review):
+    doc_review.add_stale("docs/reference.md", "The keys 1 to 4.", "five keys", "sheet")
+    docs = client.get("/api/s/doc-tab").json()["docs"]
+    assert docs["set"][0]["stale"] == 1 and docs["set"][1]["stale"] == 0
+    assert docs["stale"] == [{"id": "s1", "doc": "docs/reference.md",
+                              "quote": "The keys 1 to 4.", "section": "sheet",
+                              "note": "five keys"}]  # fmt: skip
+
+
+def test_a_batch_asks_for_the_doc_pass_and_the_pr(client):
+    body = {"action": "write-docs", "then_pr": True}
+    r = client.post("/api/s/kv-cache/batch", json=body)
+    assert r.status_code == 200 and r.json()["then_pr"] is True
+    r = client.post("/api/s/kv-cache/batch", json={"action": "create-pr", "then_pr": True})
+    assert r.status_code == 400
+
+
+def test_a_docs_review_shows_its_doc_set_with_no_plan_nor_sections(client, session):
+    repo = session.dir.parent / "docs-repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("## Install\n\nYou need uv.\n")
+    s = Session("install-docs", session.dir.parent)
+    s.create("Install docs", kind="code", repo=str(repo), workflow="view-docs")
+    s.add_doc("README.md", "the install part")
+    state = client.get("/api/s/install-docs").json()
+    assert state["workflow"] == "view-docs" and state["verdicts"] == []
+    assert state["plan"]["outline"] == [] and state["sections"] == {}
+    assert state["docs"]["set"][0]["path"] == "README.md"
+    assert state["docs"]["views"]["README.md"]["exists"] is True
+
+
+def test_the_reference_model_is_read_from_another_session(client, doc_review):
+    docs = Session("install-docs", doc_review.dir.parent)
+    docs.create("Install", kind="code", repo=doc_review.read_plan()["repo"], workflow="view-docs")
+    assert client.get("/api/s/install-docs").json()["docs"]["reference"] is None
+    plan = doc_review.read_plan()
+    plan["outline"] = [{"id": "sheet", "title": "Sheet"}]
+    plan["lexicon"] = [{"term": "doc set", "section": "sheet", "definition": "the *list*"}]
+    doc_review.plan_path.write_text(json.dumps(plan))
+    docs.set_reference("doc-tab", "adds view-docs")
+    ref = client.get("/api/s/install-docs").json()["docs"]["reference"]
+    assert ref["slug"] == "doc-tab" and ref["title"] == "Doc tab" and ref["url"] == "/s/doc-tab"
+    assert ref["reason"] == "adds view-docs"
+    assert ref["lexicon"][0]["tip_html"] == "the <em>list</em>"
+    plan["lexicon"][0]["definition"] = "the docs"
+    doc_review.plan_path.write_text(json.dumps(plan))  # re-read as it is now
+    ref = client.get("/api/s/install-docs").json()["docs"]["reference"]
+    assert ref["lexicon"][0]["tip_html"] == "the docs"

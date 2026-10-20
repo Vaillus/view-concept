@@ -192,3 +192,23 @@ def test_the_other_roles_get_the_initial_request_and_the_transcript_path(branch)
         assert "## Initial request\nrework the gate\n" in text
         assert f"{branch.request_path}: open it when a comment needs" in text
         assert "A flag, or a rule?" not in text
+
+
+def test_the_doc_set_goes_to_the_roles_that_work_on_the_docs(review, tmp_path):
+    (tmp_path / "README.md").write_text("The keys 1 to 4.\n")
+    review.add_doc("README.md", "the keys")
+    review.add_doc("docs/old.md", "out of date")
+    review.remove_doc("docs/old.md", user=True)
+    review.add_stale("README.md", "keys 1 to 4", "five keys now", section="sheet")
+    for role in ("writer", "implementer", "reviewer"):
+        text = build(review, role)
+        assert "## Doc set\n" in text and "- README.md: the keys" in text
+        assert "Removed by the user (never add them back unless the user asks): docs/old.md" in text
+        assert "- s1 README.md « keys 1 to 4 » (contradicts sheet): five keys now" in text
+    assert "## Doc set" not in build(review, "planner")
+    assert "## Doc set" not in build(review, "thread")
+
+
+def test_a_review_with_no_doc_set_says_so(review):
+    assert "## Doc set\nThe repo docs" in build(review, "writer")
+    assert "(none written yet)\n\n## Stale passages" in build(review, "writer")
