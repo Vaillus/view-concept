@@ -29,7 +29,8 @@ Roles:
 - `reviewer`: owns the rest of the refactoring part, which checks the code against the
   model. Gets every section.
 - `thread`: a side thread, read-only. Gets the section its passage belongs to; it reads
-  the others on demand.
+  the others on demand. A passage of the Doc tab gets its doc, read from the worktree
+  (`doc:<path>`), or the doc set (`doc-set`), in place of a section.
 
 An HTML section is loaded by its visible text, the words a reader sees in it, not its HTML
 source; its heading names its file, for an agent that needs the source.
@@ -48,7 +49,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .store import Session, SessionError, format_batch, format_comment
+from .store import DOC_KEY, DOC_SET_ANCHOR, Session, SessionError, format_batch, format_comment
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
 ROLES = ("planner", "writer", "implementer", "reviewer", "thread")
@@ -104,8 +105,38 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
         out += ["", head]
         out += _sections(outline, sections, None, wanted, html)
     elif role == "thread" and section:
-        out += ["", "## Section of the passage", *_sections(outline, sections, section, html=html)]
+        if section.startswith(DOC_KEY) or section == DOC_SET_ANCHOR:
+            out += ["", *doc_passage(s, section)]
+        else:
+            sec = _sections(outline, sections, section, html=html)
+            out += ["", "## Section of the passage", *sec]
     return "\n".join(out).rstrip() + "\n"
+
+
+def doc_passage(s: Session, anchor: str) -> list[str]:
+    """What a side thread on the Doc tab gets in place of a section: the doc its passage
+    is in, read from the worktree, or the doc set for a passage of the doc set list."""
+    if anchor == DOC_SET_ANCHOR:
+        return ["## Doc set of the passage", *_doc_set(s)]
+    path = anchor.removeprefix(DOC_KEY)
+    file = s.doc_file(path)
+    text = file.read_text("utf-8", errors="replace") if file and file.is_file() else None
+    where = f"read from the worktree: {file}" if file else "the session has no repo"
+    return [f"## Doc of the passage: {path} ({where})", (text or "(missing)").strip()]
+
+
+def _doc_set(s: Session) -> list[str]:
+    """The doc set, one line per doc with its reason, then the docs the user removed."""
+    data = s.read_doc_set()
+    if not data["docs"] and not data["removed"]:
+        return ["(none written yet)"]
+    lines = [f"- {d['path']}: {d.get('reason', '')}" for d in data["docs"]]
+    if data["removed"]:
+        lines.append(
+            f"Removed by the user (never add them back unless the user asks):"
+            f" {', '.join(data['removed'])}"
+        )
+    return lines
 
 
 def _request(s: Session, role: str, initial: str) -> list[str]:

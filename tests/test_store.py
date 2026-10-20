@@ -1003,3 +1003,14 @@ def test_a_batch_moves_the_docs_baselines_keyed_by_path(docs_review):
     (s.repo_dir() / "README.md").write_text("rewritten")
     s.add_batch([{"section": "doc:README.md", "quote": "keys", "text": "1 to 5"}])
     assert json.loads(s.seen_path.read_text())["doc:README.md"] == "rewritten"
+
+
+def test_a_comment_on_a_doc_is_printed_with_its_path(docs_review):
+    s = docs_review
+    b = s.add_batch([
+        {"section": "doc:docs/reference.md", "quote": "the keys 1, 2,\n3 and 4", "text": "5 keys"},
+        {"section": "doc-set", "quote": "README.md", "text": "remove it"},
+    ])  # fmt: skip
+    text = format_batch("doc-tab", b, [])
+    assert "[c1] (doc docs/reference.md) « the keys 1, 2, 3 and 4 »\n    5 keys" in text
+    assert "[c2] (doc set) « README.md »\n    remove it" in text

@@ -161,7 +161,9 @@ back unless the user asks (`--user`). A doc of the set is a doc section: its tex
 file read from the worktree at each render, never copied into the session, so the user's
 own edits show as the agent's do; a doc missing there reads as missing. Its highlight
 baseline is kept in seen.json under `doc:<path>` and moves with every batch, like a
-section's. The doc sections stay out of the published page, the vault export, the publish
+section's. A comment, a draft or a side thread on a doc's text is anchored to `doc:<path>`
+(a batch prints it `(doc <path>)`), one on the doc set list to `doc-set`. The doc
+sections stay out of the published page, the vault export, the publish
 fingerprint and `check`, which read the outline's sections only. The base mark compares
 a doc's worktree file (uncommitted changes included) with the same doc at the merge base
 of the branch and its base branch (`merge_base`, `base_text`); a doc absent there was
@@ -2147,9 +2149,15 @@ def format_batch(
 
 
 def format_comment(c: dict[str, Any], number: dict[str, int]) -> str:
-    """One comment of a batch: where it is anchored, its text, the thread it comes from."""
+    """One comment of a batch: where it is anchored (a section, a doc of the Doc tab by its
+    path, the doc set list), its text, the thread it comes from."""
     sec = c["section"]
-    where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
+    if sec.startswith(DOC_KEY):
+        where = f"(doc {sec.removeprefix(DOC_KEY)})"
+    elif sec == DOC_SET_ANCHOR:
+        where = "(doc set)"
+    else:
+        where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
     quote = " ".join(c["quote"].split())
     lines = [f"[{c['id']}] {where} « {quote} »" if quote else f"[{c['id']}] {where}"]
     lines += [f"    {line}" for line in c["text"].splitlines()]
