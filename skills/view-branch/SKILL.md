@@ -511,9 +511,12 @@ exists: the list, each doc with its reason, then one doc at a time, read
 from the worktree at each render, so the user's own edits and the agents'
 rewrites show alike. The lexicon terms are underlined in each doc. A doc
 carries two marks: the **base mark**, a blue bar in the right margin of each
-block that differs from the same doc on the base branch (the whole text for a
-doc the branch creates), and the green highlight of what changed since the
-user's last batch. The user comments on a doc's text as on a section, and the
+block that differs from the same doc on the base branch, with a blue
+background on the words it adds (the whole text for a doc the branch
+creates), and the green highlight of what changed since the user's last
+batch. The user may also edit a doc by hand in the page, which writes the
+file in the worktree: read a doc again before rewriting it, and keep the
+user's edits. The user comments on a doc's text as on a section, and the
 batch prints the comment with the doc's path in place of a section
 (`[c12] (doc docs/reference.md) « … »`); a comment on the list prints
 `[c13] (doc set) « … »`.

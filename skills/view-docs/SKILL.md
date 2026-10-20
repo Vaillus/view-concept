@@ -146,10 +146,12 @@ your open questions at the top, then the doc set, each doc with its reason
 and its count of stale passages, then one doc at a time, read from the
 worktree at each render, so your rewrites and the user's own edits show
 alike. A doc carries two marks: the **base mark**, a blue bar in the right
-margin of each block that differs from the same doc on `main` (the whole
-text for a doc the review creates), so it shows at any time what the PR
-will hold; and the green highlight of what changed since the user's last
-batch. When the session has a reference model, the terms of its lexicon are
+margin of each block that differs from the same doc on `main`, with a blue
+background on the words it adds (the whole text for a doc the review
+creates), so it shows at any time what the PR will hold; and the green
+highlight of what changed since the user's last batch. The user may also
+edit a doc by hand in the page, which writes the file in the worktree: read
+a doc again before rewriting it, and keep the user's edits. When the session has a reference model, the terms of its lexicon are
 underlined in the docs with their definition on hover, and the top bar links
 to its session, with the reason you kept it next to the link. « Create PR »
 sits at the end of the tab.

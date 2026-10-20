@@ -302,6 +302,10 @@ class SessionError(Exception):
     pass
 
 
+class DocConflict(SessionError):
+    """A doc edited in the page changed in the worktree since the edit started."""
+
+
 def slugify(text: str) -> str:
     ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")[:80] or "explanation"
@@ -1232,6 +1236,27 @@ class Session:
                 else None
             )
         return out
+
+    def write_doc(self, path: str, text: str, base: str) -> None:
+        """Write doc `path` of the doc set in the worktree: the user's edit in the Doc tab.
+        `base` is the text the edit started from; a file that no longer holds it (an
+        agent rewrote it meanwhile) is refused with DocConflict, so no rewrite is lost
+        unseen. The user's own words get no green highlight: a baseline that was the old
+        text moves to the new one (one still behind keeps the agent's rewrite marked)."""
+        path = doc_path(path)
+        if not any(d.get("path") == path for d in self.read_doc_set()["docs"]):
+            raise SessionError(f"{path} is not in the doc set")
+        file = self.doc_file(path)
+        if file is None or not file.is_file():
+            raise SessionError(f"{path} is not in the worktree")
+        now = file.read_text(encoding="utf-8", errors="replace")
+        if now != base:
+            raise DocConflict(f"{path} changed since you started editing it")
+        file.write_text(text, encoding="utf-8")
+        seen = _read_json(self.seen_path, {})
+        if seen.get(DOC_KEY + path) == now:
+            seen[DOC_KEY + path] = text
+            _write_json(self.seen_path, seen)
 
     def doc_texts(self) -> dict[str, str]:
         """The docs that exist, keyed as their highlight baseline is: `doc:<path>`."""

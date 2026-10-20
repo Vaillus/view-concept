@@ -844,8 +844,8 @@ function renderSections() {
   // A question box at the end of a section is re-attached on each render: keep its focus.
   const active = document.activeElement;
   // (the scope block too: a docs review shows it at the top of the Doc tab, re-attached)
-  const keep = active && active.closest && active.closest(".sec-questions, #scope")
-    ? [active, active.selectionStart, active.selectionEnd] : null;
+  const keep = active && active.closest && active.closest(".sec-questions, #scope, .doc-editor")
+    ? [active, active.selectionStart, active.selectionEnd, active.scrollTop] : null;
   // « Create PR » ends the code tab, or the Doc tab in a docs review.
   const prEnding = [prButton, prEnd];
   if (!sections.length) {
@@ -869,6 +869,7 @@ function renderSections() {
   if (keep && keep[0].isConnected && document.activeElement !== keep[0]) {
     keep[0].focus({ preventScroll: true });
     if (keep[1] != null) keep[0].setSelectionRange(keep[1], keep[2]);
+    keep[0].scrollTop = keep[3];
   }
   placeFrames();
   holdAnchor();
@@ -921,13 +922,14 @@ function sectionBlock(s, { bare = false } = {}) {
    in the bar carries a green dot when its doc was rewritten since its highlight baseline.
    Two marks: the green bar and words of the change highlights (markUpdates), and the base
    mark, a bar in the right margin of every block whose text is not among the blocks of the
-   doc at the merge base (`base_html`), every block for a doc created on the branch (`new`);
-   whole blocks, no words on hover (markBase). Stale passages get a wavy underline whose
+   doc at the merge base (`base_html`), every block for a doc created on the branch (`new`),
+   and in a doc the base had, a blue background on the words it added (markBase). Stale passages get a wavy underline whose
    hover shows the note (applyHighlights, "stale passages"). Lexicon terms are underlined,
    none as its definition: the model's lexicon, or in a docs review the reference model's
    (annotateDocTerms). Relative images and links load from the worktree,
    /s/<slug>/repo/<doc dir>/<relative>. A docs review adds its agent questions (the scope
-   block) above the doc set, and « Create PR » at the end. */
+   block) above the doc set, and « Create PR » at the end. « edit » in a doc's heading
+   swaps its text for its Markdown in a text box (see "editing a doc"). */
 
 let shownDoc = null; // path of the doc shown in the Doc tab
 
@@ -950,7 +952,7 @@ const missingBadge = (v) => (v.exists === false ? el("span", { class: "badge", t
 
 // The heading of a doc set or doc block: its label, its thread chips, then « mark read »
 // when updated and the comment buttons, as in a section block.
-function docHeading(id, label, updated, what) {
+function docHeading(id, label, updated, what, edit = null) {
   return el("h2", {}, label,
     el("span", { class: "t-chips", "data-section": id }),
     updated
@@ -960,7 +962,8 @@ function docHeading(id, label, updated, what) {
     el("button", { class: "sec-comment", text: `+ comment ${what}`, title: `Comment on the whole ${what}`,
                    onclick: () => openComposer({ section: id, quote: "", prefix: "" }) }),
     el("button", { class: "sec-comment ask", text: "ask", title: `Open a side thread about this ${what}`,
-                   onclick: () => openComposer({ section: id, quote: "", prefix: "" }, "ask") }));
+                   onclick: () => openComposer({ section: id, quote: "", prefix: "" }, "ask") }),
+    edit);
 }
 
 function docSetBlock(docs) {
@@ -979,20 +982,99 @@ function docBar(docs) {
     return el("button", { class: `doc-title ${d.path === shownDoc ? "active" : ""} ${v.exists === false ? "missing" : ""}`,
                           title: d.reason || d.path, onclick: () => openDoc(d.path) },
       v.updated ? el("span", { class: "doc-dot", title: "Rewritten since your last batch" }) : null,
-      d.path, staleBadge(staleCount(docs, d)));
+      d.path, staleBadge(staleCount(docs, d)),
+      docEdit && docEdit.path === d.path ? el("span", { class: "badge", text: "editing", title: "Your edit of this doc is not saved yet" }) : null);
   }));
 }
 
 function docBlock(path, v) {
   const id = DOC_PREFIX + path;
   const body = el("div", { class: "body" });
-  if (v.exists) {
+  const editor = v.exists && docEditor(path, v);
+  if (editor) body.append(editor);
+  else if (v.exists) {
     body.innerHTML = v.html || "";
     resolveRepoLinks(body, path);
   } else body.append(el("p", { class: "dim", text: "Missing: this doc is not in the worktree." }));
+  const edit = v.exists && !editor
+    ? el("button", { class: "sec-comment", text: "edit", title: "Edit this doc's Markdown by hand", onclick: () => startDocEdit(path) })
+    : null;
   return el("section", { class: `sec doc-sec ${v.exists ? "" : "missing"} ${v.updated ? "updated" : ""}`, id: `sec-${id}`, "data-id": id },
-    docHeading(id, el("code", { text: path }), !!v.updated, "doc"), body);
+    docHeading(id, el("code", { text: path }), !!v.updated && !editor, "doc", edit), body);
 }
+
+/* ---------------- editing a doc ----------------
+   « edit » opens the doc's Markdown (`md`, the file as read) in a text box in place of its
+   text; « save » writes it to the worktree (POST /api/s/<slug>/doc, with the text the edit
+   started from). The box is one element kept across renders, so a re-render while you type
+   (an agent run, a thread) keeps your text, its caret and its scroll. When the file changes
+   meanwhile, a notice says so and « save » becomes « save anyway », which overwrites that
+   change; the server refuses a save whose starting text is no longer the file's, so only a
+   change you were told of is overwritten. ⌘↵ saves, Esc cancels (asking first when the
+   text was changed). Your own words get no green highlight. One doc is edited at a time;
+   its title in the bar says « editing » while the edit is not saved. */
+let docEdit = null; // { path, base (the text the edit started from), box, ta, note, save }
+
+function startDocEdit(path) {
+  const v = docsOf().views[path];
+  if (!v || !v.exists) return;
+  if (docEdit && docEdit.path !== path && docEdit.ta.value !== docEdit.base &&
+      !confirm(`Drop your unsaved edit of ${docEdit.path}?`)) return;
+  const ta = el("textarea", { class: "doc-edit-text", spellcheck: "true" });
+  ta.value = v.md || "";
+  const note = el("p", { class: "doc-edit-note", hidden: true,
+                         text: "The file changed since you started editing: saving overwrites that change." });
+  const save = el("button", { class: "btn primary", text: "save", title: "Write the doc to the worktree (⌘↵)", onclick: saveDocEdit });
+  const cancel = el("button", { class: "btn", text: "cancel", title: "Drop your edit (Esc)", onclick: cancelDocEdit });
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveDocEdit(); }
+    else if (e.key === "Escape") { e.preventDefault(); cancelDocEdit(); }
+  });
+  const box = el("div", { class: "doc-editor" }, ta, note, el("div", { class: "doc-edit-actions" }, save, cancel));
+  docEdit = { path, base: v.md || "", box, ta, note, save };
+  releaseAnchor();
+  renderSections();
+  ta.focus({ preventScroll: true });
+  ta.setSelectionRange(0, 0);
+}
+
+// The editor of doc `path` with its notice brought up to date, or null when it is not edited.
+function docEditor(path, v) {
+  if (!docEdit || docEdit.path !== path) return null;
+  const changed = (v.md || "") !== docEdit.base;
+  docEdit.note.hidden = !changed;
+  docEdit.save.textContent = changed ? "save anyway" : "save";
+  return docEdit.box;
+}
+
+async function saveDocEdit() {
+  if (!docEdit) return;
+  const edit = docEdit;
+  const v = docsOf().views[edit.path];
+  if (!v || !v.exists) { toast(`${edit.path} is no longer in the worktree`); return; }
+  // « save anyway »: the file as the page last read it, which the notice told of.
+  const base = v.md || "";
+  edit.save.disabled = true;
+  try {
+    await postJSON(`/api/s/${SLUG}/doc`, { path: edit.path, md: edit.ta.value, base });
+  } catch (e) {
+    toast(`Could not save: ${e.message}`);
+    edit.save.disabled = false;
+    await load();
+    return;
+  }
+  if (docEdit === edit) docEdit = null;
+  toast("Doc saved");
+  await load();
+}
+
+function cancelDocEdit() {
+  if (!docEdit) return;
+  if (docEdit.ta.value !== docEdit.base && !confirm("Drop your edit?")) return;
+  docEdit = null;
+  renderSections();
+}
+
 
 /* A doc gives its images and links by a path relative to its own folder: they load from
    the worktree through the server. An absolute URL, a root path or an anchor stays. */
@@ -1823,7 +1905,8 @@ function markUpdates() {
   changeRanges = new Map();
   const docs = docsOf();
   const entries = [...Object.entries(state.sections),
-                   ...Object.entries(docs.views).filter(([, v]) => v.exists).map(([path, v]) => [DOC_PREFIX + path, v])];
+                   ...Object.entries(docs.views).filter(([path, v]) => v.exists && !(docEdit && docEdit.path === path))
+                     .map(([path, v]) => [DOC_PREFIX + path, v])];
   for (const [id, sec] of entries) {
     const body = sec.updated && document.querySelector(`#sec-${CSS.escape(id)} .body`);
     if (!body) continue;
@@ -1857,12 +1940,23 @@ function markUpdates() {
 }
 
 /* The base mark of the doc shown: each block (its own words, as the change highlights cut
-   them) whose text is not the text of a block of the doc at the merge base; every block of
-   a doc created on the branch. No base (`base_html` null and not `new`): no mark. */
+   them) whose text is not the text of a block of the doc at the merge base gets the bar;
+   every block of a doc created on the branch. In a doc that existed at the base, the words
+   of a barred block that the base did not have are painted too ("ev-base"), always, under
+   every other highlight (a lower priority): the green words of a rewrite show over them.
+   A block moved whole keeps its text, so it gets neither. No base (`base_html` null and not
+   `new`): no mark. */
 function markBase() {
   document.querySelectorAll(".based").forEach((n) => n.classList.remove("based"));
+  const paint = (ranges) => {
+    if (!window.CSS || !CSS.highlights) return;
+    const h = new Highlight(...ranges);
+    h.priority = -1;
+    CSS.highlights.set("ev-base", h);
+  };
+  paint([]);
   const v = shownDoc && docsOf().views[shownDoc];
-  if (!v || !v.exists || (!v.new && v.base_html == null)) return;
+  if (!v || !v.exists || (!v.new && v.base_html == null) || (docEdit && docEdit.path === shownDoc)) return;
   const body = document.querySelector(`#sec-${CSS.escape(DOC_PREFIX + shownDoc)} .body`);
   if (!body) return;
   const blockTexts = (root) => {
@@ -1871,12 +1965,27 @@ function markBase() {
     return m;
   };
   let base = new Set();
+  const before = document.createElement("div");
   if (!v.new) {
-    const before = document.createElement("div");
     before.innerHTML = v.base_html;
     base = new Set(blockTexts(before).values());
   }
   for (const [block, text] of blockTexts(body)) if (v.new || !base.has(text)) block.classList.add("based");
+  if (v.new) return;
+  // One range per run of words added since the base in a barred block, as in markUpdates.
+  const now = words(body);
+  const { inserted } = diffWords(words(before).map((w) => w.text), now.map((w) => w.text));
+  const ranges = [];
+  let run = null;
+  now.forEach((w, k) => {
+    if (!inserted.has(k) || !w.block.classList.contains("based")) { run = null; return; }
+    if (run && run.block === w.block) run.range.setEnd(w.range.endContainer, w.range.endOffset);
+    else {
+      run = { block: w.block, range: w.range.cloneRange() };
+      ranges.push(run.range);
+    }
+  });
+  paint(ranges);
 }
 
 // The text a « mark read » records: a section's file, or a doc's (key "doc:<path>").
@@ -1975,7 +2084,7 @@ document.addEventListener("selectionchange", () => {
 });
 
 document.addEventListener("mouseup", (e) => {
-  if (isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop")) return;
+  if (isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop, .doc-editor")) return;
   setTimeout(() => {
     const s = currentSelection();
     showSelection(s);

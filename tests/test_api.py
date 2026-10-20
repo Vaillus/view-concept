@@ -472,6 +472,50 @@ def test_a_rewritten_doc_is_updated_until_marked_read(client, doc_review):
     assert view["updated"] is False
 
 
+def edit_doc(client, md, base, path="docs/reference.md"):
+    return client.post("/api/s/doc-tab/doc", json={"path": path, "md": md, "base": base})
+
+
+def test_a_doc_edited_in_the_page_is_written_with_no_green_highlight(client, doc_review):
+    doc = doc_review.repo_dir() / "docs" / "reference.md"
+    old = doc.read_text()
+    client.get("/api/s/doc-tab")  # the first text is the first baseline
+    new = "# Reference\n\nThe keys 1 to 5.\n"
+    r = edit_doc(client, new, old)
+    assert r.status_code == 200
+    assert doc.read_text() == new
+    view = client.get("/api/s/doc-tab").json()["docs"]["views"]["docs/reference.md"]
+    assert view["updated"] is False
+
+
+def test_an_edit_keeps_the_green_highlight_of_an_unread_rewrite(client, doc_review):
+    doc = doc_review.repo_dir() / "docs" / "reference.md"
+    client.get("/api/s/doc-tab")
+    rewrite = "# Reference\n\nThe keys 1 to 5.\n"
+    doc.write_text(rewrite)
+    edit = "# Reference\n\nThe keys 1 to 5, and 0.\n"
+    r = edit_doc(client, edit, rewrite)
+    assert r.status_code == 200
+    view = client.get("/api/s/doc-tab").json()["docs"]["views"]["docs/reference.md"]
+    assert view["updated"] is True and "1 to 4" in view["seen_html"]
+
+
+def test_an_edit_of_a_doc_changed_meanwhile_is_refused(client, doc_review):
+    doc = doc_review.repo_dir() / "docs" / "reference.md"
+    old = doc.read_text()
+    doc.write_text("# Reference\n\nRewritten by the agent.\n")
+    r = edit_doc(client, "mine", old)
+    assert r.status_code == 409
+    assert "Rewritten by the agent" in doc.read_text()
+
+
+def test_only_a_doc_of_the_doc_set_in_the_worktree_is_edited(client, doc_review):
+    for path in ("README.md", "docs/missing.md", "../outside.md"):
+        r = edit_doc(client, "x", "", path)
+        assert r.status_code == 400, path
+    assert not (doc_review.repo_dir() / "docs" / "missing.md").exists()
+
+
 def test_the_page_serves_a_repo_file_a_doc_points_to(client, doc_review):
     assert client.get("/s/doc-tab/repo/docs/img/tabs.png").content == b"png"
     assert client.get("/s/doc-tab/repo/docs/img/none.png").status_code == 404

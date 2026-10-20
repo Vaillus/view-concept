@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 from . import frame, gate, launch, metrics, publish, push, threads
 from .render import md
-from .store import DOC_KEY, Session, SessionError, list_sessions
+from .store import DOC_KEY, DocConflict, Session, SessionError, list_sessions
 
 STATIC = Path(__file__).parent / "static"
 # The verdicts an item can get, by session workflow, each list in the review table's order:
@@ -426,6 +426,26 @@ def mark_seen(slug: str, body: SeenIn) -> dict[str, bool]:
     """Mark sections as read (set their highlight baseline): the body carries the
     markdown the page showed, so a rewrite that arrived meanwhile stays highlighted."""
     get_session(slug).mark_seen(body.sections)
+    return {"ok": True}
+
+
+class DocIn(BaseModel):
+    path: str
+    md: str
+    # The text the edit started from: the doc must still hold it.
+    base: str
+
+
+@app.post("/api/s/{slug}/doc")
+def write_doc(slug: str, body: DocIn) -> dict[str, bool]:
+    """Write a doc of the doc set, edited by hand in the Doc tab. 409 when the file changed
+    since the edit started."""
+    try:
+        get_session(slug).write_doc(body.path, body.md, body.base)
+    except DocConflict as e:
+        raise HTTPException(409, str(e)) from e
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
     return {"ok": True}
 
 
