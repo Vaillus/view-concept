@@ -504,6 +504,22 @@ def test_the_base_mark_compares_a_doc_with_the_merge_base(client, doc_review):
     assert views["docs/missing.md"]["new"] is True
 
 
+def test_the_base_mark_reads_a_worktree_below_the_git_root(client, doc_review):
+    repo = doc_review.repo_dir()
+    (repo / "docs" / "missing.md").write_text("At the base.\n")
+    _git(repo.parent, "init", "-b", "main")
+    _git(repo.parent, "add", repo.name)
+    _git(repo.parent, "commit", "-m", "base")
+    views = client.get("/api/s/doc-tab").json()["docs"]["views"]
+    assert views["docs/missing.md"]["base_html"] == "<p>At the base.</p>\n"
+    assert views["docs/missing.md"]["new"] is False
+
+
+def test_a_git_failure_is_no_base_mark(doc_review):
+    _git(doc_review.repo_dir(), "init", "-b", "main")
+    assert doc_review.base_text("docs/reference.md", "0" * 40) is None
+
+
 def test_no_base_mark_when_git_cannot_tell(client, doc_review):
     view = client.get("/api/s/doc-tab").json()["docs"]["views"]["docs/reference.md"]
     assert view["base_html"] is None and view["new"] is False

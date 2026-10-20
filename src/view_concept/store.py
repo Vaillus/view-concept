@@ -1251,12 +1251,22 @@ class Session:
         return (_git(repo, "merge-base", base, "HEAD") or "").strip()
 
     def base_text(self, path: str, commit: str) -> str | None:
-        """Doc `path` as it was at `commit` (the merge base), None when it did not exist
-        there: a doc the branch created."""
+        """Doc `path` (relative to the worktree) as it was at `commit` (the merge base);
+        "" when it did not exist there: a doc the branch created (an empty doc at the merge
+        base reads the same, and every block of it is new all the same). None when git
+        cannot tell (no repo, no commit, git failed or timed out): the doc then carries no
+        base mark."""
         repo = self.repo_dir()
         if repo is None or not commit:
             return None
-        return _git(repo, "show", f"{commit}:{doc_path(path)}")
+        spec = f"{commit}:./{doc_path(path)}"
+        text = _git(repo, "show", spec)
+        if text is not None:
+            return text
+        exists = _git(repo, "cat-file", "-e", spec)
+        if exists is None and _git(repo, "cat-file", "-e", f"{commit}^{{commit}}") is not None:
+            return ""
+        return None
 
     def doc_files(self) -> list[Path]:
         """The worktree file of each doc of the doc set, for `signature`."""

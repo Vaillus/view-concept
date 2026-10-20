@@ -317,8 +317,8 @@ def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> 
         views[path] = {
             "exists": True,
             **section_view(text, seen.get(DOC_KEY + path, text)),
-            "base_html": md.render(base) if base is not None else None,
-            "new": bool(commit) and base is None,
+            "base_html": md.render(base) if base else None,
+            "new": base == "",
         }
     stale = [
         {k: f.get(k, "") for k in ("id", "doc", "quote", "section", "note")}
