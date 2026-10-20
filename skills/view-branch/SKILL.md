@@ -488,8 +488,8 @@ user removed is recorded as removed, and `add` refuses it from then on unless
 the user asks for it back (`--user` again). No agent adds back a doc the user
 removed.
 
-A doc enters the doc set by four rules, the first two read from the diff,
-the last two found by reading:
+A doc enters the doc set by five rules, the first two read from the diff,
+the next two found by reading, the last one always applied:
 
 1. a doc the branch already changed. A file the branch only moves, its text
    unchanged, does not enter by this rule: rule 2 covers the move;
@@ -505,7 +505,12 @@ the last two found by reading:
    describes something of a file the branch changes in the way the doc shows
    it: a command, its arguments, an output format, a name others import. A
    file whose inside alone changes brings in no doc that cites it;
-4. a doc that describes a concept of the model.
+4. a doc that describes a concept of the model;
+5. the **repo lexicon**, `.agents/lexicon.md` at the repo root (the reader
+   line, the field the docs' reader knows, and one definition per term the
+   repo's folders share), always, present or missing, and each **folder
+   lexicon** (a `.agents/lexicon.md` below the root, for the terms only the
+   folders under it share) above a folder the branch touches.
 
 Before the code exists, a path the branch touches is where the model will
 land, which the code map says. Docstrings and code comments are not docs and

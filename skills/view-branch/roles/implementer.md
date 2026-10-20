@@ -123,7 +123,7 @@ tab). Before the doc pass, leave the docs of the doc set alone, unless a
 concept or a line of the to-do list is implemented in one of them.
 
 1. **Refresh the doc set** on the real diff (`git diff <base>...HEAD`). A doc
-   enters it by four rules:
+   enters it by five rules:
    1. a doc the branch changed. A file the branch only moves, its text
       unchanged, does not enter by this rule: rule 2 covers the move;
    2. the `README.md` of the folder that holds a **structural change**: a
@@ -140,7 +140,10 @@ concept or a line of the to-do list is implemented in one of them.
       shows it: a command, its arguments, an output format, a name others
       import. A file whose inside alone changes brings in no doc that cites
       it;
-   4. a doc that describes a concept of the model.
+   4. a doc that describes a concept of the model;
+   5. the **repo lexicon**, `.agents/lexicon.md` at the repo root, always,
+      present or missing, and each **folder lexicon** (a `.agents/lexicon.md`
+      below the root) above a folder the branch touches.
 
    Add each doc the code brought in, `view-concept doc-set <slug> add <path>
    "<reason>"` (the reason one line the user reads: what in the doc the

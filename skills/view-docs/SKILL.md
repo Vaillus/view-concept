@@ -131,7 +131,12 @@ for readers):
 - a folder or a list of files: the docs among them, then the `README.md` and
   the `CLAUDE.md` of each folder of the scope and of its parents, up to the
   repo root;
-- a subject: every doc with a passage about it, wherever it sits.
+- a subject: every doc with a passage about it, wherever it sits;
+- always, present or missing, the **repo lexicon**, `.agents/lexicon.md` at
+  the repo root (the reader line, the field the docs' reader knows, and one
+  definition per term the repo's folders share), and each **folder lexicon**
+  (a `.agents/lexicon.md` below the root, for the terms only the folders
+  under it share) above the folder of a doc of the doc set.
 
 The reason is one line the user reads in the list: what in the doc the scope
 concerns (« the Install part: the Claude Code plugin, Jazz, Codex, the other
