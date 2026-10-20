@@ -374,11 +374,18 @@ def test_reference_sets_prints_and_clears_the_reference_model(tmp_path):
     for title, workflow in (("Gate", "view-branch"), ("Docs", "view-docs")):
         args = ("new", title, "--kind", "code", "--repo", str(tmp_path), "--workflow", workflow)
         assert view_concept(tmp_path, *args).returncode == 0
+    r = view_concept(tmp_path, "reference", "docs", "--candidates")
+    assert r.returncode == 0 and r.stdout.splitlines()[0].startswith("gate · Gate · updated ")
     r = view_concept(tmp_path, "reference", "docs", "gate")
-    assert r.returncode == 0 and r.stdout.strip() == "reference model: gate", r.stderr
+    assert r.returncode == 1 and "needs its reason" in r.stderr
+    r = view_concept(tmp_path, "reference", "docs", "gate", "--reason", "adds a skill")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "reference model: gate — adds a skill"
     r = view_concept(tmp_path, "reference", "docs")
-    assert r.stdout.strip() == "reference model: gate (Gate)"
+    assert r.stdout.strip() == "reference model: gate (Gate) — adds a skill"
     assert view_concept(tmp_path, "reference", "docs", "--clear").returncode == 0
     assert view_concept(tmp_path, "reference", "docs").stdout.strip() == "no reference model"
-    r = view_concept(tmp_path, "reference", "docs", "nope")
+    r = view_concept(tmp_path, "reference", "docs", "nope", "--reason", "x")
     assert r.returncode == 1 and "no other session" in r.stderr
+    r = view_concept(tmp_path, "reference", "docs", "gate", "--clear")
+    assert r.returncode == 1 and "one at a time" in r.stderr

@@ -1092,23 +1092,66 @@ def test_a_docs_review_is_a_code_session_not_coordinated(tmp_path):
     assert s.read_plan()["workflow"] == "view-docs" and not s.coordinated
 
 
-def test_the_reference_model_is_a_session_of_the_same_repo(docs_review, tmp_path):
+def test_the_reference_model_is_a_branch_review_of_the_same_repo(docs_review, tmp_path):
     root = docs_review.dir.parent
+    repo = docs_review.read_plan()["repo"]
     docs = Session("install-docs", root)
-    docs.create("Install", kind="code", repo=docs_review.read_plan()["repo"], workflow="view-docs")
+    docs.create("Install", kind="code", repo=repo, workflow="view-docs")
     other = Session("elsewhere", root)
     other.create("Elsewhere", kind="code", repo=str(tmp_path), workflow="view-branch")
+    triage = Session("triage", root)
+    triage.create("Triage", kind="code", repo=repo, workflow="view-refactor")
     with pytest.raises(SessionError, match="no other session"):
-        docs.set_reference("missing")
+        docs.set_reference("missing", "why")
     with pytest.raises(SessionError, match="no other session"):
-        docs.set_reference("install-docs")
+        docs.set_reference("install-docs", "why")
     with pytest.raises(SessionError, match="not a session of this repo"):
-        docs.set_reference("elsewhere")
-    assert docs.set_reference("doc-tab") == "doc-tab"
-    assert docs.read_plan()["reference"] == "doc-tab"
-    assert docs.reference_model() == {"slug": "doc-tab", "title": "Doc tab", "lexicon": []}
+        docs.set_reference("elsewhere", "why")
+    with pytest.raises(SessionError, match="not a branch review"):
+        docs.set_reference("triage", "why")
+    with pytest.raises(SessionError, match="needs its reason"):
+        docs.set_reference("doc-tab", "  ")
+    ref = {"slug": "doc-tab", "reason": "adds view-docs"}
+    assert docs.set_reference("doc-tab", " adds\n view-docs ") == ref
+    assert docs.read_plan()["reference"] == ref
+    assert docs.reference_model() == {
+        "slug": "doc-tab",
+        "title": "Doc tab",
+        "reason": "adds view-docs",
+        "lexicon": [],
+    }
     docs.set_reference("")
     assert "reference" not in docs.read_plan() and docs.reference_model() is None
+
+
+def test_a_bare_slug_reference_has_no_reason(docs_review):
+    docs = Session("install-docs", docs_review.dir.parent)
+    docs.create("Install", kind="code", repo=docs_review.read_plan()["repo"], workflow="view-docs")
+    plan = docs.read_plan()
+    plan["reference"] = "doc-tab"
+    docs.plan_path.write_text(json.dumps(plan))
+    model = docs.reference_model()
+    assert model is not None and model["reason"] == ""
+
+
+def test_the_reference_candidates_are_the_repos_branch_reviews(docs_review, tmp_path):
+    root = docs_review.dir.parent
+    repo = docs_review.read_plan()["repo"]
+    plan = docs_review.read_plan()
+    plan["outline"] = [
+        {"id": "sheet", "title": "Sheet"},
+        {"id": "i1", "title": "store", "part": "refactoring"},
+    ]
+    plan["lexicon"] = [{"term": "doc set", "section": "sheet", "definition": "the list"}]
+    docs_review.plan_path.write_text(json.dumps(plan))
+    docs = Session("install-docs", root)
+    docs.create("Install", kind="code", repo=repo, workflow="view-docs")
+    Session("triage", root).create("Triage", kind="code", repo=repo, workflow="view-refactor")
+    Session("far", root).create("Far", kind="code", repo=str(tmp_path), workflow="view-branch")
+    rows = docs.reference_candidates()
+    assert [(r["slug"], r["sections"], r["terms"]) for r in rows] == [
+        ("doc-tab", ["Sheet"], ["doc set"])
+    ]
 
 
 def test_docs_stay_out_of_the_publish_fingerprint_and_the_check(docs_review):

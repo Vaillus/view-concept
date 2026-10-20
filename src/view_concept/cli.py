@@ -382,16 +382,30 @@ def cmd_stale(a: argparse.Namespace) -> None:
 
 
 def cmd_reference(a: argparse.Namespace) -> None:
-    """Set or clear the reference model, or, with neither, print it."""
+    """Set or clear the reference model, list its candidates, or, with none of these,
+    print it."""
     s = _existing(a.slug)
-    if a.clear or a.other:
-        if a.clear and a.other:
-            raise SessionError("give a session or --clear, not both")
-        ref = s.set_reference("" if a.clear else a.other)
-        print(f"reference model: {ref}" if ref else "no reference model")
+    if sum(map(bool, (a.other, a.clear, a.candidates))) > 1:
+        raise SessionError("give a session, --clear or --candidates, one at a time")
+    if a.candidates:
+        rows = s.reference_candidates()
+        for c in rows:
+            print(f"{c['slug']} · {c['title']} · updated {c['updated']}")
+            print(f"  sections: {' / '.join(c['sections']) or '(none)'}")
+            print(f"  terms: {', '.join(c['terms']) or '(none)'}")
+        if not rows:
+            print("(no branch review of this repo)")
         return
-    ref = s.reference_model()
-    print(f"reference model: {ref['slug']} ({ref['title']})" if ref else "no reference model")
+    if a.clear or a.other:
+        ref = s.set_reference("" if a.clear else a.other, a.reason or "")
+        print(f"reference model: {ref['slug']} — {ref['reason']}" if ref else "no reference model")
+        return
+    model = s.reference_model()
+    if not model:
+        print("no reference model")
+        return
+    reason = f" — {model['reason']}" if model["reason"] else ""
+    print(f"reference model: {model['slug']} ({model['title']}){reason}")
 
 
 def cmd_variant(a: argparse.Namespace) -> None:
@@ -692,11 +706,17 @@ def main() -> None:
 
     q = sub.add_parser(
         "reference",
-        help="take another session's model as the reference model of a docs review, or clear it",
+        help="take a branch review's model as the reference model of a docs review, or clear it",
     )
     q.add_argument("slug")
-    q.add_argument("other", nargs="?", help="the slug of a session of the same repo")
+    q.add_argument("other", nargs="?", help="the slug of a branch review of the same repo")
+    q.add_argument("--reason", help="one line: why this model is the reference (with a session)")
     q.add_argument("--clear", action="store_true", help="remove the reference model")
+    q.add_argument(
+        "--candidates",
+        action="store_true",
+        help="list the repo's branch reviews, with their sections and terms",
+    )
     q.set_defaults(fn=cmd_reference)
 
     q = sub.add_parser("context", help="print the context a subagent or a side thread starts from")

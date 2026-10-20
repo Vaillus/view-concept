@@ -568,9 +568,10 @@ def test_the_reference_model_is_read_from_another_session(client, doc_review):
     plan["outline"] = [{"id": "sheet", "title": "Sheet"}]
     plan["lexicon"] = [{"term": "doc set", "section": "sheet", "definition": "the *list*"}]
     doc_review.plan_path.write_text(json.dumps(plan))
-    docs.set_reference("doc-tab")
+    docs.set_reference("doc-tab", "adds view-docs")
     ref = client.get("/api/s/install-docs").json()["docs"]["reference"]
     assert ref["slug"] == "doc-tab" and ref["title"] == "Doc tab" and ref["url"] == "/s/doc-tab"
+    assert ref["reason"] == "adds view-docs"
     assert ref["lexicon"][0]["tip_html"] == "the <em>list</em>"
     plan["lexicon"][0]["definition"] = "the docs"
     doc_review.plan_path.write_text(json.dumps(plan))  # re-read as it is now

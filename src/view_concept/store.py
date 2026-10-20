@@ -179,10 +179,12 @@ it contradicts, a reference model's, or ""), note (one line: why), at}. The revi
 flags them (`stale`), and drops one fixed or dismissed. A flag whose quote is no longer
 found in its doc's current text is not shown, and stays in the file.
 
-A docs review may take another session's model as its reference model: plan.json
-`reference`, the slug of a session of the same repo (written by `reference`). Its
-lexicon's terms are underlined in the docs, and its sections are the measure of the stale
-passages the code cannot catch. It is re-read at each run, as it is then.
+A docs review may take a branch review's model as its reference model: plan.json
+`reference`, {slug (a view-branch session of the same repo), reason (one line: why the
+agent kept it, shown next to its link)} (written by `reference`, whose `--candidates`
+lists the repo's branch reviews). None is the ordinary case. Its lexicon's terms are
+underlined in the docs, and its sections are the measure of the stale passages the code
+cannot catch. It is re-read at each run, as it is then.
 
 A branch review's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
 at} (written by `pr`). The page links it at the top and at the end of the code tab.
@@ -623,39 +625,84 @@ class Session:
         _write_json(self.plan_path, plan)
         return plan["pr"]
 
-    def set_reference(self, other: str) -> str:
-        """Take session `other`'s model as the reference model (plan.json `reference`):
-        a docs review measures its docs against it. `other` is another session of the same
-        repo. An empty `other` removes the reference."""
+    def set_reference(self, other: str, reason: str = "") -> dict[str, str]:
+        """Take session `other`'s model as the reference model (plan.json `reference`:
+        {slug, reason}): a docs review measures its docs against it. `other` is a branch
+        review of the same repo (a reference candidate), `reason` the one line the page
+        shows next to its link. An empty `other` removes the reference."""
         plan = self.read_plan()
         if not other:
             plan.pop("reference", None)
             _write_json(self.plan_path, plan)
-            return ""
+            return {}
         ref = Session(other, self.dir.parent)
         if other == self.slug or not ref.exists():
             raise SessionError(f"no other session {other!r}")
-        here, there = plan.get("repo", ""), ref.read_plan().get("repo", "")
-        if not here or not there or project_of(here) != project_of(there):
+        there = ref.read_plan()
+        here_repo, there_repo = plan.get("repo", ""), there.get("repo", "")
+        if not here_repo or not there_repo or project_of(here_repo) != project_of(there_repo):
             raise SessionError(f"{other} is not a session of this repo")
-        plan["reference"] = other
+        if there.get("workflow") != "view-branch":
+            raise SessionError(f"{other} is not a branch review: only one has a model")
+        reason = " ".join(reason.split())
+        if not reason:
+            raise SessionError('a reference model needs its reason: --reason "<one line>"')
+        plan["reference"] = {"slug": other, "reason": reason}
         _write_json(self.plan_path, plan)
-        return other
+        return plan["reference"]
 
     def reference_model(self) -> dict[str, Any] | None:
-        """The reference model, re-read at each call: {slug, title, lexicon} of the session
-        plan.json `reference` names; None without one, or when that session is gone."""
-        slug = self.read_plan().get("reference")
-        if not slug:
+        """The reference model, re-read at each call: {slug, title, reason, lexicon} of the
+        session plan.json `reference` names; None without one, or when that session is
+        gone. A `reference` written as a bare slug has no reason."""
+        entry = self.read_plan().get("reference")
+        if isinstance(entry, str):
+            entry = {"slug": entry, "reason": ""}
+        if not isinstance(entry, dict) or not entry.get("slug"):
             return None
         try:
-            ref = Session(str(slug), self.dir.parent)
+            ref = Session(str(entry["slug"]), self.dir.parent)
             if not ref.exists():
                 return None
             plan = ref.read_plan()
         except SessionError:
             return None
-        return {"slug": ref.slug, "title": plan["title"], "lexicon": plan["lexicon"]}
+        return {
+            "slug": ref.slug,
+            "title": plan["title"],
+            "reason": str(entry.get("reason") or ""),
+            "lexicon": plan["lexicon"],
+        }
+
+    def reference_candidates(self) -> list[dict[str, Any]]:
+        """The sessions a docs review may take as reference model: the branch reviews of
+        the same repo (any worktree), newest first, each {slug, title, updated, sections
+        (its outline's titles), terms (its lexicon's terms)}, for the agent to read
+        against the doc set."""
+        project = project_of(self.read_plan().get("repo", ""))
+        if not project:
+            return []
+        out = []
+        for row in list_sessions(self.dir.parent):
+            if row["slug"] == self.slug or row["workflow"] != "view-branch":
+                continue
+            if row["project"] != project:
+                continue
+            plan = Session(row["slug"], self.dir.parent).read_plan()
+            out.append(
+                {
+                    "slug": row["slug"],
+                    "title": row["title"],
+                    "updated": row["updated"],
+                    "sections": [
+                        o.get("title", o["id"])
+                        for o in plan["outline"]
+                        if o.get("part") != "refactoring"
+                    ],
+                    "terms": [t["term"] for t in plan["lexicon"]],
+                }
+            )
+        return out
 
     def read_variant(self) -> dict[str, Any]:
         """The setup the session runs with: {name, models}, `models` mapping a role to the
