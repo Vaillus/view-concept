@@ -476,6 +476,10 @@ def test_the_page_serves_a_repo_file_a_doc_points_to(client, doc_review):
     assert client.get("/s/doc-tab/repo/docs/img/tabs.png").content == b"png"
     assert client.get("/s/doc-tab/repo/docs/img/none.png").status_code == 404
     assert client.get("/s/doc-tab/repo/.git/config").status_code == 404
+    (doc_review.repo_dir() / ".git").mkdir()
+    (doc_review.repo_dir() / ".git" / "config").write_text("[core]")
+    assert client.get("/s/doc-tab/repo/.git/config").status_code == 404
+    assert client.get("/s/doc-tab/repo/.GIT/config").status_code == 404
     assert client.get("/s/doc-tab/repo/..%2Fsessions%2Fdoc-tab%2Fplan.json").status_code == 404
     assert client.get("/s/kv-cache/repo/README.md").status_code == 404
 

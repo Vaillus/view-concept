@@ -705,13 +705,24 @@ def section_media(slug: str, sid: str, path: str) -> FileResponse:
     return FileResponse(file, headers=FRAME_SANDBOX_HEADER)
 
 
+def _under_git(file: Path, root: Path) -> bool:
+    """Whether `file` (resolved, under `root`) is in a .git folder of the repo, whatever
+    the case of its spelling."""
+    return any(part.lower() == ".git" for part in file.relative_to(root).parts)
+
+
 @app.get("/s/{slug}/repo/{path:path}")
 def repo_file(slug: str, path: str) -> FileResponse:
     """A file of the session's repo: the images and links a doc gives by a relative path,
     which the page resolves against the doc's folder. Nothing outside the repo, nothing of
     its .git folder."""
-    file = get_session(slug).doc_file(path)
-    if file is None or ".git" in Path(path).parts or not file.is_file():
+    s = get_session(slug)
+    file = s.doc_file(path)
+    repo = s.repo_dir()
+    # Tested on the resolved file, not the URL's spelling: on a case-insensitive file
+    # system `.GIT/config` is the .git folder's config.
+    in_git = repo is not None and file is not None and _under_git(file, repo.resolve())
+    if file is None or in_git or not file.is_file():
         raise HTTPException(404, f"no repo file {path}")
     return FileResponse(file, headers=FRAME_SANDBOX_HEADER)
 
