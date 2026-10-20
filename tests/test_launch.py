@@ -18,6 +18,13 @@ def test_command_needs_a_known_skill_and_a_request():
         launch.command("view-branch", "  ")
 
 
+def test_command_refuses_a_worktree_for_a_skill_that_makes_its_own():
+    assert " -w review " in launch.command("view-branch", "x", worktree="review")
+    with pytest.raises(SessionError):
+        launch.command("view-docs", "x", worktree="docs")
+    assert " -w " not in launch.command("view-docs", "x")
+
+
 def test_open_terminal_needs_a_folder(tmp_path):
     with pytest.raises(SessionError):
         launch.open_terminal(str(tmp_path / "missing"), "claude")
