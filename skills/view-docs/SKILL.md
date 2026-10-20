@@ -21,9 +21,9 @@ other agent writes for it.
 
 The scope to review is whatever the user typed after the command name: a
 folder, a list of files, or a subject (« everything about the install »).
-When it names another session's model to measure the docs against (« with
-the model of doc-tab »), that is the reference model (see **Stale
-passages**).
+When it names a branch review whose model to measure the docs against
+(« with the model of doc-tab »), that is the reference model (see **The
+reference model**); otherwise you look for one at the first run.
 
 The terminal is a bad place to read docs: every new message pushes them
 further up the scrollback. So the docs live in the page, and the terminal
@@ -46,7 +46,7 @@ requires approval for commands).
 2. **The doc set**: the list of docs the scope concerns, each with its
    reason.
 3. **The first run**: the stale passages the code contradicts corrected,
-   those the reference model contradicts flagged.
+   the search for a reference model, the passages it contradicts flagged.
 4. **The batches**: each batch's comments rewrite the docs at once.
 5. **« Create PR »**: one commit and the PR; each later batch adds a commit
    and updates the PR.
@@ -66,8 +66,8 @@ worktree next to the repo, the folder `<repo>-<slug>` (for the repo
 git -C <repo root> worktree add -b docs/<slug> <repo root>-<slug> main
 view-concept new "<title>" --slug <slug> --initial-request "<the user's request, verbatim>" \
     --kind code --repo <the worktree> --base main --workflow view-docs
-view-concept reference <slug> <other slug>   # when the request names a reference model
-view-concept open <slug>                     # starts the server if needed, shows the page
+view-concept reference <slug> <other slug> --reason "<one line>"   # when the request names one
+view-concept open <slug>   # starts the server if needed, shows the page
 ```
 
 `--repo` is the worktree, not the main checkout: the page reads each doc
@@ -151,7 +151,8 @@ text for a doc the review creates), so it shows at any time what the PR
 will hold; and the green highlight of what changed since the user's last
 batch. When the session has a reference model, the terms of its lexicon are
 underlined in the docs with their definition on hover, and the top bar links
-to its session. « Create PR » sits at the end of the tab.
+to its session, with the reason you kept it next to the link. « Create PR »
+sits at the end of the tab.
 
 ## The first run
 
@@ -160,14 +161,16 @@ Once the session is open, in the same turn:
 1. Write the doc set (see **The doc set**).
 2. Run `view-concept status <slug> revising`, then look for the stale
    passages in every doc of it (see **Stale passages**): correct those the
-   code contradicts, in the doc files, and flag those the reference model
-   contradicts.
-3. Ask what the reading left open (see **Agent questions**): a doc whose
+   code contradicts, in the doc files.
+3. Unless the request named one, look for a reference model (see **The
+   reference model**), then flag the passages the one you kept contradicts.
+4. Ask what the reading left open (see **Agent questions**): a doc whose
    place in the scope you cannot tell, a correction that needs the user's
    call.
-4. Run `view-concept status <slug> awaiting-pr` (the page shows « Create
+5. Run `view-concept status <slug> awaiting-pr` (the page shows « Create
    PR ») and say in one terminal line how many docs the doc set holds, how
-   many passages you corrected and how many you flagged.
+   many passages you corrected, the reference model you kept (or none) and
+   how many passages you flagged.
 
 The user's first batch therefore starts from the corrections made: the base
 mark shows each one, since nothing else has changed on the branch yet. A
@@ -193,11 +196,11 @@ new name. A correction is the smallest change that makes the passage true.
 
 **The reference model.** What the code cannot say (a doc that is wrong by
 what it leaves out, a rule stated otherwise) needs a measure: the
-**reference model**, the model of another session of the same repo, a
-branch review whose sections and lexicon say what the code now does or is
-about to do. The user names it at launch or later in a comment; set it with
-`view-concept reference <slug> <other slug>` (`--clear` removes it). Re-read
-its `plan.json` (outline and lexicon) and its `sections/` in
+**reference model**, the model of a branch review of the same repo whose
+sections and lexicon say what the code now does or is about to do. Most
+docs reviews have none: the review then measures its docs against the code
+alone, and that is the ordinary case, not a gap to fill. **The reference
+model** below says how you find one. Re-read its `plan.json` (outline and lexicon) and its `sections/` in
 `~/.view-concept/sessions/<other slug>/` at each run, as they are then. A
 passage it contradicts is flagged, not corrected: a contradiction with a
 model needs the user's judgment, where a dead name needs none.
@@ -219,7 +222,44 @@ of the passage clears it. Flag no passage that is true: each one costs the
 user a comment.
 
 Run both checks on every doc of the doc set at the first run, then on each
-doc you rewrite or add to the doc set, in the same run.
+doc you rewrite or add to the doc set, in the same run. A reference model
+set after the first run (by an answer or a comment) makes you check
+**every** doc of the doc set against it at the run that sets it, the docs
+read at the first run included, not only those rewritten since.
+
+## The reference model
+
+Only the repo's branch reviews are candidates: an explanation or a triage
+has no model. You search for one at the first run only; after it, only a
+comment sets, changes or removes one.
+
+```bash
+view-concept reference <slug> --candidates                       # the repo's branch reviews
+view-concept reference <slug> <other slug> --reason "<one line>"  # keeps one
+view-concept reference <slug> --clear                            # removes it
+view-concept reference <slug>                                    # prints it
+```
+
+`--candidates` lists each branch review of the repo (any worktree) with its
+title, the titles of its model's sections and its lexicon's terms. Read
+them against the doc set: a session **fits** when its model describes a
+concept a doc of the doc set treats, and the docs do not carry that concept
+yet (a model already written into the docs has nothing left to contradict).
+Open a candidate's sections when its titles and terms leave you unsure.
+
+| What you find | What you do |
+|---|---|
+| no session fits | set nothing: the review goes on against the code alone, and the top bar shows no link |
+| one session fits, or one fits clearly better | keep it, with `--reason`: one line the user reads next to its link, what its model adds to the doc set (« its model adds view-docs to the skills the Install part lists ») |
+| several fit and none wins | ask (see **Agent questions**): one `--option` per session, `<slug> — <its reason>`, and the option `aucune`, your pick as `--recommended`; flag no passage from a model before the answer |
+
+The answer comes in a batch: keep the session it names with its reason, or
+set nothing for `aucune`. A comment that names a session you missed,
+replaces the one you kept, or removes it (`--clear`) is applied the same
+way. When a reference model is set or replaced this way, check every doc
+of the doc set against it in that run (see **Stale passages**); when one is
+replaced or removed, drop the flags it made (`view-concept stale <slug>
+--drop <id>`).
 
 ## Writing a doc
 
@@ -290,7 +330,9 @@ Then, for every batch, in the same turn:
    worktree (see **Writing a doc**); a comment on the list adds or removes a
    doc with `--user`. A comment that says a flagged passage is right drops
    its flag (`view-concept stale <slug> --drop <id>`). A doc that enters the
-   doc set, or that you rewrite, gets both checks of **Stale passages**.
+   doc set, or that you rewrite, gets both checks of **Stale passages**. An
+   answer or a comment about the reference model is applied as **The
+   reference model** says.
 3. Answer in the terminal, grouped by comment id, one line each; discuss
    where a comment is a question.
 4. Mark what you addressed: `view-concept resolve <slug> c4 c5 --reply "<one
