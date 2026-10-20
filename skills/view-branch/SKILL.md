@@ -516,7 +516,10 @@ the next two found by reading, the last one always applied:
    line, the field the docs' reader knows, and one definition per term the
    repo's folders share), always, present or missing, and each **folder
    lexicon** (a `.agents/lexicon.md` below the root, for the terms only the
-   folders under it share) above a folder the branch touches.
+   folders under it share) above a folder the branch touches. A missing
+   repo lexicon is listed so its entry in the Doc tab carries « write repo
+   lexicon »; no agent writes it unless that button or a rewrite request
+   asks for it.
 
 Before the code exists, a path the branch touches is where the model will
 land, which the code map says. Docstrings and code comments are not docs and
@@ -630,8 +633,10 @@ into the docs by the implementer run that makes it, and the page never shows
 2. Start the implementer with the trigger `"« Write docs »"` and the batch
    id, plus every comment on a doc's text, every « write repo lexicon »
    batch and every rewrite request that waited for the doc pass. It
-   refreshes the doc set on the real diff, writes the repo lexicon (when
-   missing) and the lexicon entries the branch changes, rewrites the docs
+   refreshes the doc set on the real diff, writes the repo lexicon when it
+   is missing and a « write repo lexicon » or a rewrite request asks for
+   it, writes the lexicon entries the branch changes (skipped while the
+   repo lexicon is missing), rewrites the docs
    from the model, writes each README a rewrite request names with the
    write-readme skill, and applies those comments.
 3. Start the reviewer with the implementer's report (in words, « doc pass »

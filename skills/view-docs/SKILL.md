@@ -136,7 +136,9 @@ for readers):
   the repo root (the reader line, the field the docs' reader knows, and one
   definition per term the repo's folders share), and each **folder lexicon**
   (a `.agents/lexicon.md` below the root, for the terms only the folders
-  under it share) above the folder of a doc of the doc set.
+  under it share) above the folder of a doc of the doc set. A missing repo
+  lexicon is listed so its entry in the Doc tab carries « write repo
+  lexicon »; you write it only on that request or a rewrite request.
 
 The reason is one line the user reads in the list: what in the doc the scope
 concerns (« the Install part: the Claude Code plugin, Jazz, Codex, the other

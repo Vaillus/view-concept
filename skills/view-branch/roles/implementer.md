@@ -145,15 +145,21 @@ concept or a line of the to-do list is implemented in one of them.
    4. a doc that describes a concept of the model;
    5. the **repo lexicon**, `.agents/lexicon.md` at the repo root, always,
       present or missing, and each **folder lexicon** (a `.agents/lexicon.md`
-      below the root) above a folder the branch touches.
+      below the root) above a folder the branch touches. A missing repo
+      lexicon is listed so its entry in the Doc tab carries « write repo
+      lexicon »; listing it does not write it (step 2).
 
    Add each doc the code brought in, `view-concept doc-set <slug> add <path>
    "<reason>"` (the reason one line the user reads: what in the doc the
    branch concerns), and remove each doc left with no reason, `view-concept
    doc-set <slug> remove <path>`. Docstrings and code comments stay out. A
    doc the user removed stays out: the command refuses it.
-2. **Write the lexicons**, before any other doc:
-   1. the repo lexicon, `.agents/lexicon.md`, when it is missing. Its format:
+2. **Write the lexicons**, before any other doc. While the repo lexicon is
+   missing, skip this step, unless the trigger holds a « write repo lexicon »
+   or a rewrite request: nobody asked for the file, and the doc pass writes
+   none on its own.
+   1. the repo lexicon, `.agents/lexicon.md`, when it is missing and a
+      « write repo lexicon » or a rewrite request asks for it. Its format:
       a `# <repo name>` title, a `## Reader` part holding the reader line
       (the field the docs' reader knows, and that they have never opened
       this repo), then a `## Terms` part, one entry per term, `**Term**:`
@@ -173,7 +179,8 @@ concept or a line of the to-do list is implemented in one of them.
    lexicon or a folder lexicon above the doc's folder defines is defined at
    its first use in that doc in the entry's words, the closest lexicon
    winning; a lexicon outside the doc's path is not read for it, and no doc
-   links to a lexicon. Apply the comments on a doc's text that the
+   links to a lexicon. The lexicons are not rewritten here: step 2 alone
+   writes them, and a missing repo lexicon stays missing. Apply the comments on a doc's text that the
    trigger holds (they waited for the doc pass). A README a rewrite request
    names is not patched this way: see **The rewrite request**.
 4. **One commit** for the doc pass, whose message names the docs it

@@ -327,7 +327,9 @@ A doc enters the doc set by five rules:
    line and one definition per term the repo's folders share), always,
    present or missing, and each **folder lexicon** (a `.agents/lexicon.md`
    below the root, for the terms only the folders under it share) above a
-   folder the branch touches.
+   folder the branch touches. A missing repo lexicon is listed so its entry
+   in the Doc tab carries « write repo lexicon »; listing it does not write
+   it.
 
 Before the code exists, a path the branch touches is where the model will
 land, which the code map says. Docstrings and code comments are not docs and
