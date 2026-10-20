@@ -188,9 +188,13 @@ wins. A repo term one of them defines keeps that entry's name:
   home section; the doc pass then writes the new definition into the
   lexicon.
 
-Two folder lexicons on different paths that define one term differently
-give two lexicon entries, each named with its folder (« gate
-(dataset_tools/) »).
+The folders the branch touches can reach two definitions of one term: a
+shadowed term (one a folder lexicon defines when a lexicon above it already
+does) when the branch touches folders inside and outside that folder
+lexicon, or two sibling folder lexicons that define it differently. The
+review's lexicon then holds the term twice, each entry named with its
+folder (« gate (dataset_tools/) »), so a section about a folder uses the
+definition the doc pass copies into that folder's docs.
 
 ## The change history
 
