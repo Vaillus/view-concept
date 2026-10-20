@@ -45,3 +45,6 @@ view-refactor:
   - key: keep
     meaning: good as it is.
     tone: ok
+
+# A docs review has no items: no verdict.
+view-docs: []

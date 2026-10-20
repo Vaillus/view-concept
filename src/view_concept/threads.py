@@ -268,7 +268,8 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
     outline = plan["outline"]
     number = {sec["id"]: i + 1 for i, sec in enumerate(outline)}
     titles = {sec["id"]: sec.get("title", sec["id"]) for sec in outline}
-    doc = "review" if plan.get("workflow") in ("view-branch", "view-refactor") else "explanation"
+    reviews = ("view-branch", "view-refactor", "view-docs")
+    doc = "review" if plan.get("workflow") in reviews else "explanation"
     sec = thread["section"]
     qid = thread.get("question", "")
     on_doc = sec.startswith(DOC_KEY) or sec == DOC_SET_ANCHOR

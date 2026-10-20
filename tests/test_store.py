@@ -1058,3 +1058,11 @@ def test_write_docs_carries_then_pr_only_when_true(session):
 
 def test_awaiting_docs_is_a_phase(session):
     assert session.write_status("awaiting-docs")["phase"] == "awaiting-docs"
+
+
+def test_a_docs_review_is_a_code_session_not_coordinated(tmp_path):
+    with pytest.raises(SessionError, match="code session"):
+        Session("d", tmp_path).create("D", workflow="view-docs")
+    s = Session("d", tmp_path)
+    s.create("D", kind="code", repo=str(tmp_path), workflow="view-docs")
+    assert s.read_plan()["workflow"] == "view-docs" and not s.coordinated

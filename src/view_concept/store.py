@@ -64,7 +64,10 @@ names which of the item's files a relation starts from (by default the first). O
 `kind: "finding"` and `items: [<section ids>]` is a finding across items.
 
 The session workflow, `workflow` in plan.json, is the skill that drives the session:
-view-concept, view-branch or view-refactor (a triage of existing code). It picks the
+view-concept, view-branch, view-refactor (a triage of existing code) or view-docs (a docs
+review: a repo's docs reviewed on a scope, on a branch of their own, with the Doc tab
+alone, no outline, no sections and no items; its agent sets "awaiting-pr" whenever it
+waits once the doc set exists). It picks the
 verdict set the page shows: verdicts.yaml holds one list per workflow, and each verdict
 carries the `tone` the page colours it with. A session created before workflows existed
 has no workflow and gets view-branch's list.
@@ -253,9 +256,10 @@ ACTIONS = (
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
 # The session workflow: which skill drives the session. It picks the verdict set the page
-# shows (see verdicts.yaml). view-branch and view-refactor review code, so their sessions
-# are code sessions. A session created before workflows existed has none.
-WORKFLOWS = ("view-concept", "view-branch", "view-refactor")
+# shows (see verdicts.yaml). view-branch, view-refactor and view-docs (a docs review) work
+# on a repository, so their sessions are code sessions. A session created before workflows
+# existed has none.
+WORKFLOWS = ("view-concept", "view-branch", "view-refactor", "view-docs")
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 # The role agents a branch review's coordinator starts; a variant sets a model per role.

@@ -27,7 +27,7 @@ from typing import Any
 from .store import HOME, SessionError, _read_json, _write_json, project_of, slugify
 
 # The skills a session can start on, in the order the page offers them.
-SKILLS = ("view-branch", "view-refactor", "view-concept")
+SKILLS = ("view-branch", "view-refactor", "view-docs", "view-concept")
 # The permission mode every launch starts the agent in (see the module's docstring).
 PERMISSION_MODE = "auto"
 # After this many seconds with no session, a pending launch reads « not started ».

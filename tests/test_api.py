@@ -135,7 +135,7 @@ def set_workflow(session, workflow):
 
 
 def test_every_verdict_has_a_meaning_and_a_tone():
-    assert set(VERDICT_FILE) == {"view-branch", "view-refactor"}
+    assert set(VERDICT_FILE) == {"view-branch", "view-refactor", "view-docs"}
     for verdicts in VERDICT_FILE.values():
         assert all(v["meaning"] and v["tone"] in TONES for v in verdicts)
         assert len({v["key"] for v in verdicts}) == len(verdicts)
@@ -524,3 +524,17 @@ def test_a_batch_asks_for_the_doc_pass_and_the_pr(client):
     assert r.status_code == 200 and r.json()["then_pr"] is True
     r = client.post("/api/s/kv-cache/batch", json={"action": "create-pr", "then_pr": True})
     assert r.status_code == 400
+
+
+def test_a_docs_review_shows_its_doc_set_with_no_plan_nor_sections(client, session):
+    repo = session.dir.parent / "docs-repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("## Install\n\nYou need uv.\n")
+    s = Session("install-docs", session.dir.parent)
+    s.create("Install docs", kind="code", repo=str(repo), workflow="view-docs")
+    s.add_doc("README.md", "the install part")
+    state = client.get("/api/s/install-docs").json()
+    assert state["workflow"] == "view-docs" and state["verdicts"] == []
+    assert state["plan"]["outline"] == [] and state["sections"] == {}
+    assert state["docs"]["set"][0]["path"] == "README.md"
+    assert state["docs"]["views"]["README.md"]["exists"] is True
