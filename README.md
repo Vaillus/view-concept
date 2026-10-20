@@ -1,6 +1,6 @@
 # view-concept
 
-view-concept is a local web page where your coding agent (Claude Code, Codex, Jazz, or any agent that follows a skill and runs shell commands) writes explanations and code reviews, and where you read and comment on them. Each tool is a **skill** (a `SKILL.md` file of instructions the agent loads when you name it): `/view-concept`, `/view-branch`, `/view-refactor`.
+view-concept is a local web page where your coding agent (Claude Code, Codex, Jazz, or any agent that follows a skill and runs shell commands) writes explanations and code reviews, and where you read and comment on them. Each tool is a **skill** (a `SKILL.md` file of instructions the agent loads when you name it): `/view-concept`, `/view-branch`, `/view-refactor`, `/view-docs`.
 
 The agent writes plain files; the **page** renders them in your browser as they are written. You select passages, comment on them, and « Send » posts all your comments at once, as one **comment batch**, to the agent session, which revises the text. One explanation or review, with its files and comments, is a **session**.
 
@@ -34,19 +34,22 @@ A section can also be written as an HTML file, which the page draws like an arti
 
 To keep an explanation, « Export to vault » writes it as an Obsidian note, and « Publish » puts it on the web as a read-only page, hosted in a public GitHub repository, at a link you can send (see [`docs/reference.md`](docs/reference.md#publishing)).
 
-## Three skills
+## Four skills
 
 | Skill | Use it to |
 |---|---|
 | `/view-concept` | understand a concept, as described above |
 | `/view-branch` | review a branch you are building, concepts first |
 | `/view-refactor` | decide what stays in quickly written code, then restructure it |
+| `/view-docs` | bring a repo's docs up to date, with no branch to review |
 
-A **branch review** (`/view-branch`) first writes the concepts the branch introduces, with their rules; you correct them and approve. The main session only coordinates: separate agents write the concepts, change the code to match them, and check the result. The Code tab lists each changed file with its **verdict** (the decision recorded for that item) and a chart of how the files relate. A concept you change after approval shows as « not implemented yet » until the code catches up. « Create PR » opens the pull request.
+A **branch review** (`/view-branch`) first writes the concepts the branch introduces, with their rules; you correct them and approve. The main session only coordinates: separate agents write the concepts, change the code to match them, and check the result. The Code tab lists each changed file with its **verdict** (the decision recorded for that item) and a chart of how the files relate. A concept you change after approval shows as « not implemented yet » until the code catches up. Once the code carries the concepts, « Write docs » has the repo's docs rewritten from them: the Doc tab shows each doc the branch concerns, marks what the branch changed in it and underlines the passages the concepts contradict, and you comment on it like any section. « Create PR » then opens the pull request.
 
 To speed the workflow up, the Metrics tab of a branch review shows where its time went, run by run, and compares the repository's reviews by **variant** (`view-concept variant <slug> "writer on sonnet" --model writer=sonnet` names a session's setup and the model of each role).
 
 ![The Code tab of a branch review: one verdict per item, then the structure chart](docs/screenshots/branch-review.png)
+
+`/view-docs` reviews docs alone, on a scope you give (a folder, files, or a subject such as « everything about the install »), on a `docs/<slug>` branch of its own. The page shows only the Doc tab. The agent corrects at once what the code contradicts (a path, a command or a function the repo no longer has), flags what another session's model contradicts when you name one, rewrites the docs on each comment batch, and « Create PR » opens the pull request.
 
 `/view-refactor` works the same way on existing code: each item gets a triage verdict (`keep`, `move`, `split`, `merge`, `throw`, `separate-pr`), then the agent applies it on the current branch or splits it into PRs reviewed with `/view-branch`.
 
@@ -63,7 +66,7 @@ claude plugin install view-concept@view-concept
 
 Then type `/view-concept:view-concept explain KKT conditions` (Claude Code prefixes plugin skills with the plugin name), or just ask for an explanation in the page.
 
-**Jazz** — through the community plugin [`lvndry/jazz-plugin-view-concept`](https://github.com/lvndry/jazz-plugin-view-concept), which adds `/view-concept`, `/view-branch` and `/view-refactor`:
+**Jazz** — through the community plugin [`lvndry/jazz-plugin-view-concept`](https://github.com/lvndry/jazz-plugin-view-concept), which bundles a copy of `skills/` and adds its skills (`/view-concept`, `/view-branch`, `/view-refactor`, and `/view-docs` once the plugin's copy is synced):
 
 ```bash
 jazz plugin add lvndry/jazz-plugin-view-concept
