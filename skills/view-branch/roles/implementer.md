@@ -47,7 +47,7 @@ nothing, change nothing.
 | comment ids (`c12`) | The user asked for these code changes. |
 | « Write docs » | The doc pass (see **The doc pass**). |
 | comment ids on a doc (`(doc <path>)` or `(doc set)` in the batch) | The user asked for these changes to a doc or to the doc set (see **The doc pass**). |
-| « write repo lexicon » (`action: write-lexicon`) | Write the repo lexicon, in the doc pass or, when it came after, in this run (see **The doc pass**, step 2). |
+| « write repo lexicon » (`action: write-lexicon`) | Write the repo lexicon, in the doc pass or, when it came after, in this run (see **The doc pass**, step 2.1). |
 | a rewrite request (`action: rewrite-readme <path>`, or a comment asking for a write-readme rewrite of a README) | Write that README again with write-readme, in the doc pass or, when it came after, in this run (see **The rewrite request**). |
 
 The trigger can hold several of these at once: do them all in the run.
@@ -169,9 +169,11 @@ concept or a line of the to-do list is implemented in one of them.
       for it.
 3. **Rewrite each doc** of the doc set from the model: the concepts and
    their rules as they now stand, under the lexicon's names, without the
-   before/after comparison the modeling part makes. A repo term a lexicon
-   defines is defined at its first use in a doc in that entry's words; no
-   doc links to a lexicon. Apply the comments on a doc's text that the
+   before/after comparison the modeling part makes. A repo term the repo
+   lexicon or a folder lexicon above the doc's folder defines is defined at
+   its first use in that doc in the entry's words, the closest lexicon
+   winning; a lexicon outside the doc's path is not read for it, and no doc
+   links to a lexicon. Apply the comments on a doc's text that the
    trigger holds (they waited for the doc pass). A README a rewrite request
    names is not patched this way: see **The rewrite request**.
 4. **One commit** for the doc pass, whose message names the docs it
@@ -196,8 +198,8 @@ After the doc pass, you keep the docs:
   taking a **candidate** (a repo term several folders use that no lexicon
   on their path defines) adds its entry; a comment asking for a folder
   lexicon creates it, with the entries it names;
-- « write repo lexicon » after the doc pass writes the repo lexicon as step
-  2 says, in its own commit;
+- « write repo lexicon » after the doc pass writes the missing repo
+  lexicon as step 2.1 says, in the run's commit for the docs;
 - a rewrite request after the doc pass is done as **The rewrite request**
   says, in the run's commit for the docs.
 
@@ -217,7 +219,7 @@ after it, the coordinator passes it to you in the next pass. For that README
 alone:
 
 1. When the repo lexicon is missing, write it first (**The doc pass**, step
-   2).
+   2.1).
 2. Read `~/Documents/code/view-concept/skills/write-readme/SKILL.md` and
    follow it for that one README, naming this review's session folder, so
    the run reads the model's sections and lexicon as a source next to the
@@ -228,8 +230,8 @@ alone:
    passages the model makes false rewritten, the rest and the doc's own
    structure kept) do not apply to it: write-readme's do. A README missing
    from the worktree is written from the code.
-4. Commit it with the run's other doc changes, and resolve the comments that
-   asked for it.
+4. Commit it, and the repo lexicon step 1 wrote, with the run's other doc
+   changes, and resolve the comments that asked for it.
 5. Put the run report write-readme prints at its end into your report.
 
 ## Report
