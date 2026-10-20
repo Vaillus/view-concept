@@ -461,6 +461,8 @@ class BatchIn(BaseModel):
     comments: list[CommentIn] = []
     note: str = ""
     action: str = ""
+    # « Write docs and create PR »: the doc pass, then the PR with no pause (write-docs only).
+    then_pr: bool = False
     # The ids of the drafts the batch carries: once sent, they leave the drafts file.
     drafts: list[str] = []
 
@@ -469,7 +471,8 @@ class BatchIn(BaseModel):
 def send_batch(slug: str, body: BatchIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
-        batch = s.add_batch([c.model_dump() for c in body.comments], body.note, body.action)
+        comments = [c.model_dump() for c in body.comments]
+        batch = s.add_batch(comments, body.note, body.action, then_pr=body.then_pr)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
     s.clear_sent_drafts(body.drafts)

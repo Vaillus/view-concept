@@ -218,8 +218,10 @@ VAULT_DIR = Path(
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
-# "awaiting-model" (set by the view-branch skill only) « Approve model », and "awaiting-pr"
-# (set by the view-branch skill once refactoring is written) « Create PR ».
+# "awaiting-model" (set by the view-branch skill only) « Approve model », "awaiting-docs" (set
+# by the view-branch skill once the code carries the model) « Write docs » and « Write docs
+# and create PR », and "awaiting-pr" (set by the view-branch skill once the docs are
+# written, by the view-docs skill whenever it waits once the doc set exists) « Create PR ».
 # "awaiting-answer" (set by `question`, outside scoping) waits on an agent question shown in
 # the scope block at the top of the Plan tab.
 PHASES = (
@@ -227,6 +229,7 @@ PHASES = (
     "planning",
     "awaiting-approval",
     "awaiting-model",
+    "awaiting-docs",
     "awaiting-pr",
     "awaiting-answer",
     "writing",
@@ -238,6 +241,7 @@ ACTIONS = (
     "",
     "approve-plan",
     "approve-model",
+    "write-docs",
     "create-pr",
     "answer",
     "plan",
@@ -1643,15 +1647,18 @@ class Session:
         note: str = "",
         action: str = "",
         answers: list[dict[str, Any]] | None = None,
+        then_pr: bool = False,
     ) -> dict[str, Any]:
         """Record a batch sent from the page and append it to the inbox.
 
         `action` is what the user does with the batch: "approve-plan" means the user
         approved the plan from the page, "approve-model" that they approved the model of a
-        branch review (so the implementation starts), "create-pr" that they asked the agent to
-        open the branch's PR once the refactoring is written, with the comments as last
-        corrections, "answer" that they answered, skipped or did not understand agent
-        questions (`answers`, see `answer_question`, `skip_question` and
+        branch review (so the implementation starts), "write-docs" that they started the doc
+        pass once the code carries the model (with `then_pr`, « Write docs and create PR »:
+        the doc pass, the reviewer run and the PR follow with no pause; stored only when
+        true), "create-pr" that they asked the agent to open the branch's PR, with the
+        comments as last corrections, "answer" that they answered, skipped or did not
+        understand agent questions (`answers`, see `answer_question`, `skip_question` and
         `unclear_question`), "plan" that they ended scoping (every open question is then
         marked skipped, but a section question whose section is not written yet), "grill"
         that they started a grill, "stop-grill" that they stopped it, and "go-on" that they
@@ -1661,6 +1668,8 @@ class Session:
             raise SessionError(f"unknown action {action!r}")
         if (action == "answer") != bool(answers):
             raise SessionError("an answer batch, and only one, carries answers")
+        if then_pr and action != "write-docs":
+            raise SessionError("then_pr goes with the action write-docs only")
         note = note.strip()
         # A comment from a side thread may have no text: the thread's conclusion is the comment.
         comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
@@ -1689,6 +1698,8 @@ class Session:
         }
         if answers:
             batch["answers"] = answers
+        if then_pr:
+            batch["then_pr"] = True
         if action == "plan":
             batch["rewrite"] = self.has_written()
         batches.append(batch)
@@ -2155,6 +2166,18 @@ def format_batch(
         lines.append(
             "action: approve-model (the user approved the model from the page: "
             "start the implementation)"
+        )
+    if batch.get("action") == "write-docs" and batch.get("then_pr"):
+        lines.append(
+            "action: write-docs then create-pr (the user asked for the doc pass and the PR "
+            "with no pause: doc pass, reviewer run on the doc items and stale passages, then "
+            "open or update the PR whatever the verdicts)"
+        )
+    elif batch.get("action") == "write-docs":
+        lines.append(
+            "action: write-docs (the user asked for the doc pass: refresh the doc set, rewrite "
+            "the docs from the model, then the reviewer judges the doc items and flags stale "
+            "passages; « Create PR » follows)"
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")

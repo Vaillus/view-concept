@@ -1034,3 +1034,27 @@ def test_a_stale_passage_shows_while_its_quote_is_in_the_doc(docs_review):
     assert s.add_stale("README.md", "keys", "again")["id"] == "s3"
     with pytest.raises(SessionError, match="no stale passage s9"):
         s.drop_stale(["s9"])
+
+
+def test_write_docs_carries_then_pr_only_when_true(session):
+    b = session.add_batch([], action="write-docs")
+    assert "then_pr" not in b
+    assert (
+        format_batch("kv-cache", b, [])
+        .splitlines()[1]
+        .startswith("action: write-docs (the user asked for the doc pass: refresh the doc set")
+    )
+    b = session.add_batch([], action="write-docs", then_pr=True)
+    assert b["then_pr"] is True
+    assert json.loads(session.inbox_path.read_text().splitlines()[-1])["then_pr"] is True
+    assert (
+        format_batch("kv-cache", b, [])
+        .splitlines()[1]
+        .startswith("action: write-docs then create-pr (the user asked for the doc pass and the PR")
+    )
+    with pytest.raises(SessionError, match="then_pr"):
+        session.add_batch([], action="create-pr", then_pr=True)
+
+
+def test_awaiting_docs_is_a_phase(session):
+    assert session.write_status("awaiting-docs")["phase"] == "awaiting-docs"

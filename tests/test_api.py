@@ -516,3 +516,11 @@ def test_state_counts_the_stale_passages_shown(client, doc_review):
     assert docs["stale"] == [{"id": "s1", "doc": "docs/reference.md",
                               "quote": "The keys 1 to 4.", "section": "sheet",
                               "note": "five keys"}]  # fmt: skip
+
+
+def test_a_batch_asks_for_the_doc_pass_and_the_pr(client):
+    body = {"action": "write-docs", "then_pr": True}
+    r = client.post("/api/s/kv-cache/batch", json=body)
+    assert r.status_code == 200 and r.json()["then_pr"] is True
+    r = client.post("/api/s/kv-cache/batch", json={"action": "create-pr", "then_pr": True})
+    assert r.status_code == 400

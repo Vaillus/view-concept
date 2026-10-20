@@ -3,7 +3,7 @@ waiting for the user.
 
 A session waits for the user when its agent has stopped until the user answers: open
 questions (in scoping, or the phase awaiting-answer), or a button the page shows
-(« Approve plan », « Approve model », « Create PR ») with no answer sent yet. When a
+(« Approve plan », « Approve model », « Write docs », « Create PR ») with no answer sent yet. When a
 session starts waiting, or waits on something new (another question), the server sends a
 notice to every subscribed phone. A stalled run (an agent that stopped with an error, a
 launch that never started) sends none: it shows only in the page.
@@ -39,6 +39,7 @@ CONTACT = "mailto:view-concept@localhost"
 APPROVALS = {
     "awaiting-approval": ("approve-plan", "plan ready · waiting for your approval"),
     "awaiting-model": ("approve-model", "model ready · waiting for your approval"),
+    "awaiting-docs": ("write-docs", "code carries the model · waiting for « Write docs »"),
     "awaiting-pr": ("create-pr", "refactoring written · waiting for « Create PR »"),
 }
 
