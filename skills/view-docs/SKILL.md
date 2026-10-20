@@ -291,6 +291,33 @@ you change what is false or missing, and leave what is right as it is.
 - **Copy rules**, on trial: no aside set off by em-dashes, no « not X, but
   Y », no colon before a punchline, no « worth noting ».
 
+These rules hold for every doc but the README a rewrite request names, which
+write-readme's rules write instead (see **The rewrite request**).
+
+## The rewrite request
+
+A **rewrite request** asks you to write one README again with the
+write-readme skill instead of correcting it: a batch with `action:
+rewrite-readme <path>`, or a comment on a README asking for a write-readme
+rewrite. A docs review has no pass to wait for: do it in the batch's turn,
+for that README alone:
+
+1. When the repo lexicon is missing, write it first (see **The repo
+   lexicon**).
+2. Read `~/Documents/code/view-concept/skills/write-readme/SKILL.md` and
+   follow it for that one README, naming the reference model's session
+   folder when the review has one, so the run reads that model's sections
+   and lexicon as a source next to the code and the old README. A comment of
+   the batch that gives a reader line (« reader: … ») passes it to the run.
+   write-readme is the one skill this review reads besides its own.
+3. Keep the old README's language. A README missing from the worktree is
+   written from the code.
+4. Put the run report write-readme prints at its end into your terminal
+   reply to the batch.
+
+The rewrite is committed with the review's other changes, as **Create PR**
+says.
+
 ## The repo lexicon
 
 The repo lexicon, `.agents/lexicon.md` at the repo root, is a file for the
@@ -347,6 +374,10 @@ asks for what its name says and nothing else:
 - **`write-lexicon`** (« write repo lexicon », on the repo lexicon's entry
   in the Doc tab while the file is missing) asks you to write the repo
   lexicon at once: see **The repo lexicon**.
+- **`rewrite-readme <path>`** (the button just under the doc titles, on a
+  README) asks you to write that README again with the write-readme skill,
+  at once: see **The rewrite request**. A comment on a README asking for a
+  write-readme rewrite is the same request.
 - **Without an action**, a batch carries comments only.
 
 Then, for every batch, in the same turn:
@@ -366,7 +397,8 @@ Then, for every batch, in the same turn:
    answer or a comment about the reference model is applied as **The
    reference model** says.
 3. Answer in the terminal, grouped by comment id, one line each; discuss
-   where a comment is a question.
+   where a comment is a question. A rewrite request adds the run report of
+   its write-readme run.
 4. Mark what you addressed: `view-concept resolve <slug> c4 c5 --reply "<one
    line: what changed>"`. Leave a comment open while its discussion is
    still going.

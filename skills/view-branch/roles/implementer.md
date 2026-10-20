@@ -48,6 +48,7 @@ nothing, change nothing.
 | « Write docs » | The doc pass (see **The doc pass**). |
 | comment ids on a doc (`(doc <path>)` or `(doc set)` in the batch) | The user asked for these changes to a doc or to the doc set (see **The doc pass**). |
 | « write repo lexicon » (`action: write-lexicon`) | Write the repo lexicon, in the doc pass or, when it came after, in this run (see **The doc pass**, step 2). |
+| a rewrite request (`action: rewrite-readme <path>`, or a comment asking for a write-readme rewrite of a README) | Write that README again with write-readme, in the doc pass or, when it came after, in this run (see **The rewrite request**). |
 
 The trigger can hold several of these at once: do them all in the run.
 
@@ -171,7 +172,8 @@ concept or a line of the to-do list is implemented in one of them.
    before/after comparison the modeling part makes. A repo term a lexicon
    defines is defined at its first use in a doc in that entry's words; no
    doc links to a lexicon. Apply the comments on a doc's text that the
-   trigger holds (they waited for the doc pass).
+   trigger holds (they waited for the doc pass). A README a rewrite request
+   names is not patched this way: see **The rewrite request**.
 4. **One commit** for the doc pass, whose message names the docs it
    rewrote.
 
@@ -195,16 +197,46 @@ After the doc pass, you keep the docs:
   on their path defines) adds its entry; a comment asking for a folder
   lexicon creates it, with the entries it names;
 - « write repo lexicon » after the doc pass writes the repo lexicon as step
-  2 says, in its own commit.
+  2 says, in its own commit;
+- a rewrite request after the doc pass is done as **The rewrite request**
+  says, in the run's commit for the docs.
 
 Resolve each comment on a doc or the doc set you handled: `view-concept
 resolve <slug> <ids> --reply "<one line: what changed>"`.
 
 « Create PR » no longer starts you: closing only opens or updates the PR.
 
+## The rewrite request
+
+A **rewrite request** asks you to write one README again with the
+write-readme skill instead of patching it: a batch with `action:
+rewrite-readme <path>` (the button just under the doc titles in the Doc
+tab, naming the README in sight), or a comment on a README asking for a
+write-readme rewrite. One sent before « Write docs » waits for the doc pass;
+after it, the coordinator passes it to you in the next pass. For that README
+alone:
+
+1. When the repo lexicon is missing, write it first (**The doc pass**, step
+   2).
+2. Read `~/Documents/code/view-concept/skills/write-readme/SKILL.md` and
+   follow it for that one README, naming this review's session folder, so
+   the run reads the model's sections and lexicon as a source next to the
+   code and the old README. A comment of the batch that gives a reader line
+   (« reader: … ») passes it to the run. write-readme is the one skill a
+   role of this review reads besides its own.
+3. Keep the old README's language. The rules of the doc pass's step 3 (the
+   passages the model makes false rewritten, the rest and the doc's own
+   structure kept) do not apply to it: write-readme's do. A README missing
+   from the worktree is written from the code.
+4. Commit it with the run's other doc changes, and resolve the comments that
+   asked for it.
+5. Put the run report write-readme prints at its end into your report.
+
 ## Report
 
 End with one line for the coordinator: the commits you made (short hash and
 subject), the change id you recorded, anything you could not do, the
 comment ids you handled, the docs added to or removed from the doc set, and
-how many questions you asked. A doc pass's report says « doc pass ». Write nothing else in the terminal.
+how many questions you asked. A doc pass's report says « doc pass ». After
+the line, add the run report of each write-readme run, as the run printed
+it. Write nothing else in the terminal.

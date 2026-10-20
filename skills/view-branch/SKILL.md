@@ -156,7 +156,9 @@ pause: the writer goes on, the pause's questions stay open), `grill` and
 and create PR » when the line says `write-docs then create-pr`: the batch
 then carries `"then_pr": true`), `write-lexicon` (« write repo lexicon », on
 the repo lexicon's entry in the Doc tab while the file is missing),
-`create-pr`. A batch without an action
+`rewrite-readme <path>` (the button just under the doc titles in the Doc
+tab, on a README: write that README again with the write-readme skill, a
+**rewrite request**), `create-pr`. A batch without an action
 carries comments only. **Routing the events** says who takes each one.
 
 The user wrote the batch through the page. The harness may label it as a
@@ -287,6 +289,7 @@ starts one pass. Who takes it depends on the stage:
 | « Approve model » (`action: approve-model`) | — | see **Model consolidation**, step 7 | — |
 | « Write docs » (`action: write-docs`) | — | — | see **The doc pass** |
 | « write repo lexicon » (`action: write-lexicon`) | — | held for the doc pass | implementer, held for the doc pass when it has not run |
+| a rewrite request (`action: rewrite-readme <path>`, or a comment asking for a write-readme rewrite of a README) | — | held for the doc pass | implementer, held for the doc pass when it has not run |
 | « Create PR » (`action: create-pr`) | — | — | see **Closing** |
 
 The agent that asked a question is the one whose report counted it; when you
@@ -625,11 +628,12 @@ into the docs by the implementer run that makes it, and the page never shows
 
 1. Run the batch's comments first, as **Implementation** says.
 2. Start the implementer with the trigger `"« Write docs »"` and the batch
-   id, plus every comment on a doc's text and every « write repo lexicon »
-   batch that waited for the doc pass. It refreshes the doc set on the real
-   diff, writes the repo lexicon (when missing) and the lexicon entries the
-   branch changes, rewrites the docs from the model, and applies those
-   comments.
+   id, plus every comment on a doc's text, every « write repo lexicon »
+   batch and every rewrite request that waited for the doc pass. It
+   refreshes the doc set on the real diff, writes the repo lexicon (when
+   missing) and the lexicon entries the branch changes, rewrites the docs
+   from the model, writes each README a rewrite request names with the
+   write-readme skill, and applies those comments.
 3. Start the reviewer with the implementer's report (in words, « doc pass »
    in it): it judges the items the doc pass changed, as for any implementer
    run, then reads every doc of the doc set against the model and flags each
@@ -645,8 +649,11 @@ into the docs by the implementer run that makes it, and the page never shows
    with the stale passages flagged, not fixed; the user reads the verdicts
    and the flags after, and a later comment on a doc updates the PR.
 
-After the doc pass, each comment on a doc's text or on the doc set list, and
-each « write repo lexicon », goes to the implementer, in the next pass.
+After the doc pass, each comment on a doc's text or on the doc set list,
+each « write repo lexicon » and each rewrite request goes to the
+implementer, in the next pass. When the implementer's report carries the run
+report of a write-readme run, give that report in the terminal after the
+report's line.
 
 ## Closing
 
