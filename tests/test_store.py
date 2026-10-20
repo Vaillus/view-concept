@@ -1080,6 +1080,40 @@ def test_write_docs_carries_then_pr_only_when_true(session):
         session.add_batch([], action="create-pr", then_pr=True)
 
 
+def test_a_rewrite_request_keeps_its_readme_and_prints_it(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("tools/README.md", "created by the branch")
+    b = s.add_batch([], action="rewrite-readme", path="./README.md")
+    assert b["path"] == "README.md"
+    assert json.loads(s.inbox_path.read_text().splitlines()[-1])["path"] == "README.md"
+    assert format_batch("doc-tab", b, []).splitlines()[1] == (
+        "action: rewrite-readme README.md (the user asked to write this README again "
+        "with write-readme)"
+    )
+    # A README of the doc set not in the worktree yet: the run drafts it.
+    assert s.add_batch([], action="rewrite-readme", path="tools/README.md")["path"] == (
+        "tools/README.md"
+    )
+
+
+def test_a_rewrite_request_names_a_readme_of_the_doc_set(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/reference.md", "the tabs")
+    with pytest.raises(SessionError, match="names the README"):
+        s.add_batch([], action="rewrite-readme")
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.add_batch([], action="rewrite-readme", path="other/README.md")
+    with pytest.raises(SessionError, match="not a README.md"):
+        s.add_batch([], action="rewrite-readme", path="docs/reference.md")
+    with pytest.raises(SessionError, match="rewrite-readme only"):
+        s.add_batch([], action="write-docs", path="README.md")
+    with pytest.raises(SessionError, match="rewrite-readme only"):
+        s.add_batch([{"text": "shorter"}], path="README.md")
+    assert s.read_comments()["batches"] == []
+
+
 def test_awaiting_docs_is_a_phase(session):
     assert session.write_status("awaiting-docs")["phase"] == "awaiting-docs"
 

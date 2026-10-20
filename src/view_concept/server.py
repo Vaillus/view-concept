@@ -498,6 +498,8 @@ class BatchIn(BaseModel):
     action: str = ""
     # « Write docs and create PR »: the doc pass, then the PR with no pause (write-docs only).
     then_pr: bool = False
+    # A rewrite request: the README of the doc set to write again (rewrite-readme only).
+    path: str = ""
     # The ids of the drafts the batch carries: once sent, they leave the drafts file.
     drafts: list[str] = []
 
@@ -507,7 +509,7 @@ def send_batch(slug: str, body: BatchIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
         comments = [c.model_dump() for c in body.comments]
-        batch = s.add_batch(comments, body.note, body.action, then_pr=body.then_pr)
+        batch = s.add_batch(comments, body.note, body.action, then_pr=body.then_pr, path=body.path)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
     s.clear_sent_drafts(body.drafts)
