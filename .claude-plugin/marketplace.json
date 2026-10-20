@@ -6,7 +6,7 @@
     {
       "name": "view-concept",
       "source": "./",
-      "description": "Explanations and code reviews in a local web page: comment on any passage and the agent revises it. Skills /view-concept, /view-branch, /view-refactor and /view-docs; the view-concept command is bundled (needs uv).",
+      "description": "Explanations and code reviews in a local web page: comment on any passage and the agent revises it. Skills /view-concept, /view-branch, /view-refactor, /view-docs and /write-readme; the view-concept command is bundled (needs uv).",
       "version": "0.1.0",
       "category": "productivity",
       "keywords": ["explanation", "code-review", "refactor", "documentation"]
