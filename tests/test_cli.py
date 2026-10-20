@@ -333,3 +333,22 @@ def test_variant_names_the_setup_and_a_model_per_role(tmp_path):
     assert r.returncode == 1 and "unknown role helper" in r.stderr
     r = view_concept(tmp_path, "variant", "speed", "odd", "--model", "writer")
     assert r.returncode == 1 and "role=model" in r.stderr
+
+
+def test_doc_set_adds_removes_and_prints_the_docs(tmp_path):
+    r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate", "add", "docs/reference.md", "the tabs")
+    assert r.returncode == 0 and r.stdout.strip() == "added docs/reference.md", r.stderr
+    assert view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "install").returncode == 0
+    r = view_concept(tmp_path, "doc-set", "gate", "remove", "README.md", "--user")
+    assert r.returncode == 0, r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "install")
+    assert r.returncode == 1 and "removed by the user" in r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate")
+    assert r.stdout.splitlines() == [
+        "docs/reference.md — the tabs",
+        "removed by the user: README.md",
+    ]
+    r = view_concept(tmp_path, "doc-set", "gate", "add", "../x.md", "out")
+    assert r.returncode == 1 and "inside the repo" in r.stderr

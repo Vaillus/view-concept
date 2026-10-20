@@ -914,3 +914,57 @@ def test_batch_progress_follows_the_delivery_mark(session):
     _touch(session.sections_dir / "s1.md", 3_000_000)
     progress = session.batch_progress()
     assert progress and progress["stage"] == "acted"
+
+
+# ---- the Doc tab ----
+
+
+@pytest.fixture
+def docs_review(tmp_path):
+    """A branch review on a repo (tmp_path/repo) with two docs."""
+    repo = tmp_path / "repo"
+    (repo / "docs").mkdir(parents=True)
+    (repo / "README.md").write_text("# Tool\n\nThe keys 1 to 4.\n")
+    (repo / "docs" / "reference.md").write_text("# Reference\n\nTabs and keys.\n")
+    s = Session("doc-tab", tmp_path / "sessions")
+    s.create("Doc tab", kind="code", repo=str(repo), base="main")
+    return s
+
+
+def test_the_doc_set_keeps_a_reason_per_doc(docs_review):
+    s = docs_review
+    assert s.read_doc_set() == {"docs": [], "removed": []}
+    s.add_doc("./docs/reference.md", "describes  the tabs")
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/reference.md", "describes the tabs and keys")
+    assert s.read_doc_set()["docs"] == [
+        {"path": "docs/reference.md", "reason": "describes the tabs and keys"},
+        {"path": "README.md", "reason": "the install"},
+    ]
+
+
+@pytest.mark.parametrize("path", ["/etc/passwd", "../other/README.md", "docs/../../x.md", " "])
+def test_a_doc_of_the_doc_set_stays_inside_the_repo(docs_review, path):
+    with pytest.raises(SessionError):
+        docs_review.add_doc(path, "why")
+
+
+def test_a_doc_the_user_removed_comes_back_only_when_the_user_asks(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.remove_doc("README.md", user=True)
+    assert s.read_doc_set() == {"docs": [], "removed": ["README.md"]}
+    with pytest.raises(SessionError, match="removed by the user"):
+        s.add_doc("README.md", "the install")
+    s.add_doc("README.md", "the install", user=True)
+    assert s.read_doc_set() == {"docs": [{"path": "README.md", "reason": "the install"}],
+                                "removed": []}  # fmt: skip
+
+
+def test_an_agent_removes_a_doc_without_recording_it(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.remove_doc("README.md")
+    assert s.read_doc_set() == {"docs": [], "removed": []}
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.remove_doc("README.md")

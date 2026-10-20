@@ -325,6 +325,38 @@ def cmd_pr(a: argparse.Namespace) -> None:
     print(f"PR recorded: {s.set_pr(a.url)['url']}")
 
 
+def _existing(slug: str) -> Session:
+    s = Session(slug)
+    if not s.exists():
+        raise SessionError(f"no session {slug!r}")
+    return s
+
+
+def cmd_doc_set(a: argparse.Namespace) -> None:
+    """Add or remove a doc of the doc set, or, with no operation, print it."""
+    s = _existing(a.slug)
+    if a.op == "add":
+        if not a.path or not a.reason:
+            raise SessionError('doc-set add takes a path and a reason: add <path> "<reason>"')
+        print(f"added {s.add_doc(a.path, a.reason, a.user)['path']}")
+        return
+    if a.op == "remove":
+        if not a.path or a.reason:
+            raise SessionError("doc-set remove takes one path")
+        s.remove_doc(a.path, a.user)
+        print(f"removed {a.path}" + (" (by the user: not added back)" if a.user else ""))
+        return
+    if a.path or a.reason or a.user:
+        raise SessionError("give an operation: add or remove")
+    data = s.read_doc_set()
+    for d in data["docs"]:
+        print(f"{d['path']} — {d.get('reason', '')}")
+    if not data["docs"]:
+        print("(no doc set yet)")
+    if data["removed"]:
+        print(f"removed by the user: {', '.join(data['removed'])}")
+
+
 def cmd_variant(a: argparse.Namespace) -> None:
     """Name the setup a session runs with and the model of each role, or, with no name,
     print it: the coordinator passes a role's model when it starts that role's agent."""
@@ -596,6 +628,19 @@ def main() -> None:
         "a role left out keeps the coordinator's model",
     )
     q.set_defaults(fn=cmd_variant)
+
+    q = sub.add_parser("doc-set", help="print the doc set, or add or remove one of its docs")
+    q.add_argument("slug")
+    q.add_argument("op", nargs="?", choices=("add", "remove"))
+    q.add_argument("path", nargs="?", help="the doc's path, relative to the repo root")
+    q.add_argument("reason", nargs="?", help="with add: one line, why the doc is listed")
+    q.add_argument(
+        "--user",
+        action="store_true",
+        help="the user asked for it in a comment: remove records the doc as removed by the "
+        "user (a refresh never adds it back); add takes it back in",
+    )
+    q.set_defaults(fn=cmd_doc_set)
 
     q = sub.add_parser("context", help="print the context a subagent or a side thread starts from")
     q.add_argument("slug")

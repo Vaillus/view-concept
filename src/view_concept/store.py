@@ -33,6 +33,8 @@ reach the agent session through the inbox.
         drafts.json     the drafts and the general note, shared by every page (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
+        doc-set.json    the doc set: the repo docs the Doc tab shows, each with its reason,
+                        and the docs the user removed                    (`doc-set`)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
@@ -150,6 +152,12 @@ stays in `deleted`, so an edit to it arriving later is dropped. A batch clears t
 it carried and the note. Like seen.json, it is the page's write: it never counts as the
 agent's activity.
 
+The doc set is the list of repo docs the Doc tab shows: {docs: [{path, reason}],
+removed: [paths]}. `path` is relative to the repo root (plan.json `repo`), `reason` the one
+line that says why the doc is listed. An agent keeps it (`doc-set add` and `remove`); a
+doc the user removed by a comment goes to `removed`, and an agent's refresh never adds it
+back unless the user asks (`--user`).
+
 A branch review's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
 at} (written by `pr`). The page links it at the top and at the end of the code tab.
 
@@ -178,7 +186,7 @@ import time
 import unicodedata
 from datetime import UTC, date, datetime
 from functools import cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from . import frame
@@ -450,6 +458,10 @@ class Session:
     @property
     def published_path(self) -> Path:
         return self.dir / "published.json"
+
+    @property
+    def doc_set_path(self) -> Path:
+        return self.dir / "doc-set.json"
 
     def media_folder(self, sid: str) -> Path:
         """The media folder of section `sid`: sections/<sid>/."""
@@ -1014,6 +1026,48 @@ class Session:
         seen = _read_json(self.seen_path, {})
         seen.update(sections)
         _write_json(self.seen_path, seen)
+
+    # ---- the doc set ----
+    def read_doc_set(self) -> dict[str, Any]:
+        """The doc set: {docs: [{path, reason}], removed: [paths]}, empty without a file."""
+        data = _read_json(self.doc_set_path, {})
+        return {"docs": list(data.get("docs", [])), "removed": list(data.get("removed", []))}
+
+    def add_doc(self, path: str, reason: str, user: bool = False) -> dict[str, Any]:
+        """Add a doc to the doc set, or change its reason. A doc the user removed is
+        refused unless `user` (the user asked for it in a comment), which takes it out of
+        `removed`. The doc need not exist yet: the branch may create it."""
+        path = doc_path(path)
+        if not reason.strip():
+            raise SessionError("a doc of the doc set needs a reason")
+        data = self.read_doc_set()
+        if path in data["removed"]:
+            if not user:
+                raise SessionError(
+                    f"{path} was removed by the user: add it back only when the user asks (--user)"
+                )
+            data["removed"].remove(path)
+        entry = {"path": path, "reason": " ".join(reason.split())}
+        at = next((i for i, d in enumerate(data["docs"]) if d.get("path") == path), None)
+        if at is None:
+            data["docs"].append(entry)
+        else:
+            data["docs"][at] = entry
+        _write_json(self.doc_set_path, data)
+        return entry
+
+    def remove_doc(self, path: str, user: bool = False) -> None:
+        """Remove a doc from the doc set; `user` (the user asked in a comment) records it
+        in `removed`, so an agent's refresh never adds it back."""
+        path = doc_path(path)
+        data = self.read_doc_set()
+        listed = any(d.get("path") == path for d in data["docs"])
+        if not listed and not user:
+            raise SessionError(f"{path} is not in the doc set")
+        data["docs"] = [d for d in data["docs"] if d.get("path") != path]
+        if user and path not in data["removed"]:
+            data["removed"].append(path)
+        _write_json(self.doc_set_path, data)
 
     # ---- the drafts file ----
     def read_drafts(self) -> dict[str, Any]:
@@ -1817,6 +1871,16 @@ def _externalize(text: str, vault_dir: Path, slug: str) -> str:
         else:
             parts[i] = MD_IMAGE.sub(image, part)
     return "".join(parts)
+
+
+def doc_path(path: str) -> str:
+    """A doc's path as the doc set keeps it: relative to the repo root, in POSIX form,
+    never leaving the repo."""
+    raw = path.strip().replace("\\", "/")
+    p = PurePosixPath(raw)
+    if not raw or p.is_absolute() or ".." in p.parts or str(p) in ("", "."):
+        raise SessionError(f"not a path inside the repo: {path!r}")
+    return str(p)
 
 
 def list_sessions(root: Path | None = None) -> list[dict[str, Any]]:
