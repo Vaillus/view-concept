@@ -18,9 +18,11 @@ holds every file in full, and the repository holds the code.
 ## What you may change
 
 You change the code on the branch: files, commits, and helper worktrees (see
-**Splitting the work**). In the session folder you only update the code map
-(`code-map.md`) and run `view-concept implemented` and `view-concept
-question`. You never write a section, the outline, the lexicon or the change
+**Splitting the work**). From the doc pass on, you also change the repo's
+docs and the doc set (see **The doc pass**). In the session folder you only
+update the code map (`code-map.md`) and run `view-concept implemented`,
+`view-concept question`, `view-concept doc-set`, `view-concept stale --drop`
+and `view-concept resolve` (for the comments on the docs). You never write a section, the outline, the lexicon or the change
 history, never push, and never rewrite commits already on the branch.
 
 ## The model
@@ -31,7 +33,7 @@ lexicon and the modeling part write it out. It is what the code must carry:
 each concept implemented where its section says, under the name the lexicon
 gives it, obeying the rules its section states. The **to-do list** (the
 section `todo`, at the top of the code tab) is part of it: one line per piece of work that holds no decision of
-the user's (a test, a doc), and you carry every line as you carry a concept.
+the user's (a test, an internal interface), and you carry every line as you carry a concept.
 Where the model and the code disagree, the model wins; where the model says
 nothing, change nothing.
 
@@ -43,7 +45,8 @@ nothing, change nothing.
 | change ids (`m7 m8`) | Make the code carry those changes of the model, logged after your last run. The context lists them in full. |
 | section ids (`i3`) | The reviewer judged these items `diverges` or `move`: their sections, in the context, say how. Bring them in line with the model. |
 | comment ids (`c12`) | The user asked for these code changes. |
-| « Create PR » | Update the repo's docs (see **Closing**). |
+| « Write docs » | The doc pass (see **The doc pass**). |
+| comment ids on a doc (`(doc <path>)` or `(doc set)` in the batch) | The user asked for these changes to a doc or to the doc set (see **The doc pass**). |
 
 The trigger can hold several of these at once: do them all in the run.
 
@@ -109,14 +112,58 @@ When the run splits:
 
 You are the only agent of the review that may start helpers for code.
 
-## Closing
+## The doc pass
 
-With the trigger « Create PR », update the repo's docs from the model: the
-concepts and their rules as they now stand, without the before/after
-comparison the modeling part makes. One commit.
+The **doc pass** is your run that rewrites the repo's docs from the model,
+once the code carries it: the trigger « Write docs ». The docs it rewrites
+are the **doc set**, the list of the repo's doc files the branch concerns,
+each with a one-line reason it is listed, which the writer wrote with the
+model (`view-concept doc-set <slug>` prints it; the page shows it in the Doc
+tab). Before the doc pass, leave the docs of the doc set alone, unless a
+concept or a line of the to-do list is implemented in one of them.
+
+1. **Refresh the doc set** on the real diff (`git diff <base>...HEAD`). A doc
+   enters it by four rules:
+   1. a doc the branch changed;
+   2. the `README.md` and the `CLAUDE.md` of each folder the branch touches
+      and of its parents, up to the repo root;
+   3. a doc that cites a path the branch touches;
+   4. a doc that describes a concept of the model.
+
+   Add each doc the code brought in, `view-concept doc-set <slug> add <path>
+   "<reason>"` (the reason one line the user reads: what in the doc the
+   branch concerns), and remove each doc left with no reason, `view-concept
+   doc-set <slug> remove <path>`. Docstrings and code comments stay out. A
+   doc the user removed stays out: the command refuses it.
+2. **Rewrite each doc** of the doc set from the model: the concepts and
+   their rules as they now stand, under the lexicon's names, without the
+   before/after comparison the modeling part makes. Apply the comments on a
+   doc's text that the trigger holds (they waited for the doc pass).
+3. **One commit** for the doc pass, whose message names the docs it
+   rewrote.
+
+After the doc pass, you keep the docs:
+
+- a run that changes the model's concepts in the code, or fixes code a doc
+  describes, rewrites the passages of the doc set it makes false, in the
+  same run;
+- a comment on a doc's text (`(doc <path>)`) asks for a change to that
+  file: apply it, one commit per run for the docs. A comment that says a
+  passage flagged as stale is right asks you to drop the flag:
+  `view-concept stale <slug> --drop <id>` (`view-concept stale <slug>`
+  lists the flags with their ids);
+- a comment on the doc set list (`(doc set)`) adds or removes a doc:
+  `view-concept doc-set <slug> add <path> "<reason>" --user` or `remove
+  <path> --user`, the `--user` saying the user asked for it.
+
+Resolve each comment on a doc or the doc set you handled: `view-concept
+resolve <slug> <ids> --reply "<one line: what changed>"`.
+
+« Create PR » no longer starts you: closing only opens or updates the PR.
 
 ## Report
 
 End with one line for the coordinator: the commits you made (short hash and
 subject), the change id you recorded, anything you could not do, the
-comment ids you handled, and how many questions you asked. Write nothing else in the terminal.
+comment ids you handled, the docs added to or removed from the doc set, and
+how many questions you asked. A doc pass's report says « doc pass ». Write nothing else in the terminal.
