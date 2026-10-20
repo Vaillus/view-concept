@@ -1085,3 +1085,12 @@ def test_the_reference_model_is_a_session_of_the_same_repo(docs_review, tmp_path
     assert docs.reference_model() == {"slug": "doc-tab", "title": "Doc tab", "lexicon": []}
     docs.set_reference("")
     assert "reference" not in docs.read_plan() and docs.reference_model() is None
+
+
+def test_docs_stay_out_of_the_publish_fingerprint_and_the_check(docs_review):
+    s = docs_review
+    before = s.fingerprint()
+    s.add_doc("README.md", "the install")
+    (s.repo_dir() / "README.md").write_text("Rewritten <div>\n\nblock</div>\n")
+    assert s.fingerprint() == before
+    assert s.published_sections() == [] and s.check_sections() == []
