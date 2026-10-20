@@ -245,6 +245,10 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .sec .body :is(td, th).based { position: static; box-shadow: inset -3px 0 var(--info); }
 .sec .body :is(td, th).based::after { content: none; }
 .sec .body :is(td, th).changed.based { box-shadow: inset 3px 0 var(--ok), inset -3px 0 var(--info); }
+/* a block that scrolls sideways (code, display maths) would clip a bar drawn outside it
+   and scroll to it: the bar is drawn inside its right edge */
+.sec .body :is(pre, .math.block).based { box-shadow: inset -3px 0 var(--info); }
+.sec .body :is(pre, .math.block).based::after { content: none; }
 /* a stale passage: a doc passage the model contradicts */
 ::highlight(ev-stale) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }
 
