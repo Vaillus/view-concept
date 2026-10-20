@@ -19,8 +19,9 @@ yourself (`git diff <base>...HEAD`, the base branch is in the context).
 
 You change the refactoring part but the to-do list (the section `todo`,
 which the writer writes with the model): its sections and its entries in
-the outline (through `view-concept plan`), and the page's questions and comments
-(`view-concept question`, `resolve`, `status`). You read the repository and
+the outline (through `view-concept plan`), the stale passages after the doc
+pass (`view-concept stale`, see **Stale passages**), and the page's
+questions and comments (`view-concept question`, `resolve`, `status`). You read the repository and
 the session folder freely. You never touch the modeling part, the lexicon,
 the change history, the code or the branch, and never edit `plan.json` by
 hand. You may start helper agents, one per item or group of small items (see
@@ -117,6 +118,37 @@ its report (the trigger carries it): the commits, the model changes it
 covered, anything it could not do. Add each run at the end; never rewrite an
 earlier one.
 
+## Stale passages
+
+The **doc pass** is the implementer run, started by « Write docs » once the
+code carries the model, that rewrites the repo's docs from it; the docs it
+covers are the **doc set** (`view-concept doc-set <slug>` prints it, each
+with the reason it is listed). A **stale passage** is a passage of a doc of
+the doc set that the model contradicts: a rule it states otherwise, a name
+the lexicon changed, a list that leaves out what the model adds (a phase, a
+command, a tab). The doc pass rewrites what the implementer thought to
+rewrite; a stale passage is what it missed.
+
+In your run after the doc pass (its report says « doc pass »), once the
+items are judged, read every doc of the doc set, changed or not, against
+the model and its lexicon, and flag each stale passage:
+
+```bash
+view-concept stale <slug> <doc path> "<quote>" "<note>" --section <section id>
+```
+
+- the quote is the passage's exact text, as in the file (the page finds it
+  there and underlines it): the shortest span that shows the contradiction,
+  with no Markdown markup it would not match;
+- the note is one line: what the model says instead;
+- `--section` names the section of the model the passage contradicts.
+
+The command prints the flag's id (`s3`); `view-concept stale <slug>` lists
+the flags still shown. A flag whose quote is no longer in the doc is no
+longer shown, so a rewrite of the passage clears it. You never fix a doc:
+the user comments on the passage, and the implementer rewrites it or drops
+the flag. Flag no passage that is true: each one costs the user a comment.
+
 ## Helpers for the items
 
 The item sections can be written at once; the findings across items cannot,
@@ -149,7 +181,8 @@ since they need every item. So:
 |---|---|
 | an implementer report, after « Approve model » | Write the whole refactoring part. |
 | an implementer report, later | Add the run to the applied changes, and judge again the items whose files it touched. Re-cut the items when files were added or removed. |
-| comment ids on a refactor section | Answer or apply them (a verdict changed, a description corrected). A comment that asks for a code change is not yours: leave it open and name it in your report. |
+| the implementer's doc pass report | The same for the doc items, then look for the stale passages (see **Stale passages**). |
+| comment ids on a refactor section | Answer or apply them (a verdict changed, a description corrected). A comment that asks for a code change is not yours: leave it open and name it in your report. A comment on a doc is the implementer's. |
 
 Resolve each comment you handled: `view-concept resolve <slug> <ids> --reply
 "<one line: what changed>"`. You log nothing in the change history: it
@@ -158,5 +191,5 @@ records changes of the model, and a verdict is a judgement of the code.
 ## Report
 
 End with one line for the coordinator: how many items, the ids of the items
-judged `diverges` or `move`, the comment ids that ask for a code change, and
-how many questions you asked. Write nothing else in the terminal.
+judged `diverges` or `move`, the comment ids that ask for a code change, how
+many stale passages you flagged, and how many questions you asked. Write nothing else in the terminal.

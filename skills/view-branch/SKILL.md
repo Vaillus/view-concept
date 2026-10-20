@@ -609,14 +609,18 @@ into the docs by the implementer run that makes it, and the page never shows
    and applies those comments.
 3. Start the reviewer with the implementer's report (in words, « doc pass »
    in it): it judges the items the doc pass changed, as for any implementer
-   run.
+   run, then reads every doc of the doc set against the model and flags each
+   **stale passage**, a passage the model contradicts, with `view-concept
+   stale`. The Doc tab draws a wavy underline on it, with the note on hover;
+   the user comments on it, and the implementer rewrites it or drops the
+   flag.
 4. With « Write docs », go on as **Implementation** says (an item judged
    `diverges` or `move` goes back to the implementer), then set
    `awaiting-pr`: the user reads the docs in the Doc tab and comments on
    them, and « Create PR » shows at the bottom of the code tab. With
-   `then_pr`, go to **Closing** at once, whatever the verdicts: the user
-   reads them in the code tab after, and a later comment on a doc updates
-   the PR.
+   `then_pr`, go to **Closing** at once, whatever the verdicts: the PR opens
+   with the stale passages flagged, not fixed; the user reads the verdicts
+   and the flags after, and a later comment on a doc updates the PR.
 
 After the doc pass, each comment on a doc's text or on the doc set list goes
 to the implementer, in the next pass.
