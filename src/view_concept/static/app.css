@@ -224,7 +224,7 @@ a.cite code { color: var(--info); background: var(--infobg); }
 /* ---- the Doc tab: the doc set, the bar of doc titles, the doc shown (app.js) ---- */
 .doc-set { list-style: none; margin: 0; padding: 0; }
 .doc-set li { padding: 2px 0; }
-.doc-set .badge { margin-left: 6px; }
+.doc-set .badge, .doc-set .doc-lexicon { margin-left: 6px; }
 .doc-open { background: none; border: 0; padding: 0; color: var(--info); }
 @media (hover: hover) { .doc-open:hover { text-decoration: underline; } }
 .doc-removed { font-size: 12px; margin: 6px 0 0; }
@@ -236,6 +236,8 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .doc-title.active { color: var(--accent); border-color: var(--accent); }
 .doc-title.missing { color: var(--dim); font-style: italic; }
 .doc-title .badge { margin-left: 0; }
+/* the rewrite request's line, under the bar while a README.md is in sight */
+.doc-rewrite { padding: 8px 0 0; }
 /* a doc rewritten since its highlight baseline */
 .doc-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .doc-sec h2 code { background: none; padding: 0; }

@@ -433,7 +433,8 @@ function approvalPending() {
    the click (« model approved · the agent is implementing »…) are true. */
 const BATCH_WHAT = { answer: "answered", "go-on": "going on", "approve-plan": "plan approved",
                      "approve-model": "model approved", "write-docs": "docs requested", "create-pr": "PR requested", plan: "scoping ended",
-                     grill: "grill", "stop-grill": "grill stopped" };
+                     grill: "grill", "stop-grill": "grill stopped",
+                     "rewrite-readme": "README rewrite requested", "write-lexicon": "repo lexicon requested" };
 const BATCH_STAGE = { sent: "in the inbox", received: "the agent has it" };
 
 function batchProgress() {
@@ -929,9 +930,16 @@ function sectionBlock(s, { bare = false } = {}) {
    (annotateDocTerms). Relative images and links load from the worktree,
    /s/<slug>/repo/<doc dir>/<relative>. A docs review adds its agent questions (the scope
    block) above the doc set, and « Create PR » at the end. « edit » in a doc's heading
-   swaps its text for its Markdown in a text box (see "editing a doc"). */
+   swaps its text for its Markdown in a text box (see "editing a doc"). While the doc in
+   sight is a README.md (in the worktree or missing), a line of its own under the bar of
+   doc titles holds « rewrite <path> with write-readme »: it sends a rewrite request (a
+   batch whose action is "rewrite-readme", carrying the path) at once, with the drafts.
+   While the repo lexicon (REPO_LEXICON) is in the doc set and missing from the worktree,
+   its doc set entry holds « write repo lexicon », which sends a "write-lexicon" batch the
+   same way. */
 
 let shownDoc = null; // path of the doc shown in the Doc tab
+const REPO_LEXICON = ".agents/lexicon.md"; // store.py's REPO_LEXICON
 
 function renderDocTab(ending) {
   const view = $("#doc");
@@ -943,7 +951,7 @@ function renderDocTab(ending) {
     return;
   }
   if (!docs.set.some((d) => d.path === shownDoc)) shownDoc = docs.set[0].path;
-  view.replaceChildren(...top, docSetBlock(docs), docBar(docs), docBlock(shownDoc, docs.views[shownDoc] || {}), ...ending);
+  view.replaceChildren(...top, docSetBlock(docs), docBar(docs), docRewrite(shownDoc), docBlock(shownDoc, docs.views[shownDoc] || {}), ...ending);
 }
 
 const staleCount = (docs, d) => d.stale ?? docs.stale.filter((s) => s.doc === d.path).length;
@@ -969,7 +977,8 @@ function docHeading(id, label, updated, what, edit = null) {
 function docSetBlock(docs) {
   const list = el("ul", { class: "doc-set" }, ...docs.set.map((d) => el("li", {},
     el("button", { class: "doc-open", text: d.path, title: "Show this doc", onclick: () => openDoc(d.path) }),
-    d.reason ? ` — ${d.reason}` : "", staleBadge(staleCount(docs, d)), missingBadge(docs.views[d.path] || {}))));
+    d.reason ? ` — ${d.reason}` : "", staleBadge(staleCount(docs, d)), missingBadge(docs.views[d.path] || {}),
+    lexiconButton(d.path, docs.views[d.path] || {}))));
   return el("section", { class: "sec doc-set-sec", id: `sec-${DOC_SET}`, "data-id": DOC_SET },
     docHeading(DOC_SET, "doc set", false, "doc set"),
     el("div", { class: "body" }, list,
@@ -985,6 +994,23 @@ function docBar(docs) {
       d.path, staleBadge(staleCount(docs, d)),
       docEdit && docEdit.path === d.path ? el("span", { class: "badge", text: "editing", title: "Your edit of this doc is not saved yet" }) : null);
   }));
+}
+
+// « write repo lexicon »: on the repo lexicon's doc set entry, while it is missing.
+function lexiconButton(path, v) {
+  if (path !== REPO_LEXICON || v.exists !== false) return null;
+  return el("button", { class: "btn doc-lexicon", text: "write repo lexicon",
+                        title: "Ask the agent that owns the docs to write the repo lexicon (your drafts go with it)",
+                        onclick: (e) => send("write-lexicon", e.currentTarget) });
+}
+
+// The rewrite request's line: drawn only while the doc in sight is named README.md.
+function docRewrite(path) {
+  if (path.split("/").pop() !== "README.md") return "";
+  return el("div", { class: "doc-rewrite" },
+    el("button", { class: "btn", text: `rewrite ${path} with write-readme`,
+                   title: "Ask the agent that owns the docs to write this README again with write-readme (your drafts go with it)",
+                   onclick: (e) => send("rewrite-readme", e.currentTarget, { path }) }));
 }
 
 function docBlock(path, v) {
@@ -2649,9 +2675,13 @@ async function moveBrowserDrafts() {
   } catch (e) { toast(`Could not move this browser's drafts: ${e.message}`); }
 }
 
-/* A batch from « Send », an approval button, or a scope block button (`button`). */
+/* A batch from « Send », an approval button, a scope block button or a Doc tab request
+   (`button`); `extra` carries then_pr or the path of a rewrite request. */
 const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped",
                        "go-on": "The writer goes on" };
+// The toast of a request sent from the Doc tab, from the `extra` it was sent with.
+const DOC_TOASTS = { "rewrite-readme": (extra) => `Rewrite of ${extra.path} requested`,
+                     "write-lexicon": () => "Repo lexicon requested" };
 
 async function send(action = "", button = null, extra = {}) {
   const approval = Object.values(APPROVALS).find((a) => a.action === action);
@@ -2669,6 +2699,7 @@ async function send(action = "", button = null, extra = {}) {
     body: JSON.stringify({
       action,
       ...(extra.then_pr ? { then_pr: true } : {}),
+      ...(extra.path ? { path: extra.path } : {}),
       note: $("#note").value,
       comments: drafts.map(({ section, quote, prefix, text, thread }) => ({ section, quote, prefix, text, thread })),
       drafts: drafts.map((d) => d.id),
@@ -2688,7 +2719,7 @@ async function send(action = "", button = null, extra = {}) {
   $("#note").value = "";
   await load();
   const toastText = approval && extra.then_pr && approval.also ? approval.also.toast : approval ? approval.toast : "";
-  sentToast(toastText || SCOPE_TOASTS[action] || `Sent ${b.id} to the session`);
+  sentToast(toastText || SCOPE_TOASTS[action] || DOC_TOASTS[action]?.(extra) || `Sent ${b.id} to the session`);
 }
 
 /* ---------------- divider ----------------

@@ -884,6 +884,8 @@ def batch_label(b: dict[str, Any]) -> str:
         "grill": "« Grill »",
         "stop-grill": "« Stop grill »",
         "go-on": "« Go on »",
+        "rewrite-readme": f"« rewrite {b.get('path', 'README.md')} with write-readme »",
+        "write-lexicon": "« write repo lexicon »",
     }
     parts = []
     if action == "plan":

@@ -171,7 +171,13 @@ sections stay out of the published page, the vault export, the publish
 fingerprint and `check`, which read the outline's sections only. The base mark compares
 a doc's worktree file (uncommitted changes included) with the same doc at the merge base
 of the branch and its base branch (`merge_base`, `base_text`); a doc absent there was
-created on the branch.
+created on the branch. A rewrite request is a batch whose action is "rewrite-readme",
+sent by the button under the bar of doc titles while a README.md of the doc set is in
+sight: it carries that README's `path` (present in the worktree or not yet), and asks
+the agent that owns the docs to write it again with the write-readme skill. While the
+repo lexicon (REPO_LEXICON: the reader line and the terms the repo's folders share, for
+agents) is missing from the worktree, « write repo lexicon » on its doc set entry sends a
+batch whose action is "write-lexicon"; it is refused once the file exists.
 
 A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
 doc (its path), quote (the passage's exact text in the file), section (the model section
@@ -258,6 +264,8 @@ ACTIONS = (
     "grill",
     "stop-grill",
     "go-on",
+    "rewrite-readme",
+    "write-lexicon",
 )
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
@@ -282,6 +290,8 @@ _DRAFTS_LOCK = threading.Lock()
 # anchored to DOC_SET_ANCHOR, `doc:` alone: no doc path is empty, and no section id may
 # start with `doc:` (write_plan refuses it), so the anchor never names a section.
 DOC_KEY = "doc:"
+# The repo lexicon, relative to the repo root: what a "write-lexicon" batch asks to write.
+REPO_LEXICON = ".agents/lexicon.md"
 DOC_SET_ANCHOR = DOC_KEY
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
@@ -1785,6 +1795,7 @@ class Session:
         action: str = "",
         answers: list[dict[str, Any]] | None = None,
         then_pr: bool = False,
+        path: str = "",
     ) -> dict[str, Any]:
         """Record a batch sent from the page and append it to the inbox.
 
@@ -1800,13 +1811,23 @@ class Session:
         marked skipped, but a section question whose section is not written yet), "grill"
         that they started a grill, "stop-grill" that they stopped it, and "go-on" that they
         asked the writer of a branch review to go on past a pause, leaving its questions
-        open."""
+        open, and "rewrite-readme" that they asked for the README at `path` (a doc of the
+        doc set named README.md, in the worktree or not yet) to be written again with
+        write-readme, and "write-lexicon" that they asked for the repo lexicon
+        (REPO_LEXICON), refused once the file exists. `path` goes with "rewrite-readme"
+        only, which needs it."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         if (action == "answer") != bool(answers):
             raise SessionError("an answer batch, and only one, carries answers")
         if then_pr and action != "write-docs":
             raise SessionError("then_pr goes with the action write-docs only")
+        if path and action != "rewrite-readme":
+            raise SessionError("a path goes with the action rewrite-readme only")
+        if action == "rewrite-readme":
+            path = self._readme_to_rewrite(path)
+        if action == "write-lexicon" and (lex := self.doc_file(REPO_LEXICON)) and lex.is_file():
+            raise SessionError(f"{REPO_LEXICON} exists: correct it in the Doc tab")
         note = note.strip()
         # A comment from a side thread may have no text: the thread's conclusion is the comment.
         comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
@@ -1837,6 +1858,8 @@ class Session:
             batch["answers"] = answers
         if then_pr:
             batch["then_pr"] = True
+        if path:
+            batch["path"] = path
         if action == "plan":
             batch["rewrite"] = self.has_written()
         batches.append(batch)
@@ -1849,6 +1872,18 @@ class Session:
         if action == "plan":
             self._skip_open_questions(batch["sent"])
         return batch
+
+    def _readme_to_rewrite(self, path: str) -> str:
+        """The path a rewrite request names, as the doc set keeps it: a README.md of the
+        doc set, which may not be in the worktree yet (the run then drafts it)."""
+        if not path.strip():
+            raise SessionError("a rewrite-readme batch names the README to rewrite")
+        path = doc_path(path)
+        if PurePosixPath(path).name != "README.md":
+            raise SessionError(f"{path} is not a README.md: write-readme rewrites READMEs only")
+        if not any(d.get("path") == path for d in self.read_doc_set()["docs"]):
+            raise SessionError(f"{path} is not in the doc set")
+        return path
 
     def _skip_open_questions(self, at: str) -> None:
         """Mark the open agent questions skipped: scoping ended without their answers. A
@@ -2315,6 +2350,16 @@ def format_batch(
             "action: write-docs (the user asked for the doc pass: refresh the doc set, rewrite "
             "the docs from the model, then the reviewer judges the doc items and flags stale "
             "passages; « Create PR » follows)"
+        )
+    if batch.get("action") == "rewrite-readme":
+        lines.append(
+            f"action: rewrite-readme {batch.get('path', '')} (the user asked to write this "
+            "README again with write-readme)"
+        )
+    if batch.get("action") == "write-lexicon":
+        lines.append(
+            f"action: write-lexicon (the user asked to write the repo lexicon, {REPO_LEXICON}: "
+            "its reader line and the terms the repo's folders share)"
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")

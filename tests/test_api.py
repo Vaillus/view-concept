@@ -590,6 +590,17 @@ def test_a_batch_asks_for_the_doc_pass_and_the_pr(client):
     assert r.status_code == 400
 
 
+def test_a_batch_asks_to_rewrite_a_readme(client, doc_review):
+    doc_review.add_doc("README.md", "the install")
+    body = {"action": "rewrite-readme", "path": "README.md"}
+    r = client.post("/api/s/doc-tab/batch", json=body)
+    assert r.status_code == 200 and r.json()["path"] == "README.md"
+    body = {"action": "rewrite-readme", "path": "docs/reference.md"}
+    assert client.post("/api/s/doc-tab/batch", json=body).status_code == 400
+    body = {"action": "write-docs", "path": "README.md"}
+    assert client.post("/api/s/doc-tab/batch", json=body).status_code == 400
+
+
 def test_a_docs_review_shows_its_doc_set_with_no_plan_nor_sections(client, session):
     repo = session.dir.parent / "docs-repo"
     repo.mkdir()

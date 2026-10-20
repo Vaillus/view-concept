@@ -131,7 +131,14 @@ for readers):
 - a folder or a list of files: the docs among them, then the `README.md` and
   the `CLAUDE.md` of each folder of the scope and of its parents, up to the
   repo root;
-- a subject: every doc with a passage about it, wherever it sits.
+- a subject: every doc with a passage about it, wherever it sits;
+- always, present or missing, the **repo lexicon**, `.agents/lexicon.md` at
+  the repo root (the reader line, the field the docs' reader knows, and one
+  definition per term the repo's folders share), and each **folder lexicon**
+  (a `.agents/lexicon.md` below the root, for the terms only the folders
+  under it share) above the folder of a doc of the doc set. A missing repo
+  lexicon is listed so its entry in the Doc tab carries « write repo
+  lexicon »; you write it only on that request or a rewrite request.
 
 The reason is one line the user reads in the list: what in the doc the scope
 concerns (« the Install part: the Claude Code plugin, Jazz, Codex, the other
@@ -274,7 +281,10 @@ you change what is false or missing, and leave what is right as it is.
   history (« formerly », « since the rewrite ») and no before/after.
 - **Terms.** A term that is not plain language is defined at its first use
   in the doc, and called by one name after. With a reference model, use its
-  lexicon's names.
+  lexicon's names. A repo term the repo lexicon or a folder lexicon above
+  the doc's folder defines keeps that entry's name, and its definition is
+  the entry's, word for word, the closest lexicon winning; no doc links to a
+  lexicon.
 - **Show rather than tell.** A command with its output, a real file, a
   short example, where they make the point faster than a paragraph. Never
   let a metaphor stand in for a mechanism you can show.
@@ -282,6 +292,46 @@ you change what is false or missing, and leave what is right as it is.
   linked, not repeated, unless the doc's reader cannot be sent elsewhere.
 - **Copy rules**, on trial: no aside set off by em-dashes, no « not X, but
   Y », no colon before a punchline, no « worth noting ».
+
+These rules hold for every doc but the README a rewrite request names, which
+write-readme's rules write instead (see **The rewrite request**).
+
+## The rewrite request
+
+A **rewrite request** asks you to write one README again with the
+write-readme skill instead of correcting it: a batch with `action:
+rewrite-readme <path>`, or a comment on a README asking for a write-readme
+rewrite. A docs review has no pass to wait for: do it in the batch's turn,
+for that README alone:
+
+1. When the repo lexicon is missing, write it first (see **The repo
+   lexicon**).
+2. Read `~/Documents/code/view-concept/skills/write-readme/SKILL.md` and
+   follow it for that one README, naming the reference model's session
+   folder when the review has one, so the run reads that model's sections
+   and lexicon as a source next to the code and the old README. A comment of
+   the batch that gives a reader line (« reader: … ») passes it to the run.
+   write-readme is the one skill this review reads besides its own.
+3. Keep the old README's language. A README missing from the worktree is
+   written from the code.
+4. Put the run report write-readme prints at its end into your terminal
+   reply to the batch.
+
+The rewrite is committed with the review's other changes, as **Create PR**
+says.
+
+## The repo lexicon
+
+The repo lexicon, `.agents/lexicon.md` at the repo root, is a file for the
+agents that write the repo's docs. Its format: a `# <repo name>` title, a
+`## Reader` part holding the reader line (the field the docs' reader knows,
+and that they have never opened this repo), then a `## Terms` part, one
+entry per term, `**Term**:` and its definition on the next line. A folder
+lexicon has the same format. To write a missing repo lexicon, draft the
+reader line from the root `README.md`, the root `CLAUDE.md` and the package
+description, and an entry for each term several folders' docs share; the
+user then corrects it in the Doc tab like any doc. Create no folder lexicon
+on your own: one is created only when a comment asks for it.
 
 ## Comment batches
 
@@ -323,6 +373,13 @@ asks for what its name says and nothing else:
 - **`create-pr`** asks for the PR (« Create PR »), or for its update once it
   is open (« Update PR »): see **Create PR**. Apply the batch's comments
   first.
+- **`write-lexicon`** (« write repo lexicon », on the repo lexicon's entry
+  in the Doc tab while the file is missing) asks you to write the repo
+  lexicon at once: see **The repo lexicon**.
+- **`rewrite-readme <path>`** (the button just under the doc titles, on a
+  README) asks you to write that README again with the write-readme skill,
+  at once: see **The rewrite request**. A comment on a README asking for a
+  write-readme rewrite is the same request.
 - **Without an action**, a batch carries comments only.
 
 Then, for every batch, in the same turn:
@@ -331,12 +388,19 @@ Then, for every batch, in the same turn:
 2. Apply each comment at once: a comment on a doc rewrites that doc in the
    worktree (see **Writing a doc**); a comment on the list adds or removes a
    doc with `--user`. A comment that says a flagged passage is right drops
-   its flag (`view-concept stale <slug> --drop <id>`). A doc that enters the
+   its flag (`view-concept stale <slug> --drop <id>`). A comment correcting
+   a lexicon entry also rewrites the clause of each README that copies the
+   entry (the README's definition of the term, in the entry's old words),
+   and adds that README to the doc set; a comment taking a **candidate** (a
+   repo term several folders use that no lexicon on their path defines)
+   adds its entry; a comment asking for a folder lexicon creates it, with
+   the entries it names. A doc that enters the
    doc set, or that you rewrite, gets both checks of **Stale passages**. An
    answer or a comment about the reference model is applied as **The
    reference model** says.
 3. Answer in the terminal, grouped by comment id, one line each; discuss
-   where a comment is a question.
+   where a comment is a question. A rewrite request adds the run report of
+   its write-readme run.
 4. Mark what you addressed: `view-concept resolve <slug> c4 c5 --reply "<one
    line: what changed>"`. Leave a comment open while its discussion is
    still going.

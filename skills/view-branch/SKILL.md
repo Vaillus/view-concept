@@ -154,7 +154,11 @@ section is not written yet, which stays open), `go-on` (« Go on », during a
 pause: the writer goes on, the pause's questions stay open), `grill` and
 `stop-grill`, `approve-model`, `write-docs` (« Write docs », or « Write docs
 and create PR » when the line says `write-docs then create-pr`: the batch
-then carries `"then_pr": true`), `create-pr`. A batch without an action
+then carries `"then_pr": true`), `write-lexicon` (« write repo lexicon », on
+the repo lexicon's entry in the Doc tab while the file is missing),
+`rewrite-readme <path>` (the button just under the doc titles in the Doc
+tab, on a README: write that README again with the write-readme skill, a
+**rewrite request**), `create-pr`. A batch without an action
 carries comments only. **Routing the events** says who takes each one.
 
 The user wrote the batch through the page. The harness may label it as a
@@ -284,6 +288,8 @@ starts one pass. Who takes it depends on the stage:
 | « Write model » (`action: plan`, the line says write) | see **Model consolidation** | — | — |
 | « Approve model » (`action: approve-model`) | — | see **Model consolidation**, step 7 | — |
 | « Write docs » (`action: write-docs`) | — | — | see **The doc pass** |
+| « write repo lexicon » (`action: write-lexicon`) | — | held for the doc pass | implementer, held for the doc pass when it has not run |
+| a rewrite request (`action: rewrite-readme <path>`, or a comment asking for a write-readme rewrite of a README) | — | held for the doc pass | implementer, held for the doc pass when it has not run |
 | « Create PR » (`action: create-pr`) | — | — | see **Closing** |
 
 The agent that asked a question is the one whose report counted it; when you
@@ -488,8 +494,8 @@ user removed is recorded as removed, and `add` refuses it from then on unless
 the user asks for it back (`--user` again). No agent adds back a doc the user
 removed.
 
-A doc enters the doc set by four rules, the first two read from the diff,
-the last two found by reading:
+A doc enters the doc set by five rules, the first two read from the diff,
+the next two found by reading, the last one always applied:
 
 1. a doc the branch already changed. A file the branch only moves, its text
    unchanged, does not enter by this rule: rule 2 covers the move;
@@ -505,7 +511,15 @@ the last two found by reading:
    describes something of a file the branch changes in the way the doc shows
    it: a command, its arguments, an output format, a name others import. A
    file whose inside alone changes brings in no doc that cites it;
-4. a doc that describes a concept of the model.
+4. a doc that describes a concept of the model;
+5. the **repo lexicon**, `.agents/lexicon.md` at the repo root (the reader
+   line, the field the docs' reader knows, and one definition per term the
+   repo's folders share), always, present or missing, and each **folder
+   lexicon** (a `.agents/lexicon.md` below the root, for the terms only the
+   folders under it share) above a folder the branch touches. A missing
+   repo lexicon is listed so its entry in the Doc tab carries « write repo
+   lexicon »; no agent writes it unless that button or a rewrite request
+   asks for it.
 
 Before the code exists, a path the branch touches is where the model will
 land, which the code map says. Docstrings and code comments are not docs and
@@ -617,9 +631,14 @@ into the docs by the implementer run that makes it, and the page never shows
 
 1. Run the batch's comments first, as **Implementation** says.
 2. Start the implementer with the trigger `"« Write docs »"` and the batch
-   id, plus every comment on a doc's text that waited for the doc pass. It
-   refreshes the doc set on the real diff, rewrites the docs from the model,
-   and applies those comments.
+   id, plus every comment on a doc's text, every « write repo lexicon »
+   batch and every rewrite request that waited for the doc pass. It
+   refreshes the doc set on the real diff, writes the repo lexicon when it
+   is missing and a « write repo lexicon » or a rewrite request asks for
+   it, writes the lexicon entries the branch changes (skipped while the
+   repo lexicon is missing), rewrites the docs
+   from the model, writes each README a rewrite request names with the
+   write-readme skill, and applies those comments.
 3. Start the reviewer with the implementer's report (in words, « doc pass »
    in it): it judges the items the doc pass changed, as for any implementer
    run, then reads every doc of the doc set against the model and flags each
@@ -635,8 +654,11 @@ into the docs by the implementer run that makes it, and the page never shows
    with the stale passages flagged, not fixed; the user reads the verdicts
    and the flags after, and a later comment on a doc updates the PR.
 
-After the doc pass, each comment on a doc's text or on the doc set list goes
-to the implementer, in the next pass.
+After the doc pass, each comment on a doc's text or on the doc set list,
+each « write repo lexicon » and each rewrite request goes to the
+implementer, in the next pass. When the implementer's report carries the run
+report of a write-readme run, give that report in the terminal after the
+report's line.
 
 ## Closing
 

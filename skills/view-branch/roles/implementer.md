@@ -47,6 +47,8 @@ nothing, change nothing.
 | comment ids (`c12`) | The user asked for these code changes. |
 | « Write docs » | The doc pass (see **The doc pass**). |
 | comment ids on a doc (`(doc <path>)` or `(doc set)` in the batch) | The user asked for these changes to a doc or to the doc set (see **The doc pass**). |
+| « write repo lexicon » (`action: write-lexicon`) | Write the repo lexicon, in the doc pass or, when it came after, in this run (see **The doc pass**, step 2.1). |
+| a rewrite request (`action: rewrite-readme <path>`, or a comment asking for a write-readme rewrite of a README) | Write that README again with write-readme, in the doc pass or, when it came after, in this run (see **The rewrite request**). |
 
 The trigger can hold several of these at once: do them all in the run.
 
@@ -123,7 +125,7 @@ tab). Before the doc pass, leave the docs of the doc set alone, unless a
 concept or a line of the to-do list is implemented in one of them.
 
 1. **Refresh the doc set** on the real diff (`git diff <base>...HEAD`). A doc
-   enters it by four rules:
+   enters it by five rules:
    1. a doc the branch changed. A file the branch only moves, its text
       unchanged, does not enter by this rule: rule 2 covers the move;
    2. the `README.md` of the folder that holds a **structural change**: a
@@ -140,18 +142,48 @@ concept or a line of the to-do list is implemented in one of them.
       shows it: a command, its arguments, an output format, a name others
       import. A file whose inside alone changes brings in no doc that cites
       it;
-   4. a doc that describes a concept of the model.
+   4. a doc that describes a concept of the model;
+   5. the **repo lexicon**, `.agents/lexicon.md` at the repo root, always,
+      present or missing, and each **folder lexicon** (a `.agents/lexicon.md`
+      below the root) above a folder the branch touches. A missing repo
+      lexicon is listed so its entry in the Doc tab carries « write repo
+      lexicon »; listing it does not write it (step 2).
 
    Add each doc the code brought in, `view-concept doc-set <slug> add <path>
    "<reason>"` (the reason one line the user reads: what in the doc the
    branch concerns), and remove each doc left with no reason, `view-concept
    doc-set <slug> remove <path>`. Docstrings and code comments stay out. A
    doc the user removed stays out: the command refuses it.
-2. **Rewrite each doc** of the doc set from the model: the concepts and
+2. **Write the lexicons**, before any other doc. While the repo lexicon is
+   missing, skip this step, unless the trigger holds a « write repo lexicon »
+   or a rewrite request: nobody asked for the file, and the doc pass writes
+   none on its own.
+   1. the repo lexicon, `.agents/lexicon.md`, when it is missing and a
+      « write repo lexicon » or a rewrite request asks for it. Its format:
+      a `# <repo name>` title, a `## Reader` part holding the reader line
+      (the field the docs' reader knows, and that they have never opened
+      this repo), then a `## Terms` part, one entry per term, `**Term**:`
+      and its definition on the next line. Draft the reader line from the
+      root `README.md`, the root `CLAUDE.md` and the package description,
+      and an entry for each term several folders' docs share;
+   2. then each term of the review's lexicon that the branch adds, renames,
+      changes or removes and that the docs of several folders use: add,
+      rewrite, rename or remove its entry, its definition the review
+      lexicon's, in the **closest lexicon whose folder holds every folder
+      using it**, the repo lexicon when no folder lexicon does. Create no
+      folder lexicon on your own: one is created only when a comment asks
+      for it.
+3. **Rewrite each doc** of the doc set from the model: the concepts and
    their rules as they now stand, under the lexicon's names, without the
-   before/after comparison the modeling part makes. Apply the comments on a
-   doc's text that the trigger holds (they waited for the doc pass).
-3. **One commit** for the doc pass, whose message names the docs it
+   before/after comparison the modeling part makes. A repo term the repo
+   lexicon or a folder lexicon above the doc's folder defines is defined at
+   its first use in that doc in the entry's words, the closest lexicon
+   winning; a lexicon outside the doc's path is not read for it, and no doc
+   links to a lexicon. The lexicons are not rewritten here: step 2 alone
+   writes them, and a missing repo lexicon stays missing. Apply the comments on a doc's text that the
+   trigger holds (they waited for the doc pass). A README a rewrite request
+   names is not patched this way: see **The rewrite request**.
+4. **One commit** for the doc pass, whose message names the docs it
    rewrote.
 
 After the doc pass, you keep the docs:
@@ -166,16 +198,54 @@ After the doc pass, you keep the docs:
   lists the flags with their ids);
 - a comment on the doc set list (`(doc set)`) adds or removes a doc:
   `view-concept doc-set <slug> add <path> "<reason>" --user` or `remove
-  <path> --user`, the `--user` saying the user asked for it.
+  <path> --user`, the `--user` saying the user asked for it;
+- a comment correcting an entry of a lexicon also rewrites the clause of
+  each README that copies the entry (the README's definition of the term,
+  in the entry's old words), and adds that README to the doc set. A comment
+  taking a **candidate** (a repo term several folders use that no lexicon
+  on their path defines) adds its entry; a comment asking for a folder
+  lexicon creates it, with the entries it names;
+- « write repo lexicon » after the doc pass writes the missing repo
+  lexicon as step 2.1 says, in the run's commit for the docs;
+- a rewrite request after the doc pass is done as **The rewrite request**
+  says, in the run's commit for the docs.
 
 Resolve each comment on a doc or the doc set you handled: `view-concept
 resolve <slug> <ids> --reply "<one line: what changed>"`.
 
 « Create PR » no longer starts you: closing only opens or updates the PR.
 
+## The rewrite request
+
+A **rewrite request** asks you to write one README again with the
+write-readme skill instead of patching it: a batch with `action:
+rewrite-readme <path>` (the button just under the doc titles in the Doc
+tab, naming the README in sight), or a comment on a README asking for a
+write-readme rewrite. One sent before « Write docs » waits for the doc pass;
+after it, the coordinator passes it to you in the next pass. For that README
+alone:
+
+1. When the repo lexicon is missing, write it first (**The doc pass**, step
+   2.1).
+2. Read `~/Documents/code/view-concept/skills/write-readme/SKILL.md` and
+   follow it for that one README, naming this review's session folder, so
+   the run reads the model's sections and lexicon as a source next to the
+   code and the old README. A comment of the batch that gives a reader line
+   (« reader: … ») passes it to the run. write-readme is the one skill a
+   role of this review reads besides its own.
+3. Keep the old README's language. The rules of the doc pass's step 3 (the
+   passages the model makes false rewritten, the rest and the doc's own
+   structure kept) do not apply to it: write-readme's do. A README missing
+   from the worktree is written from the code.
+4. Commit it, and the repo lexicon step 1 wrote, with the run's other doc
+   changes, and resolve the comments that asked for it.
+5. Put the run report write-readme prints at its end into your report.
+
 ## Report
 
 End with one line for the coordinator: the commits you made (short hash and
 subject), the change id you recorded, anything you could not do, the
 comment ids you handled, the docs added to or removed from the doc set, and
-how many questions you asked. A doc pass's report says « doc pass ». Write nothing else in the terminal.
+how many questions you asked. A doc pass's report says « doc pass ». After
+the line, add the run report of each write-readme run, as the run printed
+it. Write nothing else in the terminal.
