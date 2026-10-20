@@ -344,19 +344,25 @@ function writingLabel() {
    scope block (see "agent questions" below), so it has no button here. */
 const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "answered · the agent is reading it" };
 
-/* Three phases wait for the user: the plan of an explanation ("awaiting-approval"), the
+/* Four phases wait for the user: the plan of an explanation ("awaiting-approval"), the
    model of a branch review at the end of model consolidation ("awaiting-model", set by the
-   view-branch skill only), and the opening of its PR ("awaiting-pr", view-branch and
-   view-docs).
+   view-branch skill only), the doc pass once the code carries the model ("awaiting-docs",
+   view-branch too), and the opening of its PR ("awaiting-pr", view-branch and view-docs).
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until the agent moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it.
    « Approve model » sits at the end of the explanation, after the last section of the modeling part,
-   where the model is read; « Create PR » at the end of the code tab, at the end of the Doc
-   tab in a docs review. The page does not switch tabs for
+   where the model is read; « Write docs » (action "write-docs") and « Write docs and create
+   PR » (the same action with `then_pr: true` in the batch: the doc pass, the reviewer's run
+   and the PR with no pause) at the end of the code tab; « Create PR » at the end of the
+   code tab, at the end of the Doc tab in a docs review. The page does not switch tabs for
    them. */
 const modelButton = el("button", { id: "model-approve", class: "btn primary approve doc-approve", hidden: true });
 const prButton = el("button", { id: "pr-create", class: "btn primary approve doc-approve", hidden: true });
+const docsButton = el("button", { id: "docs-write", class: "btn primary approve doc-approve", hidden: true,
+                                  title: "The doc pass: the implementer refreshes the doc set and rewrites the docs from the model" });
+const docsPrButton = el("button", { id: "docs-write-pr", class: "btn approve doc-approve", hidden: true,
+                                    title: "The doc pass, the reviewer's run on the doc items and stale passages, then the PR, with no pause" });
 // Once the agent opened the PR (plan.json's `pr`), the page links it in the top bar and at
 // the end of the code tab, under « Create PR » (« Update PR » from then on).
 const prEnd = el("a", { id: "pr-end", class: "btn doc-approve", target: "_blank", rel: "noopener", hidden: true });
@@ -389,6 +395,12 @@ const APPROVALS = {
                          ready: "plan ready · waiting for your approval", sent: "plan approved · the agent is starting" },
   "awaiting-model": { action: "approve-model", label: "Approve model", toast: "Model approved", button: modelButton,
                       ready: "model ready · waiting for your approval", sent: "model approved · the agent is implementing" },
+  "awaiting-docs": { action: "write-docs", label: "Write docs", toast: "Docs requested", button: docsButton,
+                     ready: "code carries the model · waiting for you to write the docs",
+                     sent: "docs requested · the implementer is writing them",
+                     // The second button: the same action, the PR chained after the doc pass.
+                     also: { button: docsPrButton, label: "Write docs and create PR", toast: "Docs and PR requested",
+                             extra: { then_pr: true }, sent: "docs and PR requested · the implementer is writing the docs" } },
   "awaiting-pr": { action: "create-pr", label: "Create PR", toast: "PR requested", button: prButton,
                    ready: "refactoring written · waiting for you to create the PR",
                    sent: "PR requested · the agent is opening it" },
@@ -411,14 +423,17 @@ function approvalPending() {
    phase's wording; then the phase takes over, and the wordings the page used to fix at
    the click (« model approved · the agent is implementing »…) are true. */
 const BATCH_WHAT = { answer: "answered", "go-on": "going on", "approve-plan": "plan approved",
-                     "approve-model": "model approved", "create-pr": "PR requested", plan: "scoping ended",
+                     "approve-model": "model approved", "write-docs": "docs requested", "create-pr": "PR requested", plan: "scoping ended",
                      grill: "grill", "stop-grill": "grill stopped" };
 const BATCH_STAGE = { sent: "in the inbox", received: "the agent has it" };
 
 function batchProgress() {
   const b = state.batch;
   if (!b || !BATCH_STAGE[b.stage]) return "";
-  return `${b.action ? BATCH_WHAT[b.action] || b.action : "comments"} · ${BATCH_STAGE[b.stage]}`;
+  // A « Write docs and create PR » batch carries then_pr (the batch in comments.json).
+  const chained = b.action === "write-docs" && state.comments.batches.some((x) => x.id === b.id && x.then_pr);
+  const what = chained ? "docs and PR requested" : b.action ? BATCH_WHAT[b.action] || b.action : "comments";
+  return `${what} · ${BATCH_STAGE[b.stage]}`;
 }
 
 /* The inactivity notice: a phase at work keeps its moving label until another phase is
@@ -470,7 +485,7 @@ function banner() {
            : repliedInScoping() ? "reading your reply"
            : "scoping the question",
     planning: "drafting the plan",
-    ...(approval ? { [phase]: approvalPending() ? approval.sent : approvalReady(approval) } : {}),
+    ...(approval ? { [phase]: approvalPending() ? approvalSent(approval) : approvalReady(approval) } : {}),
     ...(prReady ? { [phase]: `${prLabel(state.plan.pr.url)} ready · open it from the top bar` } : {}),
     "awaiting-answer": goOnPending() ? "going on · the writer is writing the next sections"
                      : openQuestions().length ? QUESTION_LABELS.ready : QUESTION_LABELS.sent,
@@ -489,6 +504,9 @@ function banner() {
    if later): the agent is reading your answers or comments, until it asks again or
    declares scoping done. With nothing sent since, the banner keeps « scoping the
    question ». Same-second times count as after, as in approvalPending. */
+// The banner while a phase's batch is on its way: « Write docs and create PR » has its own.
+const approvalSent = (approval) =>
+  (approval.also && lastBatchOf(approval.action).then_pr ? approval.also.sent : approval.sent);
 // A docs review waits for « Create PR » once its docs are written, with no refactoring.
 const approvalReady = (approval) =>
   (approval.action === "create-pr" && isDocsReview() ? "docs written · waiting for you to create the PR" : approval.ready);
@@ -508,18 +526,26 @@ function renderStatus() {
   p.className = `phase ${b.active ? "active" : ""} ${b.ask ? "ask" : ""}`;
   p.textContent = [b.text, b.active && !b.ask ? quietNotice() : ""].filter(Boolean).join(" · ");
 
-  $("#approve").hidden = modelButton.hidden = prButton.hidden = true;
+  $("#approve").hidden = modelButton.hidden = prButton.hidden = docsButton.hidden = docsPrButton.hidden = true;
   if (!approval) return;
+  const n = drafts.filter(ready).length;
+  const withDrafts = (label) => (n ? `${label} + send ${n} comment${n > 1 ? "s" : ""}` : label);
   const btn = buttonOf(approval);
   btn.hidden = approvalPending();
-  const label = phase === "awaiting-pr" && state.plan.pr ? "Update PR" : approval.label;
-  const n = drafts.filter(ready).length;
-  btn.textContent = n ? `${label} + send ${n} comment${n > 1 ? "s" : ""}` : label;
+  btn.textContent = withDrafts(phase === "awaiting-pr" && state.plan.pr ? "Update PR" : approval.label);
+  if (approval.also) {
+    approval.also.button.hidden = approvalPending();
+    approval.also.button.textContent = withDrafts(approval.also.label);
+  }
 }
 
-for (const b of [$("#approve"), modelButton, prButton]) b.addEventListener("click", () => {
+for (const b of [$("#approve"), modelButton, prButton, docsButton]) b.addEventListener("click", () => {
   const approval = APPROVALS[state.status.phase];
   if (approval) send(approval.action);
+});
+docsPrButton.addEventListener("click", () => {
+  const approval = APPROVALS[state.status.phase];
+  if (approval && approval.also) send(approval.action, approval.also.button, approval.also.extra);
 });
 
 function renderPlan() {
@@ -819,7 +845,7 @@ function renderSections() {
   } else {
     model.replaceChildren(...sections.filter((s) => tabOf(s.id) === "model").map((s) => sectionBlock(s)), modelButton);
     $("#refactor").replaceChildren(...[lagLine()].filter(Boolean),
-      ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")),
+      ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), docsButton, docsPrButton,
       ...(isDocsReview() ? [] : prEnding));
   }
   renderDocTab(isDocsReview() ? prEnding : []);
@@ -2509,7 +2535,7 @@ async function moveBrowserDrafts() {
 const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped",
                        "go-on": "The writer goes on" };
 
-async function send(action = "", button = null) {
+async function send(action = "", button = null, extra = {}) {
   const approval = Object.values(APPROVALS).find((a) => a.action === action);
   const btn = button || (approval ? buttonOf(approval) : $("#send"));
   if (btn.disabled) return;
@@ -2524,6 +2550,7 @@ async function send(action = "", button = null) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       action,
+      ...(extra.then_pr ? { then_pr: true } : {}),
       note: $("#note").value,
       comments: drafts.map(({ section, quote, prefix, text, thread }) => ({ section, quote, prefix, text, thread })),
       drafts: drafts.map((d) => d.id),
@@ -2542,7 +2569,8 @@ async function send(action = "", button = null) {
   drafts = [];
   $("#note").value = "";
   await load();
-  sentToast(approval ? approval.toast : SCOPE_TOASTS[action] || `Sent ${b.id} to the session`);
+  const toastText = approval && extra.then_pr && approval.also ? approval.also.toast : approval ? approval.toast : "";
+  sentToast(toastText || SCOPE_TOASTS[action] || `Sent ${b.id} to the session`);
 }
 
 /* ---------------- divider ----------------

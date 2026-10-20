@@ -238,6 +238,7 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .doc-sec h2 code { background: none; padding: 0; }
 .doc-sec .body h1 { font-size: 17px; margin: 16px 0 8px; }
 .doc-sec.missing h2 { color: var(--muted); }
+#docs-write-pr { margin-top: 8px; }
 /* the base mark: a block that differs from the base branch, a bar in the right margin */
 .sec .body .based { position: relative; }
 .sec .body .based::after { content: ""; position: absolute; right: -14px; top: 0; bottom: 0; width: 3px; background: var(--info); }
