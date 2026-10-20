@@ -300,11 +300,12 @@ def state(slug: str) -> dict[str, Any]:
 def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> dict[str, Any]:
     """The Doc tab as the page reads it: {set: [{path, reason, stale (how many of its
     stale passages are shown)}], removed, views: {path: view}, stale (the stale passages
-    shown)}. A doc's view is its section view (the file rendered as Markdown, `updated`
-    against its highlight baseline `doc:<path>`) with `exists` and the base mark's input:
-    `base_html`, the doc at the merge base rendered (None when it was not there, or when
-    git cannot tell), and `new`, whether the branch created it. A doc missing from the
-    worktree is `{exists: false}` only."""
+    shown), reference (the reference model, or None)}. A doc's view is its section view
+    (the file rendered as Markdown, `updated` against its highlight baseline
+    `doc:<path>`) with `exists` and the base mark's input: `base_html`, the doc at the
+    merge base rendered (None when it was not there, or when git cannot tell), and `new`,
+    whether the branch created it. A doc missing from the worktree is `{exists: false}`
+    only."""
     data = s.read_doc_set()
     commit = s.merge_base() if any(t is not None for t in docs.values()) else ""
     views: dict[str, dict[str, Any]] = {}
@@ -335,7 +336,21 @@ def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> 
         "removed": data["removed"],
         "views": views,
         "stale": stale,
+        "reference": reference_view(s),
     }
+
+
+def reference_view(s: Session) -> dict[str, Any] | None:
+    """The reference model as the page reads it: {slug, title, url (its session's page),
+    lexicon (each term with its hover text rendered, `tip_html`)}; None without one."""
+    ref = s.reference_model()
+    if ref is None:
+        return None
+    lexicon = [
+        {**t, "tip_html": md.renderInline(str(t.get("tip") or t.get("definition") or ""))}
+        for t in ref["lexicon"]
+    ]
+    return {**ref, "url": f"/s/{ref['slug']}", "lexicon": lexicon}
 
 
 def published_view(s: Session) -> dict[str, Any] | None:

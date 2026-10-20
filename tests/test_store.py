@@ -1066,3 +1066,22 @@ def test_a_docs_review_is_a_code_session_not_coordinated(tmp_path):
     s = Session("d", tmp_path)
     s.create("D", kind="code", repo=str(tmp_path), workflow="view-docs")
     assert s.read_plan()["workflow"] == "view-docs" and not s.coordinated
+
+
+def test_the_reference_model_is_a_session_of_the_same_repo(docs_review, tmp_path):
+    root = docs_review.dir.parent
+    docs = Session("install-docs", root)
+    docs.create("Install", kind="code", repo=docs_review.read_plan()["repo"], workflow="view-docs")
+    other = Session("elsewhere", root)
+    other.create("Elsewhere", kind="code", repo=str(tmp_path), workflow="view-branch")
+    with pytest.raises(SessionError, match="no other session"):
+        docs.set_reference("missing")
+    with pytest.raises(SessionError, match="no other session"):
+        docs.set_reference("install-docs")
+    with pytest.raises(SessionError, match="not a session of this repo"):
+        docs.set_reference("elsewhere")
+    assert docs.set_reference("doc-tab") == "doc-tab"
+    assert docs.read_plan()["reference"] == "doc-tab"
+    assert docs.reference_model() == {"slug": "doc-tab", "title": "Doc tab", "lexicon": []}
+    docs.set_reference("")
+    assert "reference" not in docs.read_plan() and docs.reference_model() is None

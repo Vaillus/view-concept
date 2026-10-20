@@ -368,3 +368,17 @@ def test_stale_flags_prints_and_drops_passages(tmp_path):
     assert view_concept(tmp_path, "stale", "gate").stdout.strip() == "(no stale passage shown)"
     r = view_concept(tmp_path, "stale", "gate", "README.md", "absent", "five")
     assert r.returncode == 1 and "quote is not in" in r.stderr
+
+
+def test_reference_sets_prints_and_clears_the_reference_model(tmp_path):
+    for title, workflow in (("Gate", "view-branch"), ("Docs", "view-docs")):
+        args = ("new", title, "--kind", "code", "--repo", str(tmp_path), "--workflow", workflow)
+        assert view_concept(tmp_path, *args).returncode == 0
+    r = view_concept(tmp_path, "reference", "docs", "gate")
+    assert r.returncode == 0 and r.stdout.strip() == "reference model: gate", r.stderr
+    r = view_concept(tmp_path, "reference", "docs")
+    assert r.stdout.strip() == "reference model: gate (Gate)"
+    assert view_concept(tmp_path, "reference", "docs", "--clear").returncode == 0
+    assert view_concept(tmp_path, "reference", "docs").stdout.strip() == "no reference model"
+    r = view_concept(tmp_path, "reference", "docs", "nope")
+    assert r.returncode == 1 and "no other session" in r.stderr

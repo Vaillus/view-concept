@@ -381,6 +381,19 @@ def cmd_stale(a: argparse.Namespace) -> None:
         print("(no stale passage shown)")
 
 
+def cmd_reference(a: argparse.Namespace) -> None:
+    """Set or clear the reference model, or, with neither, print it."""
+    s = _existing(a.slug)
+    if a.clear or a.other:
+        if a.clear and a.other:
+            raise SessionError("give a session or --clear, not both")
+        ref = s.set_reference("" if a.clear else a.other)
+        print(f"reference model: {ref}" if ref else "no reference model")
+        return
+    ref = s.reference_model()
+    print(f"reference model: {ref['slug']} ({ref['title']})" if ref else "no reference model")
+
+
 def cmd_variant(a: argparse.Namespace) -> None:
     """Name the setup a session runs with and the model of each role, or, with no name,
     print it: the coordinator passes a role's model when it starts that role's agent."""
@@ -676,6 +689,15 @@ def main() -> None:
     q.add_argument("--section", help="the model section it contradicts")
     q.add_argument("--drop", nargs="+", metavar="ID", help="remove flags (fixed or dismissed)")
     q.set_defaults(fn=cmd_stale)
+
+    q = sub.add_parser(
+        "reference",
+        help="take another session's model as the reference model of a docs review, or clear it",
+    )
+    q.add_argument("slug")
+    q.add_argument("other", nargs="?", help="the slug of a session of the same repo")
+    q.add_argument("--clear", action="store_true", help="remove the reference model")
+    q.set_defaults(fn=cmd_reference)
 
     q = sub.add_parser("context", help="print the context a subagent or a side thread starts from")
     q.add_argument("slug")

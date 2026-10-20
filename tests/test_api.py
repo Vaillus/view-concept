@@ -538,3 +538,21 @@ def test_a_docs_review_shows_its_doc_set_with_no_plan_nor_sections(client, sessi
     assert state["plan"]["outline"] == [] and state["sections"] == {}
     assert state["docs"]["set"][0]["path"] == "README.md"
     assert state["docs"]["views"]["README.md"]["exists"] is True
+
+
+def test_the_reference_model_is_read_from_another_session(client, doc_review):
+    docs = Session("install-docs", doc_review.dir.parent)
+    docs.create("Install", kind="code", repo=doc_review.read_plan()["repo"], workflow="view-docs")
+    assert client.get("/api/s/install-docs").json()["docs"]["reference"] is None
+    plan = doc_review.read_plan()
+    plan["outline"] = [{"id": "sheet", "title": "Sheet"}]
+    plan["lexicon"] = [{"term": "doc set", "section": "sheet", "definition": "the *list*"}]
+    doc_review.plan_path.write_text(json.dumps(plan))
+    docs.set_reference("doc-tab")
+    ref = client.get("/api/s/install-docs").json()["docs"]["reference"]
+    assert ref["slug"] == "doc-tab" and ref["title"] == "Doc tab" and ref["url"] == "/s/doc-tab"
+    assert ref["lexicon"][0]["tip_html"] == "the <em>list</em>"
+    plan["lexicon"][0]["definition"] = "the docs"
+    doc_review.plan_path.write_text(json.dumps(plan))  # re-read as it is now
+    ref = client.get("/api/s/install-docs").json()["docs"]["reference"]
+    assert ref["lexicon"][0]["tip_html"] == "the docs"

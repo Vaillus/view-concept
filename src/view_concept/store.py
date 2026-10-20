@@ -6,7 +6,7 @@ reach the agent session through the inbox.
 
     <home>/sessions/<slug>/
         plan.json       title, initial_request, kind, workflow, repo, base, pr, variant,
-                        outline, lexicon
+                        reference, outline, lexicon
         sections/<id>.md  the prose of one outline section         (written by the agent)
         sections/<id>.html  an HTML section instead: a self-contained HTML document
         sections/<id>/  its media folder: media files the agent produced for it
@@ -178,6 +178,11 @@ doc (its path), quote (the passage's exact text in the file), section (the model
 it contradicts, a reference model's, or ""), note (one line: why), at}. The reviewer
 flags them (`stale`), and drops one fixed or dismissed. A flag whose quote is no longer
 found in its doc's current text is not shown, and stays in the file.
+
+A docs review may take another session's model as its reference model: plan.json
+`reference`, the slug of a session of the same repo (written by `reference`). Its
+lexicon's terms are underlined in the docs, and its sections are the measure of the stale
+passages the code cannot catch. It is re-read at each run, as it is then.
 
 A branch review's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
 at} (written by `pr`). The page links it at the top and at the end of the code tab.
@@ -610,6 +615,40 @@ class Session:
         plan["pr"] = {"url": url, "at": now_iso()}
         _write_json(self.plan_path, plan)
         return plan["pr"]
+
+    def set_reference(self, other: str) -> str:
+        """Take session `other`'s model as the reference model (plan.json `reference`):
+        a docs review measures its docs against it. `other` is another session of the same
+        repo. An empty `other` removes the reference."""
+        plan = self.read_plan()
+        if not other:
+            plan.pop("reference", None)
+            _write_json(self.plan_path, plan)
+            return ""
+        ref = Session(other, self.dir.parent)
+        if other == self.slug or not ref.exists():
+            raise SessionError(f"no other session {other!r}")
+        here, there = plan.get("repo", ""), ref.read_plan().get("repo", "")
+        if not here or not there or project_of(here) != project_of(there):
+            raise SessionError(f"{other} is not a session of this repo")
+        plan["reference"] = other
+        _write_json(self.plan_path, plan)
+        return other
+
+    def reference_model(self) -> dict[str, Any] | None:
+        """The reference model, re-read at each call: {slug, title, lexicon} of the session
+        plan.json `reference` names; None without one, or when that session is gone."""
+        slug = self.read_plan().get("reference")
+        if not slug:
+            return None
+        try:
+            ref = Session(str(slug), self.dir.parent)
+            if not ref.exists():
+                return None
+            plan = ref.read_plan()
+        except SessionError:
+            return None
+        return {"slug": ref.slug, "title": plan["title"], "lexicon": plan["lexicon"]}
 
     def read_variant(self) -> dict[str, Any]:
         """The setup the session runs with: {name, models}, `models` mapping a role to the
