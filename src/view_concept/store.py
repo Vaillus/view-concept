@@ -1149,6 +1149,11 @@ class Session:
         if user and path not in data["removed"]:
             data["removed"].append(path)
         _write_json(self.doc_set_path, data)
+        # A doc that enters the doc set again starts with no green highlight: its baseline
+        # is set anew at its first read.
+        seen = _read_json(self.seen_path, {})
+        if seen.pop(DOC_KEY + path, None) is not None:
+            _write_json(self.seen_path, seen)
 
     def repo_dir(self) -> Path | None:
         """The worktree a code session works in (plan.json `repo`), None without one."""

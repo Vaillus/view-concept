@@ -961,6 +961,17 @@ def test_a_doc_the_user_removed_comes_back_only_when_the_user_asks(docs_review):
                                 "removed": []}  # fmt: skip
 
 
+def test_a_doc_back_in_the_doc_set_starts_with_no_highlight(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.read_seen(s.doc_texts())
+    s.remove_doc("README.md", user=True)
+    assert "doc:README.md" not in json.loads(s.seen_path.read_text())
+    (s.repo_dir() / "README.md").write_text("rewritten while out")
+    s.add_doc("README.md", "the install", user=True)
+    assert s.read_seen(s.doc_texts())["doc:README.md"] == "rewritten while out"
+
+
 def test_the_doc_set_anchor_names_no_section(docs_review):
     s = docs_review
     with pytest.raises(SessionError, match="may not start with 'doc:'"):
