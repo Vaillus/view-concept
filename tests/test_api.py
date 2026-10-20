@@ -478,3 +478,32 @@ def test_the_page_serves_a_repo_file_a_doc_points_to(client, doc_review):
     assert client.get("/s/doc-tab/repo/.git/config").status_code == 404
     assert client.get("/s/doc-tab/repo/..%2Fsessions%2Fdoc-tab%2Fplan.json").status_code == 404
     assert client.get("/s/kv-cache/repo/README.md").status_code == 404
+
+
+def _git(repo, *args):
+    import subprocess
+
+    cmd = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *args]
+    subprocess.run(cmd, check=True, capture_output=True)
+
+
+def test_the_base_mark_compares_a_doc_with_the_merge_base(client, doc_review):
+    repo = doc_review.repo_dir()
+    doc = repo / "docs" / "reference.md"
+    _git(repo, "init", "-b", "main")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "base")
+    _git(repo, "switch", "-c", "feat")
+    doc.write_text("# Reference\n\nThe keys 1 to 5.\n")  # uncommitted: still compared
+    (repo / "docs" / "missing.md").write_text("Created on the branch.\n")
+    views = client.get("/api/s/doc-tab").json()["docs"]["views"]
+    ref = views["docs/reference.md"]
+    assert ref["base_html"] == "<h1>Reference</h1>\n<p>The keys 1 to 4.</p>\n"
+    assert ref["new"] is False and "1 to 5" in ref["html"]
+    assert views["docs/missing.md"]["base_html"] is None
+    assert views["docs/missing.md"]["new"] is True
+
+
+def test_no_base_mark_when_git_cannot_tell(client, doc_review):
+    view = client.get("/api/s/doc-tab").json()["docs"]["views"]["docs/reference.md"]
+    assert view["base_html"] is None and view["new"] is False

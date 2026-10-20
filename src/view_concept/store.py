@@ -162,7 +162,10 @@ file read from the worktree at each render, never copied into the session, so th
 own edits show as the agent's do; a doc missing there reads as missing. Its highlight
 baseline is kept in seen.json under `doc:<path>` and moves with every batch, like a
 section's. The doc sections stay out of the published page, the vault export, the publish
-fingerprint and `check`, which read the outline's sections only.
+fingerprint and `check`, which read the outline's sections only. The base mark compares
+a doc's worktree file (uncommitted changes included) with the same doc at the merge base
+of the branch and its base branch (`merge_base`, `base_text`); a doc absent there was
+created on the branch.
 
 A branch review's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
 at} (written by `pr`). The page links it at the top and at the end of the code tab.
@@ -1115,6 +1118,24 @@ class Session:
         """The docs that exist, keyed as their highlight baseline is: `doc:<path>`."""
         return {DOC_KEY + p: t for p, t in self.read_docs().items() if t is not None}
 
+    def merge_base(self) -> str:
+        """The commit where the branch left its base branch (plan.json `base`, else main):
+        `git merge-base <base> HEAD` in the worktree. "" when git cannot tell (no repo,
+        not a git repository, no such base): the docs then carry no base mark."""
+        repo = self.repo_dir()
+        if repo is None:
+            return ""
+        base = str(self.read_plan().get("base") or "main")
+        return (_git(repo, "merge-base", base, "HEAD") or "").strip()
+
+    def base_text(self, path: str, commit: str) -> str | None:
+        """Doc `path` as it was at `commit` (the merge base), None when it did not exist
+        there: a doc the branch created."""
+        repo = self.repo_dir()
+        if repo is None or not commit:
+            return None
+        return _git(repo, "show", f"{commit}:{doc_path(path)}")
+
     def doc_files(self) -> list[Path]:
         """The worktree file of each doc of the doc set, for `signature`."""
         files = (self.doc_file(d["path"]) for d in self.read_doc_set()["docs"])
@@ -2001,6 +2022,17 @@ def project_of(repo: str) -> str:
     if common.endswith("/.git"):
         return common.removesuffix("/.git")
     return repo.split(WORKTREES_DIR, 1)[0]
+
+
+def _git(repo: Path, *args: str) -> str | None:
+    """The output of a read-only git command in `repo`, None when it fails."""
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(repo), *args], capture_output=True, timeout=5, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout.decode("utf-8", errors="replace") if r.returncode == 0 else None
 
 
 def _mtime(path: Path) -> float | None:

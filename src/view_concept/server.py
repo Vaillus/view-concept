@@ -300,15 +300,24 @@ def state(slug: str) -> dict[str, Any]:
 def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> dict[str, Any]:
     """The Doc tab as the page reads it: {set: [{path, reason}], removed, views: {path:
     view}}. A doc's view is its section view (the file rendered as Markdown, `updated`
-    against its highlight baseline `doc:<path>`) with `exists`; a doc missing from the
+    against its highlight baseline `doc:<path>`) with `exists` and the base mark's input:
+    `base_html`, the doc at the merge base rendered (None when it was not there, or when
+    git cannot tell), and `new`, whether the branch created it. A doc missing from the
     worktree is `{exists: false}` only."""
     data = s.read_doc_set()
+    commit = s.merge_base() if any(t is not None for t in docs.values()) else ""
     views: dict[str, dict[str, Any]] = {}
     for path, text in docs.items():
         if text is None:
             views[path] = {"exists": False}
             continue
-        views[path] = {"exists": True, **section_view(text, seen.get(DOC_KEY + path, text))}
+        base = s.base_text(path, commit) if commit else None
+        views[path] = {
+            "exists": True,
+            **section_view(text, seen.get(DOC_KEY + path, text)),
+            "base_html": md.render(base) if base is not None else None,
+            "new": bool(commit) and base is None,
+        }
     return {
         "set": [{"path": d["path"], "reason": d.get("reason", "")} for d in data["docs"]],
         "removed": data["removed"],
