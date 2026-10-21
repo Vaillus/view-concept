@@ -20,6 +20,10 @@ A backend also starts a workbench's runs (bench.py): `run_args`, `run_feed` and
 `run_close`. A run is a blank conversation (no resume, no fork) that may write in its
 cwd, the run's throwaway checkout, and nowhere else, with the project's settings only (on
 Claude, `--setting-sources project`: the checkout's CLAUDE.md files, none of the user's).
+Claude and Codex enforce the write limit: Claude has no shell and its Edit and Write are
+allowed under the cwd only; Codex's workspace-write sandbox has `/tmp` and `$TMPDIR`
+taken out, where the other checkouts of the same « Run all » sit. The command backend
+enforces nothing: the program writes wherever it likes.
 Its final text is the run report: Claude's `result` event, Codex's last agent message, a
 command's stdout.
 """
@@ -54,16 +58,18 @@ THREAD_ALLOWED = [
     *(f"Bash(view-concept {c}:*)" for c in ("context", "changes", "pending", "list")),
 ]
 
-# What a run's Claude may do: read, and write inside its cwd (the throwaway checkout) only;
-# the shell for the commands that list or read files.
-RUN_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
-RUN_ALLOWED = [
-    "Read",
-    "Grep",
-    "Glob",
-    "Edit(./**)",
-    "Write(./**)",
-    *(f"Bash({c}:*)" for c in ("ls", "find", "wc", "head", "cat")),
+# What a run's Claude may do: read anywhere, and write inside its cwd (the throwaway
+# checkout) only. No shell: a prefix rule such as `find:*` or `cat:*` also matches
+# `find -delete` or `cat > path`, and Read, Grep and Glob already list and read files.
+RUN_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write"]
+RUN_ALLOWED = ["Read", "Grep", "Glob", "Edit(./**)", "Write(./**)"]
+# Codex's workspace-write sandbox also opens `/tmp` and `$TMPDIR`, where every checkout
+# sits (`tempfile.mkdtemp`): a run closes both, so only its cwd stays writable.
+CODEX_RUN_SANDBOX = [
+    'sandbox_mode="workspace-write"',
+    "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+    "sandbox_workspace_write.exclude_slash_tmp=true",
+    'approval_policy="never"',
 ]
 
 
@@ -236,7 +242,8 @@ class CodexBackend(Backend):
 
     def run_args(self) -> list[str]:
         args = [os.environ.get(CODEX_ENV, "codex"), "exec", "--json", "--skip-git-repo-check"]
-        args += ["-c", 'sandbox_mode="workspace-write"', "-c", 'approval_policy="never"']
+        for setting in CODEX_RUN_SANDBOX:
+            args += ["-c", setting]
         return [*args, "-"]
 
     def run_feed(self, line: str, turn: TurnState) -> None:

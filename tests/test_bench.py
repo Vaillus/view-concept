@@ -236,12 +236,17 @@ def test_a_run_is_a_blank_conversation_that_writes_in_its_checkout_only(monkeypa
     assert args[:2] == ["claude", "-p"] and "--resume" not in args and "--add-dir" not in args
     assert args[args.index("--setting-sources") + 1] == "project"
     assert "Write(./**)" in args and "Edit(./**)" in args and "Write" in args
+    # No shell: a prefix rule like `find:*` would also let `find -delete` through.
+    assert "Bash" not in args and not any(a.startswith("Bash(") for a in args)
     turn = TurnState()
     ClaudeBackend().run_feed(json.dumps({"type": "result", "result": "the report"}), turn)
     assert turn.finished and turn.final_text == "the report"
     args = CodexBackend().run_args()
     assert args[:2] == ["codex", "exec"] and "fork" not in args and "resume" not in args
     assert 'sandbox_mode="workspace-write"' in args and args[-1] == "-"
+    # /tmp and $TMPDIR hold the other checkouts: a Codex run may not write there.
+    assert "sandbox_workspace_write.exclude_tmpdir_env_var=true" in args
+    assert "sandbox_workspace_write.exclude_slash_tmp=true" in args
     turn = TurnState()
     for event in (
         {"type": "item.completed", "item": {"type": "agent_message", "text": "first"}},
