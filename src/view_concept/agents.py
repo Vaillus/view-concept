@@ -20,12 +20,11 @@ A backend also starts a workbench's runs (bench.py): `run_args`, `run_feed` and
 `run_close`. A run is a blank conversation (no resume, no fork) that may write in its
 cwd, the run's throwaway checkout, and nowhere else, with the project's settings only (on
 Claude, `--setting-sources project`: the checkout's CLAUDE.md files, none of the user's).
-Claude and Codex enforce the write limit: Claude has no shell and its Edit and Write are
-allowed under the cwd only; Codex's workspace-write sandbox has `/tmp` and `$TMPDIR`
-taken out, where the other checkouts of the same « Run all » sit. The command backend
-enforces nothing: the program writes wherever it likes. Jazz starts no run
-(`run_refusal`): its preset is read-only, so the run could not write its README.
-Its final text is the run report: Claude's `result` event, Codex's last agent message, a
+Claude enforces the write limit: it has no shell, and its Edit and Write are allowed
+under the cwd only. The command backend enforces nothing: the program writes wherever it
+likes. Codex and Jazz start no run (`run_refusal`): Codex reads AGENTS.md files, not the
+CLAUDE.md files the cases' repo holds, and Jazz's preset is read-only, so the run could
+not write its README. Its final text is the run report: Claude's `result` event, a
 command's stdout.
 """
 
@@ -64,14 +63,6 @@ THREAD_ALLOWED = [
 # `find -delete` or `cat > path`, and Read, Grep and Glob already list and read files.
 RUN_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write"]
 RUN_ALLOWED = ["Read", "Grep", "Glob", "Edit(./**)", "Write(./**)"]
-# Codex's workspace-write sandbox also opens `/tmp` and `$TMPDIR`, where every checkout
-# sits (`tempfile.mkdtemp`): a run closes both, so only its cwd stays writable.
-CODEX_RUN_SANDBOX = [
-    'sandbox_mode="workspace-write"',
-    "sandbox_workspace_write.exclude_tmpdir_env_var=true",
-    "sandbox_workspace_write.exclude_slash_tmp=true",
-    'approval_policy="never"',
-]
 
 
 @dataclass
@@ -241,32 +232,6 @@ class CodexBackend(Backend):
         args += ["-"]
         return args
 
-    def run_args(self) -> list[str]:
-        args = [os.environ.get(CODEX_ENV, "codex"), "exec", "--json", "--skip-git-repo-check"]
-        for setting in CODEX_RUN_SANDBOX:
-            args += ["-c", setting]
-        return [*args, "-"]
-
-    def run_feed(self, line: str, turn: TurnState) -> None:
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            turn.noise.append(line.rstrip())
-            return
-        kind = event.get("type")
-        item = event.get("item", {})
-        if kind == "thread.started":
-            turn.session = event.get("thread_id", turn.session)
-        elif kind in ("turn.failed", "error"):
-            turn.failed = True
-            detail = event.get("message") or (event.get("error") or {}).get("message") or ""
-            turn.error = str(detail).strip() or turn.error
-        elif kind == "turn.completed":
-            turn.finished = True
-        elif kind == "item.completed" and item.get("type") == "agent_message":
-            # The last message is the run report.
-            turn.final_text = str(item.get("text", ""))
-
     def feed(
         self, line: str, thread: dict[str, Any], reply: dict[str, Any], turn: TurnState
     ) -> bool:
@@ -383,14 +348,20 @@ def chosen(s: Session) -> str:
 
 
 def run_refusal(s: Session) -> str:
-    """Why the session's agent cannot start a workbench's runs, or "" when it can. Jazz is
-    refused: its `jazz run` preset is read-only, so a run could not write its README."""
-    if chosen(s) != "jazz":
+    """Why the session's agent cannot start a workbench's runs, or "" when it can. Codex is
+    refused: it reads AGENTS.md files, and the cases' repo has only CLAUDE.md files. Jazz
+    is refused: its `jazz run` preset is read-only, so a run could not write its README."""
+    reason = {
+        "codex": "Codex reads AGENTS.md files, not the CLAUDE.md files the cases' repo holds",
+        "jazz": "`jazz run` is started read-only, so a run could not write its README",
+    }.get(chosen(s))
+    if not reason:
         return ""
+    name = "Codex" if chosen(s) == "codex" else "Jazz"
     return (
-        "runs do not start on Jazz: `jazz run` is started read-only, so a run could not "
-        "write its README. Open the session from Claude Code or Codex (`view-concept open "
-        f"{s.slug} --agent claude`), or set {COMMAND_ENV} to a program that may write"
+        f"runs do not start on {name}: {reason}. Open the session from Claude Code "
+        f"(`view-concept open {s.slug} --agent claude`), or set {COMMAND_ENV} to a program "
+        "that may write"
     )
 
 

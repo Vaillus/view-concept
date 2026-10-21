@@ -171,17 +171,20 @@ def test_a_failed_run_leaves_its_error_and_no_run(client, workbench, fake_run, m
     assert core["error"] is None and [r["n"] for r in core["runs"]] == [1]
 
 
-def test_a_run_on_jazz_is_refused_with_an_error_on_the_case(client, workbench, monkeypatch):
+@pytest.mark.parametrize(("agent", "name"), [("jazz", "Jazz"), ("codex", "Codex")])
+def test_a_run_on_jazz_or_codex_is_refused_with_an_error_on_the_case(
+    client, workbench, monkeypatch, agent, name
+):
     s = workbench
     s.add_case("core", "edit")
     s.add_case("core/transcript", "draft")
     monkeypatch.delenv("VIEW_CONCEPT_AGENT_COMMAND", raising=False)
     monkeypatch.delenv("VIEW_CONCEPT_AGENT", raising=False)
-    s.bind_agent("jazz", name="writer")
+    s.bind_agent(agent, name="writer")
     r = client.post("/api/s/bench/runs", json={"case": ""})
     assert r.status_code == 200 and r.json()["started"] == []
     cases = client.get("/api/s/bench").json()["bench"]["cases"]
-    assert all(c["runs"] == [] and "do not start on Jazz" in c["error"] for c in cases)
+    assert all(c["runs"] == [] and f"do not start on {name}" in c["error"] for c in cases)
     assert bench.current_version(s) is None  # no skill version copied for no run
 
 
@@ -242,10 +245,9 @@ def test_a_run_changes_the_signature(workbench, cases_repo):
 
 
 def test_a_run_is_a_blank_conversation_that_writes_in_its_checkout_only(monkeypatch):
-    from view_concept.agents import ClaudeBackend, CodexBackend, TurnState
+    from view_concept.agents import ClaudeBackend, TurnState
 
     monkeypatch.delenv("VIEW_CONCEPT_CLAUDE", raising=False)
-    monkeypatch.delenv("VIEW_CONCEPT_CODEX", raising=False)
     args = ClaudeBackend().run_args()
     assert args[:2] == ["claude", "-p"] and "--resume" not in args and "--add-dir" not in args
     assert args[args.index("--setting-sources") + 1] == "project"
@@ -255,18 +257,3 @@ def test_a_run_is_a_blank_conversation_that_writes_in_its_checkout_only(monkeypa
     turn = TurnState()
     ClaudeBackend().run_feed(json.dumps({"type": "result", "result": "the report"}), turn)
     assert turn.finished and turn.final_text == "the report"
-    args = CodexBackend().run_args()
-    assert args[:2] == ["codex", "exec"] and "fork" not in args and "resume" not in args
-    assert 'sandbox_mode="workspace-write"' in args and args[-1] == "-"
-    # /tmp and $TMPDIR hold the other checkouts: a Codex run may not write there.
-    assert "sandbox_workspace_write.exclude_tmpdir_env_var=true" in args
-    assert "sandbox_workspace_write.exclude_slash_tmp=true" in args
-    turn = TurnState()
-    for event in (
-        {"type": "item.completed", "item": {"type": "agent_message", "text": "first"}},
-        {"type": "item.completed", "item": {"type": "agent_message", "text": "last"}},
-        {"type": "turn.completed"},
-    ):
-        CodexBackend().run_feed(json.dumps(event), turn)
-    CodexBackend().run_close(turn, 0)
-    assert not turn.failed and turn.final_text == "last"

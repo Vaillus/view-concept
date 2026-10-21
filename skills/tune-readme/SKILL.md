@@ -105,10 +105,10 @@ view-concept open <slug>   # starts the server if needed, shows the page
 The page runs side threads, and the runs, on the agent you are. Claude Code
 and Codex are detected; any other agent (Jazz, …) adds `--agent jazz
 --agent-name <your own agent name>` to `new` and to every later `open`. Runs
-do not start on Jazz, whose headless preset cannot write: « Run » leaves that
-error on each case, and the runs need a session opened from Claude Code or
-Codex. After
-resuming in a new conversation, run `view-concept open <slug>` again: it
+start on Claude Code only: Codex reads AGENTS.md files, not the CLAUDE.md
+files of the cases' repo, and Jazz's headless preset cannot write. On either,
+« Run » leaves that error on each case, and the runs need a session opened
+from Claude Code. After resuming in a new conversation, run `view-concept open <slug>` again: it
 records the current conversation as the one side threads fork from.
 `view-concept pending <slug>` lists the comments still open.
 

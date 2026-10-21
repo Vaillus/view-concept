@@ -25,7 +25,7 @@ Each run follows these steps:
 
 A run that fails (its agent could not start, exited non-zero or ended with no final text)
 leaves no run folder: its error goes to runs/<case id>/error.json, which the case's next
-run deletes. A session on Jazz starts no run: each case it would start gets the error
+run deletes. A session on Codex or Jazz starts no run: each case it would start gets the error
 that says so (`agents.run_refusal`). While a run runs, the server keeps its process
 here (`_running`); a run.json still "running" with no process here was cut off by a
 server restart, and reads as the error « interrupted ».
