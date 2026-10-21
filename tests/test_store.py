@@ -1213,3 +1213,103 @@ def test_docs_stay_out_of_the_publish_fingerprint_and_the_check(docs_review):
     (s.repo_dir() / "README.md").write_text("Rewritten <div>\n\nblock</div>\n")
     assert s.fingerprint() == before
     assert s.published_sections() == [] and s.check_sections() == []
+
+
+def test_a_workbench_is_a_code_session_with_a_skill_file(tmp_path):
+    with pytest.raises(SessionError, match="code session"):
+        Session("w", tmp_path).create("W", workflow="tune-readme")
+    s = Session("w", tmp_path)
+    s.create("W", kind="code", repo=str(tmp_path), workflow="tune-readme")
+    assert s.read_plan()["workflow"] == "tune-readme" and not s.coordinated
+    assert s.skill_file() == tmp_path.resolve() / "skills/write-readme/SKILL.md"
+    other = Session("d", tmp_path)
+    other.create("D", kind="code", repo=str(tmp_path), workflow="view-docs")
+    assert other.skill_file() is None
+
+
+def test_no_outline_id_takes_a_bench_anchor(session):
+    for sid in ("run:core:1:readme", "pinned:core", "skill:"):
+        with pytest.raises(SessionError, match="Bench tab's anchors"):
+            session.write_plan(outline=[{"id": sid, "title": "X"}])
+
+
+def test_the_case_set_is_set_and_added_to(workbench, cases_repo):
+    s, (repo, sha) = workbench, cases_repo
+    assert s.read_cases() == {"repo": str(repo.resolve()), "commit": sha, "cases": []}
+    with pytest.raises(SessionError, match="cannot resolve"):
+        s.set_cases(str(repo), "nope")
+    core = s.add_case("core/", "edit")
+    assert core == {"id": "core", "folder": "core", "kind": "edit"}
+    assert s.add_case("core", "draft")["id"] == "core-draft"
+    assert s.add_case("core/transcript", "draft")["id"] == "core-transcript-draft"
+    assert s.add_case("", "edit")["id"] == "root"
+    with pytest.raises(SessionError, match="exists already"):
+        s.add_case("core", "edit")
+    with pytest.raises(SessionError, match="no folder"):
+        s.add_case("deploy", "edit")
+    with pytest.raises(SessionError, match="is a draft case"):
+        s.add_case("core/transcript", "edit")
+    with pytest.raises(SessionError, match="unknown case kind"):
+        s.add_case("core", "rewrite")
+    s.remove_case("root")
+    assert [c["id"] for c in s.read_cases()["cases"]] == ["core", "core-draft",
+                                                           "core-transcript-draft"]  # fmt: skip
+    assert s.pinned_readme(core) == "# core\n\nThe library.\n"
+    assert s.pinned_readme({"folder": "core/transcript", "kind": "draft"}) is None
+
+
+def test_a_case_needs_the_repo_set_first(tmp_path):
+    s = Session("w", tmp_path)
+    s.create("W", kind="code", repo=str(tmp_path), workflow="tune-readme")
+    with pytest.raises(SessionError, match="set the cases' repo first"):
+        s.add_case("core", "edit")
+
+
+def test_a_case_is_named_by_its_folder_and_kind():
+    from view_concept.store import case_name, case_readme
+
+    assert case_name({"folder": "core", "kind": "edit"}) == "core/"
+    assert case_name({"folder": "core", "kind": "draft"}) == "core/ (draft)"
+    assert case_name({"folder": "", "kind": "edit"}) == "README.md (root)"
+    assert case_readme({"folder": ""}) == "README.md"
+    assert case_readme({"folder": "core/transcript"}) == "core/transcript/README.md"
+
+
+def _bench_run(s, cid, n, k, readme="# run\n", report="the report\n"):
+    folder = s.run_dir(cid, n)
+    folder.mkdir(parents=True)
+    record = {"case": cid, "n": n, "skill_version": k, "state": "done", "other_files": []}
+    (folder / "run.json").write_text(json.dumps(record))
+    (folder / "README.md").write_text(readme)
+    (folder / "report.md").write_text(report)
+
+
+def test_a_batch_prints_the_bench_anchors(workbench, cases_repo):
+    s, sha = workbench, cases_repo[1]
+    s.add_case("core", "edit")
+    s.add_case("core", "draft")
+    _bench_run(s, "core", 3, 3)
+    _bench_run(s, "core-draft", 1, 2)
+    b = s.add_batch([
+        {"section": "run:core-draft:1:readme", "quote": "linaw/", "text": "keep this"},
+        {"section": "run:core:3:report", "quote": "opening line", "text": "too strict"},
+        {"section": "pinned:core", "quote": "The library.", "text": "say more"},
+        {"section": "skill:", "quote": "Rule 1.", "text": "for a single line too"},
+    ])  # fmt: skip
+    lines = format_batch("bench", b, [], bench=s.bench_labels()).splitlines()
+    assert lines[1:] == [
+        "[c1] (run core/ (draft) 1 · README, skill v2: runs/core-draft/1/README.md) « linaw/ »",
+        "    keep this",
+        "[c2] (run core/ 3 · report, skill v3: runs/core/3/report.md) « opening line »",
+        "    too strict",
+        f"[c3] (core/ · README at the pinned commit {sha[:7]}) « The library. »",
+        "    say more",
+        "[c4] (skill file) « Rule 1. »",
+        "    for a single line too",
+    ]
+    # A batch moves the skill file's highlight baseline too.
+    assert json.loads(s.seen_path.read_text())["skill:"] == "# write-readme\n\nRule 1.\n"
+
+
+def test_bench_labels_are_for_a_workbench_only(session):
+    assert session.bench_labels() == {}
