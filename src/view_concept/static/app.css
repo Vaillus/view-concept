@@ -264,6 +264,31 @@ a.cite code { color: var(--info); background: var(--infobg); }
 /* a stale passage: a doc passage the model contradicts */
 ::highlight(ev-stale) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }
 
+/* ---- the Bench tab: a tune-readme session's cases, side by side ----
+   The case bar, the run line and the two sides take the width of two text columns; the
+   report and the skill file keep one. The narrow layout stacks the sides. */
+.doc.bench > :is(.bench-bar, .bench-runs, .bench-sides, .bench-head, .bench-error) { max-width: calc(156ch + 32px); }
+.bench-head { font-size: 12px; padding: 8px 0 0; }
+.bench-bar .bench-actions { margin-left: auto; display: inline-flex; gap: 6px; }
+.bench-kind { font-size: 11px; color: var(--dim); }
+.bench-error { font-size: 12px; margin: 6px 0 0; white-space: pre-wrap; }
+.bench-runs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 0; font-size: 12px;
+              border-bottom: 1px solid var(--line); }
+.bench-run { font: inherit; color: var(--ink); background: var(--raised); border: 1px solid var(--line); padding: 1px 4px; }
+.bench-switch { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.bench-switch .doc-title:disabled { opacity: .45; cursor: default; }
+.bench-sides { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; }
+.bench-side.missing, .bench-report.missing { padding: 8px 0 16px; border-bottom: 1px solid var(--line); }
+.bench-side.missing h2, .bench-report.missing h2 { font-size: 15px; margin: 16px 0 8px; color: var(--muted); }
+.bench-side .body h1, .bench-report .body h1 { font-size: 17px; margin: 16px 0 8px; }
+.bench-meta { font-weight: normal; font-size: 12px; }
+.bench-other { font-size: 12px; margin: 0 0 6px; }
+.bench-other .badge { margin-left: 0; }
+/* the marks of the two sides: a word the right side has no counterpart for, struck on the
+   left in the danger tone; a word the left side has none for, green on the right */
+::highlight(ev-removed) { background-color: var(--dangerbg); text-decoration: line-through 1px var(--danger); }
+::highlight(ev-added) { background-color: var(--okbg); }
+
 /* ---- review pane ---- */
 .review { overflow-y: auto; min-height: 0; border-left: 1px solid var(--line); padding: 0 12px 24px; display: flex; flex-direction: column; gap: 8px; }
 .review > * { flex-shrink: 0; }
@@ -589,6 +614,9 @@ body.sb-collapsed .sidebar { display: none; }
   body.on-review .review { display: flex; flex: 1; }
   .plan, .metrics { padding: 8px 14px 24px; }
   .doc { padding: 8px 14px 40vh 18px; }
+  .bench-sides { grid-template-columns: minmax(0, 1fr); }
+  .bench-bar { position: static; } /* it wraps on several lines: kept out of the way of the sides */
+  .bench-bar .bench-actions { margin-left: 0; }
 
   /* The composer and a side thread dock across the bottom, above the keyboard (--keyboard,
      its height, from app.js). */
