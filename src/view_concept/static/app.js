@@ -1214,7 +1214,8 @@ function annotateDocTerms(view) {
      switch, which sets what the left side holds: « README at the pinned commit », or
      « previous run », the run before the one shown (disabled on the case's first run);
    - the two sides, the left README and the right one (the run shown's), each headed with
-     what it is (« <path> at the pinned commit <short> », « run n · skill vk »); a side with
+     what it is (« <path> at the pinned commit <short> », « run n · skill vk »), with the
+     removal marks on the left and the addition marks on the right (markSides); a side with
      no README says why;
    - the report of the run shown.
    Each text is a section block whose section id is its comment anchor (RUN_KEY, PINNED_KEY),
@@ -2232,6 +2233,7 @@ function markUpdates() {
   paintChange(changedBlock(under));
   frames.forEach((f, id) => postChanges(id, f));
   markBase();
+  markSides();
 }
 
 /* The base mark of the doc shown: each block (its own words, as the change highlights cut
@@ -2281,6 +2283,54 @@ function markBase() {
     }
   });
   paint(ranges);
+}
+
+/* The marks of the Bench tab's two sides: a removal mark ("ev-removed") on each word of the
+   left README with no counterpart on the right, an addition mark ("ev-added") on each word
+   of the right README with none on the left. Block by block first (a block's text is its
+   words, as the change highlights cut them): a block whose text the other side holds
+   unchanged, at any place, gets no mark, so a paragraph moved whole shows unmarked on both
+   sides. Then word by word (diffWords) between the words of the other blocks, in order.
+   A side with no README (no section block) leaves the other unmarked. Both are painted
+   under every other highlight (a lower priority), so drafts and threads show over them. */
+function markSides() {
+  const paint = (name, ranges) => {
+    if (!window.CSS || !CSS.highlights) return;
+    const h = new Highlight(...ranges);
+    h.priority = -1;
+    CSS.highlights.set(name, h);
+  };
+  const left = document.querySelector("#bench .sec.bench-left > .body");
+  const right = document.querySelector("#bench .sec.bench-right > .body");
+  if (!isBench() || !left || !right) { paint("ev-removed", []); paint("ev-added", []); return; }
+  const blockTexts = (ws) => {
+    const m = new Map();
+    for (const w of ws) m.set(w.block, m.has(w.block) ? `${m.get(w.block)} ${w.text}` : w.text);
+    return m;
+  };
+  const lw = words(left), rw = words(right);
+  const lt = blockTexts(lw), rt = blockTexts(rw);
+  const lset = new Set(lt.values()), rset = new Set(rt.values());
+  const lrest = lw.filter((w) => !rset.has(lt.get(w.block)));
+  const rrest = rw.filter((w) => !lset.has(rt.get(w.block)));
+  const { inserted, pairs } = diffWords(lrest.map((w) => w.text), rrest.map((w) => w.text));
+  paint("ev-removed", wordRuns(lrest, (k) => pairs[k] < 0));
+  paint("ev-added", wordRuns(rrest, (k) => inserted.has(k)));
+}
+
+// One range per run of marked words (`marked(k)`, k their index in `ws`) in a block, so the spaces between them are marked too.
+function wordRuns(ws, marked) {
+  const ranges = [];
+  let run = null;
+  ws.forEach((w, k) => {
+    if (!marked(k)) { run = null; return; }
+    if (run && run.block === w.block) run.range.setEnd(w.range.endContainer, w.range.endOffset);
+    else {
+      run = { block: w.block, range: w.range.cloneRange() };
+      ranges.push(run.range);
+    }
+  });
+  return ranges;
 }
 
 // The text a « mark read » records: a section's file, or a doc's (key "doc:<path>").

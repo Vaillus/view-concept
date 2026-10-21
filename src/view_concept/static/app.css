@@ -284,6 +284,10 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .bench-meta { font-weight: normal; font-size: 12px; }
 .bench-other { font-size: 12px; margin: 0 0 6px; }
 .bench-other .badge { margin-left: 0; }
+/* the marks of the two sides: a word the right side has no counterpart for, struck on the
+   left in the danger tone; a word the left side has none for, green on the right */
+::highlight(ev-removed) { background-color: var(--dangerbg); text-decoration: line-through 1px var(--danger); }
+::highlight(ev-added) { background-color: var(--okbg); }
 
 /* ---- review pane ---- */
 .review { overflow-y: auto; min-height: 0; border-left: 1px solid var(--line); padding: 0 12px 24px; display: flex; flex-direction: column; gap: 8px; }
