@@ -367,11 +367,37 @@ as it stands into a new skill version, and the user decides when.
 
 ## Agent questions
 
-This session puts no question in the page: the Bench tab has no place for
-one. A comment you cannot answer without the user's call (two edits that
-would each do what it asks, and change other cases differently) gets a reply
-that names the options and your pick, and stays open; the user answers in the
-next batch or in the terminal.
+Every question you put to the user once the session exists goes to the page,
+never to the terminal or the harness's question tool: the page shows it at
+the top of the Bench tab, above the case bar, and shows nothing there until
+the session has a question. Ask one when a comment needs the user's call: two skill
+edits that would each do what it asks, and change other cases differently.
+
+```bash
+view-concept question <slug> "<question>" [--option "<choice>" --option "<choice>"] [--multi] [--recommended "<answer>"] [--background "<text>"]
+```
+
+`--background` gives what the user needs to know to answer, shown folded
+under the question: the rule and the runs it is about, in two or three
+sentences, and what each option keeps and loses. `--option` gives the
+choices (`--multi` lets the user pick several); the page always adds a
+free-text field. `--recommended` gives the answer you would pick, which the
+page preselects; give one whenever you have a suggestion. The question sets
+the phase `awaiting-answer`.
+
+- A question whose answer would not change the skill file or the case set is
+  not worth asking; one the skill file, a run or a command can answer is not
+  one for the user.
+- Leave the comment the question comes from open until the answer comes,
+  and answer the batch's other comments without waiting.
+- The answer comes in a batch whose action is `answer`: apply it as a
+  comment, with a skill edit or a reply. An unclear answer (« I don't
+  understand ») means the question or its background missed what the note
+  says: ask it again, under the same id, with `view-concept reask <slug>
+  <qid> --text "<new wording>"`.
+- An answer typed in the terminal counts the same: close its box with
+  `view-concept answered <slug> <qid> --text "<the answer as the user gave
+  it>"`.
 
 ## Status
 
@@ -382,6 +408,7 @@ call per transition:
 |---|---|
 | From Setup until the case set and the lexicon draft are written | `planning` |
 | Applying a batch | `revising` |
+| A question is open | `awaiting-answer`, set by `view-concept question` itself |
 | Waiting for the next batch | `idle` |
 
 Nothing closes the session: no PR, no export, no publish. The user commits
