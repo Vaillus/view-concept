@@ -217,8 +217,8 @@ resolve <slug> <ids> --reply "<one line: what changed>"`.
 
 ## The rewrite request
 
-A **rewrite request** asks you to write one README again with the
-write-readme skill instead of patching it: a batch with `action:
+A **rewrite request** asks you to run the write-readme skill on one
+README, which edits what fails or writes it again: a batch with `action:
 rewrite-readme <path>` (the button just under the doc titles in the Doc
 tab, naming the README in sight), or a comment on a README asking for a
 write-readme rewrite. One sent before « Write docs » waits for the doc pass;

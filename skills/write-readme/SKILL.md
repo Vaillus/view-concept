@@ -1,10 +1,11 @@
 ---
 name: write-readme
 description: >-
-  Write a folder's README.md from its code, or rewrite an existing one from
-  scratch, against fixed content rules: a reader line and repo terms read
-  from the repo's lexicon files, an inclusion test every sentence must pass,
-  six parts in a fixed order, and a report printed at the end of the run.
+  Write a folder's README.md from its code, or bring an existing one up to
+  standard, editing only what fails, against fixed content rules: a reader
+  line and repo terms read from the repo's lexicon files, an inclusion test
+  every sentence must pass, the repo's own README conventions, six parts for
+  a new README, and a report printed at the end of the run.
   Use when the user wants a README written for a folder, or an existing
   README cleaned up, shortened or rewritten, notably one written by an LLM —
   "write the README of X", "rewrite this README", "clean up X/README.md",
@@ -22,13 +23,18 @@ the old README; it writes the README; it ends by printing its **run report**
 lexicon when the repo has none (see **When the repo lexicon is missing**),
 and never commits.
 
-A run has two modes, set by the folder alone:
+A run has one of three outcomes:
 
-- **draft mode**: the folder has no `README.md`; the run writes one from the
-  code;
-- **rewrite mode**: the folder has one; the run reads it as source material
-  and writes the README again. No heading, order or wording of the old text
-  is kept for being there.
+- **draft**: the folder has no `README.md`; the run writes one from the
+  code, in the six parts (see **The six parts**);
+- **edit**: the folder has one, and the default when it does. The run keeps
+  its structure, its headings and its wording, and changes only the passages
+  that fail a check (see **Checking an existing README**). A README that
+  departs from the six parts is not wrong for it: a folder organised by task
+  or around a chain keeps its shape;
+- **full rewrite**: the folder has one, and most of it fails the checks. The
+  run reads it as source material and writes the README again, in the six
+  parts.
 
 A run never stops before writing, with one exception: a terminal run in a
 repo with no repo lexicon asks one question first. Never ask the user's
@@ -128,17 +134,15 @@ Every fact of the README comes from one of three sources:
 
 1. **The folder's code**: always. Read it before writing: its modules,
    commands, entry points, tests and the files it reads and writes.
-2. **The old README**, in rewrite mode.
+2. **The old README**, when the folder has one.
 3. **A review's model**, when the request names a review's session folder:
    the sections in its `sections/` folder and the terms of its lexicon (the
    `lexicon` of its `plan.json`). The model holds the rules of use and the
    conventions a branch decided, which leave no trace in the code.
 
-In rewrite mode, first cut the old README by sections: be willing to lose a
-third of them, since a README that grew by added passages has no claim on
-the new one. Then check each fact left against the code:
+A fact of the old README is checked against the code:
 
-| What the code says | In the new README |
+| What the code says | In the README |
 |---|---|
 | confirms it | kept, if it passes the inclusion test |
 | contradicts it | written as the code has it |
@@ -153,8 +157,44 @@ A term the model has keeps in the README the name the review's lexicon gives
 it. When no lexicon on the path defines it, its clause is the review
 lexicon's definition, so the README and the review say one thing.
 
-A rewrite keeps the old README's language. A draft is written in the
-language of the repo's other docs.
+An edit or a full rewrite keeps the old README's language. A draft is
+written in the language of the repo's other docs.
+
+## The repo's README conventions
+
+Before writing, read the rules the repo sets for READMEs: in the root
+`CLAUDE.md` (or `AGENTS.md`), and in the README of each folder from the repo
+root down to the README's parent (a study header that every study README
+opens with, a required section). They win over the six parts and over any
+default of this skill. In an edit, a convention the README misses is a
+failure to fix like any other.
+
+## Checking an existing README
+
+When the folder has a README, check it before writing anything. Go through
+it passage by passage (a paragraph, a list, a table, a code block) and mark
+each passage that fails one of these checks:
+
+1. **the inclusion test** (see **The inclusion test**);
+2. **the code**: a fact the code contradicts (see **Sources**);
+3. **the vocabulary**: a repo term with no definition at its first use, or
+   another finding of the vocabulary audit (see **The vocabulary audit**);
+4. **the conventions**: a rule of the repo's README conventions the README
+   misses.
+
+Then pick the outcome:
+
+- **edit**, the default: fix each failing passage where it stands (define the
+  term in a clause, correct the fact, shrink the restated rule to a few words
+  and a link, add the missing header, drop what the never-include list
+  names) and leave every other passage as it is, wording included. Do not
+  move, merge or retitle sections, and do not reword a passage that passes.
+- **full rewrite**: only when more than half of the passages fail, or when
+  the README's structure is itself the failure (a section of open
+  discussion as large as the rest, the same content given twice in two
+  shapes). Write it again from the sources, in the six parts.
+
+A good README can come out with no change at all: say so in the run report.
 
 ## The inclusion test
 
@@ -174,16 +214,26 @@ without weighing each sentence:
 - history: how the folder came to be, what it replaced, which PR changed it;
 - open discussions: options under consideration, ideas, to-dos.
 
-The one exception is a **migration note**: a dated passage saying how to
+Two exceptions to the list:
+
+- history that explains an invariant, a caveat or a troubleshooting symptom
+  stays (« an unanchored `data` once removed `torch/utils/data/` from a
+  shipped venv » is why the exclude patterns are anchored);
+- a **placeholder**, a marker for a link or a fact that is missing
+  (« TODO: Notion link »), stays where it is and is listed in the run
+  report: dropping it loses the pointer.
+
+A third exception is a **migration note**: a dated passage saying how to
 read the outputs made before a change (old names, old defaults). It stays,
 with the date after which it can go. A run past that date drops it and
-lists it among the dropped passages of the run report.
+lists it among the changed passages of the run report.
 
 ## The six parts
 
-Write every README in these six parts, in this order. Only the first
-sentence is required: leave out any other part the folder has nothing for.
-Name the headings freely.
+Write a draft or a full rewrite in these six parts, in this order, unless
+the repo's README conventions set another shape. An edit keeps the
+README's own structure. Only the first sentence is required: leave out any
+other part the folder has nothing for. Name the headings freely.
 
 1. **The first sentence**: the folder in one sentence, in field terms, or
    with the repo terms it cannot avoid defined in it. When it cannot be
@@ -238,16 +288,24 @@ The run ends by printing this report, its last message (in a review, the
 agent that ran it carries it in its own report or reply):
 
 ```
-write-readme · benchmark/README.md · rewrite mode
+write-readme · benchmark/README.md · full rewrite: 14 of 22 passages fail, and a « To discuss » section as large as the rest
 reader: knows speech processing and ASR evaluation (VAD, transcription, WER), has never opened this repo
 from lexicon: registry · study · gate (.agents/lexicon.md)
 own words: harness, hypothesis cache, offline mode (this folder only)
 candidates: subset (13 docs use it, in benchmark/, experiments/ and dataset_tools/; no lexicon on the path has it)
 shadowed: none
-dropped: Tests (not needed to use or change the folder)
+changed: Tests dropped (inclusion test 1: not needed to use or change the folder) · How score computes its WER shrunk to a link (inclusion test 2: core/transcript/wer.py says it)
+placeholders: none
 audit: 2 fixed: « the pipeline » named the USB deploy · « airgap » defined · 0 left
 ```
 
+An edit names its count on the first line instead
+(`write-readme · experiments/finetuning/gign/README.md · edit: 3 of 14
+passages`), and a README that passes every check says
+`edit: no change`.
+
+- **outcome** (first line): draft, edit with the number of passages changed
+  out of the total, or full rewrite with its reason;
 - **reader**: the reader line used, with « (from the request) » when the
   request gave it;
 - **from lexicon**: the repo terms defined in a lexicon's words, grouped by
@@ -255,9 +313,11 @@ audit: 2 fixed: « the pipeline » named the USB deploy · « airgap » defined 
 - **own words**: the repo terms defined in the run's own words;
 - **candidates**: each with the folders that use it;
 - **shadowed**: each shadowed term, with the two lexicons that define it;
-- **dropped** (rewrite mode): each passage of the old README the new one
-  does not hold, with its reason (which condition of the inclusion test it
-  fails, the never-include list, or a migration note past its date);
+- **changed** (edit or full rewrite): each passage of the old README that
+  was edited, shrunk or dropped, with the check it failed (a condition of
+  the inclusion test, the code, the vocabulary, a convention, the
+  never-include list, or a migration note past its date);
+- **placeholders**: each placeholder kept, with its sentence;
 - **audit**: the findings fixed, and those left with their sentence.
 
 A run started from a review adds two lines:

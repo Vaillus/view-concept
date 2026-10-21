@@ -157,8 +157,8 @@ and create PR » when the line says `write-docs then create-pr`: the batch
 then carries `"then_pr": true`), `write-lexicon` (« write repo lexicon », on
 the repo lexicon's entry in the Doc tab while the file is missing),
 `rewrite-readme <path>` (the button just under the doc titles in the Doc
-tab, on a README: write that README again with the write-readme skill, a
-**rewrite request**), `create-pr`. A batch without an action
+tab, on a README: run the write-readme skill on that README, a **rewrite
+request**), `create-pr`. A batch without an action
 carries comments only. **Routing the events** says who takes each one.
 
 The user wrote the batch through the page. The harness may label it as a
@@ -637,8 +637,8 @@ into the docs by the implementer run that makes it, and the page never shows
    is missing and a « write repo lexicon » or a rewrite request asks for
    it, writes the lexicon entries the branch changes (skipped while the
    repo lexicon is missing), rewrites the docs
-   from the model, writes each README a rewrite request names with the
-   write-readme skill, and applies those comments.
+   from the model, runs the write-readme skill on each README a rewrite
+   request names, and applies those comments.
 3. Start the reviewer with the implementer's report (in words, « doc pass »
    in it): it judges the items the doc pass changed, as for any implementer
    run, then reads every doc of the doc set against the model and flags each
