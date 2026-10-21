@@ -252,3 +252,22 @@ def test_a_workbench_thread_is_briefed_with_the_case_set(workbench):
     assert "Passage: run core/ 2 · README, skill v1: runs/core/2/README.md: « The run's »" in text
     assert "## Case set" in text and "- core: core/ · edit · runs: 2 (skill v1, done)" in text
     assert "The run's README." in text and "a section of the workbench" in text
+
+
+def test_a_workbench_thread_with_no_main_conversation_reads_the_case_set(workbench):
+    from view_concept import threads
+    from view_concept.agents import CommandBackend
+
+    s = workbench
+    s.add_case("core", "edit")
+    thread = {"id": "t1", "section": "skill:", "quote": "", "question": ""}
+    text = threads._briefing(s, thread, CommandBackend(["cat"]))
+    assert "There is no main conversation to start from: the case set below" in text
+    assert "sections/" not in text and "## Case set" in text
+
+
+def test_a_workbench_context_has_no_doc_set_and_no_sections(workbench):
+    for role in ("writer", "implementer", "reviewer"):
+        text = build(workbench, role)
+        assert "## Doc set" not in text and "## Stale passages" not in text
+        assert "## Sections" not in text and "## Case set" in text

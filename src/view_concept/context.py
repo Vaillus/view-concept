@@ -109,14 +109,16 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     out += ["", "## Trigger", *_trigger(s, trigger or [], outline, questions)]
     if s.is_grilling():
         out.append("A grill is running: ask every open decision, each with its recommended answer.")
-    if plan.get("workflow") == "tune-readme":
+    workbench = plan.get("workflow") == "tune-readme"
+    if workbench:
         out += ["", "## Case set", *case_set(s)]
     else:
         out += ["", "## Outline (as it is now)", *_outline(outline)]
         out += ["", "## Lexicon (as it is now)", *_lexicon(plan["lexicon"], outline)]
     if plan.get("repo"):
         out += ["", "## Code map", s.read_code_map() or "(none written yet)"]
-    if plan.get("repo") and role in DOC_SET_ROLES:
+    # A workbench has no doc set and no sections: those parts belong to the reviews.
+    if plan.get("repo") and role in DOC_SET_ROLES and not workbench:
         out += ["", *_doc_tab(s)]
     out += ["", *_change_history(s)]
     out += ["", *_questions(questions)]
@@ -124,9 +126,9 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     html = s.html_sections()
     # An HTML section is read by its visible text, not its HTML source.
     sections = {**s.read_sections(), **{k: v for k, v in s.read_prose().items() if k in html}}
-    if role in ("writer", "reviewer"):
+    if role in ("writer", "reviewer") and not workbench:
         out += ["", "## Sections", *_sections(outline, sections, None, html=html)]
-    elif role == "implementer":
+    elif role == "implementer" and not workbench:
         named = set(trigger or [])
         # The to-do list is part of the model, though it sits in the refactoring part.
         named.add("todo")

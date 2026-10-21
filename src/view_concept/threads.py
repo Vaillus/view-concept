@@ -301,6 +301,12 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
             "It is a separate conversation forked from the main one: you know everything said"
             " so far, but the main session will not see what is said here."
         )
+    elif workbench:
+        # A workbench has no sections: its case set, appended below, names its files.
+        origin = (
+            "There is no main conversation to start from: the case set below says where the"
+            " skill file and the runs are; read them to know the workbench."
+        )
     else:
         origin = (
             "There is no main conversation to start from: read plan.json and sections/ in"
