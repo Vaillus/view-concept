@@ -15,6 +15,17 @@ subagents, so a thread starts from the session folder instead (`Session.fork_par
 - `command`: any program that reads a prompt on stdin and prints its answer on stdout
   (`VIEW_CONCEPT_AGENT_COMMAND`, or the `jazz run` preset). It has no conversation to
   fork, so every turn carries the explanation's location and the thread so far.
+
+A backend also starts a workbench's runs (bench.py): `run_args`, `run_feed` and
+`run_close`. A run is a blank conversation (no resume, no fork) that may write in its
+cwd, the run's throwaway checkout, and nowhere else, with the project's settings only (on
+Claude, `--setting-sources project`: the checkout's CLAUDE.md files, none of the user's).
+Claude enforces the write limit: it has no shell, and its Edit and Write are allowed
+under the cwd only. The command backend enforces nothing: the program writes wherever it
+likes. Codex and Jazz start no run (`run_refusal`): Codex reads AGENTS.md files, not the
+CLAUDE.md files the cases' repo holds, and Jazz's preset is read-only, so the run could
+not write its README. Its final text is the run report: Claude's `result` event, a
+command's stdout.
 """
 
 from __future__ import annotations
@@ -46,6 +57,12 @@ THREAD_ALLOWED = [
     *(f"Bash(git {c}:*)" for c in ("log", "show", "diff", "blame", "status", "ls-files")),
     *(f"Bash(view-concept {c}:*)" for c in ("context", "changes", "pending", "list")),
 ]
+
+# What a run's Claude may do: read anywhere, and write inside its cwd (the throwaway
+# checkout) only. No shell: a prefix rule such as `find:*` or `cat:*` also matches
+# `find -delete` or `cat > path`, and Read, Grep and Glob already list and read files.
+RUN_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write"]
+RUN_ALLOWED = ["Read", "Grep", "Glob", "Edit(./**)", "Write(./**)"]
 
 
 @dataclass
@@ -95,6 +112,24 @@ class Backend:
             turn.failed = True
             turn.error = "\n".join(turn.noise[-5:]) or "the agent ended without an answer"
 
+    # ---- a workbench's run (bench.py) ----
+    def run_args(self) -> list[str]:
+        """The command of a run: a blank conversation that may write in its cwd only."""
+        raise NotImplementedError
+
+    def run_feed(self, line: str, turn: TurnState) -> None:
+        """Fold one output line of a run into its turn; `final_text` is its run report."""
+        raise NotImplementedError
+
+    def run_close(self, turn: TurnState, code: int) -> None:
+        """Settle a run once its process has exited."""
+        if code and not turn.failed:
+            turn.failed = True
+            turn.error = "\n".join(turn.noise[-5:]) or f"exit code {code}"
+        elif not turn.finished and not turn.failed:
+            turn.failed = True
+            turn.error = "\n".join(turn.noise[-5:]) or "the agent ended without a run report"
+
 
 class ClaudeBackend(Backend):
     name = "claude"
@@ -115,6 +150,27 @@ class ClaudeBackend(Backend):
 
     def schema_args(self, schema: dict[str, Any]) -> list[str]:
         return ["--json-schema", json.dumps(schema)]
+
+    def run_args(self) -> list[str]:
+        args = [os.environ.get(CLAUDE_ENV, "claude"), "-p", "--output-format", "stream-json"]
+        args += ["--verbose", "--strict-mcp-config", "--setting-sources", "project"]
+        args += ["--permission-mode", "dontAsk"]
+        return args + ["--tools", *RUN_TOOLS, "--allowedTools", *RUN_ALLOWED]
+
+    def run_feed(self, line: str, turn: TurnState) -> None:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            turn.noise.append(line.rstrip())
+            return
+        if event.get("type") == "system" and event.get("subtype") == "init":
+            turn.session = event.get("session_id", turn.session)
+        elif event.get("type") == "result":
+            turn.finished = True
+            turn.final_text = str(event.get("result", ""))
+            if event.get("is_error"):
+                turn.failed = True
+                turn.error = turn.final_text.strip()
 
     def feed(
         self, line: str, thread: dict[str, Any], reply: dict[str, Any], turn: TurnState
@@ -256,6 +312,20 @@ class CommandBackend(Backend):
             turn.finished = True
             reply["text"] = reply["text"].strip()
 
+    def run_args(self) -> list[str]:
+        return list(self.argv)
+
+    def run_feed(self, line: str, turn: TurnState) -> None:
+        turn.final_text += line
+
+    def run_close(self, turn: TurnState, code: int) -> None:
+        if code:
+            turn.failed = True
+            out = turn.final_text.strip()[-400:] or "\n".join(turn.noise[-5:])
+            turn.error = out or f"exit code {code}"
+        else:
+            turn.finished = True
+
 
 def _separate_messages(reply: dict[str, Any]) -> None:
     """One reply can span several messages around tool calls: keep them apart."""
@@ -269,11 +339,37 @@ def jazz_command(name: str) -> list[str]:
     return [jazz, "--no-tui", "run", "--agent", name, "--approval-policy", "read-only"]
 
 
+def chosen(s: Session) -> str:
+    """The agent a session's side threads and runs use: `command` when a program is set,
+    else the environment, then what `new` / `open` recorded, then Claude Code."""
+    if os.environ.get(COMMAND_ENV):
+        return "command"
+    return os.environ.get(AGENT_ENV) or s.read_agent().get("agent") or "claude"
+
+
+def run_refusal(s: Session) -> str:
+    """Why the session's agent cannot start a workbench's runs, or "" when it can. Codex is
+    refused: it reads AGENTS.md files, and the cases' repo has only CLAUDE.md files. Jazz
+    is refused: its `jazz run` preset is read-only, so a run could not write its README."""
+    reason = {
+        "codex": "Codex reads AGENTS.md files, not the CLAUDE.md files the cases' repo holds",
+        "jazz": "`jazz run` is started read-only, so a run could not write its README",
+    }.get(chosen(s))
+    if not reason:
+        return ""
+    name = "Codex" if chosen(s) == "codex" else "Jazz"
+    return (
+        f"runs do not start on {name}: {reason}. Open the session from Claude Code "
+        f"(`view-concept open {s.slug} --agent claude`), or set {COMMAND_ENV} to a program "
+        "that may write"
+    )
+
+
 def resolve(s: Session) -> Backend:
     """The backend a session's side threads use: the environment, then what `new` / `open`
     recorded from the agent running them, then Claude Code."""
     recorded = s.read_agent()
-    agent = os.environ.get(AGENT_ENV) or recorded.get("agent") or "claude"
+    agent = chosen(s)
     custom = os.environ.get(COMMAND_ENV)
     if custom:
         return CommandBackend(shlex.split(custom))

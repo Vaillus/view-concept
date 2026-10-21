@@ -18,9 +18,18 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import frame, gate, launch, metrics, publish, push, threads
+from . import bench, frame, gate, launch, metrics, publish, push, threads
 from .render import md
-from .store import DOC_KEY, DocConflict, Session, SessionError, list_sessions
+from .store import (
+    DOC_KEY,
+    SKILL_FILE,
+    SKILL_KEY,
+    DocConflict,
+    Session,
+    SessionError,
+    case_name,
+    list_sessions,
+)
 
 STATIC = Path(__file__).parent / "static"
 # The verdicts an item can get, by session workflow, each list in the review table's order:
@@ -259,9 +268,10 @@ def state(slug: str) -> dict[str, Any]:
         grilling = s.is_grilling()
         docs = s.read_docs()
         doc_texts = {DOC_KEY + p: t for p, t in docs.items() if t is not None}
-        seen = s.read_seen({**sections, **doc_texts})
+        seen = s.read_seen({**sections, **doc_texts, **s.skill_texts()})
         published = published_view(s)
         doc_tab = docs_view(s, docs, seen)
+        bench_tab = bench_view(s, seen)
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
     # The hover text of a term: its developed `tip` when the agent wrote one, else the
@@ -294,7 +304,62 @@ def state(slug: str) -> dict[str, Any]:
         "published": published,
         # The Doc tab: the doc set and each doc read from the worktree.
         "docs": doc_tab,
+        # The Bench tab of a workbench (None in any other session).
+        "bench": bench_tab,
     }
+
+
+def bench_view(s: Session, seen: dict[str, str]) -> dict[str, Any] | None:
+    """The Bench tab as the page reads it, None outside a workbench: the case set, each
+    case with its state (`running`, `error`), its README at the pinned commit and its runs
+    (each README and run report rendered, None while it runs or when it left none), the
+    skill file as a doc of the Doc tab is (its view against its highlight baseline
+    `skill:`, and `version`: the newest skill version's number when the file holds its
+    text) and the number of skill versions."""
+    if s.read_plan().get("workflow") != "tune-readme":
+        return None
+    data = s.read_cases()
+    cases = []
+    for c in data["cases"]:
+        runs, error = bench.case_runs(s, c["id"])
+        pinned = s.pinned_readme(c)
+        cases.append(
+            {
+                "id": c["id"],
+                "name": case_name(c),
+                "folder": c["folder"],
+                "kind": c["kind"],
+                "running": bench.is_running(s, c["id"]),
+                "error": error,
+                "pinned": _rendered(pinned),
+                "runs": [
+                    {
+                        **{k: r.get(k) for k in bench.RUN_FIELDS},
+                        "readme": _rendered(bench.run_text(s, r, "README.md")),
+                        "report": _rendered(bench.run_text(s, r, "report.md")),
+                    }
+                    for r in runs
+                ],
+            }
+        )
+    texts = s.skill_texts()
+    skill: dict[str, Any] = {"path": SKILL_FILE, "exists": SKILL_KEY in texts}
+    if SKILL_KEY in texts:
+        text = texts[SKILL_KEY]
+        skill.update(section_view(text, seen.get(SKILL_KEY, text)))
+    skill["version"] = bench.current_version(s)
+    return {
+        "repo": data["repo"],
+        "commit": data["commit"],
+        "short": data["commit"][:7],
+        "cases": cases,
+        "skill": skill,
+        "versions": len(bench.versions(s)),
+    }
+
+
+def _rendered(text: str | None) -> dict[str, str] | None:
+    return None if text is None else {"md": text, "html": md.render(text)}
 
 
 def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> dict[str, Any]:
@@ -442,6 +507,41 @@ def write_doc(slug: str, body: DocIn) -> dict[str, bool]:
     since the edit started."""
     try:
         get_session(slug).write_doc(body.path, body.md, body.base)
+    except DocConflict as e:
+        raise HTTPException(409, str(e)) from e
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True}
+
+
+class RunsIn(BaseModel):
+    # The case to run, or "" for « Run all »: one run per case not running already.
+    case: str = ""
+
+
+@app.post("/api/s/{slug}/runs")
+def start_runs(slug: str, body: RunsIn) -> dict[str, Any]:
+    """« Run » on a case, or « Run all »: start the runs of a workbench (bench.py), with
+    no batch. 400 with no case set, or for a named case unknown or running already."""
+    s = get_session(slug)
+    try:
+        return {"started": bench.start(s, body.case)}
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+class SkillIn(BaseModel):
+    md: str
+    # The text the edit started from: the skill file must still hold it.
+    base: str
+
+
+@app.post("/api/s/{slug}/skill")
+def write_skill(slug: str, body: SkillIn) -> dict[str, bool]:
+    """Write a workbench's skill file, edited by hand in the Bench tab. 409 when the file
+    changed since the edit started."""
+    try:
+        get_session(slug).write_skill(body.md, body.base)
     except DocConflict as e:
         raise HTTPException(409, str(e)) from e
     except SessionError as e:

@@ -298,8 +298,8 @@ write-readme's rules write instead (see **The rewrite request**).
 
 ## The rewrite request
 
-A **rewrite request** asks you to write one README again with the
-write-readme skill instead of correcting it: a batch with `action:
+A **rewrite request** asks you to run the write-readme skill on one
+README, which edits what fails or writes it again: a batch with `action:
 rewrite-readme <path>`, or a comment on a README asking for a write-readme
 rewrite. A docs review has no pass to wait for: do it in the batch's turn,
 for that README alone:
@@ -377,8 +377,8 @@ asks for what its name says and nothing else:
   in the Doc tab while the file is missing) asks you to write the repo
   lexicon at once: see **The repo lexicon**.
 - **`rewrite-readme <path>`** (the button just under the doc titles, on a
-  README) asks you to write that README again with the write-readme skill,
-  at once: see **The rewrite request**. A comment on a README asking for a
+  README) asks you to run the write-readme skill on that README, at
+  once: see **The rewrite request**. A comment on a README asking for a
   write-readme rewrite is the same request.
 - **Without an action**, a batch carries comments only.
 
