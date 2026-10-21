@@ -23,7 +23,8 @@ Claude, `--setting-sources project`: the checkout's CLAUDE.md files, none of the
 Claude and Codex enforce the write limit: Claude has no shell and its Edit and Write are
 allowed under the cwd only; Codex's workspace-write sandbox has `/tmp` and `$TMPDIR`
 taken out, where the other checkouts of the same « Run all » sit. The command backend
-enforces nothing: the program writes wherever it likes.
+enforces nothing: the program writes wherever it likes. Jazz starts no run
+(`run_refusal`): its preset is read-only, so the run could not write its README.
 Its final text is the run report: Claude's `result` event, Codex's last agent message, a
 command's stdout.
 """
@@ -373,11 +374,31 @@ def jazz_command(name: str) -> list[str]:
     return [jazz, "--no-tui", "run", "--agent", name, "--approval-policy", "read-only"]
 
 
+def chosen(s: Session) -> str:
+    """The agent a session's side threads and runs use: `command` when a program is set,
+    else the environment, then what `new` / `open` recorded, then Claude Code."""
+    if os.environ.get(COMMAND_ENV):
+        return "command"
+    return os.environ.get(AGENT_ENV) or s.read_agent().get("agent") or "claude"
+
+
+def run_refusal(s: Session) -> str:
+    """Why the session's agent cannot start a workbench's runs, or "" when it can. Jazz is
+    refused: its `jazz run` preset is read-only, so a run could not write its README."""
+    if chosen(s) != "jazz":
+        return ""
+    return (
+        "runs do not start on Jazz: `jazz run` is started read-only, so a run could not "
+        "write its README. Open the session from Claude Code or Codex (`view-concept open "
+        f"{s.slug} --agent claude`), or set {COMMAND_ENV} to a program that may write"
+    )
+
+
 def resolve(s: Session) -> Backend:
     """The backend a session's side threads use: the environment, then what `new` / `open`
     recorded from the agent running them, then Claude Code."""
     recorded = s.read_agent()
-    agent = os.environ.get(AGENT_ENV) or recorded.get("agent") or "claude"
+    agent = chosen(s)
     custom = os.environ.get(COMMAND_ENV)
     if custom:
         return CommandBackend(shlex.split(custom))

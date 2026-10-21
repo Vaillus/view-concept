@@ -171,6 +171,20 @@ def test_a_failed_run_leaves_its_error_and_no_run(client, workbench, fake_run, m
     assert core["error"] is None and [r["n"] for r in core["runs"]] == [1]
 
 
+def test_a_run_on_jazz_is_refused_with_an_error_on_the_case(client, workbench, monkeypatch):
+    s = workbench
+    s.add_case("core", "edit")
+    s.add_case("core/transcript", "draft")
+    monkeypatch.delenv("VIEW_CONCEPT_AGENT_COMMAND", raising=False)
+    monkeypatch.delenv("VIEW_CONCEPT_AGENT", raising=False)
+    s.bind_agent("jazz", name="writer")
+    r = client.post("/api/s/bench/runs", json={"case": ""})
+    assert r.status_code == 200 and r.json()["started"] == []
+    cases = client.get("/api/s/bench").json()["bench"]["cases"]
+    assert all(c["runs"] == [] and "do not start on Jazz" in c["error"] for c in cases)
+    assert bench.current_version(s) is None  # no skill version copied for no run
+
+
 def test_a_running_case_is_not_started_again(client, workbench, fake_run, monkeypatch, tmp_path):
     s = workbench
     s.add_case("core", "edit")

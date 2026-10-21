@@ -25,9 +25,10 @@ Each run follows these steps:
 
 A run that fails (its agent could not start, exited non-zero or ended with no final text)
 leaves no run folder: its error goes to runs/<case id>/error.json, which the case's next
-run deletes. While a run runs, the server keeps its process here (`_running`); a run.json
-still "running" with no process here was cut off by a server restart, and reads as the
-error « interrupted ».
+run deletes. A session on Jazz starts no run: each case it would start gets the error
+that says so (`agents.run_refusal`). While a run runs, the server keeps its process
+here (`_running`); a run.json still "running" with no process here was cut off by a
+server restart, and reads as the error « interrupted ».
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ import threading
 from pathlib import Path
 from typing import IO, Any
 
-from .agents import Backend, TurnState, resolve
+from .agents import Backend, TurnState, resolve, run_refusal
 from .store import (
     Session,
     SessionError,
@@ -183,6 +184,13 @@ def start(s: Session, case: str = "") -> list[dict[str, Any]]:
         else:
             cases = [c for c in data["cases"] if not is_running(s, c["id"])]
         if not cases:
+            return []
+        refusal = run_refusal(s)
+        if refusal:
+            # The error shows on each case, as a failed attempt does; no run is made.
+            for c in cases:
+                error = {"at": now_iso(), "error": refusal}
+                _write_json(s.case_runs_dir(c["id"]) / "error.json", error)
             return []
         try:
             backend = resolve(s)
