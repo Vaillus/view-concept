@@ -37,6 +37,8 @@ reach the agent session through the inbox.
         doc-set.json    the doc set: the repo docs the Doc tab shows, each with its reason,
                         and the docs the user removed                    (`doc-set`)
         stale.json      the stale passages: doc passages the model contradicts  (`stale`)
+        cases.json      a workbench's case set: the cases' repo, the pinned commit, each
+                        case's id, folder and kind                       (`cases`)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
@@ -77,6 +79,13 @@ repo is the view-concept checkout that holds the skill file (SKILL_FILE), with t
 alone, no outline, no sections and no items. Its session's agent edits the skill file in
 answer to the comments; the runs of the skill on fixed folders are started by the server
 (bench.py).
+
+The case set is {repo (the cases' repo, an absolute path), commit (the pinned commit, a
+full sha), cases: [{id, folder, kind}]}: `folder` is relative to the repo root ("" for the
+root), `kind` is "edit" (the folder has a README the run edits) or "draft" (the run writes
+one from the code alone; the folder's README at the pinned commit, if any, is its
+comparison README, shown but never read by the run). The id is derived from the folder
+(`case_id`), the name the page and a batch print from both (`case_name`).
 
 A side thread is a separate headless agent conversation that the user opens from the page
 to discuss a passage without changing anything (see threads.py). Only a comment batch
@@ -307,6 +316,11 @@ PINNED_KEY = "pinned:"
 SKILL_KEY = "skill:"
 # The skill file a workbench tunes and its runs read, relative to its repo (plan.json `repo`).
 SKILL_FILE = "skills/write-readme/SKILL.md"
+# A case's kind: an edit case's folder has a README the run edits; a draft case's run writes
+# one from the code alone (the folder's README, if any, removed from its checkout).
+CASE_KINDS = ("edit", "draft")
+# The two texts a run keeps that a comment can sit on: (anchor part, printed name, file).
+RUN_PARTS = (("readme", "README", "README.md"), ("report", "report", "report.md"))
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -533,6 +547,28 @@ class Session:
     @property
     def stale_path(self) -> Path:
         return self.dir / "stale.json"
+
+    @property
+    def cases_path(self) -> Path:
+        return self.dir / "cases.json"
+
+    @property
+    def runs_dir(self) -> Path:
+        return self.dir / "runs"
+
+    @property
+    def skill_versions_dir(self) -> Path:
+        return self.dir / "skill-versions"
+
+    def case_runs_dir(self, cid: str) -> Path:
+        """runs/<case id>/: the runs of one case, one folder each, and its error.json."""
+        if not cid or "/" in cid or cid in (".", ".."):
+            raise SessionError(f"invalid case id {cid!r}")
+        return self.runs_dir / cid
+
+    def run_dir(self, cid: str, n: int) -> Path:
+        """runs/<case id>/<n>/: run n of a case."""
+        return self.case_runs_dir(cid) / str(n)
 
     def media_folder(self, sid: str) -> Path:
         """The media folder of section `sid`: sections/<sid>/."""
@@ -1382,6 +1418,112 @@ class Session:
         """The worktree file of each doc of the doc set, for `signature`."""
         files = (self.doc_file(d["path"]) for d in self.read_doc_set()["docs"])
         return [f for f in files if f is not None]
+
+    # ---- the case set (a workbench) ----
+    def read_cases(self) -> dict[str, Any]:
+        """The case set: {repo, commit, cases: [{id, folder, kind}]}, empty without a file."""
+        data = _read_json(self.cases_path, {})
+        return {
+            "repo": str(data.get("repo", "")),
+            "commit": str(data.get("commit", "")),
+            "cases": list(data.get("cases", [])),
+        }
+
+    def set_cases(self, repo: str, rev: str) -> dict[str, Any]:
+        """Set the cases' repo and the pinned commit, `rev` resolved to its full sha there.
+        Changing the commit keeps the cases and their runs."""
+        root = Path(repo).expanduser().resolve()
+        if not root.is_dir():
+            raise SessionError(f"no folder {root}")
+        sha = (_git(root, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}") or "").strip()
+        if not sha:
+            raise SessionError(f"git cannot resolve {rev!r} to a commit in {root}")
+        data = self.read_cases()
+        data.update(repo=str(root), commit=sha)
+        _write_json(self.cases_path, data)
+        return data
+
+    def add_case(self, folder: str, kind: str) -> dict[str, Any]:
+        """Add a case: a folder of the cases' repo at the pinned commit and its kind. Refused
+        with no repo set, for a folder absent at the commit, a duplicate id, and an edit
+        case whose folder has no README.md at the commit."""
+        if kind not in CASE_KINDS:
+            raise SessionError(f"unknown case kind {kind!r}; one of {', '.join(CASE_KINDS)}")
+        data = self.read_cases()
+        if not data["repo"] or not data["commit"]:
+            raise SessionError("set the cases' repo first: cases <slug> set --repo --commit")
+        folder = case_folder(folder)
+        case = {"id": case_id(folder, kind), "folder": folder, "kind": kind}
+        if any(c.get("id") == case["id"] for c in data["cases"]):
+            raise SessionError(f"the case {case['id']} exists already")
+        repo, commit = Path(data["repo"]), data["commit"]
+        if folder and (_git(repo, "cat-file", "-t", f"{commit}:{folder}") or "").strip() != "tree":
+            raise SessionError(f"no folder {folder}/ at the pinned commit {commit[:7]}")
+        if kind == "edit" and _git(repo, "cat-file", "-e", f"{commit}:{case_readme(case)}") is None:
+            raise SessionError(
+                f"{case_readme(case)} is not at the pinned commit: a folder with no README "
+                "is a draft case"
+            )
+        data["cases"].append(case)
+        _write_json(self.cases_path, data)
+        return case
+
+    def remove_case(self, cid: str) -> None:
+        """Remove a case from the case set; its runs stay on disk."""
+        data = self.read_cases()
+        if not any(c.get("id") == cid for c in data["cases"]):
+            raise SessionError(f"no case {cid!r}")
+        data["cases"] = [c for c in data["cases"] if c.get("id") != cid]
+        _write_json(self.cases_path, data)
+
+    def pinned_readme(self, case: dict[str, Any]) -> str | None:
+        """The case's README at the pinned commit: an edit case's README, a draft case's
+        comparison README; None when the folder has none there (or git cannot tell)."""
+        data = self.read_cases()
+        if not data["repo"] or not data["commit"]:
+            return None
+        return _git(Path(data["repo"]), "show", f"{data['commit']}:./{case_readme(case)}")
+
+    def read_runs(self, cid: str) -> list[dict[str, Any]]:
+        """The run records of a case (run.json of each run folder), oldest first."""
+        folder = self.case_runs_dir(cid)
+        if not folder.is_dir():
+            return []
+        runs = [
+            run
+            for d in folder.iterdir()
+            if d.name.isdigit() and (run := _read_json(d / "run.json", None))
+        ]
+        return sorted(runs, key=lambda r: int(r.get("n", 0)))
+
+    def read_run_error(self, cid: str) -> dict[str, Any] | None:
+        """The last failed attempt of a case (error.json: {at, error}), None when none."""
+        return _read_json(self.case_runs_dir(cid) / "error.json", None)
+
+    def bench_labels(self) -> dict[str, str]:
+        """How a batch prints each anchor of the Bench tab (see format_comment): every
+        run's README and report, every case's README at the pinned commit, the skill
+        file. Empty outside a workbench."""
+        if self.read_plan().get("workflow") != "tune-readme":
+            return {}
+        data = self.read_cases()
+        labels = {SKILL_KEY: "(skill file)"}
+        cases = {c["id"]: c for c in data["cases"]}
+        # A removed case's runs stay on disk, and so do the comments on them.
+        if self.runs_dir.is_dir():
+            for d in self.runs_dir.iterdir():
+                cases.setdefault(d.name, {"id": d.name, "folder": d.name, "kind": "edit"})
+        short = data["commit"][:7]
+        for cid, case in cases.items():
+            name = case_name(case)
+            labels[PINNED_KEY + cid] = f"({name} · README at the pinned commit {short})"
+            for run in self.read_runs(cid):
+                n, k = run.get("n"), run.get("skill_version")
+                for part, label, file in RUN_PARTS:
+                    labels[f"{RUN_KEY}{cid}:{n}:{part}"] = (
+                        f"(run {name} {n} · {label}, skill v{k}: runs/{cid}/{n}/{file})"
+                    )
+        return labels
 
     # ---- the drafts file ----
     def read_drafts(self) -> dict[str, Any]:
@@ -2234,6 +2376,34 @@ def doc_path(path: str) -> str:
     if not raw or p.is_absolute() or ".." in p.parts or str(p) in ("", "."):
         raise SessionError(f"not a path inside the repo: {path!r}")
     return str(p)
+
+
+def case_folder(folder: str) -> str:
+    """A case's folder as the case set keeps it: relative to the repo root, in POSIX form,
+    no leading or trailing slash, "" for the root."""
+    raw = folder.strip().replace("\\", "/").strip("/")
+    p = PurePosixPath(raw or ".")
+    if p.is_absolute() or ".." in p.parts:
+        raise SessionError(f"not a folder inside the repo: {folder!r}")
+    return "" if str(p) == "." else str(p)
+
+
+def case_id(folder: str, kind: str) -> str:
+    """A case's id: its folder with `/` turned to `-` (`root` for the root), and `-draft`
+    for a draft case."""
+    return (folder.replace("/", "-") or "root") + ("-draft" if kind == "draft" else "")
+
+
+def case_name(case: dict[str, Any]) -> str:
+    """A case's name, as the page and a batch print it: `<folder>/`, `README.md (root)` for
+    the root, plus ` (draft)` for a draft case."""
+    name = f"{case['folder']}/" if case.get("folder") else "README.md (root)"
+    return name + (" (draft)" if case.get("kind") == "draft" else "")
+
+
+def case_readme(case: dict[str, Any]) -> str:
+    """A case's README, relative to the repo root."""
+    return f"{case['folder']}/README.md" if case.get("folder") else "README.md"
 
 
 def list_sessions(root: Path | None = None) -> list[dict[str, Any]]:

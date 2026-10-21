@@ -18,6 +18,7 @@ from pathlib import Path
 from .agents import AGENTS, detect
 from .context import ROLES, build
 from .store import (
+    CASE_KINDS,
     HEARTBEAT_EVERY,
     HOME,
     KINDS,
@@ -25,6 +26,7 @@ from .store import (
     WORKFLOWS,
     Session,
     SessionError,
+    case_name,
     format_batch,
     format_changes,
     format_precedence,
@@ -356,6 +358,81 @@ def cmd_doc_set(a: argparse.Namespace) -> None:
         print("(no doc set yet)")
     if data["removed"]:
         print(f"removed by the user: {', '.join(data['removed'])}")
+
+
+def _workbench(slug: str) -> Session:
+    s = _existing(slug)
+    if s.read_plan().get("workflow") != "tune-readme":
+        raise SessionError(f"{slug} is not a workbench (a tune-readme session)")
+    return s
+
+
+def cmd_cases(a: argparse.Namespace) -> None:
+    """Set the cases' repo and pinned commit, add or remove a case, or, with no operation,
+    print the case set."""
+    s = _workbench(a.slug)
+    if a.op == "set":
+        if not a.repo or not a.commit or a.arg:
+            raise SessionError("cases set takes --repo <path> --commit <rev>")
+        data = s.set_cases(a.repo, a.commit)
+        print(f"cases' repo {data['repo']} at {data['commit']}")
+        return
+    if a.op == "add":
+        if a.arg is None or not a.kind:
+            raise SessionError("cases add takes a folder and --kind edit|draft")
+        case = s.add_case(a.arg, a.kind)
+        print(f"added {case['id']}: {case_name(case)}, {case['kind']}")
+        return
+    if a.op == "remove":
+        if not a.arg:
+            raise SessionError("cases remove takes a case id")
+        s.remove_case(a.arg)
+        print(f"removed {a.arg} (its runs stay on disk)")
+        return
+    if a.arg or a.repo or a.commit or a.kind:
+        raise SessionError("give an operation: set, add or remove")
+    data = s.read_cases()
+    if not data["repo"]:
+        print("(no case set yet: cases <slug> set --repo <path> --commit <rev>)")
+        return
+    print(f"repo: {data['repo']}")
+    print(f"pinned commit: {data['commit']}")
+    for c in data["cases"]:
+        n = len(s.read_runs(c["id"]))
+        print(f"- {c['id']}: {case_name(c)} · {c['kind']} · {n} run{'s' * (n != 1)}")
+    if not data["cases"]:
+        print("(no case yet)")
+
+
+def cmd_runs(a: argparse.Namespace) -> None:
+    """Print each run of the workbench (or of one case), and each case's last error."""
+    s = _workbench(a.slug)
+    cases = s.read_cases()["cases"]
+    if a.case:
+        cases = [c for c in cases if c["id"] == a.case]
+        if not cases:
+            raise SessionError(f"no case {a.case!r}")
+    shown = False
+    for c in cases:
+        for run in s.read_runs(c["id"]):
+            shown = True
+            folder = s.run_dir(c["id"], int(run["n"]))
+            when = run.get("ended") or run.get("started", "")
+            print(
+                f"{c['id']} run {run['n']} · skill v{run.get('skill_version')} · "
+                f"{run.get('state', '')} · {when} · {run.get('agent', '')}"
+            )
+            for name in ("README.md", "report.md"):
+                file = folder / name
+                print(f"    {name}: {file if file.is_file() else '(none)'}")
+            if run.get("other_files"):
+                print(f"    other files: {', '.join(run['other_files'])}")
+        error = s.read_run_error(c["id"])
+        if error:
+            shown = True
+            print(f"{c['id']} last error ({error.get('at', '')}): {error.get('error', '')}")
+    if not shown:
+        print("(no run yet)")
 
 
 def cmd_stale(a: argparse.Namespace) -> None:
@@ -692,6 +769,28 @@ def main() -> None:
         "user (a refresh never adds it back); add takes it back in",
     )
     q.set_defaults(fn=cmd_doc_set)
+
+    q = sub.add_parser(
+        "cases",
+        help="a workbench's case set: print it, set its repo and pinned commit, add or "
+        "remove a case",
+    )
+    q.add_argument("slug")
+    q.add_argument("op", nargs="?", choices=("set", "add", "remove"))
+    q.add_argument(
+        "arg", nargs="?", help='add: the case\'s folder ("" for the root); remove: its id'
+    )
+    q.add_argument("--repo", help="set: the cases' repo")
+    q.add_argument("--commit", help="set: the pinned commit (any revision git resolves)")
+    q.add_argument(
+        "--kind", choices=CASE_KINDS, help="add: edit (the folder has a README) or draft"
+    )
+    q.set_defaults(fn=cmd_cases)
+
+    q = sub.add_parser("runs", help="print a workbench's runs and each case's last error")
+    q.add_argument("slug")
+    q.add_argument("case", nargs="?", help="one case's id")
+    q.set_defaults(fn=cmd_runs)
 
     q = sub.add_parser(
         "stale", help="flag a doc passage the model contradicts, drop flags, or print them"
