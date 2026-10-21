@@ -135,7 +135,7 @@ def set_workflow(session, workflow):
 
 
 def test_every_verdict_has_a_meaning_and_a_tone():
-    assert set(VERDICT_FILE) == {"view-branch", "view-refactor", "view-docs"}
+    assert set(VERDICT_FILE) == {"view-branch", "view-refactor", "view-docs", "tune-readme"}
     for verdicts in VERDICT_FILE.values():
         assert all(v["meaning"] and v["tone"] in TONES for v in verdicts)
         assert len({v["key"] for v in verdicts}) == len(verdicts)

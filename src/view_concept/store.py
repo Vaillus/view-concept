@@ -67,10 +67,16 @@ The session workflow, `workflow` in plan.json, is the skill that drives the sess
 view-concept, view-branch, view-refactor (a triage of existing code) or view-docs (a docs
 review: a repo's docs reviewed on a scope, on a branch of their own, with the Doc tab
 alone, no outline, no sections and no items; its agent sets "awaiting-pr" whenever it
-waits once the doc set exists). It picks the
+waits once the doc set exists) or tune-readme (a workbench, see below). It picks the
 verdict set the page shows: verdicts.yaml holds one list per workflow, and each verdict
 carries the `tone` the page colours it with. A session created before workflows existed
 has no workflow and gets view-branch's list.
+
+A workbench (the tune-readme workflow) tunes the write-readme skill: a code session whose
+repo is the view-concept checkout that holds the skill file (SKILL_FILE), with the Bench tab
+alone, no outline, no sections and no items. Its session's agent edits the skill file in
+answer to the comments; the runs of the skill on fixed folders are started by the server
+(bench.py).
 
 A side thread is a separate headless agent conversation that the user opens from the page
 to discuss a passage without changing anything (see threads.py). Only a comment batch
@@ -271,10 +277,10 @@ ACTIONS = (
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
 # The session workflow: which skill drives the session. It picks the verdict set the page
-# shows (see verdicts.yaml). view-branch, view-refactor and view-docs (a docs review) work
-# on a repository, so their sessions are code sessions. A session created before workflows
-# existed has none.
-WORKFLOWS = ("view-concept", "view-branch", "view-refactor", "view-docs")
+# shows (see verdicts.yaml). view-branch, view-refactor, view-docs (a docs review) and
+# tune-readme (a workbench) work on a repository, so their sessions are code sessions. A
+# session created before workflows existed has none.
+WORKFLOWS = ("view-concept", "view-branch", "view-refactor", "view-docs", "tune-readme")
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 # The role agents a branch review's coordinator starts; a variant sets a model per role.
@@ -293,6 +299,14 @@ DOC_KEY = "doc:"
 # The repo lexicon, relative to the repo root: what a "write-lexicon" batch asks to write.
 REPO_LEXICON = ".agents/lexicon.md"
 DOC_SET_ANCHOR = DOC_KEY
+# A workbench's anchors (bench.py), which no outline id may start with either: a run's README
+# or report (`run:<case id>:<n>:readme`, `run:<case id>:<n>:report`), a case's README at the
+# pinned commit (`pinned:<case id>`), the skill file (`skill:`, also its highlight baseline).
+RUN_KEY = "run:"
+PINNED_KEY = "pinned:"
+SKILL_KEY = "skill:"
+# The skill file a workbench tunes and its runs read, relative to its repo (plan.json `repo`).
+SKILL_FILE = "skills/write-readme/SKILL.md"
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -603,6 +617,12 @@ class Session:
                 raise SessionError(
                     f"outline ids may not start with {DOC_KEY!r}, the Doc tab's anchors: "
                     + ", ".join(taken)
+                )
+            bench = [i for i in ids if i.startswith((RUN_KEY, PINNED_KEY, SKILL_KEY))]
+            if bench:
+                raise SessionError(
+                    f"outline ids may not start with {RUN_KEY!r}, {PINNED_KEY!r} or "
+                    f"{SKILL_KEY!r}, the Bench tab's anchors: " + ", ".join(bench)
                 )
             long = [sec["id"] for sec in outline if len(str(sec.get("earns", ""))) > EARNS_MAX]
             if long:
@@ -1267,6 +1287,14 @@ class Session:
         if seen.get(DOC_KEY + path) == now:
             seen[DOC_KEY + path] = text
             _write_json(self.seen_path, seen)
+
+    def skill_file(self) -> Path | None:
+        """The skill file a workbench tunes (SKILL_FILE in its repo), None outside a
+        tune-readme session or without a repo. The file may not exist."""
+        repo = self.repo_dir()
+        if repo is None or self.read_plan().get("workflow") != "tune-readme":
+            return None
+        return repo / SKILL_FILE
 
     def doc_texts(self) -> dict[str, str]:
         """The docs that exist, keyed as their highlight baseline is: `doc:<path>`."""

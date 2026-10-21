@@ -1,5 +1,5 @@
-"""Command line: what the view-concept, view-branch, view-refactor and view-docs skills call
-from the agent."""
+"""Command line: what the view-concept, view-branch, view-refactor, view-docs and tune-readme
+skills call from the agent."""
 
 from __future__ import annotations
 

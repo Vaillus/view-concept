@@ -1213,3 +1213,21 @@ def test_docs_stay_out_of_the_publish_fingerprint_and_the_check(docs_review):
     (s.repo_dir() / "README.md").write_text("Rewritten <div>\n\nblock</div>\n")
     assert s.fingerprint() == before
     assert s.published_sections() == [] and s.check_sections() == []
+
+
+def test_a_workbench_is_a_code_session_with_a_skill_file(tmp_path):
+    with pytest.raises(SessionError, match="code session"):
+        Session("w", tmp_path).create("W", workflow="tune-readme")
+    s = Session("w", tmp_path)
+    s.create("W", kind="code", repo=str(tmp_path), workflow="tune-readme")
+    assert s.read_plan()["workflow"] == "tune-readme" and not s.coordinated
+    assert s.skill_file() == tmp_path.resolve() / "skills/write-readme/SKILL.md"
+    other = Session("d", tmp_path)
+    other.create("D", kind="code", repo=str(tmp_path), workflow="view-docs")
+    assert other.skill_file() is None
+
+
+def test_no_outline_id_takes_a_bench_anchor(session):
+    for sid in ("run:core:1:readme", "pinned:core", "skill:"):
+        with pytest.raises(SessionError, match="Bench tab's anchors"):
+            session.write_plan(outline=[{"id": sid, "title": "X"}])
