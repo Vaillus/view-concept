@@ -42,7 +42,3 @@ def test_a_view_concept_launch_gives_way_to_a_session_with_no_project(tmp_path):
 def test_a_docs_review_can_be_launched():
     assert "view-docs" in launch.SKILLS and launch.SKILLS[0] == "view-branch"
     assert launch.command("view-docs", "the install docs").endswith("'/view-docs the install docs'")
-
-
-def test_a_workbench_can_be_launched():
-    assert "tune-readme" in launch.SKILLS

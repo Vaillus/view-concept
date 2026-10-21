@@ -135,7 +135,7 @@ def set_workflow(session, workflow):
 
 
 def test_every_verdict_has_a_meaning_and_a_tone():
-    assert set(VERDICT_FILE) == {"view-branch", "view-refactor", "view-docs", "tune-readme"}
+    assert set(VERDICT_FILE) == {"view-branch", "view-refactor", "view-docs"}
     for verdicts in VERDICT_FILE.values():
         assert all(v["meaning"] and v["tone"] in TONES for v in verdicts)
         assert len({v["key"] for v in verdicts}) == len(verdicts)
@@ -632,40 +632,3 @@ def test_the_reference_model_is_read_from_another_session(client, doc_review):
     doc_review.plan_path.write_text(json.dumps(plan))  # re-read as it is now
     ref = client.get("/api/s/install-docs").json()["docs"]["reference"]
     assert ref["lexicon"][0]["tip_html"] == "the docs"
-
-
-@pytest.fixture
-def bench_client(workbench, monkeypatch):
-    monkeypatch.setattr(server, "Session", lambda slug: Session(slug, workbench.dir.parent))
-    return TestClient(server.app)
-
-
-def test_the_skill_file_is_edited_with_the_starting_text_check(bench_client, workbench):
-    s = workbench
-    first = s.skill_file().read_text()
-    skill = bench_client.get("/api/s/bench").json()["bench"]["skill"]
-    assert skill["md"] == first and skill["updated"] is False and skill["version"] is None
-    # The agent's skill edit: green until the next batch or « mark read ».
-    s.skill_file().write_text("# write-readme\n\nRule 1, edited.\n")
-    skill = bench_client.get("/api/s/bench").json()["bench"]["skill"]
-    assert skill["updated"] is True and "Rule 1." in skill["seen_html"]
-    r = bench_client.post("/api/s/bench/skill", json={"md": "mine", "base": first})
-    assert r.status_code == 409 and s.skill_file().read_text().endswith("edited.\n")
-    comment = {"section": "skill:", "text": "ok"}
-    bench_client.post("/api/s/bench/batch", json={"comments": [comment]})
-    assert bench_client.get("/api/s/bench").json()["bench"]["skill"]["updated"] is False
-    # The user's own edit gets no green.
-    base = s.skill_file().read_text()
-    r = bench_client.post("/api/s/bench/skill", json={"md": "# mine\n", "base": base})
-    assert r.status_code == 200 and s.skill_file().read_text() == "# mine\n"
-    assert bench_client.get("/api/s/bench").json()["bench"]["skill"]["updated"] is False
-    # « mark read » sets the baseline through the seen route.
-    s.skill_file().write_text("# agent\n")
-    assert bench_client.get("/api/s/bench").json()["bench"]["skill"]["updated"] is True
-    bench_client.post("/api/s/bench/seen", json={"sections": {"skill:": "# agent\n"}})
-    assert bench_client.get("/api/s/bench").json()["bench"]["skill"]["updated"] is False
-
-
-def test_the_skill_route_is_for_a_workbench(client):
-    r = client.post("/api/s/kv-cache/skill", json={"md": "x", "base": ""})
-    assert r.status_code == 400

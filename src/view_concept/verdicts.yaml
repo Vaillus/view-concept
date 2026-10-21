@@ -48,6 +48,3 @@ view-refactor:
 
 # A docs review has no items: no verdict.
 view-docs: []
-
-# A workbench (tune-readme) has no items: no verdict.
-tune-readme: []

@@ -4,8 +4,7 @@
    lexicon, change history), the explanation (one block per explanation section; the Model
    tab of a branch review), in a branch review that has reached the refactoring step the
    code tab (the refactor sections, the refactoring part), and once a doc set exists the
-   Doc tab (the repo docs the branch concerns, see "the Doc tab"), and in a tune-readme
-   session the Bench tab alone (the runs of the write-readme skill, see "the Bench tab"); the review pane (a conversation: sent batches and answered agent
+   Doc tab (the repo docs the branch concerns, see "the Doc tab"); the review pane (a conversation: sent batches and answered agent
    questions, a line counting the open ones, then the draft comments) stays on the
    right. The page never edits the explanation: the agent writes the files, the server
    streams "changed", the page re-fetches. The page writes batches of comments, and side
@@ -32,7 +31,7 @@ let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
 let drafts = [];          // the drafts file's drafts (see "drafts"), the box being typed in kept as typed
 let pendingSelection = null;
-let tab = null;          // "plan" | "model" | "refactor" | "doc" | "bench" | "metrics" | "review" (narrow layout)
+let tab = null;          // "plan" | "model" | "refactor" | "doc" | "metrics" | "review" (narrow layout)
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
 let popThread = null;          // id of the thread shown in the popover
@@ -121,7 +120,7 @@ const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).titl
    the same section blocks. Sessions written before the rename mark them "part": 2. */
 const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
-const tabOf = (id) => (isDocAnchor(id) ? "doc" : isBenchAnchor(id) ? "bench" : inRefactoringPart(id) ? "refactor" : "model");
+const tabOf = (id) => (isDocAnchor(id) ? "doc" : inRefactoringPart(id) ? "refactor" : "model");
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
 /* The narrow layout: the page in one column whenever its window is under 700px wide
    (app.css holds the same threshold), whatever the device. The metrics tab is gone from
@@ -139,7 +138,7 @@ const TOUCH = matchMedia("(hover: none)");
 const isTouch = () => TOUCH.matches;
 // The Metrics tab (metrics.js) draws a branch review's runs: other workflows have no role agents.
 const hasMetricsTab = () => state.workflow === "view-branch" && !isNarrow();
-const docViews = () => [$("#model"), $("#refactor"), $("#doc"), $("#bench")];
+const docViews = () => [$("#model"), $("#refactor"), $("#doc")];
 /* The Doc tab (id "doc"): the repo docs the branch concerns, from `state.docs` (see "the
    Doc tab"). It shows once the doc set is written; a docs review (workflow view-docs)
    shows it alone, from the start. A server that sends no `docs` counts as no doc set. */
@@ -147,11 +146,8 @@ const NO_DOCS = { set: [], views: {}, stale: [], removed: [], reference: null };
 const docsOf = () => ({ ...NO_DOCS, ...((state && state.docs) || {}) });
 const isDocsReview = () => !!state && state.workflow === "view-docs";
 const hasDocTab = () => isDocsReview() || docsOf().set.length > 0;
-// A tune-readme session (the workbench of write-readme) shows the Bench tab alone.
-const isBench = () => !!state && state.workflow === "tune-readme";
-// The tab a missing tab gives way to: the Doc tab in a docs review, the Bench tab in a
-// tune-readme session, the model tab otherwise.
-const homeTab = () => (isDocsReview() ? "doc" : isBench() ? "bench" : "model");
+// The tab a missing tab gives way to: the Doc tab in a docs review, the model tab otherwise.
+const homeTab = () => (isDocsReview() ? "doc" : "model");
 // A comment, a draft or a side thread on a doc's text is anchored on the section id
 // "doc:<path>"; one on the doc set list on DOC_SET, "doc:" alone. No section id starts
 // with "doc:" (the server refuses it), so neither anchor names a section.
@@ -162,22 +158,6 @@ const docPathOf = (id) => {
   return s.startsWith(DOC_PREFIX) && s !== DOC_SET ? s.slice(DOC_PREFIX.length) : null;
 };
 const isDocAnchor = (id) => String(id || "").startsWith(DOC_PREFIX);
-/* The comment anchors of the Bench tab (store.py's RUN_KEY, PINNED_KEY, SKILL_KEY): the
-   README or the report a run wrote, "run:<case id>:<n>:readme" and "run:<case id>:<n>:report";
-   a case's README at the pinned commit, "pinned:<case id>"; the skill file, "skill:". No
-   section id starts with them (the server refuses it). */
-const RUN_KEY = "run:", PINNED_KEY = "pinned:", SKILL_KEY = "skill:";
-const isBenchAnchor = (id) => [RUN_KEY, PINNED_KEY, SKILL_KEY].some((k) => String(id || "").startsWith(k));
-const runAnchor = (caseId, n, part) => `${RUN_KEY}${caseId}:${n}:${part}`;
-// What a Bench tab anchor names: {kind: "skill"}, {kind: "pinned", case}, {kind: "run", case,
-// n, part}; null for any other id.
-function parseBenchAnchor(id) {
-  const s = String(id || "");
-  if (s === SKILL_KEY) return { kind: "skill" };
-  if (s.startsWith(PINNED_KEY)) return { kind: "pinned", case: s.slice(PINNED_KEY.length) };
-  const m = /^run:(.+):(\d+):(readme|report)$/.exec(s);
-  return m ? { kind: "run", case: m[1], n: Number(m[2]), part: m[3] } : null;
-}
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
 const isUpdated = (id) => !!(state.sections[id] || {}).updated;
@@ -212,8 +192,7 @@ function render() {
    model waiting for approval does not move it, nor does a PR waiting to be created:
    « Approve model » sits at the end of the explanation, where the model is read, and
    « Create PR » at the end of the code tab. A branch review also has the Metrics tab,
-   which fetches its numbers when shown and again on each state update while shown. A
-   tune-readme session shows the Bench tab alone (id "bench"), and its phases move nothing.
+   which fetches its numbers when shown and again on each state update while shown.
    Tab ids and keys: 1 "plan", 2 "model" (the explanation, named « model » in a branch
    review), 3 "refactor" (code), 4 "doc", 5 "metrics". In the narrow layout the Doc tab
    comes after code, before review. */
@@ -225,9 +204,7 @@ function setTab(name) {
   if (name === "doc" && !hasDocTab()) name = homeTab();
   if (name === "metrics" && !hasMetricsTab()) name = homeTab();
   if (name === "review" && !isNarrow()) name = homeTab();
-  if (name === "bench" && !isBench()) name = homeTab();
   if (isDocsReview() && name !== "review") name = "doc"; // the Doc tab alone
-  if (isBench() && name !== "review") name = "bench"; // the Bench tab alone
   releaseAnchor(); // the page is about to move the view, or show another one
   tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
@@ -248,9 +225,9 @@ function followSession() {
   const phase = shownPhase();
   const onPlan = ["scoping", "awaiting-approval"].includes(phase);
   if (tab === null) {
-    if (!restorePosition()) setTab(isBench() ? "bench" : isDocsReview() ? "doc" : Object.keys(state.sections).length && !onPlan ? "model" : "plan");
+    if (!restorePosition()) setTab(isDocsReview() ? "doc" : Object.keys(state.sections).length && !onPlan ? "model" : "plan");
     positionReady = true;
-  } else if (phase !== lastPhase && !isDocsReview() && !isBench()) {
+  } else if (phase !== lastPhase && !isDocsReview()) {
     if (onPlan) setTab("plan");
     // A run opens on the tab of the set's first section not written yet.
     if (phase === "writing") setTab(tabOf(writingId() || (writingRun() || { set: [""] }).set[0]));
@@ -262,10 +239,8 @@ function followSession() {
   if (tab === "doc" && !hasDocTab()) setTab(homeTab());
   $('.tab[data-tab="metrics"]').hidden = !hasMetricsTab();
   if (tab === "metrics" && !hasMetricsTab()) setTab(homeTab());
-  for (const name of ["plan", "model"]) $(`.tab[data-tab="${name}"]`).hidden = isDocsReview() || isBench();
+  for (const name of ["plan", "model"]) $(`.tab[data-tab="${name}"]`).hidden = isDocsReview();
   if (isDocsReview() && tab !== "doc" && tab !== "review") setTab("doc");
-  $('.tab[data-tab="bench"]').hidden = !isBench();
-  if (isBench() && tab !== "bench" && tab !== "review") setTab("bench");
   // In a branch review, the explanation is the modeling part, so its tab is named after the model.
   const modelLabel = state.workflow === "view-branch" ? "model" : "explanation";
   $('.tab[data-tab="model"]').title = `${modelLabel[0].toUpperCase()}${modelLabel.slice(1)} (2)`;
@@ -280,12 +255,6 @@ function followSession() {
   const docs = docsOf();
   const n = docs.set.filter((d) => (docs.views[d.path] || {}).updated).length;
   $('.tab[data-tab="doc"]').replaceChildren(...["doc", n ? el("span", { class: "badge new", text: `${n} updated` }) : null].filter(Boolean));
-  // The Bench tab's badges: the cases running now, and the skill file rewritten since its baseline.
-  const bench = benchOf();
-  const running = bench ? (bench.cases || []).filter((c) => c.running).length : 0;
-  $('.tab[data-tab="bench"]').replaceChildren(...["bench",
-    running ? el("span", { class: "badge accent writing", text: `${running} running` }) : null,
-    bench && bench.skill && bench.skill.updated ? el("span", { class: "badge new", text: "updated" }) : null].filter(Boolean));
 }
 
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -825,8 +794,7 @@ for (const view of docViews()) {
    What the page keeps of the reader's place in this session, in this browser's storage
    (one per session, like the drafts): the open tab, the reading anchor of the view shown
    (with its block key; the Plan and Metrics tabs keep only the tab), the open item
-   entries of the code tab, the doc shown in the Doc tab, and the case, run and comparison
-   switch position shown in the Bench tab. Written at the end of a scroll, at a change of tab, when an
+   entries of the code tab, and the doc shown in the Doc tab. Written at the end of a scroll, at a change of tab, when an
    item entry opens or closes, and when the page goes away; put back at every load of the
    session (a click in the sessions list, `view-concept open`, a reload). */
 
@@ -842,7 +810,6 @@ function savePosition() {
     anchor: a && { view: view.dataset.view, key: a.key, block: a.block, offset: a.offset, text: a.text, words: a.words, ranks: a.ranks },
     open: [...openItems],
     doc: shownDoc,
-    bench: { ...benchShown },
   });
 }
 
@@ -853,7 +820,6 @@ function restorePosition() {
   if (!saved || !saved.tab) return false;
   for (const id of saved.open || []) openItems.add(id);
   if (saved.doc) shownDoc = saved.doc;
-  if (saved.bench && typeof saved.bench === "object") Object.assign(benchShown, saved.bench);
   setTab(saved.tab);
   const view = docViews().find((v) => v.dataset.view === tab);
   if (view && saved.anchor && saved.anchor.view === tab) anchor = { ...saved.anchor, view, restore: true };
@@ -893,15 +859,12 @@ function renderSections() {
       ...(isDocsReview() ? [] : prEnding));
   }
   renderDocTab(isDocsReview() ? prEnding : []);
-  renderBenchTab();
   for (const view of docViews()) {
     typesetMath(view);
-    // The Bench tab's READMEs come from the cases' repo, not the session's: no links into
-    // the session's repo, no lexicon underlined.
-    if (view.id !== "bench") linkCitations(view);
+    linkCitations(view);
     renderMermaid(view);
     if (view.id === "doc") annotateDocTerms(view);
-    else if (view.id !== "bench") { annotateAudit(view); annotateLexicon(view); }
+    else { annotateAudit(view); annotateLexicon(view); }
     annotateQuestions(view);
   }
   if (keep && keep[0].isConnected && document.activeElement !== keep[0]) {
@@ -1029,7 +992,7 @@ function docBar(docs) {
                           title: d.reason || d.path, onclick: () => openDoc(d.path) },
       v.updated ? el("span", { class: "doc-dot", title: "Rewritten since your last batch" }) : null,
       d.path, staleBadge(staleCount(docs, d)),
-      docEdit && docEdit.key === DOC_PREFIX + d.path ? el("span", { class: "badge", text: "editing", title: "Your edit of this doc is not saved yet" }) : null);
+      docEdit && docEdit.path === d.path ? el("span", { class: "badge", text: "editing", title: "Your edit of this doc is not saved yet" }) : null);
   }));
 }
 
@@ -1053,14 +1016,14 @@ function docRewrite(path) {
 function docBlock(path, v) {
   const id = DOC_PREFIX + path;
   const body = el("div", { class: "body" });
-  const editor = v.exists && docEditor(id, v);
+  const editor = v.exists && docEditor(path, v);
   if (editor) body.append(editor);
   else if (v.exists) {
     body.innerHTML = v.html || "";
     resolveRepoLinks(body, path);
   } else body.append(el("p", { class: "dim", text: "Missing: this doc is not in the worktree." }));
   const edit = v.exists && !editor
-    ? el("button", { class: "sec-comment", text: "edit", title: "Edit this doc's Markdown by hand", onclick: () => startDocEdit(id) })
+    ? el("button", { class: "sec-comment", text: "edit", title: "Edit this doc's Markdown by hand", onclick: () => startDocEdit(path) })
     : null;
   return el("section", { class: `sec doc-sec ${v.exists ? "" : "missing"} ${v.updated ? "updated" : ""}`, id: `sec-${id}`, "data-id": id },
     docHeading(id, el("code", { text: path }), !!v.updated && !editor, "doc", edit), body);
@@ -1069,47 +1032,41 @@ function docBlock(path, v) {
 /* ---------------- editing a doc ----------------
    « edit » opens the doc's Markdown (`md`, the file as read) in a text box in place of its
    text; « save » writes it to the worktree (POST /api/s/<slug>/doc, with the text the edit
-   started from). The skill file of the Bench tab is edited the same way, saved by POST
-   /api/s/<slug>/skill; an edit is named by its anchor, "doc:<path>" or SKILL_KEY. The box is one element kept across renders, so a re-render while you type
+   started from). The box is one element kept across renders, so a re-render while you type
    (an agent run, a thread) keeps your text, its caret and its scroll. When the file changes
    meanwhile, a notice says so and « save » becomes « save anyway », which overwrites that
    change; the server refuses a save whose starting text is no longer the file's, so only a
    change you were told of is overwritten. ⌘↵ saves, Esc cancels (asking first when the
-   text was changed). Your own words get no green highlight. One text is edited at a time;
-   a doc's title in the bar says « editing » while the edit is not saved. */
-let docEdit = null; // { key (its anchor), label, base (the text the edit started from), box, ta, note, save }
+   text was changed). Your own words get no green highlight. One doc is edited at a time;
+   its title in the bar says « editing » while the edit is not saved. */
+let docEdit = null; // { path, base (the text the edit started from), box, ta, note, save }
 
-// The text an edit works on, {md, exists}: a doc's view, or the skill file's (state.bench.skill).
-const editedView = (key) => (key === SKILL_KEY ? (benchOf() || {}).skill : docsOf().views[docPathOf(key)]);
-const editLabel = (key) => (key === SKILL_KEY ? "the skill file" : docPathOf(key));
-
-function startDocEdit(key) {
-  const v = editedView(key);
+function startDocEdit(path) {
+  const v = docsOf().views[path];
   if (!v || !v.exists) return;
-  if (docEdit && docEdit.key !== key && docEdit.ta.value !== docEdit.base &&
-      !confirm(`Drop your unsaved edit of ${docEdit.label}?`)) return;
+  if (docEdit && docEdit.path !== path && docEdit.ta.value !== docEdit.base &&
+      !confirm(`Drop your unsaved edit of ${docEdit.path}?`)) return;
   const ta = el("textarea", { class: "doc-edit-text", spellcheck: "true" });
   ta.value = v.md || "";
   const note = el("p", { class: "doc-edit-note", hidden: true,
                          text: "The file changed since you started editing: saving overwrites that change." });
-  const save = el("button", { class: "btn primary", text: "save", onclick: saveDocEdit,
-                              title: key === SKILL_KEY ? "Write the skill file (⌘↵)" : "Write the doc to the worktree (⌘↵)" });
+  const save = el("button", { class: "btn primary", text: "save", title: "Write the doc to the worktree (⌘↵)", onclick: saveDocEdit });
   const cancel = el("button", { class: "btn", text: "cancel", title: "Drop your edit (Esc)", onclick: cancelDocEdit });
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveDocEdit(); }
     else if (e.key === "Escape") { e.preventDefault(); cancelDocEdit(); }
   });
   const box = el("div", { class: "doc-editor" }, ta, note, el("div", { class: "doc-edit-actions" }, save, cancel));
-  docEdit = { key, label: editLabel(key), base: v.md || "", box, ta, note, save };
+  docEdit = { path, base: v.md || "", box, ta, note, save };
   releaseAnchor();
   renderSections();
   ta.focus({ preventScroll: true });
   ta.setSelectionRange(0, 0);
 }
 
-// The editor of the text `key` (its view `v`) with its notice brought up to date, or null when it is not edited.
-function docEditor(key, v) {
-  if (!docEdit || docEdit.key !== key) return null;
+// The editor of doc `path` with its notice brought up to date, or null when it is not edited.
+function docEditor(path, v) {
+  if (!docEdit || docEdit.path !== path) return null;
   const changed = (v.md || "") !== docEdit.base;
   docEdit.note.hidden = !changed;
   docEdit.save.textContent = changed ? "save anyway" : "save";
@@ -1119,15 +1076,13 @@ function docEditor(key, v) {
 async function saveDocEdit() {
   if (!docEdit) return;
   const edit = docEdit;
-  const v = editedView(edit.key);
-  if (!v || !v.exists) { toast(`${edit.label} is no longer there`); return; }
+  const v = docsOf().views[edit.path];
+  if (!v || !v.exists) { toast(`${edit.path} is no longer in the worktree`); return; }
   // « save anyway »: the file as the page last read it, which the notice told of.
   const base = v.md || "";
-  const skill = edit.key === SKILL_KEY;
   edit.save.disabled = true;
   try {
-    if (skill) await postJSON(`/api/s/${SLUG}/skill`, { md: edit.ta.value, base });
-    else await postJSON(`/api/s/${SLUG}/doc`, { path: docPathOf(edit.key), md: edit.ta.value, base });
+    await postJSON(`/api/s/${SLUG}/doc`, { path: edit.path, md: edit.ta.value, base });
   } catch (e) {
     toast(`Could not save: ${e.message}`);
     edit.save.disabled = false;
@@ -1135,7 +1090,7 @@ async function saveDocEdit() {
     return;
   }
   if (docEdit === edit) docEdit = null;
-  toast(skill ? "Skill file saved" : "Doc saved");
+  toast("Doc saved");
   await load();
 }
 
@@ -1182,7 +1137,6 @@ function openDoc(path) {
    a side thread anchored in another doc opens that doc. */
 function openSection(id) {
   if (tab !== tabOf(id)) setTab(tabOf(id));
-  if (isBenchAnchor(id)) { showBenchAnchor(id); return; }
   const path = docPathOf(id);
   if (path !== null && path !== shownDoc && docsOf().set.some((d) => d.path === path)) {
     shownDoc = path;
@@ -1205,268 +1159,6 @@ function annotateDocTerms(view) {
   const ref = isDocsReview();
   docLexicon().forEach((t, i) => wrapTerm(body, t.term, () =>
     el("span", { class: "term", "data-term": i, ...(ref ? { "data-lex": "ref" } : {}) })));
-}
-
-/* ---------------- the Bench tab ----------------
-   A tune-readme session, the workbench of the write-readme skill, shows this tab alone, as
-   a docs review shows the Doc tab alone. It draws `state.bench` (the server's view of the
-   session's case set, its runs and the skill file; null outside tune-readme), one case at
-   a time:
-   - the case bar: one button per case (its name, its kind, « running » while a run of it
-     runs, « error » when its last attempt failed, the error in its title), then « Run » for
-     the case shown and « Run all ». Both ask the server to start runs at once (POST
-     /api/s/<slug>/runs, no batch: the session's agent learns nothing of it), and say so
-     in a toast;
-   - the run line: the run shown, by default the case's latest run with a README (else its
-     latest), picked in a selector of its runs (« run n · skill vk »), and the comparison
-     switch, which sets what the left side holds: « README at the pinned commit », or
-     « previous run », the run before the one shown (disabled on the case's first run);
-   - the two sides, the left README and the right one (the run shown's), each headed with
-     what it is (« <path> at the pinned commit <short> », « run n · skill vk »), with the
-     removal marks on the left and the addition marks on the right (markSides); a side with
-     no README says why;
-   - the report of the run shown;
-   - the skill file the runs read (`state.bench.skill`), editable in place as a doc is (see
-     "editing a doc"), its words green against its highlight baseline (the key "skill:")
-     with « updated · mark read », and its version: the newest skill version when the file
-     still holds its text, else « changed since vk » (the next run makes a new version).
-   Each text is a section block whose section id is its comment anchor (RUN_KEY, PINNED_KEY, SKILL_KEY),
-   so selecting and commenting, side threads and drafts work there as in the other tabs;
-   opening an anchor shows its case and run (showBenchAnchor). The case, the run and the
-   switch position shown (benchShown) are kept across renders and in the saved position. */
-
-const benchOf = () => (state && state.bench) || null;
-// The case, the run (its n; null: the default run) and the left side ("pinned" | "previous") shown.
-const benchShown = { kase: null, run: null, left: "pinned" };
-
-const caseOf = (id) => ((benchOf() || {}).cases || []).find((c) => c.id === id) || null;
-// The README a case works on, relative to the cases' repo.
-const readmePath = (c) => (c.folder ? `${c.folder}/README.md` : "README.md");
-const runName = (r) => `run ${r.n} · skill v${r.skill_version}`;
-
-// The label of a Bench tab anchor, as the review pane and the composer print it.
-function benchLabel(id) {
-  const a = parseBenchAnchor(id);
-  if (!a) return id;
-  if (a.kind === "skill") return "skill file";
-  const name = (caseOf(a.case) || {}).name || a.case;
-  return a.kind === "pinned" ? `${name} · README at the pinned commit` : `run ${name} ${a.n} · ${a.part === "readme" ? "README" : "report"}`;
-}
-
-function shownCase(b) {
-  const cases = b.cases || [];
-  return cases.find((c) => c.id === benchShown.kase) || cases[0] || null;
-}
-
-function shownRun(c) {
-  const runs = c.runs || [];
-  const picked = benchShown.kase === c.id && benchShown.run != null ? runs.find((r) => r.n === benchShown.run) : null;
-  return picked || [...runs].reverse().find((r) => r.readme) || runs[runs.length - 1] || null;
-}
-
-// The run before `run` in its case, null for the case's first run.
-function previousRun(c, run) {
-  const runs = c.runs || [];
-  const k = run ? runs.indexOf(run) : -1;
-  return k > 0 ? runs[k - 1] : null;
-}
-
-// The left side in effect: « previous run » needs a run before the one shown.
-const leftMode = (prev) => (benchShown.left === "previous" && prev ? "previous" : "pinned");
-
-function renderBenchTab() {
-  const view = $("#bench");
-  if (!isBench()) { view.replaceChildren(); return; }
-  // The scope block (its agent questions) sits at the top, as in a docs review.
-  const top = [$("#scope")];
-  const b = benchOf();
-  if (!b) { view.replaceChildren(...top, el("p", { class: "dim empty", text: "Waiting for the case set…" })); return; }
-  const c = shownCase(b);
-  if (!c) {
-    view.replaceChildren(...top, benchHead(b),
-      el("p", { class: "dim empty", text: `No case yet: view-concept cases ${SLUG} add <folder> --kind edit|draft` }), skillBlock(b));
-    return;
-  }
-  benchShown.kase = c.id;
-  const run = shownRun(c);
-  const prev = previousRun(c, run);
-  view.replaceChildren(...[...top, benchHead(b), caseBar(b, c),
-    c.error ? el("p", { class: "error bench-error", text: `last attempt failed: ${c.error}` }) : null,
-    runLine(c, run, prev), benchSides(b, c, run, prev), reportBlock(c, run), skillBlock(b)].filter(Boolean));
-}
-
-// The case set's repo, its pinned commit and the count of skill versions.
-function benchHead(b) {
-  const repo = String(b.repo || "");
-  return el("div", { class: "bench-head dim" }, "cases: ",
-    el("code", { text: repo.split("/").filter(Boolean).pop() || "no repo yet", title: repo }),
-    ...(b.short ? [" at ", el("code", { text: b.short, title: b.commit || "" })] : []),
-    ` · ${b.versions || 0} skill version${b.versions === 1 ? "" : "s"}`);
-}
-
-function caseBar(b, c) {
-  const cases = b.cases || [];
-  const run = el("button", { class: "btn", text: "Run", disabled: c.running,
-                             title: c.running ? `${c.name} is running` : `Run write-readme once on ${c.name}`,
-                             onclick: (e) => startRuns(c.id, e.currentTarget) });
-  const all = el("button", { class: "btn primary", text: "Run all", disabled: cases.every((k) => k.running),
-                             title: "One run per case, each in its own checkout (a case already running is skipped)",
-                             onclick: (e) => startRuns("", e.currentTarget) });
-  return el("div", { class: "doc-bar bench-bar" },
-    ...cases.map((k) => el("button", { class: `doc-title ${k.id === c.id ? "active" : ""}`,
-                                       title: `${k.folder || "the repository root"} · ${k.kind}${k.error ? ` · last attempt failed: ${k.error}` : ""}`,
-                                       onclick: () => showCase(k.id) },
-      k.name, el("span", { class: "bench-kind", text: k.kind }),
-      k.running ? el("span", { class: "badge accent writing", text: "running" }) : null,
-      k.error ? el("span", { class: "badge tone-danger", text: "error" }) : null)),
-    el("span", { class: "bench-actions" }, run, all));
-}
-
-// The run selector and the comparison switch.
-function runLine(c, run, prev) {
-  const runs = c.runs || [];
-  const mode = leftMode(prev);
-  const pick = runs.length
-    ? el("select", { class: "bench-run", title: "The run shown on the right",
-                     onchange: (e) => showRun(Number(e.target.value)) },
-        ...runs.map((r) => el("option", { value: r.n, selected: r === run,
-                                          text: `${runName(r)}${r.state === "done" ? "" : ` · ${r.state}`}` })))
-    : el("span", { class: "dim", text: "no run yet: « Run » starts one" });
-  const position = (key, label, disabled, title) => el("button", {
-    class: `doc-title ${mode === key ? "active" : ""}`, text: label, disabled, title,
-    onclick: () => setLeft(key) });
-  return el("div", { class: "bench-runs" }, pick,
-    el("span", { class: "bench-switch" }, el("span", { class: "dim", text: "left side:" }),
-      position("pinned", "README at the pinned commit", false, `${readmePath(c)} at the pinned commit`),
-      position("previous", "previous run", !prev, prev ? `${runName(prev)}, the run before this one` : "The case's first run has no previous run")));
-}
-
-/* A side: a README as a section block anchored where it was written, or, with no README,
-   a plain block that says why (nothing there to comment on). */
-function sideBlock(side, id, label, view, empty) {
-  if (!view) {
-    return el("div", { class: `bench-side bench-${side} missing` },
-      el("h2", {}, label), el("p", { class: "dim", text: empty }));
-  }
-  const body = el("div", { class: "body" });
-  body.innerHTML = view.html || "";
-  return el("section", { class: `sec bench-side bench-${side}`, id: `sec-${id}`, "data-id": id },
-    docHeading(id, label, false, "README"), body);
-}
-
-function benchSides(b, c, run, prev) {
-  const left = leftMode(prev) === "previous"
-    ? sideBlock("left", runAnchor(c.id, prev.n, "readme"), runName(prev), prev.readme,
-                prev.state === "done" ? "This run wrote no README." : "Running…")
-    : sideBlock("left", PINNED_KEY + c.id, el("span", {}, el("code", { text: readmePath(c) }), ` at the pinned commit ${b.short || ""}`),
-                c.pinned, `No README at the pinned commit: ${c.folder || "the root"} has none.`);
-  const others = run ? run.other_files || [] : [];
-  const right = !run
-    ? sideBlock("right", "", "no run yet", null, "« Run » starts the case's first run.")
-    : sideBlock("right", runAnchor(c.id, run.n, "readme"),
-                el("span", {}, runName(run), otherFilesBadge(others)), run.readme,
-                run.state === "done" ? "This run wrote no README." : "Running…");
-  return el("div", { class: "bench-sides" }, left, right);
-}
-
-// A run that wrote files besides its README is flagged, with the files.
-const otherFilesBadge = (files) => (files.length
-  ? el("span", { class: "badge tone-warn", text: `+${files.length} other file${files.length > 1 ? "s" : ""}`, title: files.join("\n") })
-  : null);
-
-// The run report of the run shown: its last message, with its agent, its time and the other files it wrote.
-function reportBlock(c, run) {
-  if (!run) return null;
-  const id = runAnchor(c.id, run.n, "report");
-  const when = run.ended || run.started;
-  const meta = [run.agent, when ? new Date(when).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : ""].filter(Boolean).join(" · ");
-  if (!run.report) {
-    return el("div", { class: "bench-report missing" }, el("h2", {}, `run report · ${runName(run)}`),
-      el("p", { class: "dim", text: run.state === "done" ? "This run left no report." : "Running…" }));
-  }
-  const body = el("div", { class: "body" });
-  body.innerHTML = run.report.html || "";
-  const others = run.other_files || [];
-  return el("section", { class: "sec bench-report", id: `sec-${id}`, "data-id": id },
-    docHeading(id, el("span", {}, `run report · ${runName(run)}`, meta ? el("span", { class: "dim bench-meta", text: ` · ${meta}` }) : null), false, "report"),
-    others.length ? el("p", { class: "bench-other" }, el("span", { class: "badge tone-warn", text: "other files" }), " ",
-                       ...others.flatMap((f, k) => [k ? ", " : "", el("code", { text: f })])) : null,
-    body);
-}
-
-// The skill file, as a doc of the Doc tab is drawn: its text, or its editor while edited.
-function skillBlock(b) {
-  const s = b.skill || {};
-  const body = el("div", { class: "body" });
-  const editor = s.exists && docEditor(SKILL_KEY, s);
-  if (editor) body.append(editor);
-  else if (s.exists) body.innerHTML = s.html || "";
-  else body.append(el("p", { class: "dim", text: "Missing: the skill file is not in the session's repo." }));
-  const edit = s.exists && !editor
-    ? el("button", { class: "sec-comment", text: "edit", title: "Edit the skill file's Markdown by hand", onclick: () => startDocEdit(SKILL_KEY) })
-    : null;
-  const label = el("span", {}, "skill file ", el("code", { text: s.path || "" }), skillVersion(b, s));
-  return el("section", { class: `sec doc-sec bench-skill ${s.exists ? "" : "missing"} ${s.updated ? "updated" : ""}`,
-                         id: `sec-${SKILL_KEY}`, "data-id": SKILL_KEY },
-    docHeading(SKILL_KEY, label, !!s.updated && !editor, "skill file", edit), body);
-}
-
-// Which skill version the file holds: the newest one, or none yet (the next run makes it).
-function skillVersion(b, s) {
-  if (!s.exists) return null;
-  if (s.version != null) return el("span", { class: "badge", text: `v${s.version}`, title: `The text of skill version ${s.version}, the newest` });
-  if (!b.versions) return el("span", { class: "badge", text: "no run yet", title: "The first run makes skill version 1 of this text" });
-  return el("span", { class: "badge tone-warn", text: `changed since v${b.versions}`,
-                      title: `The next run makes skill version ${b.versions + 1} of this text` });
-}
-
-function showCase(id) {
-  if (benchShown.kase === id) return;
-  benchShown.kase = id;
-  benchShown.run = null;
-  benchMoved();
-}
-function showRun(n) { benchShown.run = n; benchMoved(); }
-function setLeft(mode) { benchShown.left = mode; benchMoved(); }
-// The case, run or side shown changed: the tab is drawn again from its top part.
-function benchMoved() {
-  releaseAnchor();
-  renderSections();
-  savePosition();
-}
-
-/* Opening an anchor of the Bench tab (a comment, a draft, a side thread) shows its case and
-   run: a run already on one side stays where it is, another one is shown on the right; the
-   README at the pinned commit puts the switch on it. */
-function showBenchAnchor(id) {
-  const a = parseBenchAnchor(id);
-  const c = a && a.case ? caseOf(a.case) : null;
-  if (!c) return;
-  const before = JSON.stringify(benchShown);
-  if (benchShown.kase !== c.id) { benchShown.kase = c.id; benchShown.run = null; }
-  if (a.kind === "pinned") benchShown.left = "pinned";
-  else {
-    const run = shownRun(c);
-    const prev = previousRun(c, run);
-    const onLeft = prev && prev.n === a.n && leftMode(prev) === "previous";
-    if (!(run && run.n === a.n) && !onLeft && (c.runs || []).some((r) => r.n === a.n)) benchShown.run = a.n;
-  }
-  if (JSON.stringify(benchShown) !== before) benchMoved();
-}
-
-async function startRuns(caseId, button) {
-  if (button.disabled) return;
-  button.disabled = true;
-  benchShown.run = null; // the new run shows once it wrote its README
-  try {
-    const r = await postJSON(`/api/s/${SLUG}/runs`, { case: caseId });
-    const started = r.started || [];
-    const one = started.length === 1 ? caseOf(started[0].case) : null;
-    toast(!started.length ? "Nothing started: every case is running"
-      : one ? `Run ${started[0].n} of ${one.name} started` : `${started.length} runs started`);
-  } catch (e) { toast(`Could not start: ${e.message}`); }
-  button.disabled = false;
-  await load();
 }
 
 /* ---------------- stale passages ----------------
@@ -2127,8 +1819,7 @@ function applyHighlights() {
    over their block; a block marked only for deleted words shows nothing on hover.
    « updated · mark read » in the section heading marks the section as read. A doc of the
    Doc tab is compared the same way (its view in `state.docs`, the key "doc:<path>"), and
-   gets the base mark too (markBase); so is the skill file of the Bench tab (its view in
-   `state.bench.skill`, the key "skill:"). */
+   gets the base mark too (markBase). */
 
 const BLOCKS = "p, li, td, th, pre, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, .math.block, .mermaid";
 
@@ -2239,12 +1930,9 @@ function markUpdates() {
   document.querySelectorAll(".changed").forEach((n) => n.classList.remove("changed"));
   changeRanges = new Map();
   const docs = docsOf();
-  const skill = (benchOf() || {}).skill;
-  const edited = (key) => !!docEdit && docEdit.key === key;
   const entries = [...Object.entries(state.sections),
-                   ...Object.entries(docs.views).filter(([path, v]) => v.exists && !edited(DOC_PREFIX + path))
-                     .map(([path, v]) => [DOC_PREFIX + path, v]),
-                   ...(skill && skill.exists && !edited(SKILL_KEY) ? [[SKILL_KEY, skill]] : [])];
+                   ...Object.entries(docs.views).filter(([path, v]) => v.exists && !(docEdit && docEdit.path === path))
+                     .map(([path, v]) => [DOC_PREFIX + path, v])];
   for (const [id, sec] of entries) {
     const body = sec.updated && document.querySelector(`#sec-${CSS.escape(id)} .body`);
     if (!body) continue;
@@ -2275,7 +1963,6 @@ function markUpdates() {
   paintChange(changedBlock(under));
   frames.forEach((f, id) => postChanges(id, f));
   markBase();
-  markSides();
 }
 
 /* The base mark of the doc shown: each block (its own words, as the change highlights cut
@@ -2295,7 +1982,7 @@ function markBase() {
   };
   paint([]);
   const v = shownDoc && docsOf().views[shownDoc];
-  if (!v || !v.exists || (!v.new && v.base_html == null) || (docEdit && docEdit.key === DOC_PREFIX + shownDoc)) return;
+  if (!v || !v.exists || (!v.new && v.base_html == null) || (docEdit && docEdit.path === shownDoc)) return;
   const body = document.querySelector(`#sec-${CSS.escape(DOC_PREFIX + shownDoc)} .body`);
   if (!body) return;
   const blockTexts = (root) => {
@@ -2327,57 +2014,8 @@ function markBase() {
   paint(ranges);
 }
 
-/* The marks of the Bench tab's two sides: a removal mark ("ev-removed") on each word of the
-   left README with no counterpart on the right, an addition mark ("ev-added") on each word
-   of the right README with none on the left. Block by block first (a block's text is its
-   words, as the change highlights cut them): a block whose text the other side holds
-   unchanged, at any place, gets no mark, so a paragraph moved whole shows unmarked on both
-   sides. Then word by word (diffWords) between the words of the other blocks, in order.
-   A side with no README (no section block) leaves the other unmarked. Both are painted
-   under every other highlight (a lower priority), so drafts and threads show over them. */
-function markSides() {
-  const paint = (name, ranges) => {
-    if (!window.CSS || !CSS.highlights) return;
-    const h = new Highlight(...ranges);
-    h.priority = -1;
-    CSS.highlights.set(name, h);
-  };
-  const left = document.querySelector("#bench .sec.bench-left > .body");
-  const right = document.querySelector("#bench .sec.bench-right > .body");
-  if (!isBench() || !left || !right) { paint("ev-removed", []); paint("ev-added", []); return; }
-  const blockTexts = (ws) => {
-    const m = new Map();
-    for (const w of ws) m.set(w.block, m.has(w.block) ? `${m.get(w.block)} ${w.text}` : w.text);
-    return m;
-  };
-  const lw = words(left), rw = words(right);
-  const lt = blockTexts(lw), rt = blockTexts(rw);
-  const lset = new Set(lt.values()), rset = new Set(rt.values());
-  const lrest = lw.filter((w) => !rset.has(lt.get(w.block)));
-  const rrest = rw.filter((w) => !lset.has(rt.get(w.block)));
-  const { inserted, pairs } = diffWords(lrest.map((w) => w.text), rrest.map((w) => w.text));
-  paint("ev-removed", wordRuns(lrest, (k) => pairs[k] < 0));
-  paint("ev-added", wordRuns(rrest, (k) => inserted.has(k)));
-}
-
-// One range per run of marked words (`marked(k)`, k their index in `ws`) in a block, so the spaces between them are marked too.
-function wordRuns(ws, marked) {
-  const ranges = [];
-  let run = null;
-  ws.forEach((w, k) => {
-    if (!marked(k)) { run = null; return; }
-    if (run && run.block === w.block) run.range.setEnd(w.range.endContainer, w.range.endOffset);
-    else {
-      run = { block: w.block, range: w.range.cloneRange() };
-      ranges.push(run.range);
-    }
-  });
-  return ranges;
-}
-
-// The text a « mark read » records: a section's file, a doc's (key "doc:<path>"), or the skill file's (key "skill:").
-const mdOf = (id) => (id === SKILL_KEY ? ((benchOf() || {}).skill || {}).md || ""
-  : docPathOf(id) !== null ? (docsOf().views[docPathOf(id)] || {}).md || "" : state.sections[id].md);
+// The text a « mark read » records: a section's file, or a doc's (key "doc:<path>").
+const mdOf = (id) => (docPathOf(id) !== null ? (docsOf().views[docPathOf(id)] || {}).md || "" : state.sections[id].md);
 
 async function markSeen(ids) {
   try {
@@ -2424,7 +2062,7 @@ function currentSelection() {
   const range = sel.getRangeAt(0);
   const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
   const sec = start.closest(".sec");
-  if (!sec || !sec.closest("#model, #refactor, #doc, #bench")) return null;
+  if (!sec || !sec.closest("#model, #refactor, #doc")) return null;
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;
@@ -2538,7 +2176,6 @@ function openComposer(target, mode = "comment") {
   $(".composer-quote", c).textContent = target.question ? `agent question ${target.question}`
     : target.quote ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
     : target.section === DOC_SET ? "the doc set"
-    : isBenchAnchor(target.section) ? `whole ${benchLabel(target.section)}`
     : docPathOf(target.section) !== null ? `whole doc ${docPathOf(target.section)}`
     : target.section ? `whole section §${numberOf(target.section)} ${titleOf(target.section)}`
     : "general question, no passage";
@@ -2778,12 +2415,10 @@ function renderScope() {
     el("span", { class: "t-chips", "data-question": q.id }))));
   $("#scope-empty").hidden = questions.length > 0 || state.status.phase === "scoping";
   // In a docs review the scope block sits at the top of the Doc tab, only while it has
-  // questions; in a tune-readme session at the top of the Bench tab, only while one is
-  // open. There it holds them alone: no scoping to end, no grill.
-  const elsewhere = isDocsReview() || isBench();
-  $("#scope").hidden = isBench() ? !open.length : elsewhere && !questions.length;
-  $(".scope-actions").hidden = elsewhere;
-  $(".scope-head").firstChild.nodeValue = elsewhere ? "questions" : "scope";
+  // questions, and holds them alone: no scoping to end, no grill.
+  $("#scope").hidden = isDocsReview() && !questions.length;
+  $(".scope-actions").hidden = isDocsReview();
+  $(".scope-head").firstChild.nodeValue = isDocsReview() ? "questions" : "scope";
   annotateQuestions($("#scope"));
 
   const grill = $("#grill");
@@ -2831,11 +2466,9 @@ $(".review").addEventListener("scroll", (e) => {
   reviewAtEnd = p.scrollHeight - p.scrollTop - p.clientHeight < 24;
 }, { passive: true });
 
-// Where a comment sits: its section's number, « doc set », the file name of its doc, or
-// what it sits on in the Bench tab (« run core/ 3 · README »).
+// Where a comment sits: its section's number, « doc set », or the file name of its doc.
 function whereOf(id) {
   if (id === DOC_SET) return "doc set";
-  if (isBenchAnchor(id)) return benchLabel(id);
   const p = docPathOf(id);
   return p !== null ? p.slice(p.lastIndexOf("/") + 1) : `§${numberOf(id)}`;
 }

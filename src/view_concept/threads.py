@@ -14,9 +14,7 @@ other session files. `agents.py` holds what differs between agents.
 
 A thread opened on a doc of the Doc tab (section `doc:<path>`) gets that doc's text, read
 from the worktree, in place of a section; one on the doc set list (`doc:` alone) gets the doc
-set. A workbench's thread is briefed with the case set and the skill file's path, and one
-opened on the Bench tab (a run's README or report, a case's README at the pinned commit, the
-skill file) gets that text.
+set.
 
 A thread opened on an agent question (`question`) helps the user understand it before
 answering it from its box. Its « use as answer » turn (`draft`) asks for the answer, which
@@ -42,7 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from .agents import Backend, TurnState, resolve
-from .context import bench_passage, build, case_set, doc_passage, is_bench_anchor
+from .context import build, doc_passage
 from .store import DOC_KEY, DOC_SET_ANCHOR, Session, SessionError, now_iso, now_iso_ms
 
 FLUSH_EVERY = 0.25  # seconds between writes of a streaming reply
@@ -271,9 +269,7 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
     number = {sec["id"]: i + 1 for i, sec in enumerate(outline)}
     titles = {sec["id"]: sec.get("title", sec["id"]) for sec in outline}
     reviews = ("view-branch", "view-refactor", "view-docs")
-    workbench = plan.get("workflow") == "tune-readme"
     doc = "review" if plan.get("workflow") in reviews else "explanation"
-    doc = "workbench" if workbench else doc
     sec = thread["section"]
     qid = thread.get("question", "")
     on_doc = sec.startswith(DOC_KEY)  # a doc, or the doc set (DOC_SET_ANCHOR)
@@ -284,8 +280,6 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
             where = "the doc set (the list of repo docs the Doc tab shows)"
         elif sec.startswith(DOC_KEY):
             where = f"the doc {sec.removeprefix(DOC_KEY)} (a file of the repository)"
-        elif is_bench_anchor(sec):
-            where = s.bench_labels().get(sec, f"({sec})").removeprefix("(").removesuffix(")")
         else:
             where = f"§{number.get(sec, '?')} {titles.get(sec, sec)} ({sec})"
         anchor = f"{where}: « {thread['quote']} »" if thread["quote"] else f"the whole of {where}"
@@ -300,12 +294,6 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
         origin = (
             "It is a separate conversation forked from the main one: you know everything said"
             " so far, but the main session will not see what is said here."
-        )
-    elif workbench:
-        # A workbench has no sections: its case set, appended below, names its files.
-        origin = (
-            "There is no main conversation to start from: the case set below says where the"
-            " skill file and the runs are; read them to know the workbench."
         )
     else:
         origin = (
@@ -326,10 +314,7 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
         _question_rule(qid, doc),
         "- Answer the question asked, and only that one. When it opens a larger point,"
         " name it in one sentence and let the user decide whether to go there.",
-        "- The workbench may have changed since this conversation started: the runs are"
-        f" in {s.runs_dir}, the skill file's current text is the file named below."
-        if workbench
-        else f"- The {doc} may have changed since this conversation started: the"
+        f"- The {doc} may have changed since this conversation started: the"
         f" current text of a section is in {s.sections_dir}/<id>.md, or <id>.html for"
         " an HTML section.",
         f"- When the discussion leads to a change (to the {doc} or to the code),"
@@ -349,10 +334,6 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
     elif on_doc and not qid:
         # A doc is not in the session folder: the thread gets it here, read from the worktree.
         lines += ["", *doc_passage(s, sec)]
-    if workbench:
-        lines += ["", "## Case set", *case_set(s)]
-        if is_bench_anchor(sec) and not qid:
-            lines += ["", *bench_passage(s, sec)]
     return "\n".join(lines)
 
 

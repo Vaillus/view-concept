@@ -389,29 +389,3 @@ def test_reference_sets_prints_and_clears_the_reference_model(tmp_path):
     assert r.returncode == 1 and "no other session" in r.stderr
     r = view_concept(tmp_path, "reference", "docs", "gate", "--clear")
     assert r.returncode == 1 and "one at a time" in r.stderr
-
-
-def test_cases_sets_adds_and_prints_the_case_set(tmp_path, cases_repo):
-    repo, sha = cases_repo
-    home = tmp_path / "home"
-    r = view_concept(home, "new", "Bench", "--kind", "code", "--repo", str(tmp_path),
-                     "--workflow", "tune-readme")  # fmt: skip
-    assert r.returncode == 0, r.stderr
-    r = view_concept(home, "cases", "bench", "set", "--repo", str(repo), "--commit", "HEAD")
-    assert r.returncode == 0 and sha in r.stdout
-    assert view_concept(home, "cases", "bench", "add", "core", "--kind", "edit").returncode == 0
-    assert view_concept(home, "cases", "bench", "add", "", "--kind", "draft").returncode == 0
-    r = view_concept(home, "cases", "bench", "add", "core/transcript", "--kind", "edit")
-    assert r.returncode == 1 and "is a draft case" in r.stderr
-    out = view_concept(home, "cases", "bench").stdout.splitlines()
-    assert out == [f"repo: {repo.resolve()}", f"pinned commit: {sha}",
-                   "- core: core/ · edit · 0 runs",
-                   "- root-draft: README.md (root) (draft) · draft · 0 runs"]  # fmt: skip
-    assert view_concept(home, "runs", "bench").stdout == "(no run yet)\n"
-    assert view_concept(home, "cases", "bench", "remove", "core").returncode == 0
-
-
-def test_cases_is_for_a_workbench_only(tmp_path):
-    assert view_concept(tmp_path, "new", "Plain").returncode == 0
-    r = view_concept(tmp_path, "cases", "plain")
-    assert r.returncode == 1 and "not a workbench" in r.stderr
