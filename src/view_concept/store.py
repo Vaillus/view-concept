@@ -30,7 +30,7 @@ reach the agent session through the inbox.
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text, each doc's under
-                        `doc:<path>`                                       (server)
+                        `doc:<path>`, a workbench's skill file's under `skill:`  (server)
         drafts.json     the drafts and the general note, shared by every page (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
@@ -95,7 +95,9 @@ comparison README, shown but never read by the run). The id is derived from the 
 record, run.json, is {case, n, skill_version (k of skill-versions/v<k>.md), commit,
 started, ended, agent (the backend's name), state ("running" or "done"), other_files (the
 files it wrote, changed or deleted besides its README, relative to the repo root)}; see
-bench.py for how a run goes.
+bench.py for how a run goes. The skill file is shown as a doc of the Doc tab is: read
+from the repo at each render, its highlight baseline in seen.json under `skill:`, moved by
+every batch, and editable in the page with the same starting-text check (`write_skill`).
 
 A side thread is a separate headless agent conversation that the user opens from the page
 to discuss a passage without changing anything (see threads.py). Only a comment batch
@@ -1342,6 +1344,24 @@ class Session:
             return None
         return repo / SKILL_FILE
 
+    def write_skill(self, text: str, base: str) -> None:
+        """Write the skill file: the user's edit in the Bench tab, with the starting-text
+        check of `write_doc` (DocConflict when the file no longer holds `base`). The user's
+        own words get no green: a baseline that was the old text moves to the new one."""
+        file = self.skill_file()
+        if file is None:
+            raise SessionError("this session has no skill file")
+        if not file.is_file():
+            raise SessionError(f"{SKILL_FILE} is not in the repo")
+        now = file.read_text(encoding="utf-8", errors="replace")
+        if now != base:
+            raise DocConflict(f"{SKILL_FILE} changed since you started editing it")
+        file.write_text(text, encoding="utf-8")
+        seen = _read_json(self.seen_path, {})
+        if seen.get(SKILL_KEY) == now:
+            seen[SKILL_KEY] = text
+            _write_json(self.seen_path, seen)
+
     def skill_texts(self) -> dict[str, str]:
         """The skill file's text keyed as its highlight baseline is (`skill:`), empty when
         the session has none or the file is missing."""
@@ -2064,8 +2084,8 @@ class Session:
         with self.inbox_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(batch, ensure_ascii=False) + "\n")
         # Highlights show what changed since the last batch: every baseline moves here,
-        # the docs' included.
-        self.mark_seen({**self.read_sections(), **self.doc_texts()})
+        # the docs' and the skill file's included.
+        self.mark_seen({**self.read_sections(), **self.doc_texts(), **self.skill_texts()})
         if action == "plan":
             self._skip_open_questions(batch["sent"])
         return batch

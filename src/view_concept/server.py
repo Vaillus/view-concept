@@ -530,6 +530,25 @@ def start_runs(slug: str, body: RunsIn) -> dict[str, Any]:
         raise HTTPException(400, str(e)) from e
 
 
+class SkillIn(BaseModel):
+    md: str
+    # The text the edit started from: the skill file must still hold it.
+    base: str
+
+
+@app.post("/api/s/{slug}/skill")
+def write_skill(slug: str, body: SkillIn) -> dict[str, bool]:
+    """Write a workbench's skill file, edited by hand in the Bench tab. 409 when the file
+    changed since the edit started."""
+    try:
+        get_session(slug).write_skill(body.md, body.base)
+    except DocConflict as e:
+        raise HTTPException(409, str(e)) from e
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True}
+
+
 @app.get("/api/s/{slug}/events")
 async def events(slug: str, request: Request) -> StreamingResponse:
     s = get_session(slug)
