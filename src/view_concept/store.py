@@ -2571,9 +2571,11 @@ def format_batch(
     batch: dict[str, Any],
     outline: list[dict[str, Any]],
     questions: list[dict[str, Any]] | None = None,
+    bench: dict[str, str] | None = None,
 ) -> str:
     """How a batch appears in the agent session (one event of the comment channel). `questions`
-    gives the text of the agent questions an answer batch answers."""
+    gives the text of the agent questions an answer batch answers, `bench` how a workbench
+    prints the anchors of its Bench tab (`Session.bench_labels`)."""
     number = {s["id"]: i + 1 for i, s in enumerate(outline)}
     n = len(batch["comments"])
     lines = [f"view-concept · {slug} · batch {batch['id']} · {n} comment{'s' * (n != 1)}"]
@@ -2663,15 +2665,21 @@ def format_batch(
             lines += [f"    (from side thread {t}: threads/{t}.json)" for t in a.get("threads", [])]
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
-    lines += [format_comment(c, number) for c in batch["comments"]]
+    lines += [format_comment(c, number, bench) for c in batch["comments"]]
     return "\n".join(lines)
 
 
-def format_comment(c: dict[str, Any], number: dict[str, int]) -> str:
+def format_comment(
+    c: dict[str, Any], number: dict[str, int], bench: dict[str, str] | None = None
+) -> str:
     """One comment of a batch: where it is anchored (a section, a doc of the Doc tab by its
-    path, the doc set list), its text, the thread it comes from."""
+    path, the doc set list, or in a workbench a run's README or report, a case's README at
+    the pinned commit, the skill file, as `bench` prints them), its text, the thread it
+    comes from."""
     sec = c["section"]
-    if sec == DOC_SET_ANCHOR:
+    if bench and sec in bench:
+        where = bench[sec]
+    elif sec == DOC_SET_ANCHOR:
         where = "(doc set)"
     elif sec.startswith(DOC_KEY):
         where = f"(doc {sec.removeprefix(DOC_KEY)})"

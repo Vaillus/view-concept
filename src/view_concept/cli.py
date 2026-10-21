@@ -172,11 +172,12 @@ def _batches(s: Session, slug: str):
             complete = chunk[: chunk.rfind(b"\n") + 1]  # only complete lines
             if complete:
                 outline, questions = s.read_plan()["outline"], s.read_questions()
+                labels = s.bench_labels()
                 for raw in complete.splitlines(keepends=True):
                     cursor += len(raw)
                     if raw.strip():
                         batch = json.loads(raw)
-                        text = format_batch(slug, batch, outline, questions)
+                        text = format_batch(slug, batch, outline, questions, labels)
                         yield text, cursor, str(batch.get("id", ""))
                     else:
                         s.cursor_path.write_text(str(cursor))
@@ -548,11 +549,11 @@ def cmd_check(a: argparse.Namespace) -> None:
 
 def cmd_pending(a: argparse.Namespace) -> None:
     s = Session(a.slug)
-    outline = s.read_plan()["outline"]
+    outline, labels = s.read_plan()["outline"], s.bench_labels()
     for b in s.read_comments()["batches"]:
         open_ = [c for c in b["comments"] if c["status"] == "sent"]
         if open_:
-            print(format_batch(a.slug, {**b, "comments": open_}, outline))
+            print(format_batch(a.slug, {**b, "comments": open_}, outline, bench=labels))
             print()
 
 

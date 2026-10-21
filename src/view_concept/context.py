@@ -32,6 +32,11 @@ Roles:
   the others on demand. A passage of the Doc tab gets its doc, read from the worktree
   (`doc:<path>`), or the doc set (`doc:` alone), in place of a section.
 
+In a workbench (the tune-readme workflow) every role gets the case set and the skill
+file's path in place of the outline and the lexicon, which it has none of; a side thread on
+the Bench tab gets the text its passage is in: a run's README or report, a case's README at
+the pinned commit, or the skill file (`bench_passage`).
+
 An HTML section is loaded by its visible text, the words a reader sees in it, not its HTML
 source; its heading names its file, for an agent that needs the source.
 
@@ -50,10 +55,23 @@ code lags behind them.
 
 from __future__ import annotations
 
+import contextlib
 import re
 from typing import Any
 
-from .store import DOC_KEY, DOC_SET_ANCHOR, Session, SessionError, format_batch, format_comment
+from .store import (
+    DOC_KEY,
+    DOC_SET_ANCHOR,
+    PINNED_KEY,
+    RUN_KEY,
+    RUN_PARTS,
+    SKILL_KEY,
+    Session,
+    SessionError,
+    case_name,
+    format_batch,
+    format_comment,
+)
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
 ROLES = ("planner", "writer", "implementer", "reviewer", "thread")
@@ -91,8 +109,11 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     out += ["", "## Trigger", *_trigger(s, trigger or [], outline, questions)]
     if s.is_grilling():
         out.append("A grill is running: ask every open decision, each with its recommended answer.")
-    out += ["", "## Outline (as it is now)", *_outline(outline)]
-    out += ["", "## Lexicon (as it is now)", *_lexicon(plan["lexicon"], outline)]
+    if plan.get("workflow") == "tune-readme":
+        out += ["", "## Case set", *case_set(s)]
+    else:
+        out += ["", "## Outline (as it is now)", *_outline(outline)]
+        out += ["", "## Lexicon (as it is now)", *_lexicon(plan["lexicon"], outline)]
     if plan.get("repo"):
         out += ["", "## Code map", s.read_code_map() or "(none written yet)"]
     if plan.get("repo") and role in DOC_SET_ROLES:
@@ -116,6 +137,8 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     elif role == "thread" and section:
         if section.startswith(DOC_KEY):  # a doc, or the doc set (DOC_SET_ANCHOR)
             out += ["", *doc_passage(s, section)]
+        elif is_bench_anchor(section):
+            out += ["", *bench_passage(s, section)]
         else:
             sec = _sections(outline, sections, section, html=html)
             out += ["", "## Section of the passage", *sec]
@@ -132,6 +155,62 @@ def doc_passage(s: Session, anchor: str) -> list[str]:
     text = file.read_text("utf-8", errors="replace") if file and file.is_file() else None
     where = f"read from the worktree: {file}" if file else "the session has no repo"
     return [f"## Doc of the passage: {path} ({where})", (text or "(missing)").strip()]
+
+
+def is_bench_anchor(anchor: str) -> bool:
+    """Whether a passage is on the Bench tab: a run's text, a pinned README, the skill file."""
+    return anchor == SKILL_KEY or anchor.startswith((RUN_KEY, PINNED_KEY))
+
+
+def case_set(s: Session) -> list[str]:
+    """A workbench's case set: the cases' repo and pinned commit, the skill file's path, and
+    each case with its runs (folder and skill version) and its last error."""
+    data = s.read_cases()
+    skill = s.skill_file()
+    lines = [
+        f"Skill file: {skill} (the file the session's agent edits; each run read a copy of it,"
+        f" its skill version, {s.skill_versions_dir}/v<k>.md).",
+    ]
+    if not data["repo"]:
+        return [*lines, "(no case set yet)"]
+    lines.append(f"Cases' repo: {data['repo']} at the pinned commit {data['commit']}.")
+    for c in data["cases"]:
+        runs = ", ".join(
+            f"{r.get('n')} (skill v{r.get('skill_version')}, {r.get('state')})"
+            for r in s.read_runs(c["id"])
+        )
+        line = f"- {c['id']}: {case_name(c)} · {c['kind']} · runs: {runs or 'none'}"
+        error = s.read_run_error(c["id"])
+        if error:
+            line += f" · last error: {' '.join(str(error.get('error', '')).split())}"
+        lines.append(line)
+    if not data["cases"]:
+        lines.append("(no case yet)")
+    lines.append(
+        f"A run's files: {s.runs_dir}/<case id>/<n>/ (README.md, report.md, run.json, files/)."
+    )
+    return lines
+
+
+def bench_passage(s: Session, anchor: str) -> list[str]:
+    """What a side thread on the Bench tab gets in place of a section: the text its passage
+    is in (a run's README or report, a case's README at the pinned commit, the skill file)."""
+    label = s.bench_labels().get(anchor, f"({anchor})")
+    text: str | None = None
+    if anchor == SKILL_KEY:
+        text = s.skill_texts().get(SKILL_KEY)
+    elif anchor.startswith(PINNED_KEY):
+        cid = anchor.removeprefix(PINNED_KEY)
+        case = next((c for c in s.read_cases()["cases"] if c["id"] == cid), None)
+        text = s.pinned_readme(case) if case else None
+    else:
+        cid, _, rest = anchor.removeprefix(RUN_KEY).partition(":")
+        n, _, part = rest.partition(":")
+        file = dict((p, f) for p, _, f in RUN_PARTS).get(part)
+        with contextlib.suppress(SessionError, ValueError):
+            path = s.run_dir(cid, int(n)) / str(file)
+            text = path.read_text("utf-8", errors="replace") if file and path.is_file() else None
+    return [f"## Text of the passage {label}", (text or "(missing)").strip()]
 
 
 def _doc_tab(s: Session) -> list[str]:
@@ -211,12 +290,12 @@ def _trigger(
         if QUESTION_ID.match(event) and event in by_question:
             lines.append(_question_line(by_question[event], full=True))
         elif COMMENT_ID.match(event) and event in comments:
-            lines.append(format_comment(comments[event], _number(outline)))
+            lines.append(format_comment(comments[event], _number(outline), s.bench_labels()))
         elif BATCH_ID.match(event):
             batch = next((b for b in batches if b["id"] == event), None)
             if batch is None:
                 raise SessionError(f"no batch {event!r}")
-            lines.append(format_batch(s.slug, batch, outline, questions))
+            lines.append(format_batch(s.slug, batch, outline, questions, s.bench_labels()))
         elif MESSAGE_ID.match(event) and event in messages:
             lines.append(_message_line(messages[event]))
         elif CHANGE_ID.match(event) and event in changes:

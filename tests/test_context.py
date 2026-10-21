@@ -212,3 +212,43 @@ def test_the_doc_set_goes_to_the_roles_that_work_on_the_docs(review, tmp_path):
 def test_a_review_with_no_doc_set_says_so(review):
     assert "## Doc set\nThe repo docs" in build(review, "writer")
     assert "(none written yet)\n\n## Stale passages" in build(review, "writer")
+
+
+def _done_run(s, cid, n, k):
+    import json
+
+    folder = s.run_dir(cid, n)
+    folder.mkdir(parents=True)
+    record = {"case": cid, "n": n, "skill_version": k, "state": "done", "other_files": []}
+    (folder / "run.json").write_text(json.dumps(record))
+    (folder / "README.md").write_text("# core\n\nThe run's README.\n")
+
+
+def test_a_workbench_context_prints_the_case_set_not_an_outline(workbench, cases_repo):
+    s, (repo, sha) = workbench, cases_repo
+    s.add_case("core", "edit")
+    _done_run(s, "core", 1, 1)
+    text = build(s, "thread", section="run:core:1:readme")
+    assert "## Outline" not in text and "## Lexicon" not in text
+    assert f"Skill file: {s.skill_file()}" in text
+    assert f"Cases' repo: {repo.resolve()} at the pinned commit {sha}." in text
+    assert "- core: core/ · edit · runs: 1 (skill v1, done)" in text
+    assert "## Text of the passage (run core/ 1 · README, skill v1: runs/core/1/README.md)" in text
+    assert "The run's README." in text
+    pinned = build(s, "thread", section="pinned:core")
+    assert "# core\n\nThe library." in pinned
+    assert "# write-readme\n\nRule 1." in build(s, "thread", section="skill:")
+
+
+def test_a_workbench_thread_is_briefed_with_the_case_set(workbench):
+    from view_concept import threads
+    from view_concept.agents import ClaudeBackend
+
+    s = workbench
+    s.add_case("core", "edit")
+    _done_run(s, "core", 2, 1)
+    thread = {"id": "t1", "section": "run:core:2:readme", "quote": "The run's", "question": ""}
+    text = threads._briefing(s, thread, ClaudeBackend())
+    assert "Passage: run core/ 2 · README, skill v1: runs/core/2/README.md: « The run's »" in text
+    assert "## Case set" in text and "- core: core/ · edit · runs: 2 (skill v1, done)" in text
+    assert "The run's README." in text and "a section of the workbench" in text

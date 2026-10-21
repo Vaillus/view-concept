@@ -1273,3 +1273,43 @@ def test_a_case_is_named_by_its_folder_and_kind():
     assert case_name({"folder": "", "kind": "edit"}) == "README.md (root)"
     assert case_readme({"folder": ""}) == "README.md"
     assert case_readme({"folder": "core/transcript"}) == "core/transcript/README.md"
+
+
+def _bench_run(s, cid, n, k, readme="# run\n", report="the report\n"):
+    folder = s.run_dir(cid, n)
+    folder.mkdir(parents=True)
+    record = {"case": cid, "n": n, "skill_version": k, "state": "done", "other_files": []}
+    (folder / "run.json").write_text(json.dumps(record))
+    (folder / "README.md").write_text(readme)
+    (folder / "report.md").write_text(report)
+
+
+def test_a_batch_prints_the_bench_anchors(workbench, cases_repo):
+    s, sha = workbench, cases_repo[1]
+    s.add_case("core", "edit")
+    s.add_case("core", "draft")
+    _bench_run(s, "core", 3, 3)
+    _bench_run(s, "core-draft", 1, 2)
+    b = s.add_batch([
+        {"section": "run:core-draft:1:readme", "quote": "linaw/", "text": "keep this"},
+        {"section": "run:core:3:report", "quote": "opening line", "text": "too strict"},
+        {"section": "pinned:core", "quote": "The library.", "text": "say more"},
+        {"section": "skill:", "quote": "Rule 1.", "text": "for a single line too"},
+    ])  # fmt: skip
+    lines = format_batch("bench", b, [], bench=s.bench_labels()).splitlines()
+    assert lines[1:] == [
+        "[c1] (run core/ (draft) 1 · README, skill v2: runs/core-draft/1/README.md) « linaw/ »",
+        "    keep this",
+        "[c2] (run core/ 3 · report, skill v3: runs/core/3/report.md) « opening line »",
+        "    too strict",
+        f"[c3] (core/ · README at the pinned commit {sha[:7]}) « The library. »",
+        "    say more",
+        "[c4] (skill file) « Rule 1. »",
+        "    for a single line too",
+    ]
+    # A batch moves the skill file's highlight baseline too.
+    assert json.loads(s.seen_path.read_text())["skill:"] == "# write-readme\n\nRule 1.\n"
+
+
+def test_bench_labels_are_for_a_workbench_only(session):
+    assert session.bench_labels() == {}
