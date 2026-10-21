@@ -2777,11 +2777,11 @@ function renderScope() {
        q.answer?.from === "terminal" ? el("span", { class: "dim", text: " (in the terminal)" }) : null),
     el("span", { class: "t-chips", "data-question": q.id }))));
   $("#scope-empty").hidden = questions.length > 0 || state.status.phase === "scoping";
-  // In a docs review the scope block sits at the top of the Doc tab, in a tune-readme
-  // session at the top of the Bench tab, only while it has questions, and holds them
-  // alone: no scoping to end, no grill.
+  // In a docs review the scope block sits at the top of the Doc tab, only while it has
+  // questions; in a tune-readme session at the top of the Bench tab, only while one is
+  // open. There it holds them alone: no scoping to end, no grill.
   const elsewhere = isDocsReview() || isBench();
-  $("#scope").hidden = elsewhere && !questions.length;
+  $("#scope").hidden = isBench() ? !open.length : elsewhere && !questions.length;
   $(".scope-actions").hidden = elsewhere;
   $(".scope-head").firstChild.nodeValue = elsewhere ? "questions" : "scope";
   annotateQuestions($("#scope"));
