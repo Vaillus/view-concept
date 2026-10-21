@@ -1029,7 +1029,7 @@ function docBar(docs) {
                           title: d.reason || d.path, onclick: () => openDoc(d.path) },
       v.updated ? el("span", { class: "doc-dot", title: "Rewritten since your last batch" }) : null,
       d.path, staleBadge(staleCount(docs, d)),
-      docEdit && docEdit.path === d.path ? el("span", { class: "badge", text: "editing", title: "Your edit of this doc is not saved yet" }) : null);
+      docEdit && docEdit.key === DOC_PREFIX + d.path ? el("span", { class: "badge", text: "editing", title: "Your edit of this doc is not saved yet" }) : null);
   }));
 }
 
@@ -1053,14 +1053,14 @@ function docRewrite(path) {
 function docBlock(path, v) {
   const id = DOC_PREFIX + path;
   const body = el("div", { class: "body" });
-  const editor = v.exists && docEditor(path, v);
+  const editor = v.exists && docEditor(id, v);
   if (editor) body.append(editor);
   else if (v.exists) {
     body.innerHTML = v.html || "";
     resolveRepoLinks(body, path);
   } else body.append(el("p", { class: "dim", text: "Missing: this doc is not in the worktree." }));
   const edit = v.exists && !editor
-    ? el("button", { class: "sec-comment", text: "edit", title: "Edit this doc's Markdown by hand", onclick: () => startDocEdit(path) })
+    ? el("button", { class: "sec-comment", text: "edit", title: "Edit this doc's Markdown by hand", onclick: () => startDocEdit(id) })
     : null;
   return el("section", { class: `sec doc-sec ${v.exists ? "" : "missing"} ${v.updated ? "updated" : ""}`, id: `sec-${id}`, "data-id": id },
     docHeading(id, el("code", { text: path }), !!v.updated && !editor, "doc", edit), body);
@@ -1069,41 +1069,47 @@ function docBlock(path, v) {
 /* ---------------- editing a doc ----------------
    « edit » opens the doc's Markdown (`md`, the file as read) in a text box in place of its
    text; « save » writes it to the worktree (POST /api/s/<slug>/doc, with the text the edit
-   started from). The box is one element kept across renders, so a re-render while you type
+   started from). The skill file of the Bench tab is edited the same way, saved by POST
+   /api/s/<slug>/skill; an edit is named by its anchor, "doc:<path>" or SKILL_KEY. The box is one element kept across renders, so a re-render while you type
    (an agent run, a thread) keeps your text, its caret and its scroll. When the file changes
    meanwhile, a notice says so and « save » becomes « save anyway », which overwrites that
    change; the server refuses a save whose starting text is no longer the file's, so only a
    change you were told of is overwritten. ⌘↵ saves, Esc cancels (asking first when the
-   text was changed). Your own words get no green highlight. One doc is edited at a time;
-   its title in the bar says « editing » while the edit is not saved. */
-let docEdit = null; // { path, base (the text the edit started from), box, ta, note, save }
+   text was changed). Your own words get no green highlight. One text is edited at a time;
+   a doc's title in the bar says « editing » while the edit is not saved. */
+let docEdit = null; // { key (its anchor), label, base (the text the edit started from), box, ta, note, save }
 
-function startDocEdit(path) {
-  const v = docsOf().views[path];
+// The text an edit works on, {md, exists}: a doc's view, or the skill file's (state.bench.skill).
+const editedView = (key) => (key === SKILL_KEY ? (benchOf() || {}).skill : docsOf().views[docPathOf(key)]);
+const editLabel = (key) => (key === SKILL_KEY ? "the skill file" : docPathOf(key));
+
+function startDocEdit(key) {
+  const v = editedView(key);
   if (!v || !v.exists) return;
-  if (docEdit && docEdit.path !== path && docEdit.ta.value !== docEdit.base &&
-      !confirm(`Drop your unsaved edit of ${docEdit.path}?`)) return;
+  if (docEdit && docEdit.key !== key && docEdit.ta.value !== docEdit.base &&
+      !confirm(`Drop your unsaved edit of ${docEdit.label}?`)) return;
   const ta = el("textarea", { class: "doc-edit-text", spellcheck: "true" });
   ta.value = v.md || "";
   const note = el("p", { class: "doc-edit-note", hidden: true,
                          text: "The file changed since you started editing: saving overwrites that change." });
-  const save = el("button", { class: "btn primary", text: "save", title: "Write the doc to the worktree (⌘↵)", onclick: saveDocEdit });
+  const save = el("button", { class: "btn primary", text: "save", onclick: saveDocEdit,
+                              title: key === SKILL_KEY ? "Write the skill file (⌘↵)" : "Write the doc to the worktree (⌘↵)" });
   const cancel = el("button", { class: "btn", text: "cancel", title: "Drop your edit (Esc)", onclick: cancelDocEdit });
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveDocEdit(); }
     else if (e.key === "Escape") { e.preventDefault(); cancelDocEdit(); }
   });
   const box = el("div", { class: "doc-editor" }, ta, note, el("div", { class: "doc-edit-actions" }, save, cancel));
-  docEdit = { path, base: v.md || "", box, ta, note, save };
+  docEdit = { key, label: editLabel(key), base: v.md || "", box, ta, note, save };
   releaseAnchor();
   renderSections();
   ta.focus({ preventScroll: true });
   ta.setSelectionRange(0, 0);
 }
 
-// The editor of doc `path` with its notice brought up to date, or null when it is not edited.
-function docEditor(path, v) {
-  if (!docEdit || docEdit.path !== path) return null;
+// The editor of the text `key` (its view `v`) with its notice brought up to date, or null when it is not edited.
+function docEditor(key, v) {
+  if (!docEdit || docEdit.key !== key) return null;
   const changed = (v.md || "") !== docEdit.base;
   docEdit.note.hidden = !changed;
   docEdit.save.textContent = changed ? "save anyway" : "save";
@@ -1113,13 +1119,15 @@ function docEditor(path, v) {
 async function saveDocEdit() {
   if (!docEdit) return;
   const edit = docEdit;
-  const v = docsOf().views[edit.path];
-  if (!v || !v.exists) { toast(`${edit.path} is no longer in the worktree`); return; }
+  const v = editedView(edit.key);
+  if (!v || !v.exists) { toast(`${edit.label} is no longer there`); return; }
   // « save anyway »: the file as the page last read it, which the notice told of.
   const base = v.md || "";
+  const skill = edit.key === SKILL_KEY;
   edit.save.disabled = true;
   try {
-    await postJSON(`/api/s/${SLUG}/doc`, { path: edit.path, md: edit.ta.value, base });
+    if (skill) await postJSON(`/api/s/${SLUG}/skill`, { md: edit.ta.value, base });
+    else await postJSON(`/api/s/${SLUG}/doc`, { path: docPathOf(edit.key), md: edit.ta.value, base });
   } catch (e) {
     toast(`Could not save: ${e.message}`);
     edit.save.disabled = false;
@@ -1127,7 +1135,7 @@ async function saveDocEdit() {
     return;
   }
   if (docEdit === edit) docEdit = null;
-  toast("Doc saved");
+  toast(skill ? "Skill file saved" : "Doc saved");
   await load();
 }
 
@@ -1217,8 +1225,12 @@ function annotateDocTerms(view) {
      what it is (« <path> at the pinned commit <short> », « run n · skill vk »), with the
      removal marks on the left and the addition marks on the right (markSides); a side with
      no README says why;
-   - the report of the run shown.
-   Each text is a section block whose section id is its comment anchor (RUN_KEY, PINNED_KEY),
+   - the report of the run shown;
+   - the skill file the runs read (`state.bench.skill`), editable in place as a doc is (see
+     "editing a doc"), its words green against its highlight baseline (the key "skill:")
+     with « updated · mark read », and its version: the newest skill version when the file
+     still holds its text, else « changed since vk » (the next run makes a new version).
+   Each text is a section block whose section id is its comment anchor (RUN_KEY, PINNED_KEY, SKILL_KEY),
    so selecting and commenting, side threads and drafts work there as in the other tabs;
    opening an anchor shows its case and run (showBenchAnchor). The case, the run and the
    switch position shown (benchShown) are kept across renders and in the saved position. */
@@ -1272,7 +1284,7 @@ function renderBenchTab() {
   const c = shownCase(b);
   if (!c) {
     view.replaceChildren(...top, benchHead(b),
-      el("p", { class: "dim empty", text: `No case yet: view-concept cases ${SLUG} add <folder> --kind edit|draft` }));
+      el("p", { class: "dim empty", text: `No case yet: view-concept cases ${SLUG} add <folder> --kind edit|draft` }), skillBlock(b));
     return;
   }
   benchShown.kase = c.id;
@@ -1280,7 +1292,7 @@ function renderBenchTab() {
   const prev = previousRun(c, run);
   view.replaceChildren(...[...top, benchHead(b), caseBar(b, c),
     c.error ? el("p", { class: "error bench-error", text: `last attempt failed: ${c.error}` }) : null,
-    runLine(c, run, prev), benchSides(b, c, run, prev), reportBlock(c, run)].filter(Boolean));
+    runLine(c, run, prev), benchSides(b, c, run, prev), reportBlock(c, run), skillBlock(b)].filter(Boolean));
 }
 
 // The case set's repo, its pinned commit and the count of skill versions.
@@ -1380,6 +1392,32 @@ function reportBlock(c, run) {
     others.length ? el("p", { class: "bench-other" }, el("span", { class: "badge tone-warn", text: "other files" }), " ",
                        ...others.flatMap((f, k) => [k ? ", " : "", el("code", { text: f })])) : null,
     body);
+}
+
+// The skill file, as a doc of the Doc tab is drawn: its text, or its editor while edited.
+function skillBlock(b) {
+  const s = b.skill || {};
+  const body = el("div", { class: "body" });
+  const editor = s.exists && docEditor(SKILL_KEY, s);
+  if (editor) body.append(editor);
+  else if (s.exists) body.innerHTML = s.html || "";
+  else body.append(el("p", { class: "dim", text: "Missing: the skill file is not in the session's repo." }));
+  const edit = s.exists && !editor
+    ? el("button", { class: "sec-comment", text: "edit", title: "Edit the skill file's Markdown by hand", onclick: () => startDocEdit(SKILL_KEY) })
+    : null;
+  const label = el("span", {}, "skill file ", el("code", { text: s.path || "" }), skillVersion(b, s));
+  return el("section", { class: `sec doc-sec bench-skill ${s.exists ? "" : "missing"} ${s.updated ? "updated" : ""}`,
+                         id: `sec-${SKILL_KEY}`, "data-id": SKILL_KEY },
+    docHeading(SKILL_KEY, label, !!s.updated && !editor, "skill file", edit), body);
+}
+
+// Which skill version the file holds: the newest one, or none yet (the next run makes it).
+function skillVersion(b, s) {
+  if (!s.exists) return null;
+  if (s.version != null) return el("span", { class: "badge", text: `v${s.version}`, title: `The text of skill version ${s.version}, the newest` });
+  if (!b.versions) return el("span", { class: "badge", text: "no run yet", title: "The first run makes skill version 1 of this text" });
+  return el("span", { class: "badge tone-warn", text: `changed since v${b.versions}`,
+                      title: `The next run makes skill version ${b.versions + 1} of this text` });
 }
 
 function showCase(id) {
@@ -2089,7 +2127,8 @@ function applyHighlights() {
    over their block; a block marked only for deleted words shows nothing on hover.
    « updated · mark read » in the section heading marks the section as read. A doc of the
    Doc tab is compared the same way (its view in `state.docs`, the key "doc:<path>"), and
-   gets the base mark too (markBase). */
+   gets the base mark too (markBase); so is the skill file of the Bench tab (its view in
+   `state.bench.skill`, the key "skill:"). */
 
 const BLOCKS = "p, li, td, th, pre, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, .math.block, .mermaid";
 
@@ -2200,9 +2239,12 @@ function markUpdates() {
   document.querySelectorAll(".changed").forEach((n) => n.classList.remove("changed"));
   changeRanges = new Map();
   const docs = docsOf();
+  const skill = (benchOf() || {}).skill;
+  const edited = (key) => !!docEdit && docEdit.key === key;
   const entries = [...Object.entries(state.sections),
-                   ...Object.entries(docs.views).filter(([path, v]) => v.exists && !(docEdit && docEdit.path === path))
-                     .map(([path, v]) => [DOC_PREFIX + path, v])];
+                   ...Object.entries(docs.views).filter(([path, v]) => v.exists && !edited(DOC_PREFIX + path))
+                     .map(([path, v]) => [DOC_PREFIX + path, v]),
+                   ...(skill && skill.exists && !edited(SKILL_KEY) ? [[SKILL_KEY, skill]] : [])];
   for (const [id, sec] of entries) {
     const body = sec.updated && document.querySelector(`#sec-${CSS.escape(id)} .body`);
     if (!body) continue;
@@ -2253,7 +2295,7 @@ function markBase() {
   };
   paint([]);
   const v = shownDoc && docsOf().views[shownDoc];
-  if (!v || !v.exists || (!v.new && v.base_html == null) || (docEdit && docEdit.path === shownDoc)) return;
+  if (!v || !v.exists || (!v.new && v.base_html == null) || (docEdit && docEdit.key === DOC_PREFIX + shownDoc)) return;
   const body = document.querySelector(`#sec-${CSS.escape(DOC_PREFIX + shownDoc)} .body`);
   if (!body) return;
   const blockTexts = (root) => {
@@ -2333,8 +2375,9 @@ function wordRuns(ws, marked) {
   return ranges;
 }
 
-// The text a « mark read » records: a section's file, or a doc's (key "doc:<path>").
-const mdOf = (id) => (docPathOf(id) !== null ? (docsOf().views[docPathOf(id)] || {}).md || "" : state.sections[id].md);
+// The text a « mark read » records: a section's file, a doc's (key "doc:<path>"), or the skill file's (key "skill:").
+const mdOf = (id) => (id === SKILL_KEY ? ((benchOf() || {}).skill || {}).md || ""
+  : docPathOf(id) !== null ? (docsOf().views[docPathOf(id)] || {}).md || "" : state.sections[id].md);
 
 async function markSeen(ids) {
   try {

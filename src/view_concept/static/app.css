@@ -615,6 +615,7 @@ body.sb-collapsed .sidebar { display: none; }
   .plan, .metrics { padding: 8px 14px 24px; }
   .doc { padding: 8px 14px 40vh 18px; }
   .bench-sides { grid-template-columns: minmax(0, 1fr); }
+  .bench-bar { position: static; } /* it wraps on several lines: kept out of the way of the sides */
   .bench-bar .bench-actions { margin-left: 0; }
 
   /* The composer and a side thread dock across the bottom, above the keyboard (--keyboard,
