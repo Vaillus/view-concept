@@ -30,21 +30,13 @@ reach the agent session through the inbox.
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text, each doc's under
-                        `doc:<path>`, a workbench's skill file's under `skill:`  (server)
+                        `doc:<path>`                                       (server)
         drafts.json     the drafts and the general note, shared by every page (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
         doc-set.json    the doc set: the repo docs the Doc tab shows, each with its reason,
                         and the docs the user removed                    (`doc-set`)
         stale.json      the stale passages: doc passages the model contradicts  (`stale`)
-        cases.json      a workbench's case set: the cases' repo, the pinned commit, each
-                        case's id, folder and kind                       (`cases`)
-        skill-versions/v<k>.md  each skill version: the skill file's text a run read
-                                                                   (server, bench.py)
-        runs/<case id>/<n>/  run n of a case: run.json, the README.md it wrote, its run
-                        report (report.md), the other files it wrote under files/
-                                                                   (server, bench.py)
-        runs/<case id>/error.json  the case's last failed attempt  (server, bench.py)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
@@ -75,29 +67,10 @@ The session workflow, `workflow` in plan.json, is the skill that drives the sess
 view-concept, view-branch, view-refactor (a triage of existing code) or view-docs (a docs
 review: a repo's docs reviewed on a scope, on a branch of their own, with the Doc tab
 alone, no outline, no sections and no items; its agent sets "awaiting-pr" whenever it
-waits once the doc set exists) or tune-readme (a workbench, see below). It picks the
+waits once the doc set exists). It picks the
 verdict set the page shows: verdicts.yaml holds one list per workflow, and each verdict
 carries the `tone` the page colours it with. A session created before workflows existed
 has no workflow and gets view-branch's list.
-
-A workbench (the tune-readme workflow) tunes the write-readme skill: a code session whose
-repo is the view-concept checkout that holds the skill file (SKILL_FILE), with the Bench tab
-alone, no outline, no sections and no items. Its session's agent edits the skill file in
-answer to the comments; the runs of the skill on fixed folders are started by the server
-(bench.py).
-
-The case set is {repo (the cases' repo, an absolute path), commit (the pinned commit, a
-full sha), cases: [{id, folder, kind}]}: `folder` is relative to the repo root ("" for the
-root), `kind` is "edit" (the folder has a README the run edits) or "draft" (the run writes
-one from the code alone; the folder's README at the pinned commit, if any, is its
-comparison README, shown but never read by the run). The id is derived from the folder
-(`case_id`), the name the page and a batch print from both (`case_name`). A run's
-record, run.json, is {case, n, skill_version (k of skill-versions/v<k>.md), commit,
-started, ended, agent (the backend's name), state ("running" or "done"), other_files (the
-files it wrote, changed or deleted besides its README, relative to the repo root)}; see
-bench.py for how a run goes. The skill file is shown as a doc of the Doc tab is: read
-from the repo at each render, its highlight baseline in seen.json under `skill:`, moved by
-every batch, and editable in the page with the same starting-text check (`write_skill`).
 
 A side thread is a separate headless agent conversation that the user opens from the page
 to discuss a passage without changing anything (see threads.py). Only a comment batch
@@ -298,10 +271,10 @@ ACTIONS = (
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
 # The session workflow: which skill drives the session. It picks the verdict set the page
-# shows (see verdicts.yaml). view-branch, view-refactor, view-docs (a docs review) and
-# tune-readme (a workbench) work on a repository, so their sessions are code sessions. A
-# session created before workflows existed has none.
-WORKFLOWS = ("view-concept", "view-branch", "view-refactor", "view-docs", "tune-readme")
+# shows (see verdicts.yaml). view-branch, view-refactor and view-docs (a docs review) work
+# on a repository, so their sessions are code sessions. A session created before workflows
+# existed has none.
+WORKFLOWS = ("view-concept", "view-branch", "view-refactor", "view-docs")
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
 # The role agents a branch review's coordinator starts; a variant sets a model per role.
@@ -320,19 +293,6 @@ DOC_KEY = "doc:"
 # The repo lexicon, relative to the repo root: what a "write-lexicon" batch asks to write.
 REPO_LEXICON = ".agents/lexicon.md"
 DOC_SET_ANCHOR = DOC_KEY
-# A workbench's anchors (bench.py), which no outline id may start with either: a run's README
-# or report (`run:<case id>:<n>:readme`, `run:<case id>:<n>:report`), a case's README at the
-# pinned commit (`pinned:<case id>`), the skill file (`skill:`, also its highlight baseline).
-RUN_KEY = "run:"
-PINNED_KEY = "pinned:"
-SKILL_KEY = "skill:"
-# The skill file a workbench tunes and its runs read, relative to its repo (plan.json `repo`).
-SKILL_FILE = "skills/write-readme/SKILL.md"
-# A case's kind: an edit case's folder has a README the run edits; a draft case's run writes
-# one from the code alone (the folder's README, if any, removed from its checkout).
-CASE_KINDS = ("edit", "draft")
-# The two texts a run keeps that a comment can sit on: (anchor part, printed name, file).
-RUN_PARTS = (("readme", "README", "README.md"), ("report", "report", "report.md"))
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -560,28 +520,6 @@ class Session:
     def stale_path(self) -> Path:
         return self.dir / "stale.json"
 
-    @property
-    def cases_path(self) -> Path:
-        return self.dir / "cases.json"
-
-    @property
-    def runs_dir(self) -> Path:
-        return self.dir / "runs"
-
-    @property
-    def skill_versions_dir(self) -> Path:
-        return self.dir / "skill-versions"
-
-    def case_runs_dir(self, cid: str) -> Path:
-        """runs/<case id>/: the runs of one case, one folder each, and its error.json."""
-        if not cid or "/" in cid or cid in (".", ".."):
-            raise SessionError(f"invalid case id {cid!r}")
-        return self.runs_dir / cid
-
-    def run_dir(self, cid: str, n: int) -> Path:
-        """runs/<case id>/<n>/: run n of a case."""
-        return self.case_runs_dir(cid) / str(n)
-
     def media_folder(self, sid: str) -> Path:
         """The media folder of section `sid`: sections/<sid>/."""
         if not sid or "/" in sid or sid in (".", ".."):
@@ -665,12 +603,6 @@ class Session:
                 raise SessionError(
                     f"outline ids may not start with {DOC_KEY!r}, the Doc tab's anchors: "
                     + ", ".join(taken)
-                )
-            bench = [i for i in ids if i.startswith((RUN_KEY, PINNED_KEY, SKILL_KEY))]
-            if bench:
-                raise SessionError(
-                    f"outline ids may not start with {RUN_KEY!r}, {PINNED_KEY!r} or "
-                    f"{SKILL_KEY!r}, the Bench tab's anchors: " + ", ".join(bench)
                 )
             long = [sec["id"] for sec in outline if len(str(sec.get("earns", ""))) > EARNS_MAX]
             if long:
@@ -1336,40 +1268,6 @@ class Session:
             seen[DOC_KEY + path] = text
             _write_json(self.seen_path, seen)
 
-    def skill_file(self) -> Path | None:
-        """The skill file a workbench tunes (SKILL_FILE in its repo), None outside a
-        tune-readme session or without a repo. The file may not exist."""
-        repo = self.repo_dir()
-        if repo is None or self.read_plan().get("workflow") != "tune-readme":
-            return None
-        return repo / SKILL_FILE
-
-    def write_skill(self, text: str, base: str) -> None:
-        """Write the skill file: the user's edit in the Bench tab, with the starting-text
-        check of `write_doc` (DocConflict when the file no longer holds `base`). The user's
-        own words get no green: a baseline that was the old text moves to the new one."""
-        file = self.skill_file()
-        if file is None:
-            raise SessionError("this session has no skill file")
-        if not file.is_file():
-            raise SessionError(f"{SKILL_FILE} is not in the repo")
-        now = file.read_text(encoding="utf-8", errors="replace")
-        if now != base:
-            raise DocConflict(f"{SKILL_FILE} changed since you started editing it")
-        file.write_text(text, encoding="utf-8")
-        seen = _read_json(self.seen_path, {})
-        if seen.get(SKILL_KEY) == now:
-            seen[SKILL_KEY] = text
-            _write_json(self.seen_path, seen)
-
-    def skill_texts(self) -> dict[str, str]:
-        """The skill file's text keyed as its highlight baseline is (`skill:`), empty when
-        the session has none or the file is missing."""
-        file = self.skill_file()
-        if file is None or not file.is_file():
-            return {}
-        return {SKILL_KEY: file.read_text(encoding="utf-8", errors="replace")}
-
     def doc_texts(self) -> dict[str, str]:
         """The docs that exist, keyed as their highlight baseline is: `doc:<path>`."""
         return {DOC_KEY + p: t for p, t in self.read_docs().items() if t is not None}
@@ -1456,112 +1354,6 @@ class Session:
         """The worktree file of each doc of the doc set, for `signature`."""
         files = (self.doc_file(d["path"]) for d in self.read_doc_set()["docs"])
         return [f for f in files if f is not None]
-
-    # ---- the case set (a workbench) ----
-    def read_cases(self) -> dict[str, Any]:
-        """The case set: {repo, commit, cases: [{id, folder, kind}]}, empty without a file."""
-        data = _read_json(self.cases_path, {})
-        return {
-            "repo": str(data.get("repo", "")),
-            "commit": str(data.get("commit", "")),
-            "cases": list(data.get("cases", [])),
-        }
-
-    def set_cases(self, repo: str, rev: str) -> dict[str, Any]:
-        """Set the cases' repo and the pinned commit, `rev` resolved to its full sha there.
-        Changing the commit keeps the cases and their runs."""
-        root = Path(repo).expanduser().resolve()
-        if not root.is_dir():
-            raise SessionError(f"no folder {root}")
-        sha = (_git(root, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}") or "").strip()
-        if not sha:
-            raise SessionError(f"git cannot resolve {rev!r} to a commit in {root}")
-        data = self.read_cases()
-        data.update(repo=str(root), commit=sha)
-        _write_json(self.cases_path, data)
-        return data
-
-    def add_case(self, folder: str, kind: str) -> dict[str, Any]:
-        """Add a case: a folder of the cases' repo at the pinned commit and its kind. Refused
-        with no repo set, for a folder absent at the commit, a duplicate id, and an edit
-        case whose folder has no README.md at the commit."""
-        if kind not in CASE_KINDS:
-            raise SessionError(f"unknown case kind {kind!r}; one of {', '.join(CASE_KINDS)}")
-        data = self.read_cases()
-        if not data["repo"] or not data["commit"]:
-            raise SessionError("set the cases' repo first: cases <slug> set --repo --commit")
-        folder = case_folder(folder)
-        case = {"id": case_id(folder, kind), "folder": folder, "kind": kind}
-        if any(c.get("id") == case["id"] for c in data["cases"]):
-            raise SessionError(f"the case {case['id']} exists already")
-        repo, commit = Path(data["repo"]), data["commit"]
-        if folder and (_git(repo, "cat-file", "-t", f"{commit}:{folder}") or "").strip() != "tree":
-            raise SessionError(f"no folder {folder}/ at the pinned commit {commit[:7]}")
-        if kind == "edit" and _git(repo, "cat-file", "-e", f"{commit}:{case_readme(case)}") is None:
-            raise SessionError(
-                f"{case_readme(case)} is not at the pinned commit: a folder with no README "
-                "is a draft case"
-            )
-        data["cases"].append(case)
-        _write_json(self.cases_path, data)
-        return case
-
-    def remove_case(self, cid: str) -> None:
-        """Remove a case from the case set; its runs stay on disk."""
-        data = self.read_cases()
-        if not any(c.get("id") == cid for c in data["cases"]):
-            raise SessionError(f"no case {cid!r}")
-        data["cases"] = [c for c in data["cases"] if c.get("id") != cid]
-        _write_json(self.cases_path, data)
-
-    def pinned_readme(self, case: dict[str, Any]) -> str | None:
-        """The case's README at the pinned commit: an edit case's README, a draft case's
-        comparison README; None when the folder has none there (or git cannot tell)."""
-        data = self.read_cases()
-        if not data["repo"] or not data["commit"]:
-            return None
-        return _git(Path(data["repo"]), "show", f"{data['commit']}:./{case_readme(case)}")
-
-    def read_runs(self, cid: str) -> list[dict[str, Any]]:
-        """The run records of a case (run.json of each run folder), oldest first."""
-        folder = self.case_runs_dir(cid)
-        if not folder.is_dir():
-            return []
-        runs = [
-            run
-            for d in folder.iterdir()
-            if d.name.isdigit() and (run := _read_json(d / "run.json", None))
-        ]
-        return sorted(runs, key=lambda r: int(r.get("n", 0)))
-
-    def read_run_error(self, cid: str) -> dict[str, Any] | None:
-        """The last failed attempt of a case (error.json: {at, error}), None when none."""
-        return _read_json(self.case_runs_dir(cid) / "error.json", None)
-
-    def bench_labels(self) -> dict[str, str]:
-        """How a batch prints each anchor of the Bench tab (see format_comment): every
-        run's README and report, every case's README at the pinned commit, the skill
-        file. Empty outside a workbench."""
-        if self.read_plan().get("workflow") != "tune-readme":
-            return {}
-        data = self.read_cases()
-        labels = {SKILL_KEY: "(skill file)"}
-        cases = {c["id"]: c for c in data["cases"]}
-        # A removed case's runs stay on disk, and so do the comments on them.
-        if self.runs_dir.is_dir():
-            for d in self.runs_dir.iterdir():
-                cases.setdefault(d.name, {"id": d.name, "folder": d.name, "kind": "edit"})
-        short = data["commit"][:7]
-        for cid, case in cases.items():
-            name = case_name(case)
-            labels[PINNED_KEY + cid] = f"({name} · README at the pinned commit {short})"
-            for run in self.read_runs(cid):
-                n, k = run.get("n"), run.get("skill_version")
-                for part, label, file in RUN_PARTS:
-                    labels[f"{RUN_KEY}{cid}:{n}:{part}"] = (
-                        f"(run {name} {n} · {label}, skill v{k}: runs/{cid}/{n}/{file})"
-                    )
-        return labels
 
     # ---- the drafts file ----
     def read_drafts(self) -> dict[str, Any]:
@@ -1873,15 +1665,6 @@ class Session:
         paths += [self.doc_set_path, self.stale_path]
         with contextlib.suppress(SessionError):
             paths += self.doc_files()
-        # A workbench: its case set, its runs' files and errors, the skill file.
-        paths.append(self.cases_path)
-        if self.runs_dir.is_dir():
-            paths += sorted(self.runs_dir.glob("*/error.json"))
-            for name in ("run.json", "README.md", "report.md"):
-                paths += sorted(self.runs_dir.glob(f"*/*/{name}"))
-        with contextlib.suppress(SessionError):
-            if (skill := self.skill_file()) is not None:
-                paths.append(skill)
         return _stat_signature(paths)
 
     def thread_signature(self) -> tuple:
@@ -2084,8 +1867,8 @@ class Session:
         with self.inbox_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(batch, ensure_ascii=False) + "\n")
         # Highlights show what changed since the last batch: every baseline moves here,
-        # the docs' and the skill file's included.
-        self.mark_seen({**self.read_sections(), **self.doc_texts(), **self.skill_texts()})
+        # the docs' included.
+        self.mark_seen({**self.read_sections(), **self.doc_texts()})
         if action == "plan":
             self._skip_open_questions(batch["sent"])
         return batch
@@ -2425,34 +2208,6 @@ def doc_path(path: str) -> str:
     return str(p)
 
 
-def case_folder(folder: str) -> str:
-    """A case's folder as the case set keeps it: relative to the repo root, in POSIX form,
-    no leading or trailing slash, "" for the root."""
-    raw = folder.strip().replace("\\", "/").strip("/")
-    p = PurePosixPath(raw or ".")
-    if p.is_absolute() or ".." in p.parts:
-        raise SessionError(f"not a folder inside the repo: {folder!r}")
-    return "" if str(p) == "." else str(p)
-
-
-def case_id(folder: str, kind: str) -> str:
-    """A case's id: its folder with `/` turned to `-` (`root` for the root), and `-draft`
-    for a draft case."""
-    return (folder.replace("/", "-") or "root") + ("-draft" if kind == "draft" else "")
-
-
-def case_name(case: dict[str, Any]) -> str:
-    """A case's name, as the page and a batch print it: `<folder>/`, `README.md (root)` for
-    the root, plus ` (draft)` for a draft case."""
-    name = f"{case['folder']}/" if case.get("folder") else "README.md (root)"
-    return name + (" (draft)" if case.get("kind") == "draft" else "")
-
-
-def case_readme(case: dict[str, Any]) -> str:
-    """A case's README, relative to the repo root."""
-    return f"{case['folder']}/README.md" if case.get("folder") else "README.md"
-
-
 def list_sessions(root: Path | None = None) -> list[dict[str, Any]]:
     root = root or SESSIONS
     out = []
@@ -2571,11 +2326,9 @@ def format_batch(
     batch: dict[str, Any],
     outline: list[dict[str, Any]],
     questions: list[dict[str, Any]] | None = None,
-    bench: dict[str, str] | None = None,
 ) -> str:
     """How a batch appears in the agent session (one event of the comment channel). `questions`
-    gives the text of the agent questions an answer batch answers, `bench` how a workbench
-    prints the anchors of its Bench tab (`Session.bench_labels`)."""
+    gives the text of the agent questions an answer batch answers."""
     number = {s["id"]: i + 1 for i, s in enumerate(outline)}
     n = len(batch["comments"])
     lines = [f"view-concept · {slug} · batch {batch['id']} · {n} comment{'s' * (n != 1)}"]
@@ -2665,21 +2418,15 @@ def format_batch(
             lines += [f"    (from side thread {t}: threads/{t}.json)" for t in a.get("threads", [])]
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
-    lines += [format_comment(c, number, bench) for c in batch["comments"]]
+    lines += [format_comment(c, number) for c in batch["comments"]]
     return "\n".join(lines)
 
 
-def format_comment(
-    c: dict[str, Any], number: dict[str, int], bench: dict[str, str] | None = None
-) -> str:
+def format_comment(c: dict[str, Any], number: dict[str, int]) -> str:
     """One comment of a batch: where it is anchored (a section, a doc of the Doc tab by its
-    path, the doc set list, or in a workbench a run's README or report, a case's README at
-    the pinned commit, the skill file, as `bench` prints them), its text, the thread it
-    comes from."""
+    path, the doc set list), its text, the thread it comes from."""
     sec = c["section"]
-    if bench and sec in bench:
-        where = bench[sec]
-    elif sec == DOC_SET_ANCHOR:
+    if sec == DOC_SET_ANCHOR:
         where = "(doc set)"
     elif sec.startswith(DOC_KEY):
         where = f"(doc {sec.removeprefix(DOC_KEY)})"

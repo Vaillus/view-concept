@@ -27,7 +27,7 @@ from typing import Any
 from .store import HOME, SessionError, _read_json, _write_json, project_of, slugify
 
 # The skills a session can start on, in the order the page offers them.
-SKILLS = ("view-branch", "view-refactor", "view-docs", "view-concept", "tune-readme")
+SKILLS = ("view-branch", "view-refactor", "view-docs", "view-concept")
 # The skills that create their own branch and worktree: a launch takes no worktree for them,
 # or the session would run in one and write in the other.
 OWN_WORKTREE = ("view-docs",)
