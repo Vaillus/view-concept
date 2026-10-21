@@ -39,6 +39,12 @@ reach the agent session through the inbox.
         stale.json      the stale passages: doc passages the model contradicts  (`stale`)
         cases.json      a workbench's case set: the cases' repo, the pinned commit, each
                         case's id, folder and kind                       (`cases`)
+        skill-versions/v<k>.md  each skill version: the skill file's text a run read
+                                                                   (server, bench.py)
+        runs/<case id>/<n>/  run n of a case: run.json, the README.md it wrote, its run
+                        report (report.md), the other files it wrote under files/
+                                                                   (server, bench.py)
+        runs/<case id>/error.json  the case's last failed attempt  (server, bench.py)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
@@ -85,7 +91,11 @@ full sha), cases: [{id, folder, kind}]}: `folder` is relative to the repo root (
 root), `kind` is "edit" (the folder has a README the run edits) or "draft" (the run writes
 one from the code alone; the folder's README at the pinned commit, if any, is its
 comparison README, shown but never read by the run). The id is derived from the folder
-(`case_id`), the name the page and a batch print from both (`case_name`).
+(`case_id`), the name the page and a batch print from both (`case_name`). A run's
+record, run.json, is {case, n, skill_version (k of skill-versions/v<k>.md), commit,
+started, ended, agent (the backend's name), state ("running" or "done"), other_files (the
+files it wrote, changed or deleted besides its README, relative to the repo root)}; see
+bench.py for how a run goes.
 
 A side thread is a separate headless agent conversation that the user opens from the page
 to discuss a passage without changing anything (see threads.py). Only a comment batch
@@ -1332,6 +1342,14 @@ class Session:
             return None
         return repo / SKILL_FILE
 
+    def skill_texts(self) -> dict[str, str]:
+        """The skill file's text keyed as its highlight baseline is (`skill:`), empty when
+        the session has none or the file is missing."""
+        file = self.skill_file()
+        if file is None or not file.is_file():
+            return {}
+        return {SKILL_KEY: file.read_text(encoding="utf-8", errors="replace")}
+
     def doc_texts(self) -> dict[str, str]:
         """The docs that exist, keyed as their highlight baseline is: `doc:<path>`."""
         return {DOC_KEY + p: t for p, t in self.read_docs().items() if t is not None}
@@ -1835,6 +1853,15 @@ class Session:
         paths += [self.doc_set_path, self.stale_path]
         with contextlib.suppress(SessionError):
             paths += self.doc_files()
+        # A workbench: its case set, its runs' files and errors, the skill file.
+        paths.append(self.cases_path)
+        if self.runs_dir.is_dir():
+            paths += sorted(self.runs_dir.glob("*/error.json"))
+            for name in ("run.json", "README.md", "report.md"):
+                paths += sorted(self.runs_dir.glob(f"*/*/{name}"))
+        with contextlib.suppress(SessionError):
+            if (skill := self.skill_file()) is not None:
+                paths.append(skill)
         return _stat_signature(paths)
 
     def thread_signature(self) -> tuple:

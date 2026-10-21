@@ -15,6 +15,13 @@ subagents, so a thread starts from the session folder instead (`Session.fork_par
 - `command`: any program that reads a prompt on stdin and prints its answer on stdout
   (`VIEW_CONCEPT_AGENT_COMMAND`, or the `jazz run` preset). It has no conversation to
   fork, so every turn carries the explanation's location and the thread so far.
+
+A backend also starts a workbench's runs (bench.py): `run_args`, `run_feed` and
+`run_close`. A run is a blank conversation (no resume, no fork) that may write in its
+cwd, the run's throwaway checkout, and nowhere else, with the project's settings only (on
+Claude, `--setting-sources project`: the checkout's CLAUDE.md files, none of the user's).
+Its final text is the run report: Claude's `result` event, Codex's last agent message, a
+command's stdout.
 """
 
 from __future__ import annotations
@@ -45,6 +52,18 @@ THREAD_ALLOWED = [
     "WebFetch",
     *(f"Bash(git {c}:*)" for c in ("log", "show", "diff", "blame", "status", "ls-files")),
     *(f"Bash(view-concept {c}:*)" for c in ("context", "changes", "pending", "list")),
+]
+
+# What a run's Claude may do: read, and write inside its cwd (the throwaway checkout) only;
+# the shell for the commands that list or read files.
+RUN_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
+RUN_ALLOWED = [
+    "Read",
+    "Grep",
+    "Glob",
+    "Edit(./**)",
+    "Write(./**)",
+    *(f"Bash({c}:*)" for c in ("ls", "find", "wc", "head", "cat")),
 ]
 
 
@@ -95,6 +114,24 @@ class Backend:
             turn.failed = True
             turn.error = "\n".join(turn.noise[-5:]) or "the agent ended without an answer"
 
+    # ---- a workbench's run (bench.py) ----
+    def run_args(self) -> list[str]:
+        """The command of a run: a blank conversation that may write in its cwd only."""
+        raise NotImplementedError
+
+    def run_feed(self, line: str, turn: TurnState) -> None:
+        """Fold one output line of a run into its turn; `final_text` is its run report."""
+        raise NotImplementedError
+
+    def run_close(self, turn: TurnState, code: int) -> None:
+        """Settle a run once its process has exited."""
+        if code and not turn.failed:
+            turn.failed = True
+            turn.error = "\n".join(turn.noise[-5:]) or f"exit code {code}"
+        elif not turn.finished and not turn.failed:
+            turn.failed = True
+            turn.error = "\n".join(turn.noise[-5:]) or "the agent ended without a run report"
+
 
 class ClaudeBackend(Backend):
     name = "claude"
@@ -115,6 +152,27 @@ class ClaudeBackend(Backend):
 
     def schema_args(self, schema: dict[str, Any]) -> list[str]:
         return ["--json-schema", json.dumps(schema)]
+
+    def run_args(self) -> list[str]:
+        args = [os.environ.get(CLAUDE_ENV, "claude"), "-p", "--output-format", "stream-json"]
+        args += ["--verbose", "--strict-mcp-config", "--setting-sources", "project"]
+        args += ["--permission-mode", "dontAsk"]
+        return args + ["--tools", *RUN_TOOLS, "--allowedTools", *RUN_ALLOWED]
+
+    def run_feed(self, line: str, turn: TurnState) -> None:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            turn.noise.append(line.rstrip())
+            return
+        if event.get("type") == "system" and event.get("subtype") == "init":
+            turn.session = event.get("session_id", turn.session)
+        elif event.get("type") == "result":
+            turn.finished = True
+            turn.final_text = str(event.get("result", ""))
+            if event.get("is_error"):
+                turn.failed = True
+                turn.error = turn.final_text.strip()
 
     def feed(
         self, line: str, thread: dict[str, Any], reply: dict[str, Any], turn: TurnState
@@ -175,6 +233,31 @@ class CodexBackend(Backend):
         args += ["-c", 'sandbox_mode="read-only"', "-c", 'approval_policy="never"']
         args += ["-"]
         return args
+
+    def run_args(self) -> list[str]:
+        args = [os.environ.get(CODEX_ENV, "codex"), "exec", "--json", "--skip-git-repo-check"]
+        args += ["-c", 'sandbox_mode="workspace-write"', "-c", 'approval_policy="never"']
+        return [*args, "-"]
+
+    def run_feed(self, line: str, turn: TurnState) -> None:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            turn.noise.append(line.rstrip())
+            return
+        kind = event.get("type")
+        item = event.get("item", {})
+        if kind == "thread.started":
+            turn.session = event.get("thread_id", turn.session)
+        elif kind in ("turn.failed", "error"):
+            turn.failed = True
+            detail = event.get("message") or (event.get("error") or {}).get("message") or ""
+            turn.error = str(detail).strip() or turn.error
+        elif kind == "turn.completed":
+            turn.finished = True
+        elif kind == "item.completed" and item.get("type") == "agent_message":
+            # The last message is the run report.
+            turn.final_text = str(item.get("text", ""))
 
     def feed(
         self, line: str, thread: dict[str, Any], reply: dict[str, Any], turn: TurnState
@@ -255,6 +338,20 @@ class CommandBackend(Backend):
         else:
             turn.finished = True
             reply["text"] = reply["text"].strip()
+
+    def run_args(self) -> list[str]:
+        return list(self.argv)
+
+    def run_feed(self, line: str, turn: TurnState) -> None:
+        turn.final_text += line
+
+    def run_close(self, turn: TurnState, code: int) -> None:
+        if code:
+            turn.failed = True
+            out = turn.final_text.strip()[-400:] or "\n".join(turn.noise[-5:])
+            turn.error = out or f"exit code {code}"
+        else:
+            turn.finished = True
 
 
 def _separate_messages(reply: dict[str, Any]) -> None:
