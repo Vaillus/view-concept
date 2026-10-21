@@ -370,8 +370,8 @@ as it stands into a new skill version, and the user decides when.
 
 Every question you put to the user once the session exists goes to the page,
 never to the terminal or the harness's question tool: the page shows it at
-the top of the Bench tab, above the case bar, and shows nothing there until
-the session has a question. Ask one when a comment needs the user's call: two skill
+the top of the Bench tab, above the case bar, and shows nothing there while
+no question is open. Ask one when a comment needs the user's call: two skill
 edits that would each do what it asks, and change other cases differently.
 
 ```bash
