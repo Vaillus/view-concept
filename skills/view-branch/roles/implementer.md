@@ -155,11 +155,11 @@ concept or a line of the to-do list is implemented in one of them.
    doc-set <slug> remove <path>`. Docstrings and code comments stay out. A
    doc the user removed stays out: the command refuses it.
 2. **Write the lexicons**, before any other doc. While the repo lexicon is
-   missing, skip this step, unless the trigger holds a « write repo lexicon »
-   or a rewrite request: nobody asked for the file, and the doc pass writes
-   none on its own.
-   1. the repo lexicon, `.agents/lexicon.md`, when it is missing and a
-      « write repo lexicon » or a rewrite request asks for it. Its format:
+   missing, skip this step, unless the doc set holds a `README.md` (step 3
+   runs write-readme on it, which reads the lexicon) or the trigger holds a
+   « write repo lexicon »: nobody asked for the file otherwise.
+   1. the repo lexicon, `.agents/lexicon.md`, when it is missing and the
+      doc set holds a README or a « write repo lexicon » asks for it. Its format:
       a `# <repo name>` title, a `## Reader` part holding the reader line
       (the field the docs' reader knows, and that they have never opened
       this repo), then a `## Terms` part, one entry per term, `**Term**:`
@@ -180,9 +180,11 @@ concept or a line of the to-do list is implemented in one of them.
    its first use in that doc in the entry's words, the closest lexicon
    winning; a lexicon outside the doc's path is not read for it, and no doc
    links to a lexicon. The lexicons are not rewritten here: step 2 alone
-   writes them, and a missing repo lexicon stays missing. Apply the comments on a doc's text that the
-   trigger holds (they waited for the doc pass). A README a rewrite request
-   names is not patched this way: see **The rewrite request**.
+   writes them. Apply the comments on a doc's text that the trigger holds
+   (they waited for the doc pass). A `README.md` of the doc set is not
+   patched this way: run the write-readme skill on each, as **The rewrite
+   request** says (steps 2, 3 and 5), then apply the comments that waited
+   on its text.
 4. **One commit** for the doc pass, whose message names the docs it
    rewrote.
 
@@ -221,8 +223,9 @@ A **rewrite request** asks you to run the write-readme skill on one
 README, which edits what fails or writes it again: a batch with `action:
 rewrite-readme <path>` (the button just under the doc titles in the Doc
 tab, naming the README in sight), or a comment on a README asking for a
-write-readme rewrite. One sent before « Write docs » waits for the doc pass;
-after it, the coordinator passes it to you in the next pass. For that README
+write-readme rewrite. One sent before « Write docs » is done by the doc
+pass, which runs write-readme on every README of the doc set; after it, the
+coordinator passes it to you in the next pass. For that README
 alone:
 
 1. When the repo lexicon is missing, write it first (**The doc pass**, step

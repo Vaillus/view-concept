@@ -138,7 +138,8 @@ for readers):
   (a `.agents/lexicon.md` below the root, for the terms only the folders
   under it share) above the folder of a doc of the doc set. A missing repo
   lexicon is listed so its entry in the Doc tab carries « write repo
-  lexicon »; you write it only on that request or a rewrite request.
+  lexicon »; you write it only on that request, a rewrite request, or at
+  the first run when the doc set holds a README (see **The first run**).
 
 The reason is one line the user reads in the list: what in the doc the scope
 concerns (« the Install part: the Claude Code plugin, Jazz, Codex, the other
@@ -168,9 +169,11 @@ sits at the end of the tab.
 Once the session is open, in the same turn:
 
 1. Write the doc set (see **The doc set**).
-2. Run `view-concept status <slug> revising`, then look for the stale
-   passages in every doc of it (see **Stale passages**): correct those the
-   code contradicts, in the doc files.
+2. Run `view-concept status <slug> revising`, then run the write-readme
+   skill on each `README.md` of the doc set, as **The rewrite request**
+   says (the repo lexicon written first when it is missing), and look for
+   the stale passages in every other doc (see **Stale passages**): correct
+   those the code contradicts, in the doc files.
 3. Unless the request named one, look for a reference model (see **The
    reference model**), then flag the passages the one you kept contradicts.
 4. Ask what the reading left open (see **Agent questions**): a doc whose
@@ -293,8 +296,9 @@ you change what is false or missing, and leave what is right as it is.
 - **Copy rules**, on trial: no aside set off by em-dashes, no « not X, but
   Y », no colon before a punchline, no « worth noting ».
 
-These rules hold for every doc but the README a rewrite request names, which
-write-readme's rules write instead (see **The rewrite request**).
+These rules hold for every doc but a README the first run or a rewrite
+request runs write-readme on, which write-readme's rules write instead (see
+**The rewrite request**).
 
 ## The rewrite request
 
