@@ -625,6 +625,18 @@ def test_state_carries_the_missing_facts_highlighted_until_read(client, doc_revi
     assert [f["updated"] for f in facts["list"]] == [False, False]
 
 
+def test_a_pending_missing_fact_is_counted_on_its_doc(client, doc_review):
+    # The page puts a minor README back in the review list while one of its facts waits.
+    doc_review.add_doc("README.md", "the install")
+    doc_review.add_missing_fact("README.md", "Run serve.", "leave", "the code says open")
+    doc_review.add_missing_fact("README.md", "Offline, TeX.", "keep", "a link")
+    docs = client.get("/api/s/doc-tab").json()["docs"]
+    assert docs["set"][2]["pending"] == 2 and docs["set"][0]["pending"] == 0
+    doc_review.mark_missing_fact("f1", "left")
+    doc_review.mark_missing_fact("f2", "kept")
+    assert client.get("/api/s/doc-tab").json()["docs"]["set"][2]["pending"] == 0
+
+
 def test_a_batch_asks_for_the_doc_pass_and_the_pr(client):
     body = {"action": "write-docs", "then_pr": True}
     r = client.post("/api/s/kv-cache/batch", json=body)

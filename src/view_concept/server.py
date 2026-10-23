@@ -308,7 +308,8 @@ def state(slug: str) -> dict[str, Any]:
 def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> dict[str, Any]:
     """The Doc tab as the page reads it: {set: [{path, reason, stale (how many of its
     stale passages are shown), minor? and diff? (a minor doc), failing? (a README's failure
-    indicator), facts (how many missing facts it has)}] in the write order, removed,
+    indicator), facts (how many missing facts it has), pending (how many of them wait for the
+    user's decision)}] in the write order, removed,
     views: {path: view}, stale (the stale passages shown), facts: {path: {text, list}},
     reference (the reference model, or None)}. A doc's view is its section view (the file
     rendered as Markdown, `updated` against its highlight baseline `doc:<path>`) with
@@ -355,6 +356,9 @@ def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> 
                 "stale": sum(f["doc"] == d["path"] for f in stale),
                 **{k: d[k] for k in ("minor", "diff", "failing") if d.get(k)},
                 "facts": len(facts.get(d["path"], {}).get("list", [])),
+                "pending": sum(
+                    f["state"] == "pending" for f in facts.get(d["path"], {}).get("list", [])
+                ),
             }
             for d in data["docs"]
         ],

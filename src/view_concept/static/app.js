@@ -977,8 +977,12 @@ function renderDocTab(ending) {
 const staleCount = (docs, d) => d.stale ?? docs.stale.filter((s) => s.doc === d.path).length;
 const staleBadge = (n) => (n ? el("span", { class: "badge tone-warn", text: `${n} stale` }) : null);
 const missingBadge = (v) => (v.exists === false ? el("span", { class: "badge", text: "missing" }) : null);
-// A minor doc stays out of the review list, unless a stale passage is shown on it.
-const isFolded = (docs, d) => !!d.minor && !staleCount(docs, d);
+// A minor doc stays out of the review list, unless a stale passage is shown on it or a
+// missing fact of it waits for your decision.
+const isFolded = (docs, d) => !!d.minor && !staleCount(docs, d) && !d.pending;
+// Why a minor doc is back in the review list.
+const liftedBy = (docs, d) => [staleCount(docs, d) ? "a stale passage" : "", d.pending ? "a pending missing fact" : ""]
+  .filter(Boolean).join(" and ");
 // The docs in the write order, the review list first, then the folded minor docs.
 const reviewOrder = (docs) => [...docs.set.filter((d) => !isFolded(docs, d)), ...docs.set.filter((d) => isFolded(docs, d))];
 const diffText = (d) => `+${(d.diff || {}).added ?? 0} −${(d.diff || {}).removed ?? 0}`;
@@ -1020,7 +1024,7 @@ function docSetBlock(docs) {
   const item = (d) => el("li", {},
     el("button", { class: "doc-open", text: d.path, title: "Show this doc", onclick: () => openDoc(d.path) }),
     d.reason ? ` — ${d.reason}` : "",
-    d.minor && !isFolded(docs, d) ? el("span", { class: "badge", text: `minor · ${diffText(d)}`, title: `Minor: ${d.minor}. A stale passage brought it back to the review list` }) : null,
+    d.minor && !isFolded(docs, d) ? el("span", { class: "badge", text: `minor · ${diffText(d)}`, title: `Minor: ${d.minor}. ${liftedBy(docs, d).replace(/^./, (c) => c.toUpperCase())} brought it back to the review list` }) : null,
     staleBadge(staleCount(docs, d)), failingBadge(d), factsBadge(d), missingBadge(docs.views[d.path] || {}),
     lexiconButton(d.path, docs.views[d.path] || {}));
   const minor = docs.set.filter((d) => isFolded(docs, d));
