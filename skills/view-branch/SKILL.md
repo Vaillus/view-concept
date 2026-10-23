@@ -650,7 +650,12 @@ into the docs by the implementer run that makes it, and the page never shows
    its deepest folders up; then the other docs, each folder after its
    subfolders; then the root `README.md`; each `CLAUDE.md` and `AGENTS.md`
    last. It runs the write-readme skill on each README of the doc set,
-   rewrites the other docs from the model, and applies those comments.
+   rewrites the other docs from the model, keeps in a `CLAUDE.md` or an
+   `AGENTS.md` only the sentences it adds or changes that pass the
+   **sentence test** (without the sentence, an agent would act otherwise;
+   an existing sentence the model makes false that fails it is removed, not
+   corrected; an untouched sentence is not tested), and applies those
+   comments.
 3. Start the reviewer with the implementer's report (in words, « doc pass »
    in it): it judges the items the doc pass changed, as for any implementer
    run, then reads every doc of the doc set against the model and flags each

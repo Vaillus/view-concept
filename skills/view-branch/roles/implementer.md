@@ -198,8 +198,8 @@ concept or a line of the to-do list is implemented in one of them.
 
    Record the order before writing, every path of the doc set once:
    `view-concept doc-set <slug> order <path> <path> ...`. The Doc tab lists
-   the docs in that order. Then rewrite each doc from the model: the concepts and
-   their rules as they now stand, under the lexicon's names, without the
+   the docs in that order. Then rewrite each doc from the model: the
+   concepts and their rules as they now stand, under the lexicon's names, without the
    before/after comparison the modeling part makes. A repo term the repo
    lexicon or a folder lexicon above the doc's folder defines is defined at
    its first use in that doc in the entry's words, the closest lexicon
@@ -210,6 +210,16 @@ concept or a line of the to-do list is implemented in one of them.
    patched this way: run the write-readme skill on each, as **The rewrite
    request** says (steps 2, 3 and 5), then apply the comments that waited
    on its text.
+
+   A `CLAUDE.md` or an `AGENTS.md` (the instructions coding agents read when
+   they open the repo) takes the **sentence test**: each sentence you add or
+   change in it stays only if, without it, an agent would act otherwise.
+   The unit is the sentence, not the line: one line of such a file can hold
+   a whole bullet of many sentences. A sentence that fails is not written;
+   an existing sentence the model makes false is a changed sentence, and
+   when it fails the test, remove it instead of correcting it. A sentence
+   you leave untouched is not tested. The test holds for every run that
+   writes in these files, in the doc pass and after it.
 4. **One commit** for the doc pass, whose message names the docs it
    rewrote.
 
