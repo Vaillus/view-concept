@@ -236,8 +236,27 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .doc-title.active { color: var(--accent); border-color: var(--accent); }
 .doc-title.missing { color: var(--dim); font-style: italic; }
 .doc-title .badge { margin-left: 0; }
+/* a minor doc: after the review list in the bar, set back */
+.doc-title.minor { margin-left: 12px; opacity: .65; border-style: dashed; }
+.doc-title.minor.active { opacity: 1; }
+/* the fold of the minor docs, under the review list */
+.doc-minor { margin-top: 6px; }
+.doc-minor summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 2px 0; }
+@media (hover: hover) { .doc-minor summary:hover { color: var(--ink); } }
+.doc-minor .doc-set { color: var(--ink-dim); padding-left: 14px; }
+.doc-diff { margin-left: 6px; font-size: 11px; color: var(--muted); }
 /* the rewrite request's line, under the bar while a README.md is in sight */
 .doc-rewrite { padding: 8px 0 0; }
+.doc-rewrite-why { font-size: 12px; }
+/* the missing facts of a README rewritten in full, under its text */
+.doc-facts { margin-top: 16px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.doc-facts h3 { font-size: 13px; margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.doc-facts ul { list-style: none; margin: 0; padding: 0; }
+.doc-fact { position: relative; padding: 4px 0 6px; }
+.doc-fact.updated::before { content: ""; position: absolute; left: -14px; top: 0; bottom: 0; width: 3px; background: var(--ok); }
+.doc-fact.state-left .fact-text { color: var(--ink-dim); }
+.fact-meta { font-size: 12px; }
+.fact-meta .badge:first-child { margin-left: 0; }
 /* a doc rewritten since its highlight baseline */
 .doc-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .doc-sec h2 code { background: none; padding: 0; }
