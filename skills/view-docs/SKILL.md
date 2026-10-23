@@ -375,9 +375,11 @@ you change what is false or missing, and leave what is right as it is.
   sentence you add or change in it stays only if, without it, an agent would
   act otherwise. The test covers each such sentence, not the bullet or line
   it sits in: a bullet of these files can hold a whole paragraph on one
-  line, and its other sentences stay as they are. An existing sentence the
-  code (or the reference model) makes false is a sentence you change, so it
-  takes the test too: when it fails, remove it instead of correcting it.
+  line, and its other sentences stay as they are. An existing sentence
+  takes the test too when the code makes it false, or when a comment on a
+  passage flagged stale asks for it to change: it is then a sentence you
+  change, and when it fails, remove it instead of correcting it. A sentence
+  the reference model alone contradicts is flagged, not tested.
   What a removed sentence said is already in the doc that carries it, since
   these files are written last.
 
@@ -392,9 +394,11 @@ The first run and a rewrite request run the write-readme skill on a README:
 1. When the repo lexicon is missing, write it first (see **The repo
    lexicon**).
 2. Read `~/Documents/code/view-concept/skills/write-readme/SKILL.md` and
-   follow it for that one README, naming the reference model's session
-   folder when the review has one, so the run reads that model's sections
-   and lexicon as a source next to the code. A comment of the batch that
+   follow it for that one README, naming this review's session folder
+   always (the run then knows it is in a review, and its report gives only
+   the number of missing facts) and the reference model's session folder
+   when the review has one, so the run reads that model's sections and
+   lexicon as a source next to the code. A comment of the batch that
    gives a reader line (« reader: … ») passes it to the run. write-readme is
    the one skill this review reads besides its own.
 3. An existing README is edited, and the run counts its **failure
