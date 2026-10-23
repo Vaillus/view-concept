@@ -125,7 +125,7 @@ tab). Before the doc pass, leave the docs of the doc set alone, unless a
 concept or a line of the to-do list is implemented in one of them.
 
 1. **Refresh the doc set** on the real diff (`git diff <base>...HEAD`). A doc
-   enters it by five rules:
+   enters it by six rules:
    1. a doc the branch changed. A file the branch only moves, its text
       unchanged, does not enter by this rule: rule 2 covers the move;
    2. the `README.md` of the folder that holds a **structural change**: a
@@ -147,7 +147,12 @@ concept or a line of the to-do list is implemented in one of them.
       present or missing, and each **folder lexicon** (a `.agents/lexicon.md`
       below the root) above a folder the branch touches. A missing repo
       lexicon is listed so its entry in the Doc tab carries « write repo
-      lexicon »; listing it does not write it (step 2).
+      lexicon »; listing it does not write it (step 2);
+   6. the `README.md` of each folder the branch creates and of each folder
+      that holds a structural change (rule 2's folder), present or missing.
+      A missing README is listed under its path, and step 3 writes its
+      **draft** with write-readme: the README it writes from the code for a
+      folder that has none.
 
    Add each doc the code brought in, `view-concept doc-set <slug> add <path>
    "<reason>"` (the reason one line the user reads: what in the doc the

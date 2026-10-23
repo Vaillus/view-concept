@@ -306,7 +306,7 @@ model. You write the first one; the implementer refreshes it at the start of
 the **doc pass**, its run that rewrites the docs from the model once the code
 carries it, and keeps it from then on.
 
-A doc enters the doc set by five rules:
+A doc enters the doc set by six rules:
 
 1. a doc the branch already changed. A file the branch only moves, its text
    unchanged, does not enter by this rule: rule 2 covers the move;
@@ -329,7 +329,12 @@ A doc enters the doc set by five rules:
    below the root, for the terms only the folders under it share) above a
    folder the branch touches. A missing repo lexicon is listed so its entry
    in the Doc tab carries « write repo lexicon »; listing it does not write
-   it.
+   it;
+6. the `README.md` of each folder the branch creates and of each folder that
+   holds a structural change (rule 2's folder), present or missing. A
+   missing README is listed under its path; the doc pass writes its
+   **draft**, the README write-readme writes from the code for a folder that
+   has none. Listing it does not write it.
 
 Before the code exists, a path the branch touches is where the model will
 land, which the code map says. Docstrings and code comments are not docs and

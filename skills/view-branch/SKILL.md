@@ -494,8 +494,8 @@ user removed is recorded as removed, and `add` refuses it from then on unless
 the user asks for it back (`--user` again). No agent adds back a doc the user
 removed.
 
-A doc enters the doc set by five rules, the first two read from the diff,
-the next two found by reading, the last one always applied:
+A doc enters the doc set by six rules, rules 1, 2 and 6 read from the diff,
+rules 3 and 4 found by reading, rule 5 always applied:
 
 1. a doc the branch already changed. A file the branch only moves, its text
    unchanged, does not enter by this rule: rule 2 covers the move;
@@ -519,7 +519,12 @@ the next two found by reading, the last one always applied:
    folders under it share) above a folder the branch touches. A missing
    repo lexicon is listed so its entry in the Doc tab carries « write repo
    lexicon »; no agent writes it unless that button, a rewrite request or
-   a doc pass whose doc set holds a README asks for it.
+   a doc pass whose doc set holds a README asks for it;
+6. the `README.md` of each folder the branch creates and of each folder that
+   holds a structural change (rule 2's folder), present or missing. A
+   missing README is listed under its path, and the doc pass writes its
+   **draft** with the write-readme skill: the README written from the code
+   for a folder that has none.
 
 Before the code exists, a path the branch touches is where the model will
 land, which the code map says. Docstrings and code comments are not docs and
