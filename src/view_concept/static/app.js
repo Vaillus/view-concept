@@ -251,9 +251,10 @@ function followSession() {
       n ? el("span", { class: "badge new", text: `${n} updated` }) : null,
       writing ? el("span", { class: "badge accent writing", text: "writing" }) : null].filter(Boolean));
   }
-  // The Doc tab's badge counts the docs rewritten since their highlight baseline.
+  // The Doc tab's badge counts the docs rewritten, or whose missing facts changed, since
+  // their highlight baseline.
   const docs = docsOf();
-  const n = docs.set.filter((d) => (docs.views[d.path] || {}).updated).length;
+  const n = docs.set.filter((d) => (docs.views[d.path] || {}).updated || factsUpdated(d.path)).length;
   $('.tab[data-tab="doc"]').replaceChildren(...["doc", n ? el("span", { class: "badge new", text: `${n} updated` }) : null].filter(Boolean));
 }
 
@@ -993,6 +994,10 @@ const rewriteHinted = (d) => !!(d && d.failing && (d.failing.structure || d.fail
 // The missing facts of README `path`, [] for a doc without.
 const factsOf = (path) => ((docsOf().facts || {})[path] || {}).list || [];
 const factsUpdated = (path) => factsOf(path).some((f) => f.updated);
+// The title of a doc's dot in the bar of titles: what changed since the last batch.
+const dotTitle = (rewritten, facts) =>
+  rewritten && facts ? "Rewritten, and a missing fact changed, since your last batch"
+    : facts ? "A missing fact changed since your last batch" : "Rewritten since your last batch";
 const factsBadge = (d) => (d.facts ? el("span", { class: "badge alt", text: `${d.facts} missing facts` }) : null);
 
 // The heading of a doc set or doc block: its label, its thread chips, then « mark read »
@@ -1040,7 +1045,7 @@ function docBar(docs) {
     const folded = isFolded(docs, d);
     return el("button", { class: `doc-title ${d.path === shownDoc ? "active" : ""} ${v.exists === false ? "missing" : ""} ${folded ? "minor" : ""}`,
                           title: folded ? `minor: ${d.minor} (${diffText(d)})` : d.reason || d.path, onclick: () => openDoc(d.path) },
-      v.updated || factsUpdated(d.path) ? el("span", { class: "doc-dot", title: "Rewritten since your last batch" }) : null,
+      v.updated || factsUpdated(d.path) ? el("span", { class: "doc-dot", title: dotTitle(v.updated, factsUpdated(d.path)) }) : null,
       d.path, staleBadge(staleCount(docs, d)),
       docEdit && docEdit.path === d.path ? el("span", { class: "badge", text: "editing", title: "Your edit of this doc is not saved yet" }) : null);
   }));
