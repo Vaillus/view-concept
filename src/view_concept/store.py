@@ -57,7 +57,7 @@ published page and the vault export copy them along. An answer to a comment that
 in the explanation amends a section or adds one at its place in the outline; a `kind:
 "question"` left by an older session is ignored, and the section reads as any other. A
 refactor section, marked `part: "refactoring"`, belongs to the refactoring part of a
-branch review or a refactor and is shown in the code tab; every other section is an
+feature or a triage and is shown in the code tab; every other section is an
 explanation section, shown in the Explanation tab. A refactor section about one item of
 the diff carries its item fields under `item`: {files, verdict (one of the keys of the
 session workflow's list in verdicts.yaml, next to this module), batch? (a short label or
@@ -66,19 +66,19 @@ names which of the item's files a relation starts from (by default the first). O
 `kind: "finding"` and `items: [<section ids>]` is a finding across items.
 
 The session workflow, `workflow` in plan.json, is the skill that drives the session:
-view-concept, view-branch, view-refactor (a triage of existing code) or view-docs (a docs
+view-concept, build-feature, triage-code (a triage of existing code) or review-docs (a docs
 review: a repo's docs reviewed on a scope, on a branch of their own, with the Doc tab
 alone, no outline, no sections and no items; its agent sets "awaiting-pr" whenever it
 waits once the doc set exists). It picks the
 verdict set the page shows: verdicts.yaml holds one list per workflow, and each verdict
 carries the `tone` the page colours it with. A session created before workflows existed
-has no workflow and gets view-branch's list.
+has no workflow and gets build-feature's list.
 
 A side thread is a separate headless agent conversation that the user opens from the page
 to discuss a passage without changing anything (see threads.py). Only a comment batch
 reaches the main session.
 
-A coordinated session (the view-branch workflow) is driven by a main session that only
+A coordinated session (the build-feature workflow) is driven by a main session that only
 coordinates: subagents do the work, each started from the session folder as
 `view-concept context` prints it (context.py). The initial request is the user's first
 message, kept verbatim in plan.json. When the review follows a conversation about the
@@ -125,13 +125,13 @@ user answers in the terminal instead, the agent runs `answered`: the question is
 answered with `from: "terminal"`, empty choices and the user's words as text, and no
 batch is sent, since the agent already has the answer; the phase is left to the agent.
 
-Scoping ends when the user clicks « Write plan » (« Write model » in a branch review or
-a refactor): a batch whose action is "plan", after which
+Scoping ends when the user clicks « Write plan » (« Write model » in a feature or
+a triage): a batch whose action is "plan", after which
 every question still open is marked skipped (the agent treats them as skipped and writes
-the plan, or the model in a branch review), except a section question (one with an anchor
+the plan, or the model in a feature), except a section question (one with an anchor
 section) whose section is not written yet: it stays open, and the page shows it at the end
 of its section once written. A deferred question stays deferred: it is asked
-again after its anchor section. During a pause of a branch review (the writer
+again after its anchor section. During a pause of a feature (the writer
 stopped after a section whose questions are open, with sections left to write), « Go on »
 sends a batch whose action is "go-on": the writer goes on, and the pause's questions stay
 open; still open once every section is written, they hold back « Approve model » until
@@ -214,14 +214,14 @@ it contradicts, a reference model's, or ""), note (one line: why), at}. The revi
 flags them (`stale`), and drops one fixed or dismissed. A flag whose quote is no longer
 found in its doc's current text is not shown, and stays in the file.
 
-A docs review may take a branch review's model as its reference model: plan.json
-`reference`, {slug (a view-branch session of the same repo), reason (one line: why the
+A docs review may take a feature's model as its reference model: plan.json
+`reference`, {slug (a build-feature session of the same repo), reason (one line: why the
 agent kept it, shown next to its link)} (written by `reference`, whose `--candidates`
-lists the repo's branch reviews). None is the ordinary case. Its lexicon's terms are
+lists the repo's features). None is the ordinary case. Its lexicon's terms are
 underlined in the docs, and its sections are the measure of the stale passages the code
 cannot catch. It is re-read at each run, as it is then.
 
-A branch review's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
+A feature's PR, once the agent opened it, is recorded in plan.json as `pr`: {url,
 at} (written by `pr`). The page links it at the top and at the end of the code tab.
 
 published.json is the publish record, what the session remembers of its last publish
@@ -263,10 +263,10 @@ VAULT_DIR = Path(
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # What the page shows in its status indicator; "awaiting-approval" also shows « Approve plan »,
-# "awaiting-model" (set by the view-branch skill only) « Approve model », "awaiting-docs" (set
-# by the view-branch skill once the code carries the model) « Write docs » and « Write docs
-# and create PR », and "awaiting-pr" (set by the view-branch skill once the docs are
-# written, by the view-docs skill whenever it waits once the doc set exists) « Create PR ».
+# "awaiting-model" (set by the build-feature skill only) « Approve model », "awaiting-docs" (set
+# by the build-feature skill once the code carries the model) « Write docs » and « Write docs
+# and create PR », and "awaiting-pr" (set by the build-feature skill once the docs are
+# written, by the review-docs skill whenever it waits once the doc set exists) « Create PR ».
 # "awaiting-answer" (set by `question`, outside scoping) waits on an agent question shown in
 # the scope block at the top of the Plan tab.
 PHASES = (
@@ -300,13 +300,20 @@ ACTIONS = (
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
 # The session workflow: which skill drives the session. It picks the verdict set the page
-# shows (see verdicts.yaml). view-branch, view-refactor and view-docs (a docs review) work
+# shows (see verdicts.yaml). build-feature, triage-code and review-docs (a docs review) work
 # on a repository, so their sessions are code sessions. A session created before workflows
 # existed has none.
-WORKFLOWS = ("view-concept", "view-branch", "view-refactor", "view-docs")
+WORKFLOWS = ("view-concept", "build-feature", "triage-code", "review-docs")
+# The former names of three workflows: a session created before the rename keeps its old
+# name in plan.json, and read_plan gives the new one.
+RENAMED_WORKFLOWS = {
+    "view-branch": "build-feature",
+    "view-refactor": "triage-code",
+    "view-docs": "review-docs",
+}
 # The workflow of a session created without --workflow, by kind.
-DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "view-branch"}
-# The role agents a branch review's coordinator starts; a variant sets a model per role.
+DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "build-feature"}
+# The role agents a feature's coordinator starts; a variant sets a model per role.
 AGENT_ROLES = ("planner", "writer", "implementer", "reviewer")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 # A draft's id: the page makes it (a UUID). Its fields, as a batch comment takes them.
@@ -622,6 +629,8 @@ class Session:
         plan.setdefault("title", self.slug)
         plan.setdefault("outline", [])
         plan.setdefault("lexicon", [])
+        if plan.get("workflow") in RENAMED_WORKFLOWS:
+            plan["workflow"] = RENAMED_WORKFLOWS[plan["workflow"]]
         return plan
 
     def write_plan(
@@ -698,8 +707,8 @@ class Session:
         here_repo, there_repo = plan.get("repo", ""), there.get("repo", "")
         if not here_repo or not there_repo or project_of(here_repo) != project_of(there_repo):
             raise SessionError(f"{other} is not a session of this repo")
-        if there.get("workflow") != "view-branch":
-            raise SessionError(f"{other} is not a branch review: only one has a model")
+        if there.get("workflow") != "build-feature":
+            raise SessionError(f"{other} is not a feature: only one has a model")
         reason = " ".join(reason.split())
         if not reason:
             raise SessionError('a reference model needs its reason: --reason "<one line>"')
@@ -731,7 +740,7 @@ class Session:
         }
 
     def reference_candidates(self) -> list[dict[str, Any]]:
-        """The sessions a docs review may take as reference model: the branch reviews of
+        """The sessions a docs review may take as reference model: the features of
         the same repo (any worktree), newest first, each {slug, title, updated, sections
         (its outline's titles), terms (its lexicon's terms)}, for the agent to read
         against the doc set."""
@@ -740,7 +749,7 @@ class Session:
             return []
         out = []
         for row in list_sessions(self.dir.parent):
-            if row["slug"] == self.slug or row["workflow"] != "view-branch":
+            if row["slug"] == self.slug or row["workflow"] != "build-feature":
                 continue
             if row["project"] != project:
                 continue
@@ -976,7 +985,7 @@ class Session:
         return runs[-1]["through"] if runs else ""
 
     def model_approved(self) -> bool:
-        """Whether the user approved the model (a branch review's « Approve model »), or an
+        """Whether the user approved the model (a feature's « Approve model »), or an
         implementer already ran."""
         if self.read_implemented():
             return True
@@ -1285,14 +1294,14 @@ class Session:
         time of the first "write-docs" batch), or not committed yet once it started
         (missing from the worktree, or written and not committed).
         Before that batch, a doc new on the branch came with the code commits. In a docs
-        review (workflow view-docs), which has no doc pass and whose commits are all doc
+        review (workflow review-docs), which has no doc pass and whose commits are all doc
         work, every doc absent from the merge base is one the review created. False when
         git cannot tell."""
         path = doc_path(path)
         commit = self.merge_base()
         if self.base_text(path, commit) != "":
             return False
-        if self.read_plan().get("workflow") == "view-docs":
+        if self.read_plan().get("workflow") == "review-docs":
             return True
         batches = self.read_comments()["batches"]
         start = next((b["sent"] for b in batches if b.get("action") == "write-docs"), None)
@@ -1941,8 +1950,8 @@ class Session:
 
     @property
     def coordinated(self) -> bool:
-        """Whether the main session only coordinates subagents (the view-branch workflow)."""
-        return self.read_plan().get("workflow") == "view-branch"
+        """Whether the main session only coordinates subagents (the build-feature workflow)."""
+        return self.read_plan().get("workflow") == "build-feature"
 
     def fork_parent(self) -> str:
         """The conversation a side thread forks from, "" when it starts from the folder: a
@@ -2042,7 +2051,7 @@ class Session:
 
         `action` is what the user does with the batch: "approve-plan" means the user
         approved the plan from the page, "approve-model" that they approved the model of a
-        branch review (so the implementation starts), "write-docs" that they started the doc
+        feature (so the implementation starts), "write-docs" that they started the doc
         pass once the code carries the model (with `then_pr`, « Write docs and create PR »:
         the doc pass, the reviewer run and the PR follow with no pause; stored only when
         true), "create-pr" that they asked the agent to open the branch's PR, with the
@@ -2051,7 +2060,7 @@ class Session:
         `unclear_question`), "plan" that they ended scoping (every open question is then
         marked skipped, but a section question whose section is not written yet), "grill"
         that they started a grill, "stop-grill" that they stopped it, and "go-on" that they
-        asked the writer of a branch review to go on past a pause, leaving its questions
+        asked the writer of a feature to go on past a pause, leaving its questions
         open, and "rewrite-readme" that they asked for the README at `path` (a doc of the
         doc set named README.md, in the worktree or not yet) to be written again with
         write-readme, and "write-lexicon" that they asked for the repo lexicon
@@ -2621,13 +2630,13 @@ def format_batch(
         lines.append(
             "action: plan (the user asked to rewrite the plan from the page: open questions "
             "are marked skipped, but a section question whose section is not written yet; "
-            "revise the plan with the answers, or the model in a branch review)"
+            "revise the plan with the answers, or the model in a feature)"
         )
     elif batch.get("action") == "plan":
         lines.append(
             "action: plan (the user ended scoping from the page: open questions are marked "
             "skipped, but a section question whose section is not written yet; write the "
-            "plan, or the model in a branch review)"
+            "plan, or the model in a feature)"
         )
     if batch.get("action") == "grill":
         lines.append(

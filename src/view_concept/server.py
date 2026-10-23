@@ -32,12 +32,12 @@ from .store import (
 
 STATIC = Path(__file__).parent / "static"
 # The verdicts an item can get, by session workflow, each list in the review table's order:
-# {key, meaning, tone, sends_to?}. The view-branch and view-refactor skills read the same file.
+# {key, meaning, tone, sends_to?}. The build-feature and triage-code skills read the same file.
 VERDICTS: dict[str, list[dict[str, str]]] = yaml.safe_load(
     (Path(__file__).parent / "verdicts.yaml").read_text(encoding="utf-8")
 )
-# A session created before workflows existed was a branch review or had no items.
-LEGACY_WORKFLOW = "view-branch"
+# A session created before workflows existed was a feature or had no items.
+LEGACY_WORKFLOW = "build-feature"
 
 # How often the server looks for sessions that started waiting for the user (push.py).
 NOTICE_EVERY = 5.0
@@ -292,7 +292,7 @@ def state(slug: str) -> dict[str, Any]:
         "audit": audit,
         "comments": comments,
         "changes": changes,
-        # How far the code carries the model in a branch review: the last change an
+        # How far the code carries the model in a feature: the last change an
         # implementer took into account, and the changes logged after it.
         "implemented": implemented,
         "unimplemented": unimplemented,
@@ -665,13 +665,13 @@ class ThreadIn(BaseModel):
 
 @app.get("/api/s/{slug}/metrics")
 def session_metrics(slug: str) -> dict[str, Any]:
-    """The metrics report of a branch review (the Metrics tab): its runs, waiting and
-    quality signals, and every branch review of its repository by variant. 404 for a
+    """The metrics report of a feature (the Metrics tab): its runs, waiting and
+    quality signals, and every feature of its repository by variant. 404 for a
     session of another workflow."""
     s = get_session(slug)
     try:
-        if s.read_plan().get("workflow") != "view-branch":
-            raise HTTPException(404, f"{slug!r} is not a branch review")
+        if s.read_plan().get("workflow") != "build-feature":
+            raise HTTPException(404, f"{slug!r} is not a feature")
         return metrics.session_metrics(s)
     except SessionError as e:
         raise HTTPException(422, str(e)) from e

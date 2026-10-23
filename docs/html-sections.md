@@ -29,7 +29,7 @@ The base style is a default, not an override: it comes before the section's styl
 
 ## The kit's tabs
 
-The tabs are a contract between three places: the classes `frame.css` styles, the markup the visual rule of each skill tells the writer to use (`skills/view-branch/SKILL.md`, `skills/view-branch/roles/writer.md`, `skills/view-refactor/SKILL.md`, `skills/view-concept/SKILL.md`), and what `frame.js` reads and sets. Change them together.
+The tabs are a contract between three places: the classes `frame.css` styles, the markup the visual rule of each skill tells the writer to use (`skills/build-feature/SKILL.md`, `skills/build-feature/roles/writer.md`, `skills/triage-code/SKILL.md`, `skills/view-concept/SKILL.md`), and what `frame.js` reads and sets. Change them together.
 
 | Element | Markup | `frame.js` |
 |---|---|---|

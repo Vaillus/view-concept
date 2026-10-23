@@ -87,7 +87,7 @@ WRITER = [
     call("00:05.000", "w1", [tool("t1", "Bash", command=CONTEXT)], cache_read=9000),
     result("00:06.000", "t1", "x" * 500),
     call(
-        "00:10.000", "w2", [tool("t2", "Read", file_path="/h/skills/view-branch/roles/writer.md")]
+        "00:10.000", "w2", [tool("t2", "Read", file_path="/h/skills/build-feature/roles/writer.md")]
     ),
     result("00:11.000", "t2", "y" * 300),
     call("00:15.000", "w3", [tool("toolu_H1", "Agent", description="Write section a")]),
@@ -369,7 +369,7 @@ def test_series_and_slow_runs():
     [
         ("view-concept context rev --role writer", "exploring code"),
         ("cd /repo && view-concept check rev", "view-concept commands"),
-        ("cd /h/skills/view-branch && sed -n 1,9p roles/writer.md", "exploring code"),
+        ("cd /h/skills/build-feature && sed -n 1,9p roles/writer.md", "exploring code"),
         ("cat ~/.view-concept/sessions/rev/questions.json", "exploring code"),
         ("cd /repo && grep -n foo src/x.py 2>/dev/null", "exploring code"),
         ("cat > /s/sections/a.html <<'EOF'\n<p>x</p>\nEOF", "writing"),
@@ -399,8 +399,8 @@ def opening_run(tmp_path, prompt: str, reads: list[list[dict]]) -> dict:
     return metrics.measure(t.calls, t.inputs, t.start, t.end, prompt=t.prompt)
 
 
-PROMPT = f"Run `{CONTEXT}`, then read `roles/writer.md` in skills/view-branch."
-ROLE = "/h/skills/view-branch/roles/writer.md"
+PROMPT = f"Run `{CONTEXT}`, then read `roles/writer.md` in skills/build-feature."
+ROLE = "/h/skills/build-feature/roles/writer.md"
 
 
 def acts_of(m: dict) -> list[str]:
@@ -427,7 +427,7 @@ def test_an_unnamed_role_file_explores_code(tmp_path):
         PROMPT,
         [
             [tool("t1", "Bash", command=CONTEXT)],
-            [tool("t2", "Read", file_path="/h/skills/view-branch/roles/reviewer.md")],
+            [tool("t2", "Read", file_path="/h/skills/build-feature/roles/reviewer.md")],
             [tool("t3", "Read", file_path=ROLE)],
         ],
     )

@@ -1,5 +1,5 @@
 ---
-name: view-docs
+name: review-docs
 description: >-
   Review a repo's docs on a scope in the view-concept page, with no branch to
   model: list the docs the scope concerns, correct what the code contradicts,
@@ -7,11 +7,11 @@ description: >-
   comment batch, then open a PR on a docs branch of its own. Use when the
   user wants docs checked, brought up to date or rewritten — "review the
   docs about X", "are the install docs still right", "update the docs of
-  this folder", invokes /view-docs.
+  this folder", invokes /review-docs.
 argument-hint: "[the docs to review: a folder, files, or a subject]"
 ---
 
-# /view-docs
+# /review-docs
 
 Reviews a repo's docs in the view-concept page (the `view-concept` command):
 the list of docs a scope concerns, each doc shown as it is in a worktree of
@@ -21,7 +21,7 @@ other agent writes for it.
 
 The scope to review is whatever the user typed after the command name: a
 folder, a list of files, or a subject (« everything about the install »).
-When it names a branch review whose model to measure the docs against
+When it names a feature whose model to measure the docs against
 (« with the model of doc-tab »), that is the reference model (see **The
 reference model**); otherwise you look for one at the first run.
 
@@ -67,7 +67,7 @@ worktree next to the repo, the folder `<repo>-<slug>` (for the repo
 ```bash
 git -C <repo root> worktree add -b docs/<slug> <repo root>-<slug> main
 view-concept new "<title>" --slug <slug> --initial-request "<the user's request, verbatim>" \
-    --kind code --repo <the worktree> --base main --workflow view-docs
+    --kind code --repo <the worktree> --base main --workflow review-docs
 view-concept reference <slug> <other slug> --reason "<one line>"   # when the request names one
 view-concept open <slug>   # starts the server if needed, shows the page
 ```
@@ -283,7 +283,7 @@ new name. A correction is the smallest change that makes the passage true.
 
 **The reference model.** What the code cannot say (a doc that is wrong by
 what it leaves out, a rule stated otherwise) needs a measure: the
-**reference model**, the model of a branch review of the same repo whose
+**reference model**, the model of a feature of the same repo whose
 sections and lexicon say what the code now does or is about to do. Most
 docs reviews have none: the review then measures its docs against the code
 alone, and that is the ordinary case, not a gap to fill. **The reference
@@ -316,18 +316,18 @@ read at the first run included, not only those rewritten since.
 
 ## The reference model
 
-Only the repo's branch reviews are candidates: an explanation or a triage
+Only the repo's features are candidates: an explanation or a triage
 has no model. You search for one at the first run only; after it, only a
 comment sets, changes or removes one.
 
 ```bash
-view-concept reference <slug> --candidates                       # the repo's branch reviews
+view-concept reference <slug> --candidates                       # the repo's features
 view-concept reference <slug> <other slug> --reason "<one line>"  # keeps one
 view-concept reference <slug> --clear                            # removes it
 view-concept reference <slug>                                    # prints it
 ```
 
-`--candidates` lists each branch review of the repo (any worktree) with its
+`--candidates` lists each feature of the repo (any worktree) with its
 title, the titles of its model's sections and its lexicon's terms. Read
 them against the doc set: a session **fits** when its model describes a
 concept a doc of the doc set treats, and the docs do not carry that concept
@@ -337,7 +337,7 @@ Open a candidate's sections when its titles and terms leave you unsure.
 | What you find | What you do |
 |---|---|
 | no session fits | set nothing: the review goes on against the code alone, and the top bar shows no link |
-| one session fits, or one fits clearly better | keep it, with `--reason`: one line the user reads next to its link, what its model adds to the doc set (« its model adds view-docs to the skills the Install part lists ») |
+| one session fits, or one fits clearly better | keep it, with `--reason`: one line the user reads next to its link, what its model adds to the doc set (« its model adds review-docs to the skills the Install part lists ») |
 | several fit and none wins | ask (see **Agent questions**): one `--option` per session, `<slug> — <its reason>`, and the option `aucune`, your pick as `--recommended`; flag no passage from a model before the answer |
 
 The answer comes in a batch: keep the session it names with its reason, or

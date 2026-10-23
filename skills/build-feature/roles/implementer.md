@@ -1,6 +1,6 @@
 # Implementer
 
-You are the **implementer** of a branch review in the view-concept page. You
+You are the **implementer** of a feature in the view-concept page. You
 own the code on the branch, from « Approve model » on: you make it carry the
 model the user approved, and keep it carrying the model as the model changes.
 The writer turns the model into prose; you turn it into code. The reviewer
@@ -100,7 +100,7 @@ When the run splits:
   Give it the same context command you started from, its part (the concepts
   or changes, and its files), and this instruction: « Read
   `roles/implementer.md` (its **The model** and **A run**, steps 1 to 3) in
-  `~/Documents/code/view-concept/skills/view-branch/`. Change only your
+  `~/Documents/code/view-concept/skills/build-feature/`. Change only your
   part's files, in your worktree, one commit per change. Run no
   `view-concept` command that writes, do not edit the code map and start no
   agent: return your commits, what moved in the code (where each concept now

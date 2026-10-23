@@ -265,8 +265,8 @@ q4 unclear « <question> » (the user doesn't understand it yet: explain what it
 The three buttons of the scope block each send a batch with their own action, and the draft comments go with it:
 
 ```
-action: plan (the user ended scoping from the page: treat open questions as skipped and write the plan, or the model in a branch review)
-action: plan (the user asked to rewrite the plan from the page: treat open questions as skipped and revise the plan with the answers, or the model in a branch review)
+action: plan (the user ended scoping from the page: treat open questions as skipped and write the plan, or the model in a feature)
+action: plan (the user asked to rewrite the plan from the page: treat open questions as skipped and revise the plan with the answers, or the model in a feature)
 action: grill (the user started a grill: ask every open design decision as a question with a recommended answer, until none is left)
 action: stop-grill (the user stopped the grill)
 ```
@@ -370,7 +370,7 @@ A code session explains part of the repository at `--repo`, and it is read to ac
 - **Citations are required.** Every claim about the code cites where it is true, as inline code: `` `src/pkg/store.py:118` `` (path relative to the repo root, `:line` or `:start-end`). The page turns each citation into a link that opens the file at that line in VS Code. A claim you cannot cite is a claim you have not checked: check it or cut it.
 - **No vault export by default, no publishing.** The code will change and the explanation will go stale, so do not offer the export. Never offer to publish: the page hides « Publish » in a code session and `view-concept publish` refuses one, because the session cites the user's repositories and published pages are public.
 
-A review of a branch, or a triage of existing code, is a code session with more around it: the `view-branch` and `view-refactor` skills run those.
+A review of a branch, or a triage of existing code, is a code session with more around it: the `build-feature` and `triage-code` skills run those.
 
 ## Keeping it
 

@@ -2,8 +2,8 @@
 # table: those that need action first, the one that needs none last. `tone` is the colour the page
 # draws the verdict in, one of ok, danger, warn, alt, flag, info.
 
-# The verdicts of an item in a branch review: the item measured against the model.
-view-branch:
+# The verdicts of an item in a feature: the item measured against the model.
+build-feature:
   - key: diverges
     meaning: does not match the model; say how in the description.
     sends_to: implementer
@@ -25,8 +25,8 @@ view-branch:
     meaning: matches the model.
     tone: ok
 
-# The triage verdicts of an item in a refactor: what happens to existing code.
-view-refactor:
+# The triage verdicts of an item in a triage: what happens to existing code.
+triage-code:
   - key: move
     meaning: used, but in the wrong place; say where it belongs.
     tone: warn
@@ -47,4 +47,4 @@ view-refactor:
     tone: ok
 
 # A docs review has no items: no verdict.
-view-docs: []
+review-docs: []

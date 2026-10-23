@@ -24,11 +24,11 @@ def view_concept(home, *args):
 def test_new_stores_the_workflow(tmp_path):
     r = view_concept(
         tmp_path, "new", "Triage", "--kind", "code", "--repo", str(tmp_path),
-        "--workflow", "view-refactor",
+        "--workflow", "triage-code",
     )  # fmt: skip
     assert r.returncode == 0, r.stderr
     plan = json.loads((tmp_path / "sessions" / "triage" / "plan.json").read_text())
-    assert plan["workflow"] == "view-refactor"
+    assert plan["workflow"] == "triage-code"
 
 
 def test_new_rejects_an_unknown_workflow(tmp_path):
@@ -260,7 +260,7 @@ def test_a_branch_review_logs_and_prints_its_context(tmp_path):
 def test_implemented_records_and_reports_what_the_code_carries(tmp_path):
     r = view_concept(
         tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path),
-        "--workflow", "view-branch",
+        "--workflow", "build-feature",
     )  # fmt: skip
     assert r.returncode == 0, r.stderr
     for change in ("gate split", "threshold renamed"):
@@ -279,7 +279,7 @@ def test_implemented_records_and_reports_what_the_code_carries(tmp_path):
 def test_pr_records_the_link_in_the_plan(tmp_path):
     r = view_concept(
         tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path),
-        "--workflow", "view-branch",
+        "--workflow", "build-feature",
     )  # fmt: skip
     assert r.returncode == 0, r.stderr
     url = "https://github.com/o/r/pull/42"
@@ -419,7 +419,7 @@ def test_stale_flags_prints_and_drops_passages(tmp_path):
 
 
 def test_reference_sets_prints_and_clears_the_reference_model(tmp_path):
-    for title, workflow in (("Gate", "view-branch"), ("Docs", "view-docs")):
+    for title, workflow in (("Gate", "build-feature"), ("Docs", "review-docs")):
         args = ("new", title, "--kind", "code", "--repo", str(tmp_path), "--workflow", workflow)
         assert view_concept(tmp_path, *args).returncode == 0
     r = view_concept(tmp_path, "reference", "docs", "--candidates")

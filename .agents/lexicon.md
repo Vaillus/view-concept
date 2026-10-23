@@ -6,7 +6,7 @@ Uses a coding agent (Claude Code, Codex or another) from the terminal and knows 
 ## Terms
 
 **Skill**:
-A `SKILL.md` file of instructions an agent loads when you name it (`/view-branch`, `/write-readme`).
+A `SKILL.md` file of instructions an agent loads when you name it (`/build-feature`, `/write-readme`).
 
 **Page**:
 The local web page that renders a session's files in the browser and sends your comments back to the agent.
@@ -20,11 +20,14 @@ The comments and answers you send from the page to the agent at once, with « Se
 **Side thread**:
 A separate, read-only conversation forked from the session to discuss a passage; the session never sees it.
 
-**Branch review**:
-A `/view-branch` session: the review of a branch you are building, through the model of what it introduces.
+**Feature**:
+A `/build-feature` session: a feature designed concepts first, from its model to its implementation, its docs and its PR.
+
+**Triage**:
+A `/triage-code` session: quickly written code given a verdict per item, then restructured.
 
 **Docs review**:
-A `/view-docs` session: a repo's docs on a scope, with no branch to model.
+A `/review-docs` session: a repo's docs on a scope, with no branch to model.
 
 **Model**:
 The concepts a branch introduces or changes, with their rules, written out in the sections of its review.

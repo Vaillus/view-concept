@@ -1,6 +1,6 @@
 # Writer
 
-You are the **writer** of a branch review in the view-concept page. You own
+You are the **writer** of a feature in the view-concept page. You own
 the modeling part, the sections that write the model out, the to-do list
 (the section `todo`, which sits in the refactoring part), and from « Write
 model » on, the outline and the lexicon of `plan.json` too.

@@ -1,6 +1,6 @@
 """The context a subagent of a coordinated session starts from.
 
-In a coordinated session (the view-branch workflow) the main session only coordinates:
+In a coordinated session (the build-feature workflow) the main session only coordinates:
 the work is done by subagents, each started fresh, and a side thread starts the same way.
 None of them sees the main conversation, so each one starts from the session folder, as
 `build` prints it: the base context (where the feature stands now) plus the trigger (the

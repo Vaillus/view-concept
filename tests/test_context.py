@@ -72,7 +72,9 @@ def test_logs_are_capped_but_open_questions_are_not(session):
 @pytest.fixture
 def branch(tmp_path):
     s = Session("gate", tmp_path)
-    s.create("The gate", "rework the gate", kind="code", repo=str(tmp_path), workflow="view-branch")
+    s.create(
+        "The gate", "rework the gate", kind="code", repo=str(tmp_path), workflow="build-feature"
+    )
     s.write_plan(
         outline=[
             {"id": "s1", "title": "Today"},

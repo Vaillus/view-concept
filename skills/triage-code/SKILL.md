@@ -1,5 +1,5 @@
 ---
-name: view-refactor
+name: triage-code
 description: >-
   Review a part of the codebase that was written quickly in the view-concept
   page, decide what stays, and restructure it: map the scope, give each item a
@@ -8,11 +8,11 @@ description: >-
   are reviewed one by one. Use when the user wants to clean up, triage or
   restructure vibe-coded or experimental code — "help me decide what to keep
   in X", "triage this folder", "clean up X before I PR it", "refactor this
-  module", invokes /view-refactor.
+  module", invokes /triage-code.
 argument-hint: "[the files or folder to review]"
 ---
 
-# /view-refactor
+# /triage-code
 
 Triages existing code in the view-concept page (the `view-concept` command):
 a model of what the scope is, a verdict for each item of it, approved by the
@@ -58,11 +58,11 @@ The slug is a short kebab-case name of the scope.
 
 ```bash
 view-concept new "<title>" --slug <slug> --initial-request "<the user's request, verbatim>" \
-    --kind code --repo <repo root> --workflow view-refactor
+    --kind code --repo <repo root> --workflow triage-code
 view-concept open <slug>          # starts the server if needed, shows the page
 ```
 
-The workflow makes the page use view-refactor's verdicts. The page runs side
+The workflow makes the page use triage-code's verdicts. The page runs side
 threads on the agent you are. Claude Code and Codex are detected; any other
 agent (Jazz, …) adds `--agent jazz --agent-name <your own agent name>` to `new`
 and to every later `open`. After resuming in a new conversation, run
@@ -429,7 +429,7 @@ is listed in the outline, write its **item fields** under `item`:
 ```
 
 - `files`: the paths the item covers.
-- `verdict`: one of the keys of the `view-refactor` list in
+- `verdict`: one of the keys of the `triage-code` list in
   `~/Documents/code/view-concept/src/view_concept/verdicts.yaml` (keep, move,
   split, merge, separate-pr, throw). Read that file for what each verdict
   means; it lists them in the order of the review table.
@@ -520,8 +520,8 @@ arises, and follow the user's call.
 
 Pushing a branch and opening a PR are seen by others: show the list of batch
 PRs (branch name, items, description) and push or open nothing before the user
-confirms. Each PR is then reviewed with view-branch, in its own session.
-view-refactor stops once the PRs are planned or opened.
+confirms. Each PR is then reviewed with build-feature, in its own session.
+triage-code stops once the PRs are planned or opened.
 
 ## Status
 
