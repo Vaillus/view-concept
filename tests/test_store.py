@@ -944,6 +944,214 @@ def test_the_doc_set_keeps_a_reason_per_doc(docs_review):
     ]
 
 
+def test_a_minor_doc_keeps_its_reason_and_diff_size_until_made_major(docs_review):
+    s = docs_review
+    s.add_doc("docs/reference.md", "the tabs")
+    s.set_minor("docs/reference.md", "adds  a name to a list", 1, 1)
+    entry = {"path": "docs/reference.md", "reason": "the tabs", "minor": "adds a name to a list",
+             "diff": {"added": 1, "removed": 1}}  # fmt: skip
+    assert s.read_doc_set()["docs"] == [entry]
+    # A refresh of the reason keeps the class.
+    s.add_doc("docs/reference.md", "the tabs and keys")
+    assert s.read_doc_set()["docs"] == [{**entry, "reason": "the tabs and keys"}]
+    s.set_major("docs/reference.md")
+    assert s.read_doc_set()["docs"] == [{"path": "docs/reference.md",
+                                         "reason": "the tabs and keys"}]  # fmt: skip
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.set_minor("README.md", "why", 0, 0)
+    with pytest.raises(SessionError, match="needs its reason"):
+        s.set_minor("docs/reference.md", " ", 0, 0)
+    with pytest.raises(SessionError, match="0 or more"):
+        s.set_minor("docs/reference.md", "why", -1, 0)
+
+
+def test_a_readme_carries_its_failure_indicator(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/reference.md", "the tabs")
+    s.set_failing("README.md", 3, 6, structure=True)
+    s.add_doc("README.md", "the install, again")
+    assert s.read_doc_set()["docs"][0]["failing"] == {"fail": 3, "total": 6, "structure": True}
+    with pytest.raises(SessionError, match="not a README.md"):
+        s.set_failing("docs/reference.md", 1, 2)
+    with pytest.raises(SessionError, match="fail <= total"):
+        s.set_failing("README.md", 7, 6)
+    s.set_failing("README.md", None)
+    assert "failing" not in s.read_doc_set()["docs"][0]
+
+
+def _commit(repo, path, when, committed=None):
+    """Commit file `path` of `repo`, its author date `when` (an ISO time) and its
+    committer date `committed`, `when` by default."""
+    import subprocess
+
+    git = ["git", "-C", str(repo), "-c", "user.email=a@b", "-c", "user.name=a"]
+    env = {**os.environ, "GIT_COMMITTER_DATE": committed or when, "GIT_AUTHOR_DATE": when}
+    subprocess.run([*git, "add", path], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", path], check=True, env=env)
+
+
+@pytest.fixture
+def branch_docs(tmp_path):
+    """A branch review on a git repo: README.md on main, src/README.md added on the
+    branch by a code commit, before any doc pass. That commit's committer date is
+    late, as a rebase after the doc pass would leave it: only its author date tells
+    when the doc was added."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    (repo / "README.md").write_text("# Tool\n")
+    _commit(repo, "README.md", "2001-01-01T00:00:00+00:00")
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "feat"], check=True)
+    (repo / "src" / "README.md").write_text("# src\n")
+    _commit(repo, "src/README.md", "2001-01-02T00:00:00+00:00", "2099-01-02T00:00:00+00:00")
+    s = Session("doc-pass", tmp_path / "sessions")
+    s.create("Doc pass", kind="code", repo=str(repo), base="main")
+    for p in ("README.md", "src/README.md", "lib/README.md", "new/README.md"):
+        s.add_doc(p, "why")
+    return s
+
+
+def test_a_doc_the_doc_pass_creates_is_never_minor_and_has_no_indicator(branch_docs):
+    s = branch_docs
+    repo = s.repo_dir()
+    # Before « Write docs », a doc new on the branch came with the code: it may be minor.
+    s.set_minor("src/README.md", "a name", 1, 0)
+    s.set_failing("src/README.md", 1, 4)
+    s.add_batch([], action="write-docs")
+    (repo / "lib").mkdir()
+    (repo / "lib" / "README.md").write_text("# lib\n")
+    _commit(repo, "lib/README.md", "2099-01-01T00:00:00+00:00")  # the doc pass commit
+    assert not s.created_by_doc_pass("README.md")
+    assert not s.created_by_doc_pass("src/README.md")  # added before the doc pass
+    assert s.created_by_doc_pass("lib/README.md")
+    assert s.created_by_doc_pass("new/README.md")  # not written yet
+    s.set_minor("README.md", "a name", 1, 1)
+    s.set_minor("src/README.md", "a name", 1, 1)
+    with pytest.raises(SessionError, match="lib/README.md is new: a doc the doc pass creates"):
+        s.set_minor("lib/README.md", "a name", 1, 0)
+    with pytest.raises(SessionError, match="new/README.md is new"):
+        s.set_minor("new/README.md", "a name", 1, 0)
+    with pytest.raises(SessionError, match="has no indicator"):
+        s.set_failing("lib/README.md", 1, 4)
+    s.set_failing("lib/README.md", None)  # --clear stays allowed
+    # Written and not committed yet, once the doc pass started: created by it.
+    (repo / "new").mkdir()
+    (repo / "new" / "README.md").write_text("# new\n")
+    assert s.created_by_doc_pass("new/README.md")
+
+
+def test_in_a_docs_review_every_doc_new_on_the_branch_is_created(branch_docs, tmp_path):
+    s = Session("docs-review", tmp_path / "sessions")
+    s.create("Docs", kind="code", repo=str(branch_docs.repo_dir()), workflow="view-docs",
+             base="main")  # fmt: skip
+    s.add_doc("src/README.md", "why")
+    assert s.created_by_doc_pass("src/README.md")
+    with pytest.raises(SessionError, match="is new"):
+        s.set_minor("src/README.md", "a name", 1, 0)
+
+
+def test_the_doc_set_takes_the_write_order(docs_review):
+    s = docs_review
+    for p in ("README.md", "docs/reference.md", "CLAUDE.md"):
+        s.add_doc(p, "why")
+    s.set_minor("docs/reference.md", "a name", 1, 1)
+    s.order_docs(["docs/reference.md", "./CLAUDE.md", "README.md"])
+    docs = s.read_doc_set()["docs"]
+    assert [d["path"] for d in docs] == ["docs/reference.md", "CLAUDE.md", "README.md"]
+    assert docs[0]["minor"] == "a name"
+    with pytest.raises(SessionError, match="missing: README.md"):
+        s.order_docs(["docs/reference.md", "CLAUDE.md"])
+    with pytest.raises(SessionError, match="not in the doc set: x.md"):
+        s.order_docs(["docs/reference.md", "CLAUDE.md", "README.md", "x.md"])
+    with pytest.raises(SessionError, match="each doc once"):
+        s.order_docs(["README.md", "README.md", "CLAUDE.md", "docs/reference.md"])
+
+
+def test_a_readme_rewritten_in_full_keeps_its_missing_facts(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/reference.md", "the tabs")
+    assert s.read_missing_facts() == {}
+    f1 = s.add_missing_fact("README.md", "Run  serve --port 8000.", "leave", "the code says open",
+                            passage=4)  # fmt: skip
+    f2 = s.add_missing_fact("./README.md", "Offline, maths shows as TeX.", "keep", "a link")
+    assert f1 == {"id": "f1", "fact": "Run serve --port 8000.", "passage": 4, "proposal": "leave",
+                  "reason": "the code says open", "state": "pending"}  # fmt: skip
+    assert f2["id"] == "f2" and f2["passage"] is None
+    assert s.mark_missing_fact("f2", "kept")["state"] == "kept"
+    assert [f["state"] for f in s.read_missing_facts()["README.md"]] == ["pending", "kept"]
+    with pytest.raises(SessionError, match="not a README.md"):
+        s.add_missing_fact("docs/reference.md", "x", "keep", "y")
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.add_missing_fact("src/README.md", "x", "keep", "y")
+    with pytest.raises(SessionError, match="proposal is one of"):
+        s.add_missing_fact("README.md", "x", "maybe", "y")
+    with pytest.raises(SessionError, match="state is one of"):
+        s.mark_missing_fact("f1", "done")
+    with pytest.raises(SessionError, match="no missing fact"):
+        s.mark_missing_fact("f9", "left")
+    # A new full rewrite replaces the list.
+    assert s.clear_missing_facts("README.md") == 2
+    assert s.read_missing_facts() == {}
+
+
+def test_a_readme_out_of_the_doc_set_loses_its_missing_facts(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/README.md", "the docs")
+    s.add_missing_fact("README.md", "Run serve.", "leave", "the code says open")
+    s.add_missing_fact("docs/README.md", "Tabs.", "keep", "a link")
+    s.remove_doc("README.md")
+    assert list(s.read_missing_facts()) == ["docs/README.md"]
+    s.add_doc("README.md", "the install")
+    assert "README.md" not in s.read_missing_facts()
+
+
+def test_a_comment_on_a_missing_fact_names_the_fact(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_missing_fact("README.md", "Run serve.", "leave", "the code says open")
+    b = s.add_batch([{"section": "doc:README.md", "quote": "Run serve.", "text": "keep it",
+                      "fact": "f1"}])  # fmt: skip
+    assert b["comments"][0]["fact"] == "f1"
+    assert "[c1] (doc README.md · fact f1) « Run serve. »" in format_batch("doc-tab", b, [])
+    with pytest.raises(SessionError, match="anchored to its README"):
+        s.add_batch([{"section": "doc:", "text": "x", "fact": "f1"}])
+    with pytest.raises(SessionError, match="anchored to its README"):
+        s.add_batch([{"section": "doc:README.md", "text": "x", "fact": "c1"}])
+    # A comment with no fact keeps no field for it.
+    assert "fact" not in s.add_batch([{"section": "doc:README.md", "text": "x"}])["comments"][0]
+    # Ids go on past a cleared list: the sent comment still names f1.
+    s.clear_missing_facts("README.md")
+    assert s.add_missing_fact("README.md", "x", "keep", "y")["id"] == "f2"
+
+
+def test_a_draft_on_a_missing_fact_keeps_the_fact(docs_review):
+    s = docs_review
+    s.save_draft({"id": "d1", "section": "doc:README.md", "quote": "Run serve.", "text": "a",
+                  "fact": "f1"})  # fmt: skip
+    s.save_draft({"id": "d2", "section": "doc:README.md", "text": "b"})
+    drafts = s.read_drafts()["drafts"]
+    assert drafts[0]["fact"] == "f1" and "fact" not in drafts[1]
+
+
+def test_a_fact_id_named_by_a_draft_never_serves_again(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_missing_fact("README.md", "Run serve.", "leave", "the code says open")
+    s.add_missing_fact("README.md", "Offline.", "keep", "a link")
+    s.save_draft({"id": "d1", "section": "doc:README.md", "quote": "Offline.", "text": "a",
+                  "fact": "f2"})  # fmt: skip
+    s.clear_missing_facts("README.md")
+    assert s.add_missing_fact("README.md", "x", "keep", "y")["id"] == "f3"
+    # A side thread on a fact counts the same.
+    s.new_thread("doc:README.md", "x", fact="f7")
+    assert s.add_missing_fact("README.md", "z", "keep", "y")["id"] == "f8"
+
+
 @pytest.mark.parametrize("path", ["/etc/passwd", "../other/README.md", "docs/../../x.md", " "])
 def test_a_doc_of_the_doc_set_stays_inside_the_repo(docs_review, path):
     with pytest.raises(SessionError):

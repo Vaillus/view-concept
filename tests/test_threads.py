@@ -163,6 +163,21 @@ def test_comment_from_a_thread_needs_no_text(session):
     assert "(from side thread t3: threads/t3.json)" in out
 
 
+def test_a_thread_on_a_missing_fact_keeps_the_fact_up_to_its_comment(session, fake_claude):
+    t = threads.create(session, "doc:README.md", "Run serve.", "", "why leave it?", fact="f1")
+    assert session.read_thread(t["id"])["fact"] == "f1"
+    assert "fact" not in session.new_thread("s1", "Le cache")
+    with pytest.raises(SessionError, match="anchored to its README"):
+        session.new_thread("s1", "Le cache", fact="f1")
+    with pytest.raises(SessionError, match="anchored to its README"):
+        session.new_thread("doc:", "x", fact="f1")
+    # The comment the thread becomes carries the fact.
+    b = session.add_batch([{"section": "doc:README.md", "quote": "Run serve.", "text": "",
+                            "thread": t["id"], "fact": "f1"}])  # fmt: skip
+    out = format_batch("kv-cache", b, session.read_plan()["outline"])
+    assert "(doc README.md · fact f1) « Run serve. »" in out
+
+
 def test_delete_thread(session, fake_claude):
     session.new_thread()
     session.new_thread()
@@ -429,4 +444,4 @@ def test_a_thread_on_a_doc_gets_the_doc_from_the_worktree(tmp_path):
     assert "Passage: the doc README.md (a file of the repository): « The keys »" in text
     assert "## Doc of the passage: README.md" in text and "The keys 1 to 4." in text
     listed = build(s, "thread", ["x"], "doc:")
-    assert "## Doc set of the passage\n- README.md: the install" in listed
+    assert "## Doc set of the passage\n- README.md — the install" in listed

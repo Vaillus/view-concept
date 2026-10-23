@@ -202,11 +202,36 @@ def test_the_doc_set_goes_to_the_roles_that_work_on_the_docs(review, tmp_path):
     review.add_stale("README.md", "keys 1 to 4", "five keys now", section="sheet")
     for role in ("writer", "implementer", "reviewer"):
         text = build(review, role)
-        assert "## Doc set\n" in text and "- README.md: the keys" in text
+        assert "## Doc set\n" in text and "- README.md — the keys" in text
         assert "Removed by the user (never add them back unless the user asks): docs/old.md" in text
         assert "- s1 README.md « keys 1 to 4 » (contradicts sheet): five keys now" in text
     assert "## Doc set" not in build(review, "planner")
     assert "## Doc set" not in build(review, "thread")
+
+
+def test_the_doc_set_shows_minor_docs_and_failure_indicators(review):
+    review.add_doc("README.md", "the keys")
+    review.add_doc("docs/reference.md", "the tabs")
+    review.set_failing("README.md", 3, 6)
+    review.set_minor("docs/reference.md", "a name", 1, 1)
+    text = build(review, "implementer")
+    assert "- README.md — the keys · 3/6 failing\n" in text
+    assert "- docs/reference.md — the tabs · minor: a name (+1 −1)\n" in text
+
+
+def test_the_implementer_gets_the_missing_facts_and_their_state(review, tmp_path):
+    (tmp_path / "README.md").write_text("The keys.\n")
+    review.add_doc("README.md", "the keys")
+    review.add_missing_fact("README.md", "Run serve.", "leave", "the code says open", 4)
+    review.add_missing_fact("README.md", "Offline, TeX.", "keep", "a link")
+    review.mark_missing_fact("f2", "kept")
+    text = build(review, "implementer")
+    assert "## Missing facts" in text
+    assert "README.md:\n- f1 [pending] « Run serve. » (passage 4) · propose leave: the code" in text
+    assert "- f2 [kept] « Offline, TeX. » · propose keep: a link" in text
+    assert "## Missing facts" not in build(review, "writer")
+    # A side thread on the README gets them with its text.
+    assert "- f1 [pending]" in build(review, "thread", section="doc:README.md")
 
 
 def test_a_review_with_no_doc_set_says_so(review):

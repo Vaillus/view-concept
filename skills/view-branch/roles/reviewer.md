@@ -131,7 +131,11 @@ rewrite; a stale passage is what it missed.
 
 In your run after the doc pass (its report says « doc pass »), once the
 items are judged, read every doc of the doc set, changed or not, against
-the model and its lexicon, and flag each stale passage:
+the model and its lexicon, and flag each stale passage. The **minor docs**
+(the docs the implementer classed as touched only for a detail, which the
+Doc tab folds out of the user's review list) are read too: a stale passage
+on one puts it back in the review list, which the page does; you change no
+doc's class.
 
 ```bash
 view-concept stale <slug> <doc path> "<quote>" "<note>" --section <section id>

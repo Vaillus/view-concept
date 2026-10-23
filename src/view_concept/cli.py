@@ -18,6 +18,7 @@ from pathlib import Path
 from .agents import AGENTS, detect
 from .context import ROLES, build
 from .store import (
+    FACT_PROPOSALS,
     HEARTBEAT_EVERY,
     HOME,
     KINDS,
@@ -27,6 +28,8 @@ from .store import (
     SessionError,
     format_batch,
     format_changes,
+    format_doc,
+    format_fact,
     format_precedence,
     format_section_problem,
     list_sessions,
@@ -333,25 +336,68 @@ def _existing(slug: str) -> Session:
     return s
 
 
+def _int_arg(value: str, what: str) -> int:
+    try:
+        return int(value)
+    except ValueError:
+        raise SessionError(f"{what} is a whole number, not {value!r}") from None
+
+
 def cmd_doc_set(a: argparse.Namespace) -> None:
-    """Add or remove a doc of the doc set, or, with no operation, print it."""
+    """Change the doc set (add or remove a doc, class one minor or not, record a README's
+    failure indicator, put the docs in the write order), or, with no operation, print it."""
     s = _existing(a.slug)
+    args = a.args
+    if a.op != "minor" and (a.added is not None or a.removed is not None):
+        raise SessionError("--added and --removed go with minor only")
+    if a.op != "failing" and (a.structure or a.clear):
+        raise SessionError("--structure and --clear go with failing only")
+    if a.user and a.op not in ("add", "remove"):
+        raise SessionError("--user goes with add or remove only")
     if a.op == "add":
-        if not a.path or not a.reason:
+        if len(args) != 2:
             raise SessionError('doc-set add takes a path and a reason: add <path> "<reason>"')
-        print(f"added {s.add_doc(a.path, a.reason, a.user)['path']}")
+        print(f"added {s.add_doc(args[0], args[1], a.user)['path']}")
         return
     if a.op == "remove":
-        if not a.path or a.reason:
+        if len(args) != 1:
             raise SessionError("doc-set remove takes one path")
-        s.remove_doc(a.path, a.user)
-        print(f"removed {a.path}" + (" (by the user: not added back)" if a.user else ""))
+        s.remove_doc(args[0], a.user)
+        print(f"removed {args[0]}" + (" (by the user: not added back)" if a.user else ""))
         return
-    if a.path or a.reason or a.user:
-        raise SessionError("give an operation: add or remove")
+    if a.op == "minor":
+        if len(args) != 2 or a.added is None or a.removed is None:
+            raise SessionError(
+                "doc-set minor takes a path, a reason and the diff size: "
+                'minor <path> "<reason>" --added N --removed N'
+            )
+        print(format_doc(s.set_minor(args[0], args[1], a.added, a.removed)))
+        return
+    if a.op == "major":
+        if len(args) != 1:
+            raise SessionError("doc-set major takes one path")
+        print(format_doc(s.set_major(args[0])))
+        return
+    if a.op == "failing":
+        if a.clear:
+            if len(args) != 1 or a.structure:
+                raise SessionError("doc-set failing <path> --clear takes the path alone")
+            print(format_doc(s.set_failing(args[0], None)))
+            return
+        if len(args) != 3:
+            raise SessionError("doc-set failing takes a README, then <fail> <total> [--structure]")
+        fail, total = _int_arg(args[1], "fail"), _int_arg(args[2], "total")
+        print(format_doc(s.set_failing(args[0], fail, total, a.structure)))
+        return
+    if a.op == "order":
+        if not args:
+            raise SessionError("doc-set order takes every doc of the doc set, in the write order")
+        s.order_docs(args)
+    elif args:
+        raise SessionError("give an operation: add, remove, minor, major, failing or order")
     data = s.read_doc_set()
     for d in data["docs"]:
-        print(f"{d['path']} — {d.get('reason', '')}")
+        print(format_doc(d))
     if not data["docs"]:
         print("(no doc set yet)")
     if data["removed"]:
@@ -379,6 +425,43 @@ def cmd_stale(a: argparse.Namespace) -> None:
         print(f"{f['id']} {f['doc']} « {quote} »{section}: {f['note']}")
     if not flags:
         print("(no stale passage shown)")
+
+
+def cmd_facts(a: argparse.Namespace) -> None:
+    """Record a missing fact of a README rewritten in full, mark the user's decision on
+    one, drop a README's list, or, with no operation, print them by README."""
+    s = _existing(a.slug)
+    args = a.args
+    if a.op != "add" and (a.propose or a.reason or a.passage is not None):
+        raise SessionError("--propose, --reason and --passage go with add only")
+    if a.op == "add":
+        if len(args) != 2 or not a.propose or not a.reason:
+            raise SessionError(
+                "facts add takes a README, the fact, its proposal and reason: add <path> "
+                '"<fact>" --propose keep|leave --reason "<one line>" [--passage N]'
+            )
+        print(s.add_missing_fact(args[0], args[1], a.propose, a.reason, a.passage)["id"])
+        return
+    if a.op == "mark":
+        if len(args) != 2:
+            raise SessionError("facts mark takes a fact id and a state: <id> kept|left|pending")
+        f = s.mark_missing_fact(args[0], args[1])
+        print(f"{f['id']} {f['state']}")
+        return
+    if a.op == "clear":
+        if len(args) != 1:
+            raise SessionError("facts clear takes one README path")
+        print(f"cleared {s.clear_missing_facts(args[0])} missing facts of {args[0]}")
+        return
+    if args:
+        raise SessionError("give an operation: add, mark or clear")
+    data = s.read_missing_facts()
+    for path, facts in data.items():
+        print(f"{path} · {len(facts)} missing facts")
+        for f in facts:
+            print(f"  {format_fact(f)}")
+    if not data:
+        print("(no missing fact)")
 
 
 def cmd_reference(a: argparse.Namespace) -> None:
@@ -680,11 +763,26 @@ def main() -> None:
     )
     q.set_defaults(fn=cmd_variant)
 
-    q = sub.add_parser("doc-set", help="print the doc set, or add or remove one of its docs")
+    q = sub.add_parser(
+        "doc-set",
+        help="print the doc set, or change it: add or remove a doc, class one minor or "
+        "major, record a README's failure indicator, put the docs in the write order",
+    )
     q.add_argument("slug")
-    q.add_argument("op", nargs="?", choices=("add", "remove"))
-    q.add_argument("path", nargs="?", help="the doc's path, relative to the repo root")
-    q.add_argument("reason", nargs="?", help="with add: one line, why the doc is listed")
+    q.add_argument("op", nargs="?", choices=("add", "remove", "minor", "major", "failing", "order"))
+    q.add_argument(
+        "args",
+        nargs="*",
+        help="add <path> <reason> · remove <path> · minor <path> <reason> · major <path> · "
+        "failing <path> <fail> <total> · order <path> <path>… (every doc, in the write "
+        "order); a path is relative to the repo root",
+    )
+    q.add_argument("--added", type=int, help="with minor: the lines the doc's diff adds")
+    q.add_argument("--removed", type=int, help="with minor: the lines the doc's diff removes")
+    q.add_argument(
+        "--structure", action="store_true", help="with failing: the README's structure fails"
+    )
+    q.add_argument("--clear", action="store_true", help="with failing: remove the indicator")
     q.add_argument(
         "--user",
         action="store_true",
@@ -703,6 +801,24 @@ def main() -> None:
     q.add_argument("--section", help="the model section it contradicts")
     q.add_argument("--drop", nargs="+", metavar="ID", help="remove flags (fixed or dismissed)")
     q.set_defaults(fn=cmd_stale)
+
+    q = sub.add_parser(
+        "facts",
+        help="record the missing facts of a README rewritten in full, mark the user's "
+        "decision on one, or print them",
+    )
+    q.add_argument("slug")
+    q.add_argument("op", nargs="?", choices=("add", "mark", "clear"))
+    q.add_argument(
+        "args",
+        nargs="*",
+        help="add <path> <fact> · mark <id> kept|left|pending · clear <path> (a new full "
+        "rewrite replaces the README's list)",
+    )
+    q.add_argument("--propose", choices=FACT_PROPOSALS, help="with add: keep or leave the fact")
+    q.add_argument("--reason", help="with add: one line, why that proposal")
+    q.add_argument("--passage", type=int, help="with add: the number of the old README's passage")
+    q.set_defaults(fn=cmd_facts)
 
     q = sub.add_parser(
         "reference",

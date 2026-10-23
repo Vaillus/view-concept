@@ -2,7 +2,9 @@
 name: write-readme
 description: >-
   Write a folder's README.md from its code, or bring an existing one up to
-  standard, editing only what fails, against fixed content rules: a reader
+  standard, editing only what fails and counting the passages that fail, or
+  write it again from the code alone when asked and list the facts the old
+  one said that the new one lost, against fixed content rules: a reader
   line and repo terms read from the repo's lexicon files, an inclusion test
   every sentence must pass, the repo's own README conventions, five parts for
   a new README, and a report printed at the end of the run.
@@ -10,25 +12,40 @@ description: >-
   README cleaned up, shortened or rewritten, notably one written by an LLM —
   "write the README of X", "rewrite this README", "clean up X/README.md",
   "this README is bloated", invokes /write-readme.
-argument-hint: "[the folder, or its README.md] [reader: <reader line>]"
+argument-hint: "[the folder, or its README.md] [rewrite] [reader: <reader line>]"
 ---
 
 # /write-readme
 
 Writes the `README.md` of one folder: the folder, or its `README.md`, is
-whatever the user typed after the command name. The run reads the repo's
-lexicon files, the folder's code and the old README if there is one, writes
-the README, and ends by printing its **run report**. It writes no other file
-(except the repo lexicon when the repo has none) and never commits.
+whatever the user typed after the command name, followed by `rewrite` when
+the user asks for a full rewrite (`/write-readme <folder> rewrite`). The run
+reads the repo's lexicon files, the folder's code and the old README if
+there is one, writes the README, and ends by printing its **run report**. It
+writes no other file (except the repo lexicon when the repo has none) and
+never commits.
 
 A run has one of three outcomes:
 
 - **draft**: the folder has no `README.md`; write one from the code, in the
   five parts;
-- **edit** (the default when it has one): keep its structure, headings and
-  wording, and change only the passages that fail a check;
-- **full rewrite**: most of the old README fails; write it again in the five
-  parts, using it as source material.
+- **edit** (always, when it has one and no full rewrite was asked for): keep
+  its structure, headings and wording, change only the passages that fail a
+  check, and count the **failure indicator** (see **Checking an existing
+  README**);
+- **full rewrite**: only on a **rewrite request**, the `rewrite` argument or
+  a review's request to write a README again from scratch; write it again
+  in the five parts from the code alone, without reading the old README, as
+  for a draft, then list its **missing facts** (see **The missing facts**).
+
+The run never chooses a full rewrite on its own, however much of the old
+README fails: the failure indicator tells the user, who decides.
+
+A run is **in a review** when its request names a review's session folder
+(`~/.view-concept/sessions/<slug>/`): the agent of a branch review or of a
+docs review ran it, and the review's page shows what the run leaves to the
+user. Any other run, a `rewrite` argument typed in a terminal included, is
+outside a review.
 
 Never ask the user anything, except the one question of **The repo
 lexicon** below: the reader line says who reads, the goal is always that the
@@ -71,31 +88,32 @@ The reader line sorts the terms the README uses:
 root `CLAUDE.md` and the package description: the reader line those assume,
 and the repo terms several folders' docs share, one line each. From the
 terminal, show the draft and ask once (« Correct the reader line or the
-terms, or answer « ok » »), then write it. Run by a review's agent (the
-request comes from a rewrite request or names a review's session folder),
-write it without asking.
+terms, or answer « ok » »), then write it. In a review, write it without
+asking.
 
 ## Sources
 
 Every fact comes from the folder's code (always read first: modules,
 commands, entry points, tests, the files it reads and writes), the old
-README, and, when the request names a review's session folder, the review's
-model (its `sections/` and the `lexicon` of its `plan.json`), which holds
-rules the code does not show. A fact the code contradicts is written as the
-code has it. A term the review's lexicon has keeps its name there, and its
+README for an edit, the missing facts the user keeps after a full rewrite,
+and the model of each session folder the request names that holds one (its
+`sections/` and the `lexicon` of its `plan.json`), which holds rules the
+code does not show. A branch review names its own folder; a docs review
+names its own, which holds no model, and its reference model's folder when
+it has one. A fact the code contradicts is written as the code has it. A term the review's lexicon has keeps its name there, and its
 definition when no lexicon on the path has the term.
 
 Before writing, read the rules the repo sets for READMEs, in the root
 `CLAUDE.md` (or `AGENTS.md`) and the READMEs from the root down to the
 folder (a study header, a required section). They win over this skill.
 
-An edit or a full rewrite keeps the old README's language; a draft takes
+An edit keeps the old README's language; a draft and a full rewrite take
 the language of the repo's other docs.
 
 ## Checking an existing README
 
-Go through the old README passage by passage (a paragraph, a list, a
-table, a code block) and mark each passage that fails:
+An edit goes through the old README passage by passage (a paragraph, a
+list, a table, a code block) and marks each passage that fails:
 
 1. the inclusion test;
 2. the code: a fact the code contradicts. A rule the README states that
@@ -104,13 +122,45 @@ table, a code block) and mark each passage that fails:
 3. the vocabulary: a finding of the audit (see **Writing**);
 4. the repo's README conventions.
 
-Edit by default: fix each failing passage where it stands and leave the
-others word for word; never move, merge or retitle sections. Rewrite in
-full only when more than half the passages fail, or when the structure is
-itself the failure (a section of open discussion as large as the rest).
-A passage that fails only by leaving something out (a file missing from the
-map) is fixed by adding the line and does not count. A README can come out
-unchanged.
+Fix each failing passage where it stands and leave the others word for
+word; never move, merge or retitle sections. A passage that fails only by
+leaving something out (a file missing from the map) is fixed by adding the
+line. A README can come out unchanged.
+
+The **failure indicator** is the number of passages that fail a check,
+counted before the edit, out of the README's passages: `3 of 6 passages
+fail`. A passage that fails only by leaving something out does not count.
+When the structure itself fails (a section of open discussion as large as
+the rest), the indicator says so too (`structure fails`); the edit does not
+fix the structure, and the run stays an edit. The indicator is in the first
+line of the run report.
+
+## The missing facts
+
+A full rewrite never reads the old README while it writes. Once the new
+README is written, compare the two: read the old README fact by fact (one
+thing it states: a command, a path, a rule, a reason) and keep each fact the
+new README says neither in words nor by a link to a doc that says it. These
+are the **missing facts**. A fact the new README says in other words, once
+instead of three times, or as a link, is not missing.
+
+For each missing fact, give:
+
+- the fact itself, in one sentence;
+- the number of the old passage that held it, counted from the top;
+- your proposal, **keep** or **leave**, with a reason in one line: keep when
+  the reader needs it (and in what form it would come back: a sentence, or a
+  link to the doc that says it), leave when it fails the inclusion test. A
+  fact the code contradicts is listed too, proposed leave, with that reason
+  (« the code contradicts it: the page opens with `view-concept open` »).
+
+The proposal drops nothing: the new README stays as written, and the user
+decides which facts come back. A fact the user keeps is added to the README
+under this skill's rules, so the inclusion test can make it a link. Outside
+a review, the user reads the list in the run report and names the facts to
+keep in a later message; in a review, the review's agent records them in
+the session and the user decides in the page. An edit has no missing facts:
+the passages it changes are named in the report's `changed` line.
 
 ## The inclusion test
 
@@ -203,7 +253,7 @@ The run's last message (in a review, the agent that ran it carries it in
 its own report):
 
 ```
-write-readme · benchmark/README.md · full rewrite: 14 of 22 passages fail
+write-readme · benchmark/README.md · edit: 2 of 22 passages fail; structure fails
 reader: knows speech processing and ASR evaluation (VAD, transcription, WER), has never opened this repo
 changed: Tests dropped (inclusion test 1) · How score computes its WER shrunk to a link (inclusion test 2: core/transcript/wer.py says it)
 candidates: subset (benchmark/, experiments/, dataset_tools/)
@@ -212,9 +262,27 @@ code findings: none
 audit: 2 fixed · 0 left
 ```
 
-The first line is `draft`, `edit: <changed> of <total> passages` (`edit: no
-change` when all pass), or `full rewrite` with its reason. `changed` names
-each old passage edited, shrunk or dropped with the check it failed;
-`code findings` each with its file. A run from a review adds `model:` (the
-facts of the review's model written that the code does not show, and those
-the code contradicted). Add a line when the run wrote the repo lexicon.
+The first line is `write-readme · <path> · ` then the outcome: `draft` for
+a missing README, `edit: <n> of <total> passages fail` (the failure
+indicator, followed by `; structure fails` when the structure fails; `edit:
+0 of <total> passages fail` when all pass), or `full rewrite` when it was
+asked for. `changed`, in an edit only, names each old passage edited,
+shrunk or dropped with the check it failed; `code findings` each with its
+file.
+
+A full rewrite has no `changed` line and adds a `missing facts:` line.
+Outside a review, it lists each missing fact with its old passage, its
+proposal and its reason:
+
+```
+write-readme · README.md · full rewrite
+missing facts: 3
+  1. The page starts with `view-concept serve --port 8000` (passage 4) · leave: the code contradicts it, the page opens with `view-concept open <slug>`
+  2. view-concept was built in a weekend (passage 6) · leave: the reader does not need it
+  3. Offline, maths and diagrams show as source (passage 7) · keep: as a link to docs/reference.md, which says it
+```
+
+In a review, the line gives only their number (`missing facts: 3`): the
+review's agent records each one in the session. A run that read a model
+adds `model:` (the facts of the model written that the code does not show,
+and those the code contradicted). Add a line when the run wrote the repo lexicon.

@@ -20,7 +20,15 @@ from pydantic import BaseModel
 
 from . import frame, gate, launch, metrics, publish, push, threads
 from .render import md
-from .store import DOC_KEY, DocConflict, Session, SessionError, list_sessions
+from .store import (
+    DOC_KEY,
+    FACTS_KEY,
+    DocConflict,
+    Session,
+    SessionError,
+    format_fact,
+    list_sessions,
+)
 
 STATIC = Path(__file__).parent / "static"
 # The verdicts an item can get, by session workflow, each list in the review table's order:
@@ -259,7 +267,7 @@ def state(slug: str) -> dict[str, Any]:
         grilling = s.is_grilling()
         docs = s.read_docs()
         doc_texts = {DOC_KEY + p: t for p, t in docs.items() if t is not None}
-        seen = s.read_seen({**sections, **doc_texts})
+        seen = s.read_seen({**sections, **doc_texts, **s.fact_texts()})
         published = published_view(s)
         doc_tab = docs_view(s, docs, seen)
     except SessionError as e:
@@ -299,14 +307,30 @@ def state(slug: str) -> dict[str, Any]:
 
 def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> dict[str, Any]:
     """The Doc tab as the page reads it: {set: [{path, reason, stale (how many of its
-    stale passages are shown)}], removed, views: {path: view}, stale (the stale passages
-    shown), reference (the reference model, or None)}. A doc's view is its section view
-    (the file rendered as Markdown, `updated` against its highlight baseline
-    `doc:<path>`) with `exists` and the base mark's input: `base_html`, the doc at the
-    merge base rendered (None when it was not there, or when git cannot tell), and `new`,
-    whether the branch created it. A doc missing from the worktree is `{exists: false}`
-    only."""
+    stale passages are shown), minor? and diff? (a minor doc), failing? (a README's failure
+    indicator), facts (how many missing facts it has), pending (how many of them wait for the
+    user's decision)}] in the write order, removed,
+    views: {path: view}, stale (the stale passages shown), facts: {path: {text, list}},
+    reference (the reference model, or None)}. A doc's view is its section view (the file
+    rendered as Markdown, `updated` against its highlight baseline `doc:<path>`) with
+    `exists` and the base mark's input: `base_html`, the doc at the merge base rendered
+    (None when it was not there, or when git cannot tell), and `new`, whether the branch
+    created it. A doc missing from the worktree is `{exists: false}` only. A README's
+    missing facts are `list`, each fact with `updated` (its line is not in the baseline
+    `facts:<path>`: a new fact, or a changed state), and `text`, what « mark read »
+    records."""
     data = s.read_doc_set()
+    listed = {d["path"] for d in data["docs"]}
+    facts: dict[str, dict[str, Any]] = {}
+    for path, entries in s.read_missing_facts().items():
+        if path not in listed:
+            continue
+        text = "\n".join(map(format_fact, entries))
+        old = set(seen.get(FACTS_KEY + path, text).splitlines())
+        facts[path] = {
+            "text": text,
+            "list": [{**f, "updated": format_fact(f) not in old} for f in entries],
+        }
     commit = s.merge_base() if any(t is not None for t in docs.values()) else ""
     views: dict[str, dict[str, Any]] = {}
     for path, text in docs.items():
@@ -330,12 +354,18 @@ def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> 
                 "path": d["path"],
                 "reason": d.get("reason", ""),
                 "stale": sum(f["doc"] == d["path"] for f in stale),
+                **{k: d[k] for k in ("minor", "diff", "failing") if d.get(k)},
+                "facts": len(facts.get(d["path"], {}).get("list", [])),
+                "pending": sum(
+                    f["state"] == "pending" for f in facts.get(d["path"], {}).get("list", [])
+                ),
             }
             for d in data["docs"]
         ],
         "removed": data["removed"],
         "views": views,
         "stale": stale,
+        "facts": facts,
         "reference": reference_view(s),
     }
 
@@ -490,6 +520,8 @@ class CommentIn(BaseModel):
     prefix: str = ""
     text: str = ""
     thread: str = ""
+    # A comment on a missing fact of a README: the fact's id.
+    fact: str = ""
 
 
 class BatchIn(BaseModel):
@@ -525,6 +557,7 @@ class DraftIn(BaseModel):
     prefix: str = ""
     text: str = ""
     thread: str = ""
+    fact: str = ""
 
 
 class NoteIn(BaseModel):
@@ -625,6 +658,8 @@ class ThreadIn(BaseModel):
     quote: str = ""
     prefix: str = ""
     question: str = ""
+    # A thread opened on a missing fact carries its id, as a comment on it does.
+    fact: str = ""
     text: str
 
 
@@ -667,7 +702,9 @@ def list_threads(slug: str) -> dict[str, Any]:
 def new_thread(slug: str, body: ThreadIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
-        t = threads.create(s, body.section, body.quote, body.prefix, body.text, body.question)
+        t = threads.create(
+            s, body.section, body.quote, body.prefix, body.text, body.question, body.fact
+        )
         return thread_view(s, t)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e

@@ -30,13 +30,15 @@ reach the agent session through the inbox.
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text, each doc's under
-                        `doc:<path>`                                       (server)
+                        `doc:<path>`, a README's missing facts under `facts:<path>`  (server)
         drafts.json     the drafts and the general note, shared by every page (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
-        doc-set.json    the doc set: the repo docs the Doc tab shows, each with its reason,
-                        and the docs the user removed                    (`doc-set`)
+        doc-set.json    the doc set: the repo docs the Doc tab shows, in the write order,
+                        each with its reason, its minor class and the failure indicator
+                        of a README, and the docs the user removed       (`doc-set`)
         stale.json      the stale passages: doc passages the model contradicts  (`stale`)
+        missing-facts.json  the missing facts of each README rewritten in full  (`facts`)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
@@ -157,17 +159,28 @@ stays in `deleted`, so an edit to it arriving later is dropped. A batch clears t
 it carried and the note. Like seen.json, it is the page's write: it never counts as the
 agent's activity.
 
-The doc set is the list of repo docs the Doc tab shows: {docs: [{path, reason}],
-removed: [paths]}. `path` is relative to the repo root (plan.json `repo`), `reason` the one
-line that says why the doc is listed. An agent keeps it (`doc-set add` and `remove`); a
-doc the user removed by a comment goes to `removed`, and an agent's refresh never adds it
-back unless the user asks (`--user`). A doc of the set is a doc section: its text is the
-file read from the worktree at each render, never copied into the session, so the user's
-own edits show as the agent's do; a doc missing there reads as missing. Its highlight
-baseline is kept in seen.json under `doc:<path>` and moves with every batch, like a
-section's. A comment, a draft or a side thread on a doc's text is anchored to `doc:<path>`
-(a batch prints it `(doc <path>)`), one on the doc set list to `doc:` alone. The doc
-sections stay out of the published page, the vault export, the publish
+The doc set is the list of repo docs the Doc tab shows: {docs: [{path, reason, minor?,
+diff?, failing?}], removed: [paths]}. `path` is relative to the repo root (plan.json
+`repo`), `reason` the one line that says why the doc is listed. An agent keeps it
+(`doc-set add` and `remove`); a doc the user removed by a comment goes to `removed`, and
+an agent's refresh never adds it back unless the user asks (`--user`). The docs are kept
+in the write order, the order the agent writes them in (`doc-set order`), and the Doc
+tab lists them in it. A minor doc is one the doc pass (or a docs review's first run)
+touched only for a detail that leaves its meaning as it was: `minor` is the one line that
+says why (`doc-set minor`, taken off by `doc-set major`), `diff` its diff size, {added,
+removed} lines, in the doc pass commit (in a docs review, against the base branch). The
+Doc tab folds the minor docs out of the review list, the docs it asks the user to read.
+`failing` is the failure indicator of a README write-readme edited: {fail, total,
+structure}, the passages that failed its checks before the edit, out of all, and whether
+its structure fails (`doc-set failing`). A doc the doc pass (or a docs review) created
+is never minor and carries no indicator: it is a draft (`created_by_doc_pass`). `add`
+on a listed doc keeps these fields. A doc of the set is a doc section: its text is the
+file read from the worktree at each render, never copied into the session, so the
+user's own edits show as the agent's do; a doc missing there reads as missing. Its
+highlight baseline is kept in seen.json under `doc:<path>` and moves with every batch,
+like a section's. A comment, a draft or a side thread on a doc's text is anchored to
+`doc:<path>` (a batch prints it `(doc <path>)`), one on the doc set list to `doc:`
+alone. The doc sections stay out of the published page, the vault export, the publish
 fingerprint and `check`, which read the outline's sections only. The base mark compares
 a doc's worktree file (uncommitted changes included) with the same doc at the merge base
 of the branch and its base branch (`merge_base`, `base_text`); a doc absent there was
@@ -178,6 +191,22 @@ the agent that owns the docs to write it again with the write-readme skill. Whil
 repo lexicon (REPO_LEXICON: the reader line and the terms the repo's folders share, for
 agents) is missing from the worktree, « write repo lexicon » on its doc set entry sends a
 batch whose action is "write-lexicon"; it is refused once the file exists.
+
+A missing fact is a fact the old text of a README said and its full rewrite (asked by a
+rewrite request, written from the code alone) no longer says, in words or by a link.
+missing-facts.json keeps them by README: {path: [{id (f1…, unique in the session), fact,
+passage (the number of the old README's passage it came from, or null), proposal ("keep"
+or "leave": what the agent proposes), reason (one line), state ("pending", "kept" or
+"left")}]} (written by `facts`; a new full rewrite of a README replaces its list, and
+`remove_doc` drops it). A fact
+the user does not comment on stays out of the README, whatever the proposal. The Doc tab
+lists them under their README; a comment, a draft or a side thread on one is anchored to
+`doc:<path>` with the fact's text as its quote, and also carries the fact's id, `fact`
+(a batch prints it `(doc <path> · fact <id>)`; a thread passes it to the comment it
+becomes). Their highlight
+baseline is kept in seen.json under `facts:<path>`, the list as one line per fact
+(`fact_texts`), and moves with every batch and with « mark read » on the README: a new
+fact or a changed state shows highlighted.
 
 A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
 doc (its path), quote (the passage's exact text in the file), section (the model section
@@ -282,7 +311,9 @@ AGENT_ROLES = ("planner", "writer", "implementer", "reviewer")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 # A draft's id: the page makes it (a UUID). Its fields, as a batch comment takes them.
 DRAFT_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
-DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread")
+DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread", "fact")
+# The draft fields a draft leaves out when empty: a side thread's id, a missing fact's id.
+DRAFT_OPTIONAL = ("thread", "fact")
 # The pages of every session write the drafts file from the server's threadpool.
 _DRAFTS_LOCK = threading.Lock()
 # The key prefix of a doc's highlight baseline in seen.json, and of the anchor of a comment,
@@ -293,6 +324,13 @@ DOC_KEY = "doc:"
 # The repo lexicon, relative to the repo root: what a "write-lexicon" batch asks to write.
 REPO_LEXICON = ".agents/lexicon.md"
 DOC_SET_ANCHOR = DOC_KEY
+# The key prefix of the highlight baseline of a README's missing facts in seen.json:
+# `facts:<path>`. No section id may start with it either (write_plan refuses it).
+FACTS_KEY = "facts:"
+# A missing fact: what the agent proposes to do with it, and where the user's decision stands.
+FACT_PROPOSALS = ("keep", "leave")
+FACT_STATES = ("pending", "kept", "left")
+FACT_ID_RE = re.compile(r"^f[0-9]{1,6}$")
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -520,6 +558,10 @@ class Session:
     def stale_path(self) -> Path:
         return self.dir / "stale.json"
 
+    @property
+    def missing_facts_path(self) -> Path:
+        return self.dir / "missing-facts.json"
+
     def media_folder(self, sid: str) -> Path:
         """The media folder of section `sid`: sections/<sid>/."""
         if not sid or "/" in sid or sid in (".", ".."):
@@ -598,11 +640,11 @@ class Session:
                 raise SessionError("every outline entry needs an id and a title")
             if len(set(ids)) != len(ids):
                 raise SessionError("outline ids must be unique")
-            taken = [i for i in ids if i.startswith(DOC_KEY)]
+            taken = [i for i in ids if i.startswith((DOC_KEY, FACTS_KEY))]
             if taken:
                 raise SessionError(
-                    f"outline ids may not start with {DOC_KEY!r}, the Doc tab's anchors: "
-                    + ", ".join(taken)
+                    f"outline ids may not start with {DOC_KEY!r} or {FACTS_KEY!r}, the Doc "
+                    "tab's keys: " + ", ".join(taken)
                 )
             long = [sec["id"] for sec in outline if len(str(sec.get("earns", ""))) > EARNS_MAX]
             if long:
@@ -1171,14 +1213,126 @@ class Session:
 
     # ---- the doc set ----
     def read_doc_set(self) -> dict[str, Any]:
-        """The doc set: {docs: [{path, reason}], removed: [paths]}, empty without a file."""
+        """The doc set: {docs: [{path, reason, minor?, diff?, failing?}], removed: [paths]},
+        empty without a file."""
         data = _read_json(self.doc_set_path, {})
         return {"docs": list(data.get("docs", [])), "removed": list(data.get("removed", []))}
 
+    def _listed_doc(self, data: dict[str, Any], path: str) -> dict[str, Any]:
+        """The entry of doc `path` in the doc set `data`; refused when it is not listed."""
+        entry = next((d for d in data["docs"] if d.get("path") == path), None)
+        if entry is None:
+            raise SessionError(f"{path} is not in the doc set")
+        return entry
+
+    def set_minor(self, path: str, reason: str, added: int, removed: int) -> dict[str, Any]:
+        """Class a doc of the doc set minor: `reason` is the one line that says why, `added`
+        and `removed` its diff size in lines (the doc pass commit, or in a docs review the
+        diff against the base branch)."""
+        path = doc_path(path)
+        if not reason.strip():
+            raise SessionError("a minor doc needs its reason")
+        if added < 0 or removed < 0:
+            raise SessionError("a diff size counts lines: --added and --removed are 0 or more")
+        data = self.read_doc_set()
+        entry = self._listed_doc(data, path)
+        if self.created_by_doc_pass(path):
+            raise SessionError(f"{path} is new: a doc the doc pass creates is never minor")
+        entry["minor"] = " ".join(reason.split())
+        entry["diff"] = {"added": added, "removed": removed}
+        _write_json(self.doc_set_path, data)
+        return entry
+
+    def set_major(self, path: str) -> dict[str, Any]:
+        """Take the minor class off a doc of the doc set: it is back in the review list."""
+        path = doc_path(path)
+        data = self.read_doc_set()
+        entry = self._listed_doc(data, path)
+        entry.pop("minor", None)
+        entry.pop("diff", None)
+        _write_json(self.doc_set_path, data)
+        return entry
+
+    def set_failing(
+        self, path: str, fail: int | None, total: int = 0, structure: bool = False
+    ) -> dict[str, Any]:
+        """Record the failure indicator of a README of the doc set that write-readme edited:
+        `fail` of its `total` passages failed the checks before the edit, and `structure`
+        whether its structure fails. `fail` None clears it. A README the doc pass created
+        is a draft, which has no indicator."""
+        path = doc_path(path)
+        data = self.read_doc_set()
+        entry = self._listed_doc(data, path)
+        if fail is None:
+            entry.pop("failing", None)
+        else:
+            if PurePosixPath(path).name != "README.md":
+                raise SessionError(f"{path} is not a README.md: only a README has an indicator")
+            if self.created_by_doc_pass(path):
+                raise SessionError(f"{path} is new: a draft the doc pass writes has no indicator")
+            if total < 1 or not 0 <= fail <= total:
+                raise SessionError(
+                    "the indicator is <fail> of <total> passages: 0 <= fail <= total"
+                )
+            entry["failing"] = {"fail": fail, "total": total, "structure": structure}
+        _write_json(self.doc_set_path, data)
+        return entry
+
+    def created_by_doc_pass(self, path: str) -> bool:
+        """Whether doc `path` is one the doc pass created, so never minor and with no
+        failure indicator: absent at the merge base, and added on the branch once the doc
+        pass started (the author date of the commit that added it, against the `sent`
+        time of the first "write-docs" batch), or not committed yet once it started
+        (missing from the worktree, or written and not committed).
+        Before that batch, a doc new on the branch came with the code commits. In a docs
+        review (workflow view-docs), which has no doc pass and whose commits are all doc
+        work, every doc absent from the merge base is one the review created. False when
+        git cannot tell."""
+        path = doc_path(path)
+        commit = self.merge_base()
+        if self.base_text(path, commit) != "":
+            return False
+        if self.read_plan().get("workflow") == "view-docs":
+            return True
+        batches = self.read_comments()["batches"]
+        start = next((b["sent"] for b in batches if b.get("action") == "write-docs"), None)
+        if start is None:
+            return False
+        repo, file = self.repo_dir(), self.doc_file(path)
+        if repo is None or file is None or not file.exists():
+            return True
+        # The author date, which a rebase keeps; the committer date moves to the rebase.
+        log = _git(repo, "log", "--diff-filter=A", "--format=%aI", f"{commit}..HEAD", "--", path)
+        added = (log or "").split()
+        if not added:
+            return True
+        return datetime.fromisoformat(added[0]) >= datetime.fromisoformat(start)
+
+    def order_docs(self, paths: list[str]) -> list[str]:
+        """Put the doc set in the write order: `paths` names every doc of the set once."""
+        paths = [doc_path(p) for p in paths]
+        data = self.read_doc_set()
+        listed = [d["path"] for d in data["docs"]]
+        if len(set(paths)) != len(paths):
+            raise SessionError("order names each doc once")
+        unknown = [p for p in paths if p not in listed]
+        if unknown:
+            raise SessionError(f"not in the doc set: {', '.join(unknown)}")
+        missing = [p for p in listed if p not in paths]
+        if missing:
+            raise SessionError(
+                f"order names every doc of the doc set; missing: {', '.join(missing)}"
+            )
+        by_path = {d["path"]: d for d in data["docs"]}
+        data["docs"] = [by_path[p] for p in paths]
+        _write_json(self.doc_set_path, data)
+        return paths
+
     def add_doc(self, path: str, reason: str, user: bool = False) -> dict[str, Any]:
-        """Add a doc to the doc set, or change its reason. A doc the user removed is
-        refused unless `user` (the user asked for it in a comment), which takes it out of
-        `removed`. The doc need not exist yet: the branch may create it."""
+        """Add a doc to the doc set, or change its reason (its minor class and failure
+        indicator stay). A doc the user removed is refused unless `user` (the user asked
+        for it in a comment), which takes it out of `removed`. The doc need not exist yet:
+        the branch may create it."""
         path = doc_path(path)
         if not reason.strip():
             raise SessionError("a doc of the doc set needs a reason")
@@ -1194,13 +1348,14 @@ class Session:
         if at is None:
             data["docs"].append(entry)
         else:
-            data["docs"][at] = entry
+            entry = data["docs"][at] = {**data["docs"][at], **entry}
         _write_json(self.doc_set_path, data)
         return entry
 
     def remove_doc(self, path: str, user: bool = False) -> None:
         """Remove a doc from the doc set; `user` (the user asked in a comment) records it
-        in `removed`, so an agent's refresh never adds it back."""
+        in `removed`, so an agent's refresh never adds it back. The whole entry goes: its
+        minor class, its indicator, its missing facts and its highlight baselines."""
         path = doc_path(path)
         data = self.read_doc_set()
         listed = any(d.get("path") == path for d in data["docs"])
@@ -1210,10 +1365,15 @@ class Session:
         if user and path not in data["removed"]:
             data["removed"].append(path)
         _write_json(self.doc_set_path, data)
+        # Its missing facts go with the entry: a README back in the doc set has none.
+        facts = self.read_missing_facts()
+        if facts.pop(path, None) is not None:
+            _write_json(self.missing_facts_path, facts)
         # A doc that enters the doc set again starts with no green highlight: its baseline
         # is set anew at its first read.
         seen = _read_json(self.seen_path, {})
-        if seen.pop(DOC_KEY + path, None) is not None:
+        dropped = [seen.pop(k, None) for k in (DOC_KEY + path, FACTS_KEY + path)]
+        if any(v is not None for v in dropped):
             _write_json(self.seen_path, seen)
 
     def repo_dir(self) -> Path | None:
@@ -1322,6 +1482,85 @@ class Session:
             raise SessionError(f"no stale passage {', '.join(unknown)}")
         _write_json(self.stale_path, [f for f in flags if f.get("id") not in ids])
 
+    # ---- missing facts ----
+    def read_missing_facts(self) -> dict[str, list[dict[str, Any]]]:
+        """The missing facts by README path: {path: [{id, fact, passage, proposal, reason,
+        state}]}, in the order they were recorded; empty without a file."""
+        data = _read_json(self.missing_facts_path, {})
+        return {str(p): list(facts) for p, facts in data.items() if facts}
+
+    def add_missing_fact(
+        self, path: str, fact: str, proposal: str, reason: str, passage: int | None = None
+    ) -> dict[str, Any]:
+        """Record a missing fact of README `path`, a README.md of the doc set rewritten in
+        full: `fact` in one sentence, `proposal` "keep" or "leave" with its one-line
+        `reason`, `passage` the number of the old README's passage it came from. It waits
+        on the user's decision: state "pending"."""
+        path = doc_path(path)
+        if PurePosixPath(path).name != "README.md":
+            raise SessionError(f"{path} is not a README.md: only a full rewrite has missing facts")
+        if path not in {d["path"] for d in self.read_doc_set()["docs"]}:
+            raise SessionError(f"{path} is not in the doc set")
+        if proposal not in FACT_PROPOSALS:
+            raise SessionError(f"a proposal is one of {', '.join(FACT_PROPOSALS)}")
+        if not fact.strip() or not reason.strip():
+            raise SessionError("a missing fact needs its text and the reason of its proposal")
+        if passage is not None and passage < 1:
+            raise SessionError("a passage number counts from 1")
+        data = self.read_missing_facts()
+        # The ids go on past a cleared list: a sent comment, an open draft or a side
+        # thread may still name an old one.
+        ids = [str(f.get("id", "")) for facts in data.values() for f in facts]
+        batches = self.read_comments()["batches"]
+        ids += [str(c.get("fact", "")) for b in batches for c in b["comments"]]
+        ids += [str(d.get("fact", "")) for d in self.read_drafts()["drafts"]]
+        ids += [str(t.get("fact", "")) for t in self.read_threads()]
+        n = max((int(i[1:]) for i in ids if FACT_ID_RE.match(i)), default=0)
+        entry = {
+            "id": f"f{n + 1}",
+            "fact": " ".join(fact.split()),
+            "passage": passage,
+            "proposal": proposal,
+            "reason": " ".join(reason.split()),
+            "state": "pending",
+        }
+        data.setdefault(path, []).append(entry)
+        _write_json(self.missing_facts_path, data)
+        return entry
+
+    def mark_missing_fact(self, fid: str, state: str) -> dict[str, Any]:
+        """Set where the user's decision on missing fact `fid` stands: "kept" (the README
+        took it back), "left" or "pending"."""
+        if state not in FACT_STATES:
+            raise SessionError(f"a missing fact's state is one of {', '.join(FACT_STATES)}")
+        data = self.read_missing_facts()
+        entry = next((f for facts in data.values() for f in facts if f.get("id") == fid), None)
+        if entry is None:
+            raise SessionError(f"no missing fact {fid!r}")
+        entry["state"] = state
+        _write_json(self.missing_facts_path, data)
+        return entry
+
+    def fact_texts(self) -> dict[str, str]:
+        """The missing facts of each README of the doc set, keyed as their highlight
+        baseline is (`facts:<path>`): one line per fact (`format_fact`), so a new fact or a
+        changed state is a line the baseline lacks."""
+        listed = {d["path"] for d in self.read_doc_set()["docs"]}
+        return {
+            FACTS_KEY + p: "\n".join(map(format_fact, facts))
+            for p, facts in self.read_missing_facts().items()
+            if p in listed
+        }
+
+    def clear_missing_facts(self, path: str) -> int:
+        """Drop the missing facts of README `path` (a new full rewrite replaces them).
+        Returns how many were dropped."""
+        path = doc_path(path)
+        data = self.read_missing_facts()
+        dropped = len(data.pop(path, []))
+        _write_json(self.missing_facts_path, data)
+        return dropped
+
     def merge_base(self) -> str:
         """The commit where the branch left its base branch (plan.json `base`, else main):
         `git merge-base <base> HEAD` in the worktree. "" when git cannot tell (no repo,
@@ -1376,10 +1615,7 @@ class Session:
             data = self.read_drafts()
             if did in data["deleted"]:
                 return False
-            entry = {k: str(draft.get(k) or "") for k in DRAFT_FIELDS}
-            entry["id"] = did
-            if not entry["thread"]:
-                del entry["thread"]
+            entry = _draft_entry(draft, did)
             at = next((i for i, d in enumerate(data["drafts"]) if d.get("id") == did), None)
             if at is None:
                 data["drafts"].append(entry)
@@ -1412,11 +1648,7 @@ class Session:
                 did = str(d.get("id", ""))
                 if not DRAFT_ID_RE.match(did) or did in known:
                     continue
-                entry = {k: str(d.get(k) or "") for k in DRAFT_FIELDS}
-                entry["id"] = did
-                if not entry["thread"]:
-                    del entry["thread"]
-                data["drafts"].append(entry)
+                data["drafts"].append(_draft_entry(d, did))
                 known.add(did)
             if note.strip():
                 data["note"] = "\n\n".join(n for n in (data["note"].strip(), note.strip()) if n)
@@ -1585,6 +1817,7 @@ class Session:
             self.request_path,
             self.doc_set_path,
             self.stale_path,
+            self.missing_facts_path,
             *self.section_files().values(),
         ]
         times = [iso_time(t) for p in paths if (t := _mtime(p))]
@@ -1662,7 +1895,7 @@ class Session:
         if self.sections_dir.is_dir():
             paths += sorted([*self.sections_dir.glob("*.md"), *self.sections_dir.glob("*.html")])
         # The docs of the doc set are files of the worktree: an edit there re-renders too.
-        paths += [self.doc_set_path, self.stale_path]
+        paths += [self.doc_set_path, self.stale_path, self.missing_facts_path]
         with contextlib.suppress(SessionError):
             paths += self.doc_files()
         return _stat_signature(paths)
@@ -1749,11 +1982,18 @@ class Session:
         _write_json(self.thread_path(thread["id"]), thread)
 
     def new_thread(
-        self, section: str = "", quote: str = "", prefix: str = "", question: str = ""
+        self,
+        section: str = "",
+        quote: str = "",
+        prefix: str = "",
+        question: str = "",
+        fact: str = "",
     ) -> dict[str, Any]:
         """Create an empty thread, anchored to a passage like a comment, to an open agent
         question (`question`, its id: the user discusses it before answering), or to
-        nothing."""
+        nothing. A thread on a missing fact carries the fact's id (`fact`, kept only when
+        set), which the comment it becomes carries too."""
+        _check_fact(fact, section)
         if question:
             self._open_question(self.read_questions(), question)
         n = max((int(t["id"][1:]) for t in self.read_threads()), default=0) + 1
@@ -1764,6 +2004,7 @@ class Session:
             "quote": quote,
             "prefix": prefix,
             "question": question,
+            **({"fact": fact} if fact else {}),
             "agent_session": "",
             "forked_from": "",
             "state": "idle",
@@ -1833,6 +2074,8 @@ class Session:
         comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
         if not comments and not note and not action:
             raise SessionError("empty batch")
+        for c in comments:
+            _check_fact(str(c.get("fact") or ""), str(c.get("section", "")))
         data = self.read_comments()
         batches = data["batches"]
         n_comments = sum(len(b["comments"]) for b in batches)
@@ -1849,6 +2092,8 @@ class Session:
                     "prefix": str(c.get("prefix", "")),
                     "text": str(c.get("text", "")).strip(),
                     "thread": str(c.get("thread", "")),
+                    # A comment on a missing fact carries the fact's id.
+                    **({"fact": str(c["fact"])} if c.get("fact") else {}),
                     "status": "sent",
                 }
                 for i, c in enumerate(comments)
@@ -1867,8 +2112,8 @@ class Session:
         with self.inbox_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(batch, ensure_ascii=False) + "\n")
         # Highlights show what changed since the last batch: every baseline moves here,
-        # the docs' included.
-        self.mark_seen({**self.read_sections(), **self.doc_texts()})
+        # the docs' and their missing facts' included.
+        self.mark_seen({**self.read_sections(), **self.doc_texts(), **self.fact_texts()})
         if action == "plan":
             self._skip_open_questions(batch["sent"])
         return batch
@@ -2313,6 +2558,14 @@ def _stat_signature(paths: list[Path]) -> tuple:
     return tuple(sig)
 
 
+def _check_fact(fact: str, section: str) -> None:
+    """Refuse the `fact` of a comment or a side thread unless it is a fact id on a doc's
+    anchor (`doc:<path>`, not the doc set list): a missing fact is commented on its README."""
+    readme = section.startswith(DOC_KEY) and section != DOC_SET_ANCHOR
+    if fact and not (FACT_ID_RE.match(fact) and readme):
+        raise SessionError(f"a missing fact's comment is anchored to its README: {fact!r}")
+
+
 def _upgrade_thread(thread: dict[str, Any]) -> dict[str, Any]:
     """A thread written before sessions could run on other agents keeps its conversation id
     under `claude_id`: read it as `agent_session`, so the thread still resumes."""
@@ -2422,14 +2675,49 @@ def format_batch(
     return "\n".join(lines)
 
 
+def _draft_entry(draft: dict[str, Any], did: str) -> dict[str, str]:
+    """A draft as the drafts file keeps it: its fields as text, the empty optional ones
+    left out."""
+    entry = {k: str(draft.get(k) or "") for k in DRAFT_FIELDS}
+    entry["id"] = did
+    for k in DRAFT_OPTIONAL:
+        if not entry[k]:
+            del entry[k]
+    return entry
+
+
+def format_doc(d: dict[str, Any]) -> str:
+    """One doc of the doc set on one line (`doc-set`, the agents' context): its path and
+    reason, its minor class with its diff size, the failure indicator of a README."""
+    line = f"{d['path']} — {d.get('reason', '')}"
+    if d.get("minor"):
+        diff = d.get("diff") or {}
+        line += f" · minor: {d['minor']} (+{diff.get('added', 0)} −{diff.get('removed', 0)})"
+    if f := d.get("failing"):
+        line += f" · {f.get('fail', 0)}/{f.get('total', 0)} failing"
+        line += ", structure fails" if f.get("structure") else ""
+    return line
+
+
+def format_fact(f: dict[str, Any]) -> str:
+    """One missing fact on one line: its id, state, text, old passage and the proposal."""
+    passage = f" (passage {f['passage']})" if f.get("passage") else ""
+    return (
+        f"{f.get('id', '')} [{f.get('state', 'pending')}] « {f.get('fact', '')} »{passage}"
+        f" · propose {f.get('proposal', '')}: {f.get('reason', '')}"
+    )
+
+
 def format_comment(c: dict[str, Any], number: dict[str, int]) -> str:
     """One comment of a batch: where it is anchored (a section, a doc of the Doc tab by its
-    path, the doc set list), its text, the thread it comes from."""
+    path, a missing fact of a README, the doc set list), its text, the thread it comes
+    from."""
     sec = c["section"]
     if sec == DOC_SET_ANCHOR:
         where = "(doc set)"
     elif sec.startswith(DOC_KEY):
-        where = f"(doc {sec.removeprefix(DOC_KEY)})"
+        fact = f" · fact {c['fact']}" if c.get("fact") else ""
+        where = f"(doc {sec.removeprefix(DOC_KEY)}{fact})"
     else:
         where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
     quote = " ".join(c["quote"].split())

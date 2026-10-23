@@ -142,7 +142,7 @@ const docViews = () => [$("#model"), $("#refactor"), $("#doc")];
 /* The Doc tab (id "doc"): the repo docs the branch concerns, from `state.docs` (see "the
    Doc tab"). It shows once the doc set is written; a docs review (workflow view-docs)
    shows it alone, from the start. A server that sends no `docs` counts as no doc set. */
-const NO_DOCS = { set: [], views: {}, stale: [], removed: [], reference: null };
+const NO_DOCS = { set: [], views: {}, stale: [], removed: [], facts: {}, reference: null };
 const docsOf = () => ({ ...NO_DOCS, ...((state && state.docs) || {}) });
 const isDocsReview = () => !!state && state.workflow === "view-docs";
 const hasDocTab = () => isDocsReview() || docsOf().set.length > 0;
@@ -251,9 +251,10 @@ function followSession() {
       n ? el("span", { class: "badge new", text: `${n} updated` }) : null,
       writing ? el("span", { class: "badge accent writing", text: "writing" }) : null].filter(Boolean));
   }
-  // The Doc tab's badge counts the docs rewritten since their highlight baseline.
+  // The Doc tab's badge counts the docs rewritten, or whose missing facts changed, since
+  // their highlight baseline.
   const docs = docsOf();
-  const n = docs.set.filter((d) => (docs.views[d.path] || {}).updated).length;
+  const n = docs.set.filter((d) => (docs.views[d.path] || {}).updated || factsUpdated(d.path)).length;
   $('.tab[data-tab="doc"]').replaceChildren(...["doc", n ? el("span", { class: "badge new", text: `${n} updated` }) : null].filter(Boolean));
 }
 
@@ -936,10 +937,27 @@ function sectionBlock(s, { bare = false } = {}) {
    batch whose action is "rewrite-readme", carrying the path) at once, with the drafts.
    While the repo lexicon (REPO_LEXICON) is in the doc set and missing from the worktree,
    its doc set entry holds « write repo lexicon », which sends a "write-lexicon" batch the
-   same way. */
+   same way.
+   The docs come in the write order. The doc set list shows the review list first, the
+   docs the user is asked to read: every doc but the minor ones (`minor`, the reason the
+   doc pass gave), and a minor doc on which a stale passage is shown, which climbs back.
+   The other minor docs sit in a fold « n minor docs », each with its reason and its diff
+   size `+a −r`. The bar of doc titles follows the same order, the minor docs after the
+   review list, set back. A README with a failure indicator (`failing`) shows « n/total
+   failing » in the list; when more than REWRITE_HINT of its passages fail, or its
+   structure fails, its rewrite button is put forward (accent).
+   A README rewritten in full lists its missing facts under its text (`state.docs.facts`):
+   each fact with the agent's proposal, its reason and its state. A fact is commented
+   like a passage of the doc: its comment is anchored to "doc:<path>", quotes the fact and
+   carries its id (`fact`); a passage selected in a fact anchors the same way. A fact new
+   or changed since the baseline "facts:<path>" gets the green bar, and « mark read » on
+   the README marks its facts read too. */
 
 let shownDoc = null; // path of the doc shown in the Doc tab
 const REPO_LEXICON = ".agents/lexicon.md"; // store.py's REPO_LEXICON
+// The failing share of a README's passages beyond which its rewrite button is put forward.
+const REWRITE_HINT = 0.5;
+let minorOpen = false; // the fold of the minor docs is open (kept across renders)
 
 function renderDocTab(ending) {
   const view = $("#doc");
@@ -950,13 +968,41 @@ function renderDocTab(ending) {
     view.replaceChildren(...top, isDocsReview() ? el("p", { class: "dim empty", text: "Waiting for the doc set…" }) : "", ...ending);
     return;
   }
-  if (!docs.set.some((d) => d.path === shownDoc)) shownDoc = docs.set[0].path;
-  view.replaceChildren(...top, docSetBlock(docs), docBar(docs), docRewrite(shownDoc), docBlock(shownDoc, docs.views[shownDoc] || {}), ...ending);
+  if (!docs.set.some((d) => d.path === shownDoc)) shownDoc = reviewOrder(docs)[0].path;
+  const entry = docs.set.find((d) => d.path === shownDoc);
+  view.replaceChildren(...top, docSetBlock(docs), docBar(docs), docRewrite(shownDoc, entry),
+    docBlock(shownDoc, docs.views[shownDoc] || {}), ...ending);
 }
 
 const staleCount = (docs, d) => d.stale ?? docs.stale.filter((s) => s.doc === d.path).length;
 const staleBadge = (n) => (n ? el("span", { class: "badge tone-warn", text: `${n} stale` }) : null);
 const missingBadge = (v) => (v.exists === false ? el("span", { class: "badge", text: "missing" }) : null);
+// A minor doc stays out of the review list, unless a stale passage is shown on it or a
+// missing fact of it waits for your decision.
+const isFolded = (docs, d) => !!d.minor && !staleCount(docs, d) && !d.pending;
+// Why a minor doc is back in the review list.
+const liftedBy = (docs, d) => [staleCount(docs, d) ? "a stale passage" : "", d.pending ? "a pending missing fact" : ""]
+  .filter(Boolean).join(" and ");
+// The docs in the write order, the review list first, then the folded minor docs.
+const reviewOrder = (docs) => [...docs.set.filter((d) => !isFolded(docs, d)), ...docs.set.filter((d) => isFolded(docs, d))];
+const diffText = (d) => `+${(d.diff || {}).added ?? 0} −${(d.diff || {}).removed ?? 0}`;
+// The failure indicator of a README write-readme edited.
+const failingBadge = (d) => {
+  const f = d.failing;
+  if (!f) return null;
+  return el("span", { class: `badge ${rewriteHinted(d) ? "tone-warn" : ""}`,
+                      text: `${f.fail}/${f.total} failing${f.structure ? " · structure fails" : ""}`,
+                      title: "The passages that failed write-readme's checks before its edit, out of all" });
+};
+const rewriteHinted = (d) => !!(d && d.failing && (d.failing.structure || d.failing.fail > REWRITE_HINT * d.failing.total));
+// The missing facts of README `path`, [] for a doc without.
+const factsOf = (path) => ((docsOf().facts || {})[path] || {}).list || [];
+const factsUpdated = (path) => factsOf(path).some((f) => f.updated);
+// The title of a doc's dot in the bar of titles: what changed since the last batch.
+const dotTitle = (rewritten, facts) =>
+  rewritten && facts ? "Rewritten, and a missing fact changed, since your last batch"
+    : facts ? "A missing fact changed since your last batch" : "Rewritten since your last batch";
+const factsBadge = (d) => (d.facts ? el("span", { class: "badge alt", text: `${d.facts} missing facts` }) : null);
 
 // The heading of a doc set or doc block: its label, its thread chips, then « mark read »
 // when updated and the comment buttons, as in a section block.
@@ -975,22 +1021,35 @@ function docHeading(id, label, updated, what, edit = null) {
 }
 
 function docSetBlock(docs) {
-  const list = el("ul", { class: "doc-set" }, ...docs.set.map((d) => el("li", {},
+  const item = (d) => el("li", {},
     el("button", { class: "doc-open", text: d.path, title: "Show this doc", onclick: () => openDoc(d.path) }),
-    d.reason ? ` — ${d.reason}` : "", staleBadge(staleCount(docs, d)), missingBadge(docs.views[d.path] || {}),
-    lexiconButton(d.path, docs.views[d.path] || {}))));
+    d.reason ? ` — ${d.reason}` : "",
+    d.minor && !isFolded(docs, d) ? el("span", { class: "badge", text: `minor · ${diffText(d)}`, title: `Minor: ${d.minor}. ${liftedBy(docs, d).replace(/^./, (c) => c.toUpperCase())} brought it back to the review list` }) : null,
+    staleBadge(staleCount(docs, d)), failingBadge(d), factsBadge(d), missingBadge(docs.views[d.path] || {}),
+    lexiconButton(d.path, docs.views[d.path] || {}));
+  const minor = docs.set.filter((d) => isFolded(docs, d));
+  const fold = minor.length
+    ? el("details", { class: "doc-minor", ...(minorOpen ? { open: "" } : {}),
+                      ontoggle: (e) => { minorOpen = e.currentTarget.open; } },
+        el("summary", { text: `${minor.length} minor doc${minor.length > 1 ? "s" : ""}` }),
+        el("ul", { class: "doc-set" }, ...minor.map((d) => el("li", {},
+          el("button", { class: "doc-open", text: d.path, title: "Show this doc", onclick: () => openDoc(d.path) }),
+          ` — minor: ${d.minor}`, el("span", { class: "doc-diff", text: diffText(d), title: "Its diff size: lines added and removed" }),
+          failingBadge(d), factsBadge(d), missingBadge(docs.views[d.path] || {})))))
+    : null;
   return el("section", { class: "sec doc-set-sec", id: `sec-${DOC_SET}`, "data-id": DOC_SET },
     docHeading(DOC_SET, "doc set", false, "doc set"),
-    el("div", { class: "body" }, list,
+    el("div", { class: "body" }, el("ul", { class: "doc-set" }, ...docs.set.filter((d) => !isFolded(docs, d)).map(item)), fold,
       docs.removed.length ? el("p", { class: "dim doc-removed", text: `removed by you: ${docs.removed.join(", ")}` }) : null));
 }
 
 function docBar(docs) {
-  return el("div", { class: "doc-bar" }, ...docs.set.map((d) => {
+  return el("div", { class: "doc-bar" }, ...reviewOrder(docs).map((d) => {
     const v = docs.views[d.path] || {};
-    return el("button", { class: `doc-title ${d.path === shownDoc ? "active" : ""} ${v.exists === false ? "missing" : ""}`,
-                          title: d.reason || d.path, onclick: () => openDoc(d.path) },
-      v.updated ? el("span", { class: "doc-dot", title: "Rewritten since your last batch" }) : null,
+    const folded = isFolded(docs, d);
+    return el("button", { class: `doc-title ${d.path === shownDoc ? "active" : ""} ${v.exists === false ? "missing" : ""} ${folded ? "minor" : ""}`,
+                          title: folded ? `minor: ${d.minor} (${diffText(d)})` : d.reason || d.path, onclick: () => openDoc(d.path) },
+      v.updated || factsUpdated(d.path) ? el("span", { class: "doc-dot", title: dotTitle(v.updated, factsUpdated(d.path)) }) : null,
       d.path, staleBadge(staleCount(docs, d)),
       docEdit && docEdit.path === d.path ? el("span", { class: "badge", text: "editing", title: "Your edit of this doc is not saved yet" }) : null);
   }));
@@ -1004,13 +1063,43 @@ function lexiconButton(path, v) {
                         onclick: (e) => send("write-lexicon", e.currentTarget) });
 }
 
-// The rewrite request's line: drawn only while the doc in sight is named README.md.
-function docRewrite(path) {
+// The rewrite request's line: drawn only while the doc in sight is named README.md; put
+// forward when its failure indicator passes REWRITE_HINT or its structure fails.
+function docRewrite(path, entry) {
   if (path.split("/").pop() !== "README.md") return "";
+  const hinted = rewriteHinted(entry);
   return el("div", { class: "doc-rewrite" },
-    el("button", { class: "btn", text: `rewrite ${path} with write-readme`,
+    el("button", { class: `btn ${hinted ? "primary" : ""}`, text: `rewrite ${path} with write-readme`,
                    title: "Ask the agent that owns the docs to write this README again with write-readme (your drafts go with it)",
-                   onclick: (e) => send("rewrite-readme", e.currentTarget, { path }) }));
+                   onclick: (e) => send("rewrite-readme", e.currentTarget, { path }) }),
+    hinted ? el("span", { class: "dim doc-rewrite-why", text: ` ${failingWhy(entry.failing)}` }) : null);
+}
+const failingWhy = (f) => (f.structure ? "its structure fails" : `${f.fail} of its ${f.total} passages fail`);
+
+/* The missing facts of a README rewritten in full, under its text: each fact with its old
+   passage, the agent's proposal and reason, and its state; « + comment » and « ask » open
+   the composer on the fact, as on a passage of the doc. */
+const FACT_STATE = { pending: "waits on you", kept: "kept", left: "left" };
+const FACT_PROPOSAL = { keep: "keep", leave: "leave" };
+function docFacts(path) {
+  const facts = factsOf(path);
+  if (!facts.length) return null;
+  const id = DOC_PREFIX + path;
+  const target = (f) => ({ section: id, quote: f.fact, prefix: "", fact: f.id });
+  return el("div", { class: "doc-facts", "data-doc": path },
+    el("h3", { text: `${facts.length} missing fact${facts.length > 1 ? "s" : ""}`,
+               title: "What the old README said and its full rewrite no longer says; a fact you do not comment on is not taken back" }),
+    el("ul", {}, ...facts.map((f) => el("li", { class: `doc-fact state-${f.state} ${f.updated ? "updated" : ""}`, "data-fact": f.id },
+      el("span", { class: "fact-text", text: f.fact }),
+      f.passage ? el("span", { class: "dim", text: ` (passage ${f.passage})` }) : null,
+      el("div", { class: "fact-meta" },
+        el("span", { class: `badge ${f.proposal === "keep" ? "tone-ok" : "tone-flag"}`, text: FACT_PROPOSAL[f.proposal] || f.proposal }),
+        el("span", { class: "dim", text: ` ${f.reason}` }),
+        el("span", { class: `badge ${f.state === "pending" ? "tone-warn" : ""}`, text: FACT_STATE[f.state] || f.state }),
+        el("button", { class: "sec-comment", text: "+ comment", title: "Comment on this fact: « keep it », « leave it », or a question",
+                       onclick: (e) => openComposer({ ...target(f), rect: e.currentTarget.getBoundingClientRect() }) }),
+        el("button", { class: "sec-comment ask", text: "ask", title: "Open a side thread about this fact",
+                       onclick: (e) => openComposer({ ...target(f), rect: e.currentTarget.getBoundingClientRect() }, "ask") }))))));
 }
 
 function docBlock(path, v) {
@@ -1025,8 +1114,9 @@ function docBlock(path, v) {
   const edit = v.exists && !editor
     ? el("button", { class: "sec-comment", text: "edit", title: "Edit this doc's Markdown by hand", onclick: () => startDocEdit(path) })
     : null;
-  return el("section", { class: `sec doc-sec ${v.exists ? "" : "missing"} ${v.updated ? "updated" : ""}`, id: `sec-${id}`, "data-id": id },
-    docHeading(id, el("code", { text: path }), !!v.updated && !editor, "doc", edit), body);
+  const updated = !!v.updated || factsUpdated(path);
+  return el("section", { class: `sec doc-sec ${v.exists ? "" : "missing"} ${updated ? "updated" : ""}`, id: `sec-${id}`, "data-id": id },
+    docHeading(id, el("code", { text: path }), updated && !editor, "doc", edit), body, docFacts(path));
 }
 
 /* ---------------- editing a doc ----------------
@@ -1777,8 +1867,16 @@ function textIndex(root) {
   return { text, pos };
 }
 
-function findQuote(sectionId, quote, prefix) {
-  const body = document.querySelector(`#sec-${CSS.escape(sectionId)} .body`);
+/* The range of a quote in section `sectionId`. A quote on a missing fact (`fact`, its id)
+   is looked for in that fact; one not found in a doc's text, in the doc's missing facts. */
+function findQuote(sectionId, quote, prefix, fact = "") {
+  const sec = `#sec-${CSS.escape(sectionId)}`;
+  if (fact) return findIn(document.querySelector(`${sec} .doc-facts [data-fact="${CSS.escape(fact)}"]`), quote, "");
+  return findIn(document.querySelector(`${sec} .body`), quote, prefix)
+    || findIn(document.querySelector(`${sec} .doc-facts`), quote, prefix);
+}
+
+function findIn(body, quote, prefix) {
   if (!body || !quote) return null;
   const { text, pos } = textIndex(body);
   const q = collapse(quote);
@@ -1795,14 +1893,14 @@ function findQuote(sectionId, quote, prefix) {
 
 function applyHighlights() {
   threadRanges = threadsState.threads.filter((t) => t.quote)
-    .map((t) => [t, findQuote(t.section, t.quote, t.prefix)]).filter(([, r]) => r);
+    .map((t) => [t, findQuote(t.section, t.quote, t.prefix, t.fact)]).filter(([, r]) => r);
   staleRanges = docsOf().stale.filter((s) => s.doc === shownDoc).map((s) => [s, findStale(s)]).filter(([, r]) => r);
   if (!window.CSS || !CSS.highlights) return;
   CSS.highlights.set("ev-stale", new Highlight(...staleRanges.map(([, r]) => r)));
-  const draftRanges = drafts.map((d) => findQuote(d.section, d.quote, d.prefix)).filter(Boolean);
+  const draftRanges = drafts.map((d) => findQuote(d.section, d.quote, d.prefix, d.fact)).filter(Boolean);
   const sentRanges = state.comments.batches.flatMap((b) => b.comments)
     .filter((c) => c.status === "sent")
-    .map((c) => findQuote(c.section, c.quote, c.prefix)).filter(Boolean);
+    .map((c) => findQuote(c.section, c.quote, c.prefix, c.fact)).filter(Boolean);
   CSS.highlights.set("ev-draft", new Highlight(...draftRanges));
   CSS.highlights.set("ev-sent", new Highlight(...sentRanges));
   CSS.highlights.set("ev-thread", new Highlight(...threadRanges.map(([, r]) => r)));
@@ -2017,9 +2115,16 @@ function markBase() {
 // The text a « mark read » records: a section's file, or a doc's (key "doc:<path>").
 const mdOf = (id) => (docPathOf(id) !== null ? (docsOf().views[docPathOf(id)] || {}).md || "" : state.sections[id].md);
 
+// A doc's « mark read » marks its missing facts read too (key "facts:<path>").
+const FACTS_PREFIX = "facts:";
 async function markSeen(ids) {
+  const read = ids.map((id) => [id, mdOf(id)]);
+  for (const id of ids) {
+    const facts = (docsOf().facts || {})[docPathOf(id)];
+    if (facts) read.push([FACTS_PREFIX + docPathOf(id), facts.text]);
+  }
   try {
-    await postJSON(`/api/s/${SLUG}/seen`, { sections: Object.fromEntries(ids.map((id) => [id, mdOf(id)])) });
+    await postJSON(`/api/s/${SLUG}/seen`, { sections: Object.fromEntries(read) });
   } catch (e) { toast(`Could not mark as read: ${e.message}`); return; }
   await load();
 }
@@ -2035,7 +2140,7 @@ function revealQuote(c) {
     f.contentWindow.postMessage({ viewConcept: "reveal", quote: c.quote, prefix: c.prefix || "" }, "*");
     return;
   }
-  const r = findQuote(c.section, c.quote, c.prefix);
+  const r = findQuote(c.section, c.quote, c.prefix, c.fact);
   if (r) {
     const p = r.startContainer.parentElement;
     pageScroll(p.closest(".view"), () => p.scrollIntoView({ block: "center", behavior: "smooth" }));
@@ -2066,6 +2171,9 @@ function currentSelection() {
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;
+  // A passage of a missing fact: anchored to the doc, carrying the fact's id.
+  const fact = start.closest("[data-fact]");
+  if (fact) return { section: sec.dataset.id, quote, prefix: "", fact: fact.dataset.fact, rect: range.getBoundingClientRect() };
   const before = document.createRange();
   before.setStart(body, 0);
   before.setEnd(range.startContainer, range.startOffset);
@@ -2174,6 +2282,7 @@ function openComposer(target, mode = "comment") {
   c._target = target;
   c._mode = mode;
   $(".composer-quote", c).textContent = target.question ? `agent question ${target.question}`
+    : target.fact ? `missing fact ${target.fact} « ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
     : target.quote ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
     : target.section === DOC_SET ? "the doc set"
     : docPathOf(target.section) !== null ? `whole doc ${docPathOf(target.section)}`
@@ -2220,8 +2329,8 @@ function addDraft() {
   const c = $("#composer");
   const text = $("textarea", c).value.trim();
   if (!text) return;
-  const { section, quote, prefix } = c._target;
-  const d = { id: crypto.randomUUID(), section, quote, prefix, text };
+  const { section, quote, prefix, fact } = c._target;
+  const d = { id: crypto.randomUUID(), section, quote, prefix, text, ...(fact ? { fact } : {}) };
   drafts.push(d);
   saveDraft(d);
   closeComposer();
@@ -2475,7 +2584,7 @@ function whereOf(id) {
 
 function quoteLine(c) {
   if (c.question) return el("div", { class: "c-quote" }, el("span", { class: "num", text: "?" }), ` agent question ${c.question}`);
-  const where = c.section ? whereOf(c.section) : "·";
+  const where = (c.section ? whereOf(c.section) : "·") + (c.fact ? ` · fact ${c.fact}` : "");
   const q = c.quote ? `« ${c.quote.length > 90 ? c.quote.slice(0, 90) + "…" : c.quote} »`
           : c.section ? "whole section" : "general";
   const open = () => {
@@ -2571,7 +2680,7 @@ const deletedHere = new Set(); // ids of drafts deleted from this page
 const draftNodes = new Map(); // draft id -> its box in the review, built once
 let noteTimer = null;
 
-const draftBody = ({ section, quote, prefix, text, thread }) => ({ section, quote, prefix, text, thread: thread || "" });
+const draftBody = ({ section, quote, prefix, text, thread, fact }) => ({ section, quote, prefix, text, thread: thread || "", fact: fact || "" });
 
 async function saveDraft(d, now = true) {
   clearTimeout(saveTimers.get(d.id));
@@ -2701,7 +2810,7 @@ async function send(action = "", button = null, extra = {}) {
       ...(extra.then_pr ? { then_pr: true } : {}),
       ...(extra.path ? { path: extra.path } : {}),
       note: $("#note").value,
-      comments: drafts.map(({ section, quote, prefix, text, thread }) => ({ section, quote, prefix, text, thread })),
+      comments: drafts.map(({ section, quote, prefix, text, thread, fact }) => ({ section, quote, prefix, text, thread, fact: fact || "" })),
       drafts: drafts.map((d) => d.id),
     }),
   });
@@ -2815,9 +2924,9 @@ async function askThread() {
   const c = $("#composer");
   const text = $("textarea", c).value.trim();
   if (!text) return;
-  const { section, quote, prefix, question = "" } = c._target;
+  const { section, quote, prefix, question = "", fact = "" } = c._target;
   try {
-    const t = await postJSON(`/api/s/${SLUG}/threads`, { section, quote, prefix, question, text });
+    const t = await postJSON(`/api/s/${SLUG}/threads`, { section, quote, prefix, question, fact, text });
     closeComposer();
     getSelection().removeAllRanges();
     popThread = t.id;
@@ -3058,11 +3167,13 @@ async function deleteThread(tid) {
 }
 
 /* The conclusion of a thread reaches the main session as an ordinary comment, anchored
-   where the thread was and carrying its id, so the session can read the thread. Its
-   text is optional: without one, the thread's conclusion is the comment. */
+   where the thread was and carrying its id, so the session can read the thread, and the
+   id of the missing fact it was opened on, if any. Its text is optional: without one,
+   the thread's conclusion is the comment. */
 function threadToBatch(tid) {
   const t = threadOf(tid);
-  const d = { id: crypto.randomUUID(), section: t.section, quote: t.quote, prefix: t.prefix, text: "", thread: tid };
+  const d = { id: crypto.randomUUID(), section: t.section, quote: t.quote, prefix: t.prefix, text: "", thread: tid,
+              ...(t.fact ? { fact: t.fact } : {}) };
   drafts.push(d);
   saveDraft(d);
   renderReview();

@@ -107,6 +107,9 @@ def test_api_threads(client, session):
     r = client.get("/api/s/kv-cache/threads")
     assert r.json() == {"forkable": False, "threads": []}
     assert client.post("/api/s/kv-cache/threads", json={"text": " "}).status_code == 400
+    # A fact goes on a doc's anchor only.
+    bad = {"section": "s1", "quote": "x", "fact": "f1", "text": "why?"}
+    assert client.post("/api/s/kv-cache/threads", json=bad).status_code == 400
     session.new_thread("s1", "L'attention")
     session.bind_agent("claude", "main-1")
     r = client.get("/api/s/kv-cache/threads").json()
@@ -580,6 +583,58 @@ def test_state_counts_the_stale_passages_shown(client, doc_review):
     assert docs["stale"] == [{"id": "s1", "doc": "docs/reference.md",
                               "quote": "The keys 1 to 4.", "section": "sheet",
                               "note": "five keys"}]  # fmt: skip
+
+
+def test_state_carries_minor_docs_and_failure_indicators(client, doc_review):
+    doc_review.add_doc("README.md", "the install")
+    doc_review.set_minor("docs/reference.md", "a name in a list", 1, 1)
+    doc_review.set_failing("README.md", 3, 6, structure=True)
+    doc_review.order_docs(["README.md", "docs/missing.md", "docs/reference.md"])
+    docs = client.get("/api/s/doc-tab").json()["docs"]
+    assert [d["path"] for d in docs["set"]] == ["README.md", "docs/missing.md", "docs/reference.md"]
+    assert docs["set"][0]["failing"] == {"fail": 3, "total": 6, "structure": True}
+    assert docs["set"][2]["minor"] == "a name in a list"
+    assert docs["set"][2]["diff"] == {"added": 1, "removed": 1}
+    assert "minor" not in docs["set"][0] and "failing" not in docs["set"][2]
+
+
+def test_state_carries_the_missing_facts_highlighted_until_read(client, doc_review):
+    doc_review.add_doc("README.md", "the install")
+    doc_review.add_missing_fact("README.md", "Run serve.", "leave", "the code says open", 4)
+    docs = client.get("/api/s/doc-tab").json()["docs"]  # the first list is the baseline
+    facts = docs["facts"]["README.md"]
+    assert docs["set"][2]["facts"] == 1 and docs["set"][0]["facts"] == 0
+    assert facts["list"] == [{"id": "f1", "fact": "Run serve.", "passage": 4,
+                              "proposal": "leave", "reason": "the code says open",
+                              "state": "pending", "updated": False}]  # fmt: skip
+    doc_review.add_missing_fact("README.md", "Offline, TeX.", "keep", "a link")
+    doc_review.mark_missing_fact("f1", "left")
+    facts = client.get("/api/s/doc-tab").json()["docs"]["facts"]["README.md"]
+    assert [f["updated"] for f in facts["list"]] == [True, True]
+    r = client.post("/api/s/doc-tab/seen", json={"sections": {"facts:README.md": facts["text"]}})
+    assert r.status_code == 200
+    facts = client.get("/api/s/doc-tab").json()["docs"]["facts"]["README.md"]
+    assert [f["updated"] for f in facts["list"]] == [False, False]
+    # A batch moves the baseline too.
+    doc_review.mark_missing_fact("f2", "kept")
+    body = {"comments": [{"section": "doc:README.md", "quote": "Offline, TeX.", "text": "ok",
+                          "fact": "f2"}]}  # fmt: skip
+    b = client.post("/api/s/doc-tab/batch", json=body).json()
+    assert b["comments"][0]["fact"] == "f2"
+    facts = client.get("/api/s/doc-tab").json()["docs"]["facts"]["README.md"]
+    assert [f["updated"] for f in facts["list"]] == [False, False]
+
+
+def test_a_pending_missing_fact_is_counted_on_its_doc(client, doc_review):
+    # The page puts a minor README back in the review list while one of its facts waits.
+    doc_review.add_doc("README.md", "the install")
+    doc_review.add_missing_fact("README.md", "Run serve.", "leave", "the code says open")
+    doc_review.add_missing_fact("README.md", "Offline, TeX.", "keep", "a link")
+    docs = client.get("/api/s/doc-tab").json()["docs"]
+    assert docs["set"][2]["pending"] == 2 and docs["set"][0]["pending"] == 0
+    doc_review.mark_missing_fact("f1", "left")
+    doc_review.mark_missing_fact("f2", "kept")
+    assert client.get("/api/s/doc-tab").json()["docs"]["set"][2]["pending"] == 0
 
 
 def test_a_batch_asks_for_the_doc_pass_and_the_pr(client):
