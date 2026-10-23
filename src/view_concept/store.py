@@ -197,7 +197,8 @@ rewrite request, written from the code alone) no longer says, in words or by a l
 missing-facts.json keeps them by README: {path: [{id (f1…, unique in the session), fact,
 passage (the number of the old README's passage it came from, or null), proposal ("keep"
 or "leave": what the agent proposes), reason (one line), state ("pending", "kept" or
-"left")}]} (written by `facts`; a new full rewrite of a README replaces its list). A fact
+"left")}]} (written by `facts`; a new full rewrite of a README replaces its list, and
+`remove_doc` drops it). A fact
 the user does not comment on stays out of the README, whatever the proposal. The Doc tab
 lists them under their README; a comment, a draft or a side thread on one is anchored to
 `doc:<path>` with the fact's text as its quote, and a comment or a draft also carries the
@@ -1350,7 +1351,8 @@ class Session:
 
     def remove_doc(self, path: str, user: bool = False) -> None:
         """Remove a doc from the doc set; `user` (the user asked in a comment) records it
-        in `removed`, so an agent's refresh never adds it back."""
+        in `removed`, so an agent's refresh never adds it back. The whole entry goes: its
+        minor class, its indicator, its missing facts and its highlight baselines."""
         path = doc_path(path)
         data = self.read_doc_set()
         listed = any(d.get("path") == path for d in data["docs"])
@@ -1360,6 +1362,10 @@ class Session:
         if user and path not in data["removed"]:
             data["removed"].append(path)
         _write_json(self.doc_set_path, data)
+        # Its missing facts go with the entry: a README back in the doc set has none.
+        facts = self.read_missing_facts()
+        if facts.pop(path, None) is not None:
+            _write_json(self.missing_facts_path, facts)
         # A doc that enters the doc set again starts with no green highlight: its baseline
         # is set anew at its first read.
         seen = _read_json(self.seen_path, {})

@@ -1095,6 +1095,18 @@ def test_a_readme_rewritten_in_full_keeps_its_missing_facts(docs_review):
     assert s.read_missing_facts() == {}
 
 
+def test_a_readme_out_of_the_doc_set_loses_its_missing_facts(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/README.md", "the docs")
+    s.add_missing_fact("README.md", "Run serve.", "leave", "the code says open")
+    s.add_missing_fact("docs/README.md", "Tabs.", "keep", "a link")
+    s.remove_doc("README.md")
+    assert list(s.read_missing_facts()) == ["docs/README.md"]
+    s.add_doc("README.md", "the install")
+    assert "README.md" not in s.read_missing_facts()
+
+
 def test_a_comment_on_a_missing_fact_names_the_fact(docs_review):
     s = docs_review
     s.add_doc("README.md", "the install")
