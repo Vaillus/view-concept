@@ -487,6 +487,8 @@ view-concept doc-set <slug>                                 # prints it
 view-concept doc-set <slug> add <path> "<reason>" [--user]  # adds a doc, or changes its reason
 view-concept doc-set <slug> remove <path> [--user]          # removes a doc
 view-concept doc-set <slug> order <path> <path> ...         # puts the doc set in the write order
+view-concept doc-set <slug> minor <path> "<reason>" --added N --removed N  # classes a doc minor
+view-concept doc-set <slug> major <path>                    # takes the minor class off
 ```
 
 A path is relative to the repo root and may name a doc the branch will
@@ -537,7 +539,8 @@ doc pass; the **implementer** refreshes it on the real diff at the start of
 the doc pass (see **The doc pass**) and keeps it from then on.
 
 The page shows the doc set in the **Doc tab**, after the code tab, once it
-exists: the list, each doc with its reason, then one doc at a time, read
+exists: the list, each doc with its reason, in the doc set's order (the
+write order once the doc pass has recorded it), then one doc at a time, read
 from the worktree at each render, so the user's own edits and the agents'
 rewrites show alike. The lexicon terms are underlined in each doc. A doc
 carries two marks: the **base mark**, a blue bar in the right margin of each
@@ -550,6 +553,17 @@ user's edits. The user comments on a doc's text as on a section, and the
 batch prints the comment with the doc's path in place of a section
 (`[c12] (doc docs/reference.md) « … »`); a comment on the list prints
 `[c13] (doc set) « … »`.
+
+At the end of the doc pass, the implementer classes as a **minor doc** each
+doc it touched only for a detail with no effect on its meaning, with a
+one-line reason and the doc's diff size in the doc pass commit; a doc it
+creates is never minor, and before the doc pass no doc is. The list shows
+first the **review list**, the docs the user is asked to read, then a fold
+of the minor docs, each with its reason and `+added −removed`; the title
+bar puts them after the review list, set back. A minor doc still opens,
+takes comments and edits, and carries its marks. The reviewer reads it too,
+and a stale passage on it puts it back in the review list. A comment on the
+list moves a doc either way.
 
 ### Model consolidation — the modeling part
 
@@ -654,8 +668,8 @@ into the docs by the implementer run that makes it, and the page never shows
    `AGENTS.md` only the sentences it adds or changes that pass the
    **sentence test** (without the sentence, an agent would act otherwise;
    an existing sentence the model makes false that fails it is removed, not
-   corrected; an untouched sentence is not tested), and applies those
-   comments.
+   corrected; an untouched sentence is not tested), applies those
+   comments, commits, and classes the minor docs.
 3. Start the reviewer with the implementer's report (in words, « doc pass »
    in it): it judges the items the doc pass changed, as for any implementer
    run, then reads every doc of the doc set against the model and flags each

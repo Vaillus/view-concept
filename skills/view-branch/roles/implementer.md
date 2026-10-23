@@ -222,6 +222,16 @@ concept or a line of the to-do list is implemented in one of them.
    writes in these files, in the doc pass and after it.
 4. **One commit** for the doc pass, whose message names the docs it
    rewrote.
+5. **Class the minor docs.** A **minor doc** is a doc of the doc set the
+   doc pass touched only for a detail with no effect on its meaning (a name
+   added to a list, a path renamed). The Doc tab folds the minor docs out
+   of the **review list**, the docs it asks the user to read, each with its
+   reason and its diff size. For each one, `view-concept doc-set <slug>
+   minor <path> "<reason>" --added N --removed N`: the reason one line the
+   user reads (« adds view-tests to the list of workflows »), N the doc's
+   lines added and removed in the doc pass commit (`git show --numstat
+   <commit> -- <path>`). A doc the doc pass creates is never minor, nor one
+   it did not touch.
 
 After the doc pass, you keep the docs:
 
@@ -235,7 +245,10 @@ After the doc pass, you keep the docs:
   lists the flags with their ids);
 - a comment on the doc set list (`(doc set)`) adds or removes a doc:
   `view-concept doc-set <slug> add <path> "<reason>" --user` or `remove
-  <path> --user`, the `--user` saying the user asked for it;
+  <path> --user`, the `--user` saying the user asked for it. It may also
+  move a doc between the review list and the minor docs, either way: `minor
+  <path> "<reason>" --added N --removed N` (the diff from the doc pass
+  commit) or `view-concept doc-set <slug> major <path>`;
 - a comment correcting an entry of a lexicon also rewrites the clause of
   each README that copies the entry (the README's definition of the term,
   in the entry's old words), and adds that README to the doc set. A comment
