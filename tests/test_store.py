@@ -1025,6 +1025,34 @@ def test_a_readme_rewritten_in_full_keeps_its_missing_facts(docs_review):
     assert s.read_missing_facts() == {}
 
 
+def test_a_comment_on_a_missing_fact_names_the_fact(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_missing_fact("README.md", "Run serve.", "leave", "the code says open")
+    b = s.add_batch([{"section": "doc:README.md", "quote": "Run serve.", "text": "keep it",
+                      "fact": "f1"}])  # fmt: skip
+    assert b["comments"][0]["fact"] == "f1"
+    assert "[c1] (doc README.md · fact f1) « Run serve. »" in format_batch("doc-tab", b, [])
+    with pytest.raises(SessionError, match="anchored to its README"):
+        s.add_batch([{"section": "doc:", "text": "x", "fact": "f1"}])
+    with pytest.raises(SessionError, match="anchored to its README"):
+        s.add_batch([{"section": "doc:README.md", "text": "x", "fact": "c1"}])
+    # A comment with no fact keeps no field for it.
+    assert "fact" not in s.add_batch([{"section": "doc:README.md", "text": "x"}])["comments"][0]
+    # Ids go on past a cleared list: the sent comment still names f1.
+    s.clear_missing_facts("README.md")
+    assert s.add_missing_fact("README.md", "x", "keep", "y")["id"] == "f2"
+
+
+def test_a_draft_on_a_missing_fact_keeps_the_fact(docs_review):
+    s = docs_review
+    s.save_draft({"id": "d1", "section": "doc:README.md", "quote": "Run serve.", "text": "a",
+                  "fact": "f1"})  # fmt: skip
+    s.save_draft({"id": "d2", "section": "doc:README.md", "text": "b"})
+    drafts = s.read_drafts()["drafts"]
+    assert drafts[0]["fact"] == "f1" and "fact" not in drafts[1]
+
+
 @pytest.mark.parametrize("path", ["/etc/passwd", "../other/README.md", "docs/../../x.md", " "])
 def test_a_doc_of_the_doc_set_stays_inside_the_repo(docs_review, path):
     with pytest.raises(SessionError):

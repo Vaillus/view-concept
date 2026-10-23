@@ -197,7 +197,10 @@ missing-facts.json keeps them by README: {path: [{id (f1…, unique in the sessi
 passage (the number of the old README's passage it came from, or null), proposal ("keep"
 or "leave": what the agent proposes), reason (one line), state ("pending", "kept" or
 "left")}]} (written by `facts`; a new full rewrite of a README replaces its list). A fact
-the user does not comment on stays out of the README, whatever the proposal.
+the user does not comment on stays out of the README, whatever the proposal. The Doc tab
+lists them under their README; a comment, a draft or a side thread on one is anchored to
+`doc:<path>` with the fact's text as its quote, and a comment or a draft also carries the
+fact's id, `fact` (a batch prints it `(doc <path> · fact <id>)`).
 
 A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
 doc (its path), quote (the passage's exact text in the file), section (the model section
@@ -302,7 +305,9 @@ AGENT_ROLES = ("planner", "writer", "implementer", "reviewer")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 # A draft's id: the page makes it (a UUID). Its fields, as a batch comment takes them.
 DRAFT_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
-DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread")
+DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread", "fact")
+# The draft fields a draft leaves out when empty: a side thread's id, a missing fact's id.
+DRAFT_OPTIONAL = ("thread", "fact")
 # The pages of every session write the drafts file from the server's threadpool.
 _DRAFTS_LOCK = threading.Lock()
 # The key prefix of a doc's highlight baseline in seen.json, and of the anchor of a comment,
@@ -1453,7 +1458,10 @@ class Session:
         if passage is not None and passage < 1:
             raise SessionError("a passage number counts from 1")
         data = self.read_missing_facts()
+        # The ids go on past a cleared list: a sent comment may still name an old one.
         ids = [str(f.get("id", "")) for facts in data.values() for f in facts]
+        batches = self.read_comments()["batches"]
+        ids += [str(c.get("fact", "")) for b in batches for c in b["comments"]]
         n = max((int(i[1:]) for i in ids if FACT_ID_RE.match(i)), default=0)
         entry = {
             "id": f"f{n + 1}",
@@ -1543,10 +1551,7 @@ class Session:
             data = self.read_drafts()
             if did in data["deleted"]:
                 return False
-            entry = {k: str(draft.get(k) or "") for k in DRAFT_FIELDS}
-            entry["id"] = did
-            if not entry["thread"]:
-                del entry["thread"]
+            entry = _draft_entry(draft, did)
             at = next((i for i, d in enumerate(data["drafts"]) if d.get("id") == did), None)
             if at is None:
                 data["drafts"].append(entry)
@@ -1579,11 +1584,7 @@ class Session:
                 did = str(d.get("id", ""))
                 if not DRAFT_ID_RE.match(did) or did in known:
                     continue
-                entry = {k: str(d.get(k) or "") for k in DRAFT_FIELDS}
-                entry["id"] = did
-                if not entry["thread"]:
-                    del entry["thread"]
-                data["drafts"].append(entry)
+                data["drafts"].append(_draft_entry(d, did))
                 known.add(did)
             if note.strip():
                 data["note"] = "\n\n".join(n for n in (data["note"].strip(), note.strip()) if n)
@@ -2001,6 +2002,11 @@ class Session:
         comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
         if not comments and not note and not action:
             raise SessionError("empty batch")
+        for c in comments:
+            fact, section = str(c.get("fact") or ""), str(c.get("section", ""))
+            readme = section.startswith(DOC_KEY) and section != DOC_SET_ANCHOR
+            if fact and not (FACT_ID_RE.match(fact) and readme):
+                raise SessionError(f"a missing fact's comment is anchored to its README: {fact!r}")
         data = self.read_comments()
         batches = data["batches"]
         n_comments = sum(len(b["comments"]) for b in batches)
@@ -2017,6 +2023,8 @@ class Session:
                     "prefix": str(c.get("prefix", "")),
                     "text": str(c.get("text", "")).strip(),
                     "thread": str(c.get("thread", "")),
+                    # A comment on a missing fact carries the fact's id.
+                    **({"fact": str(c["fact"])} if c.get("fact") else {}),
                     "status": "sent",
                 }
                 for i, c in enumerate(comments)
@@ -2590,6 +2598,17 @@ def format_batch(
     return "\n".join(lines)
 
 
+def _draft_entry(draft: dict[str, Any], did: str) -> dict[str, str]:
+    """A draft as the drafts file keeps it: its fields as text, the empty optional ones
+    left out."""
+    entry = {k: str(draft.get(k) or "") for k in DRAFT_FIELDS}
+    entry["id"] = did
+    for k in DRAFT_OPTIONAL:
+        if not entry[k]:
+            del entry[k]
+    return entry
+
+
 def format_fact(f: dict[str, Any]) -> str:
     """One missing fact on one line: its id, state, text, old passage and the proposal."""
     passage = f" (passage {f['passage']})" if f.get("passage") else ""
@@ -2601,12 +2620,14 @@ def format_fact(f: dict[str, Any]) -> str:
 
 def format_comment(c: dict[str, Any], number: dict[str, int]) -> str:
     """One comment of a batch: where it is anchored (a section, a doc of the Doc tab by its
-    path, the doc set list), its text, the thread it comes from."""
+    path, a missing fact of a README, the doc set list), its text, the thread it comes
+    from."""
     sec = c["section"]
     if sec == DOC_SET_ANCHOR:
         where = "(doc set)"
     elif sec.startswith(DOC_KEY):
-        where = f"(doc {sec.removeprefix(DOC_KEY)})"
+        fact = f" · fact {c['fact']}" if c.get("fact") else ""
+        where = f"(doc {sec.removeprefix(DOC_KEY)}{fact})"
     else:
         where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
     quote = " ".join(c["quote"].split())

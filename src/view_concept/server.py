@@ -490,6 +490,8 @@ class CommentIn(BaseModel):
     prefix: str = ""
     text: str = ""
     thread: str = ""
+    # A comment on a missing fact of a README: the fact's id.
+    fact: str = ""
 
 
 class BatchIn(BaseModel):
@@ -525,6 +527,7 @@ class DraftIn(BaseModel):
     prefix: str = ""
     text: str = ""
     thread: str = ""
+    fact: str = ""
 
 
 class NoteIn(BaseModel):
