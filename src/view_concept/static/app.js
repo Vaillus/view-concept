@@ -1889,7 +1889,7 @@ function findIn(body, quote, prefix) {
 
 function applyHighlights() {
   threadRanges = threadsState.threads.filter((t) => t.quote)
-    .map((t) => [t, findQuote(t.section, t.quote, t.prefix)]).filter(([, r]) => r);
+    .map((t) => [t, findQuote(t.section, t.quote, t.prefix, t.fact)]).filter(([, r]) => r);
   staleRanges = docsOf().stale.filter((s) => s.doc === shownDoc).map((s) => [s, findStale(s)]).filter(([, r]) => r);
   if (!window.CSS || !CSS.highlights) return;
   CSS.highlights.set("ev-stale", new Highlight(...staleRanges.map(([, r]) => r)));
@@ -2920,9 +2920,9 @@ async function askThread() {
   const c = $("#composer");
   const text = $("textarea", c).value.trim();
   if (!text) return;
-  const { section, quote, prefix, question = "" } = c._target;
+  const { section, quote, prefix, question = "", fact = "" } = c._target;
   try {
-    const t = await postJSON(`/api/s/${SLUG}/threads`, { section, quote, prefix, question, text });
+    const t = await postJSON(`/api/s/${SLUG}/threads`, { section, quote, prefix, question, fact, text });
     closeComposer();
     getSelection().removeAllRanges();
     popThread = t.id;
@@ -3163,11 +3163,13 @@ async function deleteThread(tid) {
 }
 
 /* The conclusion of a thread reaches the main session as an ordinary comment, anchored
-   where the thread was and carrying its id, so the session can read the thread. Its
-   text is optional: without one, the thread's conclusion is the comment. */
+   where the thread was and carrying its id, so the session can read the thread, and the
+   id of the missing fact it was opened on, if any. Its text is optional: without one,
+   the thread's conclusion is the comment. */
 function threadToBatch(tid) {
   const t = threadOf(tid);
-  const d = { id: crypto.randomUUID(), section: t.section, quote: t.quote, prefix: t.prefix, text: "", thread: tid };
+  const d = { id: crypto.randomUUID(), section: t.section, quote: t.quote, prefix: t.prefix, text: "", thread: tid,
+              ...(t.fact ? { fact: t.fact } : {}) };
   drafts.push(d);
   saveDraft(d);
   renderReview();

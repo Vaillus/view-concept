@@ -69,12 +69,20 @@ def view(s: Session, thread: dict[str, Any]) -> dict[str, Any]:
 
 
 def create(
-    s: Session, section: str, quote: str, prefix: str, text: str, question: str = ""
+    s: Session,
+    section: str,
+    quote: str,
+    prefix: str,
+    text: str,
+    question: str = "",
+    fact: str = "",
 ) -> dict[str, Any]:
+    """Open a side thread on a passage (`fact`: the id of the missing fact it quotes), an
+    agent question or nothing, and start the turn that answers its first message."""
     if not text.strip():
         raise SessionError("empty message")
     with _lock:
-        thread = s.new_thread(section, quote, prefix, question)
+        thread = s.new_thread(section, quote, prefix, question, fact)
     return send(s, thread["id"], text)
 
 

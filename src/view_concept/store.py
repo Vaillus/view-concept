@@ -201,8 +201,9 @@ or "leave": what the agent proposes), reason (one line), state ("pending", "kept
 `remove_doc` drops it). A fact
 the user does not comment on stays out of the README, whatever the proposal. The Doc tab
 lists them under their README; a comment, a draft or a side thread on one is anchored to
-`doc:<path>` with the fact's text as its quote, and a comment or a draft also carries the
-fact's id, `fact` (a batch prints it `(doc <path> · fact <id>)`). Their highlight
+`doc:<path>` with the fact's text as its quote, and also carries the fact's id, `fact`
+(a batch prints it `(doc <path> · fact <id>)`; a thread passes it to the comment it
+becomes). Their highlight
 baseline is kept in seen.json under `facts:<path>`, the list as one line per fact
 (`fact_texts`), and moves with every batch and with « mark read » on the README: a new
 fact or a changed state shows highlighted.
@@ -1505,12 +1506,13 @@ class Session:
         if passage is not None and passage < 1:
             raise SessionError("a passage number counts from 1")
         data = self.read_missing_facts()
-        # The ids go on past a cleared list: a sent comment or an open draft may still
-        # name an old one.
+        # The ids go on past a cleared list: a sent comment, an open draft or a side
+        # thread may still name an old one.
         ids = [str(f.get("id", "")) for facts in data.values() for f in facts]
         batches = self.read_comments()["batches"]
         ids += [str(c.get("fact", "")) for b in batches for c in b["comments"]]
         ids += [str(d.get("fact", "")) for d in self.read_drafts()["drafts"]]
+        ids += [str(t.get("fact", "")) for t in self.read_threads()]
         n = max((int(i[1:]) for i in ids if FACT_ID_RE.match(i)), default=0)
         entry = {
             "id": f"f{n + 1}",
@@ -1978,11 +1980,18 @@ class Session:
         _write_json(self.thread_path(thread["id"]), thread)
 
     def new_thread(
-        self, section: str = "", quote: str = "", prefix: str = "", question: str = ""
+        self,
+        section: str = "",
+        quote: str = "",
+        prefix: str = "",
+        question: str = "",
+        fact: str = "",
     ) -> dict[str, Any]:
         """Create an empty thread, anchored to a passage like a comment, to an open agent
         question (`question`, its id: the user discusses it before answering), or to
-        nothing."""
+        nothing. A thread on a missing fact carries the fact's id (`fact`, kept only when
+        set), which the comment it becomes carries too."""
+        _check_fact(fact, section)
         if question:
             self._open_question(self.read_questions(), question)
         n = max((int(t["id"][1:]) for t in self.read_threads()), default=0) + 1
@@ -1993,6 +2002,7 @@ class Session:
             "quote": quote,
             "prefix": prefix,
             "question": question,
+            **({"fact": fact} if fact else {}),
             "agent_session": "",
             "forked_from": "",
             "state": "idle",
@@ -2063,10 +2073,7 @@ class Session:
         if not comments and not note and not action:
             raise SessionError("empty batch")
         for c in comments:
-            fact, section = str(c.get("fact") or ""), str(c.get("section", ""))
-            readme = section.startswith(DOC_KEY) and section != DOC_SET_ANCHOR
-            if fact and not (FACT_ID_RE.match(fact) and readme):
-                raise SessionError(f"a missing fact's comment is anchored to its README: {fact!r}")
+            _check_fact(str(c.get("fact") or ""), str(c.get("section", "")))
         data = self.read_comments()
         batches = data["batches"]
         n_comments = sum(len(b["comments"]) for b in batches)
@@ -2547,6 +2554,14 @@ def _stat_signature(paths: list[Path]) -> tuple:
         except FileNotFoundError:
             sig.append((p.name, None, None))
     return tuple(sig)
+
+
+def _check_fact(fact: str, section: str) -> None:
+    """Refuse the `fact` of a comment or a side thread unless it is a fact id on a doc's
+    anchor (`doc:<path>`, not the doc set list): a missing fact is commented on its README."""
+    readme = section.startswith(DOC_KEY) and section != DOC_SET_ANCHOR
+    if fact and not (FACT_ID_RE.match(fact) and readme):
+        raise SessionError(f"a missing fact's comment is anchored to its README: {fact!r}")
 
 
 def _upgrade_thread(thread: dict[str, Any]) -> dict[str, Any]:

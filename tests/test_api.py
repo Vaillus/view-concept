@@ -107,6 +107,9 @@ def test_api_threads(client, session):
     r = client.get("/api/s/kv-cache/threads")
     assert r.json() == {"forkable": False, "threads": []}
     assert client.post("/api/s/kv-cache/threads", json={"text": " "}).status_code == 400
+    # A fact goes on a doc's anchor only.
+    bad = {"section": "s1", "quote": "x", "fact": "f1", "text": "why?"}
+    assert client.post("/api/s/kv-cache/threads", json=bad).status_code == 400
     session.new_thread("s1", "L'attention")
     session.bind_agent("claude", "main-1")
     r = client.get("/api/s/kv-cache/threads").json()

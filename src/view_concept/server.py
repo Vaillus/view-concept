@@ -654,6 +654,8 @@ class ThreadIn(BaseModel):
     quote: str = ""
     prefix: str = ""
     question: str = ""
+    # A thread opened on a missing fact carries its id, as a comment on it does.
+    fact: str = ""
     text: str
 
 
@@ -696,7 +698,9 @@ def list_threads(slug: str) -> dict[str, Any]:
 def new_thread(slug: str, body: ThreadIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
-        t = threads.create(s, body.section, body.quote, body.prefix, body.text, body.question)
+        t = threads.create(
+            s, body.section, body.quote, body.prefix, body.text, body.question, body.fact
+        )
         return thread_view(s, t)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e

@@ -1144,6 +1144,9 @@ def test_a_fact_id_named_by_a_draft_never_serves_again(docs_review):
                   "fact": "f2"})  # fmt: skip
     s.clear_missing_facts("README.md")
     assert s.add_missing_fact("README.md", "x", "keep", "y")["id"] == "f3"
+    # A side thread on a fact counts the same.
+    s.new_thread("doc:README.md", "x", fact="f7")
+    assert s.add_missing_fact("README.md", "z", "keep", "y")["id"] == "f8"
 
 
 @pytest.mark.parametrize("path", ["/etc/passwd", "../other/README.md", "docs/../../x.md", " "])
