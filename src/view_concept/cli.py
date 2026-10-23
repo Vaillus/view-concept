@@ -19,6 +19,7 @@ from typing import Any
 from .agents import AGENTS, detect
 from .context import ROLES, build
 from .store import (
+    FACT_PROPOSALS,
     HEARTBEAT_EVERY,
     HOME,
     KINDS,
@@ -28,6 +29,7 @@ from .store import (
     SessionError,
     format_batch,
     format_changes,
+    format_fact,
     format_precedence,
     format_section_problem,
     list_sessions,
@@ -438,6 +440,43 @@ def cmd_stale(a: argparse.Namespace) -> None:
         print("(no stale passage shown)")
 
 
+def cmd_facts(a: argparse.Namespace) -> None:
+    """Record a missing fact of a README rewritten in full, mark the user's decision on
+    one, drop a README's list, or, with no operation, print them by README."""
+    s = _existing(a.slug)
+    args = a.args
+    if a.op != "add" and (a.propose or a.reason or a.passage is not None):
+        raise SessionError("--propose, --reason and --passage go with add only")
+    if a.op == "add":
+        if len(args) != 2 or not a.propose or not a.reason:
+            raise SessionError(
+                "facts add takes a README, the fact, its proposal and reason: add <path> "
+                '"<fact>" --propose keep|leave --reason "<one line>" [--passage N]'
+            )
+        print(s.add_missing_fact(args[0], args[1], a.propose, a.reason, a.passage)["id"])
+        return
+    if a.op == "mark":
+        if len(args) != 2:
+            raise SessionError("facts mark takes a fact id and a state: <id> kept|left|pending")
+        f = s.mark_missing_fact(args[0], args[1])
+        print(f"{f['id']} {f['state']}")
+        return
+    if a.op == "clear":
+        if len(args) != 1:
+            raise SessionError("facts clear takes one README path")
+        print(f"cleared {s.clear_missing_facts(args[0])} missing facts of {args[0]}")
+        return
+    if args:
+        raise SessionError("give an operation: add, mark or clear")
+    data = s.read_missing_facts()
+    for path, facts in data.items():
+        print(f"{path} · {len(facts)} missing facts")
+        for f in facts:
+            print(f"  {format_fact(f)}")
+    if not data:
+        print("(no missing fact)")
+
+
 def cmd_reference(a: argparse.Namespace) -> None:
     """Set or clear the reference model, list its candidates, or, with none of these,
     print it."""
@@ -775,6 +814,24 @@ def main() -> None:
     q.add_argument("--section", help="the model section it contradicts")
     q.add_argument("--drop", nargs="+", metavar="ID", help="remove flags (fixed or dismissed)")
     q.set_defaults(fn=cmd_stale)
+
+    q = sub.add_parser(
+        "facts",
+        help="record the missing facts of a README rewritten in full, mark the user's "
+        "decision on one, or print them",
+    )
+    q.add_argument("slug")
+    q.add_argument("op", nargs="?", choices=("add", "mark", "clear"))
+    q.add_argument(
+        "args",
+        nargs="*",
+        help="add <path> <fact> · mark <id> kept|left|pending · clear <path> (a new full "
+        "rewrite replaces the README's list)",
+    )
+    q.add_argument("--propose", choices=FACT_PROPOSALS, help="with add: keep or leave the fact")
+    q.add_argument("--reason", help="with add: one line, why that proposal")
+    q.add_argument("--passage", type=int, help="with add: the number of the old README's passage")
+    q.set_defaults(fn=cmd_facts)
 
     q = sub.add_parser(
         "reference",

@@ -382,6 +382,26 @@ def test_doc_set_classes_minor_docs_records_indicators_and_orders(tmp_path):
     assert r.returncode == 1 and "whole number" in r.stderr
 
 
+def test_facts_records_marks_prints_and_clears_missing_facts(tmp_path):
+    r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "why").returncode == 0
+    assert view_concept(tmp_path, "facts", "gate").stdout.strip() == "(no missing fact)"
+    add = ("add", "README.md", "Run serve.", "--propose", "leave", "--reason", "the code")
+    r = view_concept(tmp_path, "facts", "gate", *add, "--passage", "4")
+    assert r.returncode == 0 and r.stdout.strip() == "f1", r.stderr
+    r = view_concept(tmp_path, "facts", "gate", "mark", "f1", "left")
+    assert r.returncode == 0 and r.stdout.strip() == "f1 left", r.stderr
+    assert view_concept(tmp_path, "facts", "gate").stdout.splitlines() == [
+        "README.md · 1 missing facts",
+        "  f1 [left] « Run serve. » (passage 4) · propose leave: the code",
+    ]
+    r = view_concept(tmp_path, "facts", "gate", "add", "README.md", "x", "--propose", "keep")
+    assert r.returncode == 1 and "--propose keep|leave" in r.stderr
+    r = view_concept(tmp_path, "facts", "gate", "clear", "README.md")
+    assert r.stdout.strip() == "cleared 1 missing facts of README.md"
+
+
 def test_stale_flags_prints_and_drops_passages(tmp_path):
     (tmp_path / "README.md").write_text("The keys 1 to 4.\n")
     r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))

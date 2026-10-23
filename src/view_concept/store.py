@@ -38,6 +38,7 @@ reach the agent session through the inbox.
                         each with its reason, its minor class and the failure indicator
                         of a README, and the docs the user removed       (`doc-set`)
         stale.json      the stale passages: doc passages the model contradicts  (`stale`)
+        missing-facts.json  the missing facts of each README rewritten in full  (`facts`)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
@@ -190,6 +191,14 @@ repo lexicon (REPO_LEXICON: the reader line and the terms the repo's folders sha
 agents) is missing from the worktree, « write repo lexicon » on its doc set entry sends a
 batch whose action is "write-lexicon"; it is refused once the file exists.
 
+A missing fact is a fact the old text of a README said and its full rewrite (asked by a
+rewrite request, written from the code alone) no longer says, in words or by a link.
+missing-facts.json keeps them by README: {path: [{id (f1…, unique in the session), fact,
+passage (the number of the old README's passage it came from, or null), proposal ("keep"
+or "leave": what the agent proposes), reason (one line), state ("pending", "kept" or
+"left")}]} (written by `facts`; a new full rewrite of a README replaces its list). A fact
+the user does not comment on stays out of the README, whatever the proposal.
+
 A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
 doc (its path), quote (the passage's exact text in the file), section (the model section
 it contradicts, a reference model's, or ""), note (one line: why), at}. The reviewer
@@ -304,6 +313,10 @@ DOC_KEY = "doc:"
 # The repo lexicon, relative to the repo root: what a "write-lexicon" batch asks to write.
 REPO_LEXICON = ".agents/lexicon.md"
 DOC_SET_ANCHOR = DOC_KEY
+# A missing fact: what the agent proposes to do with it, and where the user's decision stands.
+FACT_PROPOSALS = ("keep", "leave")
+FACT_STATES = ("pending", "kept", "left")
+FACT_ID_RE = re.compile(r"^f[0-9]{1,6}$")
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -530,6 +543,10 @@ class Session:
     @property
     def stale_path(self) -> Path:
         return self.dir / "stale.json"
+
+    @property
+    def missing_facts_path(self) -> Path:
+        return self.dir / "missing-facts.json"
 
     def media_folder(self, sid: str) -> Path:
         """The media folder of section `sid`: sections/<sid>/."""
@@ -1410,6 +1427,68 @@ class Session:
             raise SessionError(f"no stale passage {', '.join(unknown)}")
         _write_json(self.stale_path, [f for f in flags if f.get("id") not in ids])
 
+    # ---- missing facts ----
+    def read_missing_facts(self) -> dict[str, list[dict[str, Any]]]:
+        """The missing facts by README path: {path: [{id, fact, passage, proposal, reason,
+        state}]}, in the order they were recorded; empty without a file."""
+        data = _read_json(self.missing_facts_path, {})
+        return {str(p): list(facts) for p, facts in data.items() if facts}
+
+    def add_missing_fact(
+        self, path: str, fact: str, proposal: str, reason: str, passage: int | None = None
+    ) -> dict[str, Any]:
+        """Record a missing fact of README `path`, a README.md of the doc set rewritten in
+        full: `fact` in one sentence, `proposal` "keep" or "leave" with its one-line
+        `reason`, `passage` the number of the old README's passage it came from. It waits
+        on the user's decision: state "pending"."""
+        path = doc_path(path)
+        if PurePosixPath(path).name != "README.md":
+            raise SessionError(f"{path} is not a README.md: only a full rewrite has missing facts")
+        if path not in {d["path"] for d in self.read_doc_set()["docs"]}:
+            raise SessionError(f"{path} is not in the doc set")
+        if proposal not in FACT_PROPOSALS:
+            raise SessionError(f"a proposal is one of {', '.join(FACT_PROPOSALS)}")
+        if not fact.strip() or not reason.strip():
+            raise SessionError("a missing fact needs its text and the reason of its proposal")
+        if passage is not None and passage < 1:
+            raise SessionError("a passage number counts from 1")
+        data = self.read_missing_facts()
+        ids = [str(f.get("id", "")) for facts in data.values() for f in facts]
+        n = max((int(i[1:]) for i in ids if FACT_ID_RE.match(i)), default=0)
+        entry = {
+            "id": f"f{n + 1}",
+            "fact": " ".join(fact.split()),
+            "passage": passage,
+            "proposal": proposal,
+            "reason": " ".join(reason.split()),
+            "state": "pending",
+        }
+        data.setdefault(path, []).append(entry)
+        _write_json(self.missing_facts_path, data)
+        return entry
+
+    def mark_missing_fact(self, fid: str, state: str) -> dict[str, Any]:
+        """Set where the user's decision on missing fact `fid` stands: "kept" (the README
+        took it back), "left" or "pending"."""
+        if state not in FACT_STATES:
+            raise SessionError(f"a missing fact's state is one of {', '.join(FACT_STATES)}")
+        data = self.read_missing_facts()
+        entry = next((f for facts in data.values() for f in facts if f.get("id") == fid), None)
+        if entry is None:
+            raise SessionError(f"no missing fact {fid!r}")
+        entry["state"] = state
+        _write_json(self.missing_facts_path, data)
+        return entry
+
+    def clear_missing_facts(self, path: str) -> int:
+        """Drop the missing facts of README `path` (a new full rewrite replaces them).
+        Returns how many were dropped."""
+        path = doc_path(path)
+        data = self.read_missing_facts()
+        dropped = len(data.pop(path, []))
+        _write_json(self.missing_facts_path, data)
+        return dropped
+
     def merge_base(self) -> str:
         """The commit where the branch left its base branch (plan.json `base`, else main):
         `git merge-base <base> HEAD` in the worktree. "" when git cannot tell (no repo,
@@ -1673,6 +1752,7 @@ class Session:
             self.request_path,
             self.doc_set_path,
             self.stale_path,
+            self.missing_facts_path,
             *self.section_files().values(),
         ]
         times = [iso_time(t) for p in paths if (t := _mtime(p))]
@@ -1750,7 +1830,7 @@ class Session:
         if self.sections_dir.is_dir():
             paths += sorted([*self.sections_dir.glob("*.md"), *self.sections_dir.glob("*.html")])
         # The docs of the doc set are files of the worktree: an edit there re-renders too.
-        paths += [self.doc_set_path, self.stale_path]
+        paths += [self.doc_set_path, self.stale_path, self.missing_facts_path]
         with contextlib.suppress(SessionError):
             paths += self.doc_files()
         return _stat_signature(paths)
@@ -2508,6 +2588,15 @@ def format_batch(
         lines.append(f"note: {batch['note']}")
     lines += [format_comment(c, number) for c in batch["comments"]]
     return "\n".join(lines)
+
+
+def format_fact(f: dict[str, Any]) -> str:
+    """One missing fact on one line: its id, state, text, old passage and the proposal."""
+    passage = f" (passage {f['passage']})" if f.get("passage") else ""
+    return (
+        f"{f.get('id', '')} [{f.get('state', 'pending')}] « {f.get('fact', '')} »{passage}"
+        f" · propose {f.get('proposal', '')}: {f.get('reason', '')}"
+    )
 
 
 def format_comment(c: dict[str, Any], number: dict[str, int]) -> str:

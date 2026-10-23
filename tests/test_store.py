@@ -997,6 +997,34 @@ def test_the_doc_set_takes_the_write_order(docs_review):
         s.order_docs(["README.md", "README.md", "CLAUDE.md", "docs/reference.md"])
 
 
+def test_a_readme_rewritten_in_full_keeps_its_missing_facts(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/reference.md", "the tabs")
+    assert s.read_missing_facts() == {}
+    f1 = s.add_missing_fact("README.md", "Run  serve --port 8000.", "leave", "the code says open",
+                            passage=4)  # fmt: skip
+    f2 = s.add_missing_fact("./README.md", "Offline, maths shows as TeX.", "keep", "a link")
+    assert f1 == {"id": "f1", "fact": "Run serve --port 8000.", "passage": 4, "proposal": "leave",
+                  "reason": "the code says open", "state": "pending"}  # fmt: skip
+    assert f2["id"] == "f2" and f2["passage"] is None
+    assert s.mark_missing_fact("f2", "kept")["state"] == "kept"
+    assert [f["state"] for f in s.read_missing_facts()["README.md"]] == ["pending", "kept"]
+    with pytest.raises(SessionError, match="not a README.md"):
+        s.add_missing_fact("docs/reference.md", "x", "keep", "y")
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.add_missing_fact("src/README.md", "x", "keep", "y")
+    with pytest.raises(SessionError, match="proposal is one of"):
+        s.add_missing_fact("README.md", "x", "maybe", "y")
+    with pytest.raises(SessionError, match="state is one of"):
+        s.mark_missing_fact("f1", "done")
+    with pytest.raises(SessionError, match="no missing fact"):
+        s.mark_missing_fact("f9", "left")
+    # A new full rewrite replaces the list.
+    assert s.clear_missing_facts("README.md") == 2
+    assert s.read_missing_facts() == {}
+
+
 @pytest.mark.parametrize("path", ["/etc/passwd", "../other/README.md", "docs/../../x.md", " "])
 def test_a_doc_of_the_doc_set_stays_inside_the_repo(docs_review, path):
     with pytest.raises(SessionError):
