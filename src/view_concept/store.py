@@ -1281,8 +1281,9 @@ class Session:
     def created_by_doc_pass(self, path: str) -> bool:
         """Whether doc `path` is one the doc pass created, so never minor and with no
         failure indicator: absent at the merge base, and added on the branch once the doc
-        pass started (the `sent` time of the first "write-docs" batch), or not committed
-        yet once it started (missing from the worktree, or written and not committed).
+        pass started (the author date of the commit that added it, against the `sent`
+        time of the first "write-docs" batch), or not committed yet once it started
+        (missing from the worktree, or written and not committed).
         Before that batch, a doc new on the branch came with the code commits. In a docs
         review (workflow view-docs), which has no doc pass and whose commits are all doc
         work, every doc absent from the merge base is one the review created. False when
@@ -1300,7 +1301,8 @@ class Session:
         repo, file = self.repo_dir(), self.doc_file(path)
         if repo is None or file is None or not file.exists():
             return True
-        log = _git(repo, "log", "--diff-filter=A", "--format=%cI", f"{commit}..HEAD", "--", path)
+        # The author date, which a rebase keeps; the committer date moves to the rebase.
+        log = _git(repo, "log", "--diff-filter=A", "--format=%aI", f"{commit}..HEAD", "--", path)
         added = (log or "").split()
         if not added:
             return True

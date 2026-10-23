@@ -980,12 +980,13 @@ def test_a_readme_carries_its_failure_indicator(docs_review):
     assert "failing" not in s.read_doc_set()["docs"][0]
 
 
-def _commit(repo, path, when):
-    """Commit file `path` of `repo`, its committer date `when` (an ISO time)."""
+def _commit(repo, path, when, committed=None):
+    """Commit file `path` of `repo`, its author date `when` (an ISO time) and its
+    committer date `committed`, `when` by default."""
     import subprocess
 
     git = ["git", "-C", str(repo), "-c", "user.email=a@b", "-c", "user.name=a"]
-    env = {**os.environ, "GIT_COMMITTER_DATE": when, "GIT_AUTHOR_DATE": when}
+    env = {**os.environ, "GIT_COMMITTER_DATE": committed or when, "GIT_AUTHOR_DATE": when}
     subprocess.run([*git, "add", path], check=True)
     subprocess.run([*git, "commit", "-q", "-m", path], check=True, env=env)
 
@@ -993,7 +994,9 @@ def _commit(repo, path, when):
 @pytest.fixture
 def branch_docs(tmp_path):
     """A branch review on a git repo: README.md on main, src/README.md added on the
-    branch by a code commit, before any doc pass."""
+    branch by a code commit, before any doc pass. That commit's committer date is
+    late, as a rebase after the doc pass would leave it: only its author date tells
+    when the doc was added."""
     import subprocess
 
     repo = tmp_path / "repo"
@@ -1003,7 +1006,7 @@ def branch_docs(tmp_path):
     _commit(repo, "README.md", "2001-01-01T00:00:00+00:00")
     subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "feat"], check=True)
     (repo / "src" / "README.md").write_text("# src\n")
-    _commit(repo, "src/README.md", "2001-01-02T00:00:00+00:00")
+    _commit(repo, "src/README.md", "2001-01-02T00:00:00+00:00", "2099-01-02T00:00:00+00:00")
     s = Session("doc-pass", tmp_path / "sessions")
     s.create("Doc pass", kind="code", repo=str(repo), base="main")
     for p in ("README.md", "src/README.md", "lib/README.md", "new/README.md"):
