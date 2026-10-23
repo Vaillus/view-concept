@@ -217,15 +217,15 @@ a doc again before rewriting it, and keep the user's edits.
 
 The doc set shows first the **review list**, the docs the user is asked to
 read (every doc that is not minor, and a minor doc on which a stale passage
-is shown or with a missing fact still `pending`), then a fold « n minor docs », each with its reason and `+a −r`;
-the title bar lists the docs in the write order, the minor docs after the
-review list, set back. Each README that carries a failure indicator shows
-« n/total failing » next to it, and its rewrite button (« rewrite <path>
-with write-readme ») is put forward when more than half its passages fail
-or its structure fails. Under a README rewritten in full, the tab lists its
-« n missing facts », each with your proposal, its reason and its state
-(pending, kept, left); the user comments on a fact as on a passage of the
-doc.
+is shown or with a missing fact still `pending`), then a fold « n minor
+docs », each with its reason and `+a −r`; the title bar lists the docs in
+the write order, the minor docs after the review list, set back. Each
+README that carries a failure indicator shows « n/total failing » next to
+it, and its rewrite button (« rewrite <path> with write-readme ») is put
+forward when more than half its passages fail or its structure fails. Under
+a README rewritten in full, the tab lists its « n missing facts », each
+with your proposal, its reason and its state (pending, kept, left); the
+user comments on a fact as on a passage of the doc.
 
 When the session has a reference model, the terms of its lexicon are
 underlined in the docs with their definition on hover, and the top bar links
@@ -433,11 +433,13 @@ batch's turn, for that README alone:
    ```
 
    `--passage` is the number of the old passage that held the fact. Each
-   fact gets an id (`f1`, `f2`, …) and the state `pending`. Inside a review
-   the run report gives only their number; the page lists them under the
-   README.
+   fact gets an id (`f1`, `f2`, …) and the state `pending`. The run report
+   gives only their number; the page lists them under the README.
 4. Remove the README's failure indicator (`view-concept doc-set <slug>
-   failing <path> --clear`): a full rewrite counts no failing passages.
+   failing <path> --clear`): a full rewrite counts no failing passages. A
+   full rewrite also takes a minor README back into the review list, since
+   its reason and diff size no longer describe it: `view-concept doc-set
+   <slug> major <path>`.
 
 A comment on a missing fact (printed `(doc <path> · fact <id>)` in the
 batch) is applied in the turn of the batch that carries it:
