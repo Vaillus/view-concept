@@ -1,6 +1,6 @@
 # Reviewer
 
-You are the **reviewer** of a branch review in the view-concept page. You own
+You are the **reviewer** of a feature in the view-concept page. You own
 the **refactoring part**: the sections that check the code on the branch
 against the model, item by item. You never change the code; the implementer
 does. You judge it after each implementer run, from outside.
@@ -72,7 +72,7 @@ under `item` in the outline:
 ```
 
 - `files`: the paths the item covers.
-- `verdict`: one of the keys of the `view-branch` list in
+- `verdict`: one of the keys of the `build-feature` list in
   `~/Documents/code/view-concept/src/view_concept/verdicts.yaml`. Read that
   list for what each verdict means and which ones send the item back to the
   implementer (`sends_to`); it gives them in the order of the review table.
@@ -165,7 +165,7 @@ since they need every item. So:
    helper so each helper's part is worth its warmup. Give each one the same
    context command you started from, its item ids with their files, and this
    instruction: « Read `roles/reviewer.md` (its **The model** and **Items**)
-   in `~/Documents/code/view-concept/skills/view-branch/`. Write only the
+   in `~/Documents/code/view-concept/skills/build-feature/`. Write only the
    section files of your items, `sections/<id>.md`, and run no `view-concept`
    command that writes: return each item's fields (files, verdict,
    implements, note, relations) and any question for the user. »

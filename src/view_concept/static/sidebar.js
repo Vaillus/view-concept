@@ -29,10 +29,10 @@
   let rows = [];
   let launches = [];      // the pending launches (launch.py)
   let pendingFor = 300;   // seconds before a pending launch reads « not started »
-  let skills = ["view-branch"];
+  let skills = ["build-feature"];
   // The skills that create their own branch and worktree: the launcher offers them none
   // (launch.py OWN_WORKTREE, which refuses one).
-  const OWN_WORKTREE = ["view-docs"];
+  const OWN_WORKTREE = ["review-docs"];
 
   const h = (tag, attrs = {}, ...kids) => {
     const n = document.createElement(tag);

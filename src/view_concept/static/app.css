@@ -392,7 +392,7 @@ body.resizing-corner { cursor: nwse-resize; user-select: none; }
 .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--raised);
          border: 1px solid var(--accent); padding: 6px 14px; z-index: 20; }
 
-/* ---- the Metrics tab of a branch review (metrics.js) ---- */
+/* ---- the Metrics tab of a feature (metrics.js) ---- */
 .metrics { padding: 8px 32px 40px; }
 .mx { max-width: 120ch; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; font-size: 12px; line-height: 18px; }
 .mx-empty { margin-top: 20vh; text-align: center; }
@@ -497,7 +497,7 @@ body.resizing-corner { cursor: nwse-resize; user-select: none; }
 @media (hover: hover) { .mx-table tbody tr[data-run]:hover td { color: var(--accent); } }
 .mx-table td .mx-chip + .mx-chip { margin-left: 4px; }
 
-/* every branch review of the repository, by variant */
+/* every feature of the repository, by variant */
 .mx-rows { display: flex; flex-direction: column; gap: 4px; }
 .mx-strip { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 8px; align-items: center; }
 .mx-strack { position: relative; height: 16px; border-bottom: 1px solid var(--line); margin-right: 12px; }

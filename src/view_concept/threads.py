@@ -3,7 +3,7 @@
 A thread discusses a passage without changing anything. On an agent that can fork its
 conversation (Claude Code, Codex), its first turn forks the main session, so it starts
 knowing the whole conversation so far while the main session stays untouched; every later
-turn resumes the thread's own session. In a coordinated session (view-branch) the main
+turn resumes the thread's own session. In a coordinated session (build-feature) the main
 session only coordinates subagents, so a thread never forks it: its first turn carries the
 context a subagent gets (`view-concept context --role thread`), and later turns resume the
 thread's own session as usual. On any other agent (a program that answers a prompt
@@ -276,7 +276,7 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
     outline = plan["outline"]
     number = {sec["id"]: i + 1 for i, sec in enumerate(outline)}
     titles = {sec["id"]: sec.get("title", sec["id"]) for sec in outline}
-    reviews = ("view-branch", "view-refactor", "view-docs")
+    reviews = ("build-feature", "triage-code", "review-docs")
     doc = "review" if plan.get("workflow") in reviews else "explanation"
     sec = thread["section"]
     qid = thread.get("question", "")

@@ -1,4 +1,4 @@
-"""Command line: what the view-concept, view-branch, view-refactor and view-docs skills call
+"""Command line: what the view-concept, build-feature, triage-code and review-docs skills call
 from the agent."""
 
 from __future__ import annotations
@@ -477,7 +477,7 @@ def cmd_reference(a: argparse.Namespace) -> None:
             print(f"  sections: {' / '.join(c['sections']) or '(none)'}")
             print(f"  terms: {', '.join(c['terms']) or '(none)'}")
         if not rows:
-            print("(no branch review of this repo)")
+            print("(no feature of this repo)")
         return
     if a.clear or a.other:
         ref = s.set_reference("" if a.clear else a.other, a.reason or "")
@@ -610,12 +610,12 @@ def main() -> None:
     q.add_argument("--initial-request", help="the user's first message, verbatim")
     q.add_argument("--kind", choices=KINDS, default="explanation")
     q.add_argument("--repo", help="repository a code session is about (citations link into it)")
-    q.add_argument("--base", help="the branch a branch review compares with")
+    q.add_argument("--base", help="the branch a feature compares with")
     q.add_argument(
         "--workflow",
         choices=WORKFLOWS,
         help="the skill driving the session; picks its verdict set "
-        "(default: view-concept, or view-branch for a code session)",
+        "(default: view-concept, or build-feature for a code session)",
     )
     _add_agent_flags(q)
     q.set_defaults(fn=cmd_new)
@@ -822,16 +822,16 @@ def main() -> None:
 
     q = sub.add_parser(
         "reference",
-        help="take a branch review's model as the reference model of a docs review, or clear it",
+        help="take a feature's model as the reference model of a docs review, or clear it",
     )
     q.add_argument("slug")
-    q.add_argument("other", nargs="?", help="the slug of a branch review of the same repo")
+    q.add_argument("other", nargs="?", help="the slug of a feature of the same repo")
     q.add_argument("--reason", help="one line: why this model is the reference (with a session)")
     q.add_argument("--clear", action="store_true", help="remove the reference model")
     q.add_argument(
         "--candidates",
         action="store_true",
-        help="list the repo's branch reviews, with their sections and terms",
+        help="list the repo's features, with their sections and terms",
     )
     q.set_defaults(fn=cmd_reference)
 

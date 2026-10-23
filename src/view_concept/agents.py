@@ -10,7 +10,7 @@ Three backends:
 - `claude`: `claude -p`, forking the main conversation on a thread's first turn.
 - `codex`: `codex exec`, forking the main conversation the same way.
 
-A coordinated session (view-branch) never forks: its main conversation only coordinates
+A coordinated session (build-feature) never forks: its main conversation only coordinates
 subagents, so a thread starts from the session folder instead (`Session.fork_parent`).
 - `command`: any program that reads a prompt on stdin and prints its answer on stdout
   (`VIEW_CONCEPT_AGENT_COMMAND`, or the `jazz run` preset). It has no conversation to

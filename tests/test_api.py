@@ -138,22 +138,22 @@ def set_workflow(session, workflow):
 
 
 def test_every_verdict_has_a_meaning_and_a_tone():
-    assert set(VERDICT_FILE) == {"view-branch", "view-refactor", "view-docs"}
+    assert set(VERDICT_FILE) == {"build-feature", "triage-code", "review-docs"}
     for verdicts in VERDICT_FILE.values():
         assert all(v["meaning"] and v["tone"] in TONES for v in verdicts)
         assert len({v["key"] for v in verdicts}) == len(verdicts)
 
 
-@pytest.mark.parametrize("workflow", ["view-branch", "view-refactor"])
+@pytest.mark.parametrize("workflow", ["build-feature", "triage-code"])
 def test_api_sends_the_verdicts_of_the_session_workflow(client, session, workflow):
     set_workflow(session, workflow)
     verdicts = client.get("/api/s/kv-cache").json()["verdicts"]
     assert [v["key"] for v in verdicts] == [v["key"] for v in VERDICT_FILE[workflow]]
-    assert verdicts[-1]["key"] == {"view-branch": "conforms", "view-refactor": "keep"}[workflow]
+    assert verdicts[-1]["key"] == {"build-feature": "conforms", "triage-code": "keep"}[workflow]
 
 
 def test_api_branch_verdicts_keep_their_tones_and_destinations(client, session):
-    set_workflow(session, "view-branch")
+    set_workflow(session, "build-feature")
     verdicts = client.get("/api/s/kv-cache").json()["verdicts"]
     assert {v["key"]: v["tone"] for v in verdicts} == {
         "diverges": "danger",
@@ -172,7 +172,7 @@ def test_api_falls_back_to_branch_verdicts_without_a_workflow(client, session):
     session.plan_path.write_text(json.dumps(plan))
     state = client.get("/api/s/kv-cache").json()
     assert state["workflow"] == ""
-    assert state["verdicts"] == VERDICT_FILE["view-branch"]
+    assert state["verdicts"] == VERDICT_FILE["build-feature"]
 
 
 def test_api_sends_no_verdicts_to_an_explanation(client):
@@ -245,7 +245,7 @@ def test_api_shows_the_change_history(client, session):
 
 def test_api_shows_the_changes_not_implemented_yet(client, session):
     s = Session("gate", session.dir.parent)
-    s.create("The gate", kind="code", repo=str(session.dir), workflow="view-branch")
+    s.create("The gate", kind="code", repo=str(session.dir), workflow="build-feature")
     s.add_change("gate split")
     s.add_change("threshold renamed")
     s.add_batch([], action="approve-model")
@@ -317,7 +317,7 @@ def test_launch_opens_a_terminal_in_the_project(client, tmp_path, monkeypatch):
     body = {"project": str(tmp_path), "request": "add a sidebar", "worktree": "Session sidebar"}
     r = client.post("/api/launch", json=body)
     assert r.json()["command"] == (
-        "claude --permission-mode auto -w session-sidebar '/view-branch add a sidebar'"
+        "claude --permission-mode auto -w session-sidebar '/build-feature add a sidebar'"
     )
     assert opened == [(str(tmp_path), r.json()["command"])]
     r = client.post("/api/launch", json={**body, "skill": "explain"})
@@ -438,7 +438,7 @@ def test_drafts_are_not_the_agents_activity(client, session):
 
 @pytest.fixture
 def doc_review(session):
-    """A branch review next to the test session, on a repo with one doc in its doc set."""
+    """A feature next to the test session, on a repo with one doc in its doc set."""
     repo = session.dir.parent / "repo"
     (repo / "docs" / "img").mkdir(parents=True)
     (repo / "docs" / "reference.md").write_text("# Reference\n\nThe keys 1 to 4.\n")
@@ -661,10 +661,10 @@ def test_a_docs_review_shows_its_doc_set_with_no_plan_nor_sections(client, sessi
     repo.mkdir()
     (repo / "README.md").write_text("## Install\n\nYou need uv.\n")
     s = Session("install-docs", session.dir.parent)
-    s.create("Install docs", kind="code", repo=str(repo), workflow="view-docs")
+    s.create("Install docs", kind="code", repo=str(repo), workflow="review-docs")
     s.add_doc("README.md", "the install part")
     state = client.get("/api/s/install-docs").json()
-    assert state["workflow"] == "view-docs" and state["verdicts"] == []
+    assert state["workflow"] == "review-docs" and state["verdicts"] == []
     assert state["plan"]["outline"] == [] and state["sections"] == {}
     assert state["docs"]["set"][0]["path"] == "README.md"
     assert state["docs"]["views"]["README.md"]["exists"] is True
@@ -672,16 +672,16 @@ def test_a_docs_review_shows_its_doc_set_with_no_plan_nor_sections(client, sessi
 
 def test_the_reference_model_is_read_from_another_session(client, doc_review):
     docs = Session("install-docs", doc_review.dir.parent)
-    docs.create("Install", kind="code", repo=doc_review.read_plan()["repo"], workflow="view-docs")
+    docs.create("Install", kind="code", repo=doc_review.read_plan()["repo"], workflow="review-docs")
     assert client.get("/api/s/install-docs").json()["docs"]["reference"] is None
     plan = doc_review.read_plan()
     plan["outline"] = [{"id": "sheet", "title": "Sheet"}]
     plan["lexicon"] = [{"term": "doc set", "section": "sheet", "definition": "the *list*"}]
     doc_review.plan_path.write_text(json.dumps(plan))
-    docs.set_reference("doc-tab", "adds view-docs")
+    docs.set_reference("doc-tab", "adds review-docs")
     ref = client.get("/api/s/install-docs").json()["docs"]["reference"]
     assert ref["slug"] == "doc-tab" and ref["title"] == "Doc tab" and ref["url"] == "/s/doc-tab"
-    assert ref["reason"] == "adds view-docs"
+    assert ref["reason"] == "adds review-docs"
     assert ref["lexicon"][0]["tip_html"] == "the <em>list</em>"
     plan["lexicon"][0]["definition"] = "the docs"
     doc_review.plan_path.write_text(json.dumps(plan))  # re-read as it is now

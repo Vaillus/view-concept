@@ -1,8 +1,8 @@
-/* view-concept — the Metrics tab of a branch review (the metrics report).
+/* view-concept — the Metrics tab of a feature (the metrics report).
 
    The tab draws GET /api/s/<slug>/metrics (metrics.py): the review's clock (pickup, agent
    and user time, its runs on lanes), where agent time goes by role, the waiting per batch,
-   the runs list, the side-thread turns, then every branch review of the repository
+   the runs list, the side-thread turns, then every feature of the repository
    compared by variant. Each number opens onto the one under it, in the detail panel: a
    batch onto the runs of its coordinator pass, a role onto its runs, a run onto its
    activity bar and measures (a stretch of the bar shows, on hover, the command that ended
@@ -13,7 +13,7 @@
    or a helper (over ten minutes, "stalled"), which the server already leaves out of every
    sum. A coordinator pass never stalls: its wait on the agents it started is agent time.
 
-   app.js shows the tab on branch reviews only and calls refreshMetrics() when the tab is
+   app.js shows the tab on features only and calls refreshMetrics() when the tab is
    shown and on each state update while it is. The published page has no Metrics tab. */
 
 "use strict";
@@ -605,7 +605,7 @@
     return add(h("div", "mx-scroll"), add(t, tb));
   }
 
-  /* ---------------- every branch review of the repository, by variant ---------------- */
+  /* ---------------- every feature of the repository, by variant ---------------- */
 
   function niceMax(v) {
     if (v <= 0) return 1;
@@ -615,9 +615,9 @@
   }
 
   function comparePart() {
-    const part = add(h("div", "mx-part"), label("every branch review of this repository, by variant · one point per review"));
+    const part = add(h("div", "mx-part"), label("every feature of this repository, by variant · one point per review"));
     const variants = ((data.compare || {}).variants || []);
-    if (!variants.length) return add(part, h("p", "dim", "No branch review to compare."));
+    if (!variants.length) return add(part, h("p", "dim", "No feature to compare."));
     const lg = h("div", "mx-legend");
     variants.forEach((v, i) => add(lg, add(h("span", `mx-v${i % 6}`), h("i", v.reviews.length ? "mx-sw mx-dotsw" : "mx-ring"),
       `${v.name} · ${v.reviews.length ? `${v.reviews.length} review${v.reviews.length > 1 ? "s" : ""}` : "no review yet"}`)));

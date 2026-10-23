@@ -6,7 +6,7 @@ description: >-
   write it again from the code alone when asked and list the facts the old
   one said that the new one lost, against fixed content rules: a reader
   line and repo terms read from the repo's lexicon files, an inclusion test
-  every sentence must pass, the repo's own README conventions, five parts for
+  every sentence must pass, the repo's own README conventions, four parts for
   a new README, and a report printed at the end of the run.
   Use when the user wants a README written for a folder, or an existing
   README cleaned up, shortened or rewritten, notably one written by an LLM —
@@ -28,21 +28,21 @@ never commits.
 A run has one of three outcomes:
 
 - **draft**: the folder has no `README.md`; write one from the code, in the
-  five parts;
+  four parts;
 - **edit** (always, when it has one and no full rewrite was asked for): keep
   its structure, headings and wording, change only the passages that fail a
   check, and count the **failure indicator** (see **Checking an existing
   README**);
 - **full rewrite**: only on a **rewrite request**, the `rewrite` argument or
   a review's request to write a README again from scratch; write it again
-  in the five parts from the code alone, without reading the old README, as
+  in the four parts from the code alone, without reading the old README, as
   for a draft, then list its **missing facts** (see **The missing facts**).
 
 The run never chooses a full rewrite on its own, however much of the old
 README fails: the failure indicator tells the user, who decides.
 
 A run is **in a review** when its request names a review's session folder
-(`~/.view-concept/sessions/<slug>/`): the agent of a branch review or of a
+(`~/.view-concept/sessions/<slug>/`): the agent of a feature or of a
 docs review ran it, and the review's page shows what the run leaves to the
 user. Any other run, a `rewrite` argument typed in a terminal included, is
 outside a review.
@@ -98,7 +98,7 @@ commands, entry points, tests, the files it reads and writes), the old
 README for an edit, the missing facts the user keeps after a full rewrite,
 and the model of each session folder the request names that holds one (its
 `sections/` and the `lexicon` of its `plan.json`), which holds rules the
-code does not show. A branch review names its own folder; a docs review
+code does not show. A feature names its own folder; a docs review
 names its own, which holds no model, and its reference model's folder when
 it has one. A fact the code contradicts is written as the code has it. A term the review's lexicon has keeps its name there, and its
 definition when no lexicon on the path has the term.
@@ -174,11 +174,12 @@ Every sentence of a draft, a rewrite or an edit stays only if:
 
 A sentence that fails only the second shrinks to a few words and a link.
 Drop history and open discussions (ideas, to-dos), except history that
-explains a caveat, a **placeholder** for a missing link or fact (« TODO:
-Notion link », kept and listed in the report), and a dated **migration
-note** on reading outputs made before a change, kept until its date.
+explains a caveat the README already gives, a **placeholder** for a missing
+link or fact (« TODO: Notion link », kept and listed in the report), and a
+dated **migration note** on reading outputs made before a change, kept
+until its date.
 
-## The five parts
+## The four parts
 
 A draft or a full rewrite has these parts, in this order, unless the repo's
 conventions set another shape; headings are named freely.
@@ -201,11 +202,12 @@ conventions set another shape; headings are named freely.
 4. **Usage**: the folder's own commands, each with what it produces; for a
    library, one short call example per public entry point. No subsection
    per module, no list of return fields.
-5. **Caveats**: what trips a reader who uses or changes the folder. What
-   the run finds wrong with the code (a script that fails at import, one
-   with no caller, a file breaking a repo rule) is a **code finding**: it
-   goes in the run report, and in the README only when a reader would hit
-   it by running a command the README gives.
+
+No part for caveats: what trips a reader is the user's judgement, so the
+run never writes one. An edit keeps the caveats an existing README gives,
+checked like any passage. What the run finds wrong with the code (a script
+that fails at import, one with no caller, a file breaking a repo rule) is a
+**code finding**: it goes in the run report only.
 
 The target, a library folder's README, in full:
 
@@ -229,7 +231,7 @@ utils/          # paths, file IO helpers
 ```
 ~~~
 
-No Usage and no Caveats: the folder has no command of its own, and each
+No Usage: the folder has no command of its own, and each
 subfolder's README says what it holds and how to call it.
 
 ## Writing

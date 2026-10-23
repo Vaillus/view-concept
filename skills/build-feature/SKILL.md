@@ -1,21 +1,23 @@
 ---
-name: view-branch
+name: build-feature
 description: >-
-  Work on a branch in the view-concept page, concepts first: build the model
-  of what the branch introduces and how it fits the existing code, challenge
-  and revise it with the user, send agents to bring the code in line with the
-  revised model, then check the code item by item against it. Use when the user wants to work on, understand or rework a
-  branch they are building — "let's work on this branch", "review my branch",
-  "explain this branch so I can decide what stays", invokes /view-branch.
+  Build a feature in the view-concept page, concepts first: model what the
+  feature introduces and how it fits the existing code, challenge and revise
+  the model with the user, send agents to bring the code in line with it,
+  check the code item by item against it, then write the docs and open the
+  PR. Use when the user wants to design, build, understand or rework a
+  feature on a branch — "let's build this feature", "work on this branch",
+  "review my branch", "explain this branch so I can decide what stays",
+  invokes /build-feature.
 argument-hint: "[the branch or PR number]"
 ---
 
-# /view-branch
+# /build-feature
 
-Reviews a branch in the view-concept page (the `view-concept` command): a
-model of what the branch introduces, written and corrected with the user,
-agents that change the code to match it, and a check of the code against the
-model.
+Builds a feature in the view-concept page (the `view-concept` command): a
+model of what the feature introduces, written and corrected with the user,
+agents that change the code on its branch to match it, a check of the code
+against the model, then the docs and the PR.
 
 The tool is self-contained: the model is built for this branch and lives in the
 session; it reaches the repository only through the **doc pass**, which
@@ -86,7 +88,7 @@ short kebab-case name of the branch):
 
 ```bash
 view-concept new "<title>" --slug <slug> --initial-request "<the message>" \
-    --kind code --repo <repo root> --base <base branch> --workflow view-branch
+    --kind code --repo <repo root> --base <base branch> --workflow build-feature
 view-concept request <slug> <file>   # when the review follows a conversation
 view-concept open <slug>          # starts the server if needed, shows the page
 ```
@@ -185,7 +187,7 @@ a `resolve` reply), name a section by the number the page shows, in words:
 
 ## Coordinating
 
-In a branch review the main session (you) **coordinates**: you start the
+In a feature the main session (you) **coordinates**: you start the
 agents, route the user's events to them, and keep the session folder current.
 The work is done by fresh **subagents**, each started from the folder, never
 from this conversation, which they do not see; you do not write the outline,
@@ -203,7 +205,7 @@ carry the feature and where each concept lives, so a fresh agent does not
 explore the same code again: the planner writes it on its first run, the
 implementer updates it when it moves code, and every context loads it.
 
-The role files are in `~/Documents/code/view-concept/skills/view-branch/`.
+The role files are in `~/Documents/code/view-concept/skills/build-feature/`.
 The planner and the writer also read `roles/planning-rules.md` there. A side
 thread the user opens from the page is one more agent, read-only, which the
 server starts itself from the same folder.
@@ -229,7 +231,7 @@ its output, and let it run the command itself. Its prompt is: « Run
 `view-concept context <slug> --role <role> --trigger <ids or words>` and treat
 its output as your context. Then read `<role file>` (and
 `roles/planning-rules.md` for the planner and the writer) in
-`~/Documents/code/view-concept/skills/view-branch/`, and do your run. » Do not
+`~/Documents/code/view-concept/skills/build-feature/`, and do your run. » Do not
 run the command yourself first, save its output to a file, or paste it into
 the prompt: the context grows with the session (a writer's holds every
 section), and it would go through your own conversation, where it stays, and
@@ -352,7 +354,7 @@ by item).
 A review is a list of **sections**: plan.json lists them under its `outline`
 key, and `sections/<id>.md` holds the text of each. The sections fall in two
 parts. The **modeling part** writes the model out; the page shows it in the
-Model tab (the page's name for the Explanation tab in a branch review). The
+Model tab (the page's name for the Explanation tab in a feature). The
 **refactoring part** checks the code against the model; a section with
 `"part": "refactoring"` belongs to it, and is a **refactor section**: the
 page shows it in the code tab. The to-do list (`todo`) is the one refactor

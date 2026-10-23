@@ -190,12 +190,12 @@ def test_plan_batch_skips_the_open_questions(session):
     assert (
         "action: plan (the user asked to rewrite the plan from the page: open questions "
         "are marked skipped, but a section question whose section is not written yet; "
-        "revise the plan with the answers, or the model in a branch review)"
+        "revise the plan with the answers, or the model in a feature)"
     ) in format_batch("kv-cache", b, [])
     assert (
         "action: plan (the user ended scoping from the page: open questions are marked "
         "skipped, but a section question whose section is not written yet; write the "
-        "plan, or the model in a branch review)"
+        "plan, or the model in a feature)"
     ) in format_batch("kv-cache", {**b, "rewrite": False}, [])
 
 
@@ -335,17 +335,33 @@ def test_workflow_is_stored_and_defaults_by_kind(tmp_path):
     assert s.read_plan()["workflow"] == "view-concept"
     s = Session("y", tmp_path)
     s.create("Y", kind="code", repo=str(tmp_path))
-    assert s.read_plan()["workflow"] == "view-branch"
+    assert s.read_plan()["workflow"] == "build-feature"
     s = Session("z", tmp_path)
-    s.create("Z", kind="code", repo=str(tmp_path), workflow="view-refactor")
-    assert s.read_plan()["workflow"] == "view-refactor"
+    s.create("Z", kind="code", repo=str(tmp_path), workflow="triage-code")
+    assert s.read_plan()["workflow"] == "triage-code"
+
+
+@pytest.mark.parametrize(
+    "old, new",
+    [
+        ("view-branch", "build-feature"),
+        ("view-refactor", "triage-code"),
+        ("view-docs", "review-docs"),
+    ],
+)
+def test_a_session_under_a_former_workflow_name_reads_the_new_one(tmp_path, old, new):
+    s = Session("x", tmp_path)
+    s.create("X", kind="code", repo=str(tmp_path))
+    plan = json.loads(s.plan_path.read_text())
+    s.plan_path.write_text(json.dumps({**plan, "workflow": old}))
+    assert s.read_plan()["workflow"] == new
 
 
 def test_workflow_is_validated(tmp_path):
     with pytest.raises(SessionError, match="unknown workflow"):
         Session("x", tmp_path).create("X", kind="code", repo=str(tmp_path), workflow="view-pr")
     with pytest.raises(SessionError, match="code session"):
-        Session("y", tmp_path).create("Y", workflow="view-refactor")
+        Session("y", tmp_path).create("Y", workflow="triage-code")
     assert not Session("x", tmp_path).exists()
 
 
@@ -710,7 +726,7 @@ def test_write_plan_keeps_the_other_fields(tmp_path):
 
 def test_unimplemented_changes_follow_the_last_implementer_run(tmp_path):
     s = Session("gate", tmp_path)
-    s.create("The gate", kind="code", repo=str(tmp_path), workflow="view-branch")
+    s.create("The gate", kind="code", repo=str(tmp_path), workflow="build-feature")
     s.add_change("gate split")
     s.add_change("threshold renamed")
     assert s.unimplemented_changes() == []  # the model is not approved yet
@@ -922,7 +938,7 @@ def test_batch_progress_follows_the_delivery_mark(session):
 
 @pytest.fixture
 def docs_review(tmp_path):
-    """A branch review on a repo (tmp_path/repo) with two docs."""
+    """A feature on a repo (tmp_path/repo) with two docs."""
     repo = tmp_path / "repo"
     (repo / "docs").mkdir(parents=True)
     (repo / "README.md").write_text("# Tool\n\nThe keys 1 to 4.\n")
@@ -993,7 +1009,7 @@ def _commit(repo, path, when, committed=None):
 
 @pytest.fixture
 def branch_docs(tmp_path):
-    """A branch review on a git repo: README.md on main, src/README.md added on the
+    """A feature on a git repo: README.md on main, src/README.md added on the
     branch by a code commit, before any doc pass. That commit's committer date is
     late, as a rebase after the doc pass would leave it: only its author date tells
     when the doc was added."""
@@ -1045,7 +1061,7 @@ def test_a_doc_the_doc_pass_creates_is_never_minor_and_has_no_indicator(branch_d
 
 def test_in_a_docs_review_every_doc_new_on_the_branch_is_created(branch_docs, tmp_path):
     s = Session("docs-review", tmp_path / "sessions")
-    s.create("Docs", kind="code", repo=str(branch_docs.repo_dir()), workflow="view-docs",
+    s.create("Docs", kind="code", repo=str(branch_docs.repo_dir()), workflow="review-docs",
              base="main")  # fmt: skip
     s.add_doc("src/README.md", "why")
     assert s.created_by_doc_pass("src/README.md")
@@ -1346,38 +1362,38 @@ def test_awaiting_docs_is_a_phase(session):
 
 def test_a_docs_review_is_a_code_session_not_coordinated(tmp_path):
     with pytest.raises(SessionError, match="code session"):
-        Session("d", tmp_path).create("D", workflow="view-docs")
+        Session("d", tmp_path).create("D", workflow="review-docs")
     s = Session("d", tmp_path)
-    s.create("D", kind="code", repo=str(tmp_path), workflow="view-docs")
-    assert s.read_plan()["workflow"] == "view-docs" and not s.coordinated
+    s.create("D", kind="code", repo=str(tmp_path), workflow="review-docs")
+    assert s.read_plan()["workflow"] == "review-docs" and not s.coordinated
 
 
 def test_the_reference_model_is_a_branch_review_of_the_same_repo(docs_review, tmp_path):
     root = docs_review.dir.parent
     repo = docs_review.read_plan()["repo"]
     docs = Session("install-docs", root)
-    docs.create("Install", kind="code", repo=repo, workflow="view-docs")
+    docs.create("Install", kind="code", repo=repo, workflow="review-docs")
     other = Session("elsewhere", root)
-    other.create("Elsewhere", kind="code", repo=str(tmp_path), workflow="view-branch")
+    other.create("Elsewhere", kind="code", repo=str(tmp_path), workflow="build-feature")
     triage = Session("triage", root)
-    triage.create("Triage", kind="code", repo=repo, workflow="view-refactor")
+    triage.create("Triage", kind="code", repo=repo, workflow="triage-code")
     with pytest.raises(SessionError, match="no other session"):
         docs.set_reference("missing", "why")
     with pytest.raises(SessionError, match="no other session"):
         docs.set_reference("install-docs", "why")
     with pytest.raises(SessionError, match="not a session of this repo"):
         docs.set_reference("elsewhere", "why")
-    with pytest.raises(SessionError, match="not a branch review"):
+    with pytest.raises(SessionError, match="not a feature"):
         docs.set_reference("triage", "why")
     with pytest.raises(SessionError, match="needs its reason"):
         docs.set_reference("doc-tab", "  ")
-    ref = {"slug": "doc-tab", "reason": "adds view-docs"}
-    assert docs.set_reference("doc-tab", " adds\n view-docs ") == ref
+    ref = {"slug": "doc-tab", "reason": "adds review-docs"}
+    assert docs.set_reference("doc-tab", " adds\n review-docs ") == ref
     assert docs.read_plan()["reference"] == ref
     assert docs.reference_model() == {
         "slug": "doc-tab",
         "title": "Doc tab",
-        "reason": "adds view-docs",
+        "reason": "adds review-docs",
         "lexicon": [],
     }
     docs.set_reference("")
@@ -1386,7 +1402,9 @@ def test_the_reference_model_is_a_branch_review_of_the_same_repo(docs_review, tm
 
 def test_a_bare_slug_reference_has_no_reason(docs_review):
     docs = Session("install-docs", docs_review.dir.parent)
-    docs.create("Install", kind="code", repo=docs_review.read_plan()["repo"], workflow="view-docs")
+    docs.create(
+        "Install", kind="code", repo=docs_review.read_plan()["repo"], workflow="review-docs"
+    )
     plan = docs.read_plan()
     plan["reference"] = "doc-tab"
     docs.plan_path.write_text(json.dumps(plan))
@@ -1405,9 +1423,9 @@ def test_the_reference_candidates_are_the_repos_branch_reviews(docs_review, tmp_
     plan["lexicon"] = [{"term": "doc set", "section": "sheet", "definition": "the list"}]
     docs_review.plan_path.write_text(json.dumps(plan))
     docs = Session("install-docs", root)
-    docs.create("Install", kind="code", repo=repo, workflow="view-docs")
-    Session("triage", root).create("Triage", kind="code", repo=repo, workflow="view-refactor")
-    Session("far", root).create("Far", kind="code", repo=str(tmp_path), workflow="view-branch")
+    docs.create("Install", kind="code", repo=repo, workflow="review-docs")
+    Session("triage", root).create("Triage", kind="code", repo=repo, workflow="triage-code")
+    Session("far", root).create("Far", kind="code", repo=str(tmp_path), workflow="build-feature")
     rows = docs.reference_candidates()
     assert [(r["slug"], r["sections"], r["terms"]) for r in rows] == [
         ("doc-tab", ["Sheet"], ["doc set"])

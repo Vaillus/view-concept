@@ -2,7 +2,7 @@
 
    Tabs share the main space: the plan (the scope block with the agent questions, outline,
    lexicon, change history), the explanation (one block per explanation section; the Model
-   tab of a branch review), in a branch review that has reached the refactoring step the
+   tab of a feature), in a feature that has reached the refactoring step the
    code tab (the refactor sections, the refactoring part), and once a doc set exists the
    Doc tab (the repo docs the branch concerns, see "the Doc tab"); the review pane (a conversation: sent batches and answered agent
    questions, a line counting the open ones, then the draft comments) stays on the
@@ -113,10 +113,10 @@ const numberOf = (id) => {
 };
 const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).title || id;
 
-/* The refactoring part of a branch review, written in the refactoring step, is made of
+/* The refactoring part of a feature, written in the refactoring step, is made of
    refactor sections (sections with "part": "refactoring"): they are read in their own
    tab, the code tab (id "refactor"); every other section is an explanation section, in the
-   explanation tab (id "model": in a branch review the Model tab, the modeling part). Both tabs are rendered into their own view, with
+   explanation tab (id "model": in a feature the Model tab, the modeling part). Both tabs are rendered into their own view, with
    the same section blocks. Sessions written before the rename mark them "part": 2. */
 const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
@@ -136,15 +136,15 @@ const isNarrow = () => NARROW.matches;
    hints name no shortcut. */
 const TOUCH = matchMedia("(hover: none)");
 const isTouch = () => TOUCH.matches;
-// The Metrics tab (metrics.js) draws a branch review's runs: other workflows have no role agents.
-const hasMetricsTab = () => state.workflow === "view-branch" && !isNarrow();
+// The Metrics tab (metrics.js) draws a feature's runs: other workflows have no role agents.
+const hasMetricsTab = () => state.workflow === "build-feature" && !isNarrow();
 const docViews = () => [$("#model"), $("#refactor"), $("#doc")];
 /* The Doc tab (id "doc"): the repo docs the branch concerns, from `state.docs` (see "the
-   Doc tab"). It shows once the doc set is written; a docs review (workflow view-docs)
+   Doc tab"). It shows once the doc set is written; a docs review (workflow review-docs)
    shows it alone, from the start. A server that sends no `docs` counts as no doc set. */
 const NO_DOCS = { set: [], views: {}, stale: [], removed: [], facts: {}, reference: null };
 const docsOf = () => ({ ...NO_DOCS, ...((state && state.docs) || {}) });
-const isDocsReview = () => !!state && state.workflow === "view-docs";
+const isDocsReview = () => !!state && state.workflow === "review-docs";
 const hasDocTab = () => isDocsReview() || docsOf().set.length > 0;
 // The tab a missing tab gives way to: the Doc tab in a docs review, the model tab otherwise.
 const homeTab = () => (isDocsReview() ? "doc" : "model");
@@ -191,7 +191,7 @@ function render() {
    tab of the section being written) — and otherwise stays where the user put it. A
    model waiting for approval does not move it, nor does a PR waiting to be created:
    « Approve model » sits at the end of the explanation, where the model is read, and
-   « Create PR » at the end of the code tab. A branch review also has the Metrics tab,
+   « Create PR » at the end of the code tab. A feature also has the Metrics tab,
    which fetches its numbers when shown and again on each state update while shown.
    Tab ids and keys: 1 "plan", 2 "model" (the explanation, named « model » in a branch
    review), 3 "refactor" (code), 4 "doc", 5 "metrics". In the narrow layout the Doc tab
@@ -241,8 +241,8 @@ function followSession() {
   if (tab === "metrics" && !hasMetricsTab()) setTab(homeTab());
   for (const name of ["plan", "model"]) $(`.tab[data-tab="${name}"]`).hidden = isDocsReview();
   if (isDocsReview() && tab !== "doc" && tab !== "review") setTab("doc");
-  // In a branch review, the explanation is the modeling part, so its tab is named after the model.
-  const modelLabel = state.workflow === "view-branch" ? "model" : "explanation";
+  // In a feature, the explanation is the modeling part, so its tab is named after the model.
+  const modelLabel = state.workflow === "build-feature" ? "model" : "explanation";
   $('.tab[data-tab="model"]').title = `${modelLabel[0].toUpperCase()}${modelLabel.slice(1)} (2)`;
   for (const [name, label] of [["model", modelLabel], ["refactor", "code"]]) {
     const n = Object.keys(state.sections).filter((id) => isUpdated(id) && tabOf(id) === name).length;
@@ -351,9 +351,9 @@ function writingLabel() {
 const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "answered · the agent is reading it" };
 
 /* Four phases wait for the user: the plan of an explanation ("awaiting-approval"), the
-   model of a branch review at the end of model consolidation ("awaiting-model", set by the
-   view-branch skill only), the doc pass once the code carries the model ("awaiting-docs",
-   view-branch too), and the opening of its PR ("awaiting-pr", view-branch and view-docs).
+   model of a feature at the end of model consolidation ("awaiting-model", set by the
+   build-feature skill only), the doc pass once the code carries the model ("awaiting-docs",
+   build-feature too), and the opening of its PR ("awaiting-pr", build-feature and review-docs).
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until the agent moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it.
@@ -384,7 +384,7 @@ function renderPr() {
     a.textContent = a === prEnd ? `Open ${prLabel(pr.url)} ↗` : `${prLabel(pr.url)} ↗`;
   }
 }
-/* A docs review that takes a branch review's model as reference model links that session
+/* A docs review that takes a feature's model as reference model links that session
    in the top bar, with the reason the agent kept it next to the link; it opens in another
    browser tab. No reference, the ordinary case, shows neither. */
 function renderReference() {
@@ -562,7 +562,7 @@ docsPrButton.addEventListener("click", () => {
 function renderPlan() {
   const { plan } = state;
   renderScope();
-  // A branch review logs every change of the model: its last entry says what moved last.
+  // A feature logs every change of the model: its last entry says what moved last.
   // Other sessions state their last plan revision in plan.json.
   const changes = state.changes || [];
   const last = changes.length && changes[changes.length - 1].cause ? changes[changes.length - 1].change : "";
@@ -608,7 +608,7 @@ function renderPlan() {
   }
 }
 
-/* In a branch review, once the model is approved, the changes logged after the last one an
+/* In a feature, once the model is approved, the changes logged after the last one an
    implementer took into account are not implemented yet: the code does not carry them. */
 const unimplemented = () => new Set(state.unimplemented || []);
 const lagLine = () => {
@@ -1296,7 +1296,7 @@ $("#doc").addEventListener("mousemove", (e) => {
    concepts it implements, a note), the items that need action first. Clicking an entry opens its description underneath, which is
    the section's own block, so comments, threads, highlights and annotations work there
    as in the explanation. Below the table, the structure view (see structureView). The
-   to-do list of a branch review (the section "todo": the work that holds no decision of
+   to-do list of a feature (the section "todo": the work that holds no decision of
    the user's, written with the model) comes above the table; the other refactor sections,
    such as the applied changes, follow it as plain sections. A review whose refactor
    sections carry no item fields is drawn as plain sections only. */
@@ -2374,15 +2374,15 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    what is missing (its entry `{question, unclear: true, note}`: the options are ignored,
    and the question is deferred until the agent asks it again, after the section that
    explains it), or the box stays open: no question blocks the agent, except during the
-   pause of a branch review's writer, which « Go on » ends (see paused).
+   pause of a feature's writer, which « Go on » ends (see paused).
    The header holds « Grill me » (a batch whose action is "grill"; « Stop grill » sends
    "stop-grill" while a grill runs) and, while scoping runs or a question is open,
    « Write plan » (action "plan": scoping ends, the open questions count as skipped, but a
    section question whose section is not written yet, which stays open; once a
    plan exists it reads « Rewrite plan », and the agent revises the plan with the answers).
-   In a branch review or a refactor, what is written is the model: « Write model ».
+   In a feature or a triage, what is written is the model: « Write model ».
    These three take the draft comments with them, like the approvals.
-   A docs review (view-docs) has no Plan tab: its scope block, headed « questions », sits at
+   A docs review (review-docs) has no Plan tab: its scope block, headed « questions », sits at
    the top of the Doc tab while it holds a question, without these three buttons. */
 
 const openQuestions = () => (state ? state.questions || [] : []).filter((q) => q.status === "open");
@@ -2447,7 +2447,7 @@ function questionCard(q) {
   return card;
 }
 
-/* A pause: in a branch review, the writer stops after a section that opened questions while
+/* A pause: in a feature, the writer stops after a section that opened questions while
    sections of the modeling part are left to write, and the coordinator sets the phase
    awaiting-answer. The page reads the pause from that phase, not from the open questions: a
    question left open by an earlier « Go on » still sits at the end of a written section
@@ -2459,7 +2459,7 @@ function questionCard(q) {
    section is written there is no pause: a question still open holds back « Approve model »,
    as any open question does. */
 function paused() {
-  if (state.workflow !== "view-branch" || state.status.phase !== "awaiting-answer" || goOnPending()) return false;
+  if (state.workflow !== "build-feature" || state.status.phase !== "awaiting-answer" || goOnPending()) return false;
   return (state.plan.outline || []).some((s) => !isRefactorSection(s) && !(s.id in state.sections));
 }
 
@@ -2482,16 +2482,16 @@ function planPending() {
   return !openQuestions().length && state.comments.batches.some((b) => b.action === "plan" && b.sent >= since);
 }
 
-// What the agent writes once scoping ends: the model in a branch review or a refactor,
+// What the agent writes once scoping ends: the model in a feature or a triage,
 // the plan otherwise.
 function scopingProduct() {
-  return ["view-branch", "view-refactor"].includes(state.workflow) ? "model" : "plan";
+  return ["build-feature", "triage-code"].includes(state.workflow) ? "model" : "plan";
 }
 
 // Once what the button writes exists, the answers given since may change it: « Write »
-// becomes « Rewrite ». A branch review's planner drafts an outline before scoping ends, so
+// becomes « Rewrite ». A feature's planner drafts an outline before scoping ends, so
 // there the button rewrites once the sections are written (as Session.has_written).
-const rewriting = () => (state.workflow === "view-branch"
+const rewriting = () => (state.workflow === "build-feature"
   ? Object.keys(state.sections).length > 0
   : (state.plan.outline || []).length > 0);
 

@@ -1,4 +1,4 @@
-"""Run metrics of a branch review: where the time of a review goes, read from Claude Code's
+"""Run metrics of a feature: where the time of a review goes, read from Claude Code's
 transcripts and the session's own files. The Metrics tab draws what `session_metrics`
 returns (`GET /api/s/{slug}/metrics`).
 
@@ -1304,12 +1304,12 @@ def _role_walls(runs: list[Run]) -> dict[str, list[float]]:
 
 
 def _repo_reviews(s: Session, plan: dict[str, Any]) -> list[Session]:
-    """Every branch review of the session's repository (its main checkout), itself
+    """Every feature of the session's repository (its main checkout), itself
     included."""
     project = project_of(str(plan.get("repo", "")))
     out = []
     for row in list_sessions(s.dir.parent):
-        if row["workflow"] != "view-branch" or row["slug"] == s.slug:
+        if row["workflow"] != "build-feature" or row["slug"] == s.slug:
             continue
         if project and row["project"] == project:
             out.append(Session(row["slug"], s.dir.parent))
@@ -1421,7 +1421,7 @@ def _by_role(runs: list[Run]) -> list[dict[str, Any]]:
 
 
 def session_metrics(s: Session) -> dict[str, Any]:
-    """The metrics report of one branch review, as the Metrics tab reads it."""
+    """The metrics report of one feature, as the Metrics tab reads it."""
     plan = _json(s.plan_path, {})
     variant = s.read_variant()
     agent = s.read_agent().get("agent") or "claude"
