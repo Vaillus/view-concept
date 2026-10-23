@@ -178,7 +178,27 @@ concept or a line of the to-do list is implemented in one of them.
       using it**, the repo lexicon when no folder lexicon does. Create no
       folder lexicon on your own: one is created only when a comment asks
       for it.
-3. **Rewrite each doc** of the doc set from the model: the concepts and
+3. **Rewrite each doc** of the doc set, in the **write order**, which
+   puts each folder's docs after its subfolders' (a parent `README.md`
+   written after its children finds their READMEs to link to, instead of
+   holding their detail):
+   1. the lexicons (step 2 wrote them);
+   2. the docs of each **central subtree**, a folder holding a file that
+      `code-map.md` ties to a core concept of the model (a term whose entry
+      in the review's lexicon has `kind: core`), with everything below that
+      folder: from its deepest folders up to its own. Two central subtrees
+      go in the order of their core concepts' sections in the outline, the
+      earlier first; a central subtree inside another is part of it;
+   3. the other docs, by the same rule: each folder's docs after its
+      subfolders', a folder's `README.md` after its other docs;
+   4. the root `README.md`;
+   5. each `CLAUDE.md` and `AGENTS.md` last, the deepest first: written
+      after every other doc, they can link to them instead of saying again
+      what they say.
+
+   Record the order before writing, every path of the doc set once:
+   `view-concept doc-set <slug> order <path> <path> ...`. The Doc tab lists
+   the docs in that order. Then rewrite each doc from the model: the concepts and
    their rules as they now stand, under the lexicon's names, without the
    before/after comparison the modeling part makes. A repo term the repo
    lexicon or a folder lexicon above the doc's folder defines is defined at
@@ -197,7 +217,7 @@ After the doc pass, you keep the docs:
 
 - a run that changes the model's concepts in the code, or fixes code a doc
   describes, rewrites the passages of the doc set it makes false, in the
-  same run;
+  same run, in the write order;
 - a comment on a doc's text (`(doc <path>)`) asks for a change to that
   file: apply it, one commit per run for the docs. A comment that says a
   passage flagged as stale is right asks you to drop the flag:

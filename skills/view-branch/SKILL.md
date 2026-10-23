@@ -486,6 +486,7 @@ never by hand:
 view-concept doc-set <slug>                                 # prints it
 view-concept doc-set <slug> add <path> "<reason>" [--user]  # adds a doc, or changes its reason
 view-concept doc-set <slug> remove <path> [--user]          # removes a doc
+view-concept doc-set <slug> order <path> <path> ...         # puts the doc set in the write order
 ```
 
 A path is relative to the repo root and may name a doc the branch will
@@ -641,9 +642,15 @@ into the docs by the implementer run that makes it, and the page never shows
    refreshes the doc set on the real diff, writes the repo lexicon when it
    is missing and the doc set holds a README or a « write repo lexicon »
    asks for it, writes the lexicon entries the branch changes (skipped
-   while the repo lexicon is missing), runs the write-readme skill on each
-   README of the doc set, rewrites the other docs from the model, and
-   applies those comments.
+   while the repo lexicon is missing), then writes the other docs in the
+   **write order**, which it records with `view-concept doc-set <slug>
+   order` so the Doc tab lists the docs in it: the lexicons first; then
+   each **central subtree** (a folder holding a file the code map ties to a
+   core concept of the model, the earlier concept's section first), from
+   its deepest folders up; then the other docs, each folder after its
+   subfolders; then the root `README.md`; each `CLAUDE.md` and `AGENTS.md`
+   last. It runs the write-readme skill on each README of the doc set,
+   rewrites the other docs from the model, and applies those comments.
 3. Start the reviewer with the implementer's report (in words, « doc pass »
    in it): it judges the items the doc pass changed, as for any implementer
    run, then reads every doc of the doc set against the model and flags each
