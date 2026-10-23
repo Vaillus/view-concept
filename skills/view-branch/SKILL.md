@@ -676,19 +676,21 @@ into the docs by the implementer run that makes it, and the page never shows
 2. Start the implementer with the trigger `"« Write docs »"` and the batch
    id, plus every comment on a doc's text, every « write repo lexicon »
    batch and every rewrite request that waited for the doc pass. It
-   refreshes the doc set on the real diff, writes the repo lexicon when it
-   is missing and the doc set holds a README or a « write repo lexicon »
-   asks for it, writes the lexicon entries the branch changes (skipped
-   while the repo lexicon is missing), then writes the other docs in the
+   refreshes the doc set on the real diff, then writes the doc set in the
    **write order**, which it records with `view-concept doc-set <slug>
-   order` so the Doc tab lists the docs in it: the lexicons first; then
-   each **central subtree** (a folder holding a file the code map ties to a
+   order` so the Doc tab lists the docs in it: the lexicons first (the
+   repo lexicon when it is missing and the doc set holds a README or a
+   « write repo lexicon » asks for it, then the lexicon entries the branch
+   changes, skipped while the repo lexicon is missing); then each
+   **central subtree** (a folder holding a file the code map ties to a
    core concept of the model, the earlier concept's section first), from
    its deepest folders up; then the other docs, each folder after its
    subfolders; then the root `README.md`; each `CLAUDE.md` and `AGENTS.md`
    last. It runs the write-readme skill on each README of the doc set (a
-   draft for a missing one, an edit for the others, whose failure
-   indicator it records), rewrites the other docs from the model, keeps in a `CLAUDE.md` or an
+   draft for a missing one; a full rewrite, followed by its missing facts,
+   for one a waiting rewrite request names; an edit for the others, whose
+   failure indicator it records), rewrites the other docs from the model,
+   keeps in a `CLAUDE.md` or an
    `AGENTS.md` only the sentences it adds or changes that pass the
    **sentence test** (without the sentence, an agent would act otherwise;
    an existing sentence the model makes false that fails it is removed, not
