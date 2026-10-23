@@ -322,7 +322,10 @@ next pass. For each README:
    structure fails. The Doc tab shows « n/total failing » beside the README
    and, past half its passages or with its structure failing, puts the
    rewrite button forward; the user decides. A draft has no indicator, and
-   after a full rewrite remove the old one: `failing <path> --clear`.
+   after a full rewrite remove the old one: `failing <path> --clear`. A full
+   rewrite also takes a minor README back into the review list, since its
+   reason and diff size no longer describe it: `view-concept doc-set <slug>
+   major <path>`.
 5. **The missing facts.** After a full rewrite, write-readme compares the
    old README with the new one and lists each **missing fact**: a fact the
    old one said that the new one does not say, in words or by a link, with
