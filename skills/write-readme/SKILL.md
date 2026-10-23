@@ -41,6 +41,12 @@ A run has one of three outcomes:
 The run never chooses a full rewrite on its own, however much of the old
 README fails: the failure indicator tells the user, who decides.
 
+A run is **in a review** when its request names a review's session folder
+(`~/.view-concept/sessions/<slug>/`): the agent of a branch review or of a
+docs review ran it, and the review's page shows what the run leaves to the
+user. Any other run, a `rewrite` argument typed in a terminal included, is
+outside a review.
+
 Never ask the user anything, except the one question of **The repo
 lexicon** below: the reader line says who reads, the goal is always that the
 reader can use or change the folder, and the inclusion test says what stays.
@@ -82,18 +88,19 @@ The reader line sorts the terms the README uses:
 root `CLAUDE.md` and the package description: the reader line those assume,
 and the repo terms several folders' docs share, one line each. From the
 terminal, show the draft and ask once (« Correct the reader line or the
-terms, or answer « ok » »), then write it. Run by a review's agent (the
-request comes from a rewrite request or names a review's session folder),
-write it without asking.
+terms, or answer « ok » »), then write it. In a review, write it without
+asking.
 
 ## Sources
 
 Every fact comes from the folder's code (always read first: modules,
 commands, entry points, tests, the files it reads and writes), the old
-README for an edit only, and, when the request names a review's session
-folder, the review's model (its `sections/` and the `lexicon` of its
-`plan.json`), which holds rules the code does not show. A fact the code contradicts is written as the
-code has it. A term the review's lexicon has keeps its name there, and its
+README for an edit, the missing facts the user keeps after a full rewrite,
+and the model of each session folder the request names that holds one (its
+`sections/` and the `lexicon` of its `plan.json`), which holds rules the
+code does not show. A branch review names its own folder; a docs review
+names its own, which holds no model, and its reference model's folder when
+it has one. A fact the code contradicts is written as the code has it. A term the review's lexicon has keeps its name there, and its
 definition when no lexicon on the path has the term.
 
 Before writing, read the rules the repo sets for READMEs, in the root
@@ -139,6 +146,7 @@ instead of three times, or as a link, is not missing.
 
 For each missing fact, give:
 
+- the fact itself, in one sentence;
 - the number of the old passage that held it, counted from the top;
 - your proposal, **keep** or **leave**, with a reason in one line: keep when
   the reader needs it (and in what form it would come back: a sentence, or a
@@ -150,7 +158,7 @@ The proposal drops nothing: the new README stays as written, and the user
 decides which facts come back. A fact the user keeps is added to the README
 under this skill's rules, so the inclusion test can make it a link. Outside
 a review, the user reads the list in the run report and names the facts to
-keep in a later message; inside a review, the review's agent records them in
+keep in a later message; in a review, the review's agent records them in
 the session and the user decides in the page. An edit has no missing facts:
 the passages it changes are named in the report's `changed` line.
 
@@ -245,7 +253,7 @@ The run's last message (in a review, the agent that ran it carries it in
 its own report):
 
 ```
-write-readme · benchmark/README.md · edit: 14 of 22 passages fail; structure fails
+write-readme · benchmark/README.md · edit: 2 of 22 passages fail; structure fails
 reader: knows speech processing and ASR evaluation (VAD, transcription, WER), has never opened this repo
 changed: Tests dropped (inclusion test 1) · How score computes its WER shrunk to a link (inclusion test 2: core/transcript/wer.py says it)
 candidates: subset (benchmark/, experiments/, dataset_tools/)
@@ -274,7 +282,7 @@ missing facts: 3
   3. Offline, maths and diagrams show as source (passage 7) · keep: as a link to docs/reference.md, which says it
 ```
 
-Inside a review, the line gives only their number (`missing facts: 3`): the
-review's agent records each one in the session. A run from a review adds `model:` (the
-facts of the review's model written that the code does not show, and those
-the code contradicted). Add a line when the run wrote the repo lexicon.
+In a review, the line gives only their number (`missing facts: 3`): the
+review's agent records each one in the session. A run that read a model
+adds `model:` (the facts of the model written that the code does not show,
+and those the code contradicted). Add a line when the run wrote the repo lexicon.
