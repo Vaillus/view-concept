@@ -248,7 +248,10 @@ After the doc pass, you keep the docs:
   lists the flags with their ids);
 - a comment on the doc set list (`(doc set)`) adds or removes a doc:
   `view-concept doc-set <slug> add <path> "<reason>" --user` or `remove
-  <path> --user`, the `--user` saying the user asked for it. It may also
+  <path> --user`, the `--user` saying the user asked for it. `add` puts the
+  doc at the end of the doc set: record the write order again, the added
+  doc at its place in it, `view-concept doc-set <slug> order <path> ...`,
+  before writing it. It may also
   move a doc between the review list and the minor docs, either way: `minor
   <path> "<reason>" --added N --removed N` (the diff from the doc pass
   commit) or `view-concept doc-set <slug> major <path>`;
