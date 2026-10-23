@@ -944,6 +944,59 @@ def test_the_doc_set_keeps_a_reason_per_doc(docs_review):
     ]
 
 
+def test_a_minor_doc_keeps_its_reason_and_diff_size_until_made_major(docs_review):
+    s = docs_review
+    s.add_doc("docs/reference.md", "the tabs")
+    s.set_minor("docs/reference.md", "adds  a name to a list", 1, 1)
+    entry = {"path": "docs/reference.md", "reason": "the tabs", "minor": "adds a name to a list",
+             "diff": {"added": 1, "removed": 1}}  # fmt: skip
+    assert s.read_doc_set()["docs"] == [entry]
+    # A refresh of the reason keeps the class.
+    s.add_doc("docs/reference.md", "the tabs and keys")
+    assert s.read_doc_set()["docs"] == [{**entry, "reason": "the tabs and keys"}]
+    s.set_major("docs/reference.md")
+    assert s.read_doc_set()["docs"] == [{"path": "docs/reference.md",
+                                         "reason": "the tabs and keys"}]  # fmt: skip
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.set_minor("README.md", "why", 0, 0)
+    with pytest.raises(SessionError, match="needs its reason"):
+        s.set_minor("docs/reference.md", " ", 0, 0)
+    with pytest.raises(SessionError, match="0 or more"):
+        s.set_minor("docs/reference.md", "why", -1, 0)
+
+
+def test_a_readme_carries_its_failure_indicator(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/reference.md", "the tabs")
+    s.set_failing("README.md", 3, 6, structure=True)
+    s.add_doc("README.md", "the install, again")
+    assert s.read_doc_set()["docs"][0]["failing"] == {"fail": 3, "total": 6, "structure": True}
+    with pytest.raises(SessionError, match="not a README.md"):
+        s.set_failing("docs/reference.md", 1, 2)
+    with pytest.raises(SessionError, match="fail <= total"):
+        s.set_failing("README.md", 7, 6)
+    s.set_failing("README.md", None)
+    assert "failing" not in s.read_doc_set()["docs"][0]
+
+
+def test_the_doc_set_takes_the_write_order(docs_review):
+    s = docs_review
+    for p in ("README.md", "docs/reference.md", "CLAUDE.md"):
+        s.add_doc(p, "why")
+    s.set_minor("docs/reference.md", "a name", 1, 1)
+    s.order_docs(["docs/reference.md", "./CLAUDE.md", "README.md"])
+    docs = s.read_doc_set()["docs"]
+    assert [d["path"] for d in docs] == ["docs/reference.md", "CLAUDE.md", "README.md"]
+    assert docs[0]["minor"] == "a name"
+    with pytest.raises(SessionError, match="missing: README.md"):
+        s.order_docs(["docs/reference.md", "CLAUDE.md"])
+    with pytest.raises(SessionError, match="not in the doc set: x.md"):
+        s.order_docs(["docs/reference.md", "CLAUDE.md", "README.md", "x.md"])
+    with pytest.raises(SessionError, match="each doc once"):
+        s.order_docs(["README.md", "README.md", "CLAUDE.md", "docs/reference.md"])
+
+
 @pytest.mark.parametrize("path", ["/etc/passwd", "../other/README.md", "docs/../../x.md", " "])
 def test_a_doc_of_the_doc_set_stays_inside_the_repo(docs_review, path):
     with pytest.raises(SessionError):

@@ -354,6 +354,34 @@ def test_doc_set_adds_removes_and_prints_the_docs(tmp_path):
     assert r.returncode == 1 and "inside the repo" in r.stderr
 
 
+def test_doc_set_classes_minor_docs_records_indicators_and_orders(tmp_path):
+    r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    for path in ("README.md", "docs/reference.md"):
+        assert view_concept(tmp_path, "doc-set", "gate", "add", path, "why").returncode == 0
+    minor = ("minor", "docs/reference.md", "a name in a list", "--added", "1", "--removed", "1")
+    r = view_concept(tmp_path, "doc-set", "gate", *minor)
+    assert r.returncode == 0, r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate", "failing", "README.md", "3", "6", "--structure")
+    assert r.returncode == 0, r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate", "order", "docs/reference.md", "README.md")
+    assert r.stdout.splitlines() == [
+        "docs/reference.md — why · minor: a name in a list (+1 −1)",
+        "README.md — why · 3/6 failing, structure fails",
+    ]
+    assert view_concept(tmp_path, "doc-set", "gate", "major", "docs/reference.md").returncode == 0
+    r = view_concept(tmp_path, "doc-set", "gate", "failing", "README.md", "--clear")
+    assert r.returncode == 0, r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate")
+    assert r.stdout.splitlines() == ["docs/reference.md — why", "README.md — why"]
+    r = view_concept(tmp_path, "doc-set", "gate", "minor", "README.md", "why")
+    assert r.returncode == 1 and "--added N --removed N" in r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate", "order", "README.md")
+    assert r.returncode == 1 and "missing: docs/reference.md" in r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate", "failing", "README.md", "x", "6")
+    assert r.returncode == 1 and "whole number" in r.stderr
+
+
 def test_stale_flags_prints_and_drops_passages(tmp_path):
     (tmp_path / "README.md").write_text("The keys 1 to 4.\n")
     r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))

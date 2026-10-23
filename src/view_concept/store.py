@@ -34,8 +34,9 @@ reach the agent session through the inbox.
         drafts.json     the drafts and the general note, shared by every page (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
-        doc-set.json    the doc set: the repo docs the Doc tab shows, each with its reason,
-                        and the docs the user removed                    (`doc-set`)
+        doc-set.json    the doc set: the repo docs the Doc tab shows, in the write order,
+                        each with its reason, its minor class and the failure indicator
+                        of a README, and the docs the user removed       (`doc-set`)
         stale.json      the stale passages: doc passages the model contradicts  (`stale`)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
@@ -157,18 +158,28 @@ stays in `deleted`, so an edit to it arriving later is dropped. A batch clears t
 it carried and the note. Like seen.json, it is the page's write: it never counts as the
 agent's activity.
 
-The doc set is the list of repo docs the Doc tab shows: {docs: [{path, reason}],
-removed: [paths]}. `path` is relative to the repo root (plan.json `repo`), `reason` the one
-line that says why the doc is listed. An agent keeps it (`doc-set add` and `remove`); a
-doc the user removed by a comment goes to `removed`, and an agent's refresh never adds it
-back unless the user asks (`--user`). A doc of the set is a doc section: its text is the
-file read from the worktree at each render, never copied into the session, so the user's
-own edits show as the agent's do; a doc missing there reads as missing. Its highlight
-baseline is kept in seen.json under `doc:<path>` and moves with every batch, like a
-section's. A comment, a draft or a side thread on a doc's text is anchored to `doc:<path>`
-(a batch prints it `(doc <path>)`), one on the doc set list to `doc:` alone. The doc
-sections stay out of the published page, the vault export, the publish
-fingerprint and `check`, which read the outline's sections only. The base mark compares
+The doc set is the list of repo docs the Doc tab shows: {docs: [{path, reason, minor?,
+diff?, failing?}], removed: [paths]}. `path` is relative to the repo root (plan.json
+`repo`), `reason` the one line that says why the doc is listed. An agent keeps it
+(`doc-set add` and `remove`); a doc the user removed by a comment goes to `removed`, and
+an agent's refresh never adds it back unless the user asks (`--user`). The docs are kept
+in the write order, the order the agent writes them in (`doc-set order`), and the Doc
+tab lists them in it. A minor doc is one the doc pass (or a docs review's first run)
+touched only for a detail that leaves its meaning as it was: `minor` is the one line that
+says why (`doc-set minor`, taken off by `doc-set major`), `diff` its diff size, {added,
+removed} lines, in the doc pass commit (in a docs review, against the base branch). The
+Doc tab folds the minor docs out of the review list, the docs it asks the user to read.
+`failing` is the failure indicator of a README write-readme edited: {fail, total,
+structure}, the passages that failed its checks before the edit, out of all, and whether
+its structure fails (`doc-set failing`). `add` on a listed doc keeps these fields. A doc
+of the set is a doc section: its text is the file read from the worktree at each render,
+never copied into the session, so the user's own edits show as the agent's do; a doc
+missing there reads as missing. Its highlight baseline is kept in seen.json under
+`doc:<path>` and moves with every batch, like a section's. A comment, a draft or a side
+thread on a doc's text is anchored to `doc:<path>` (a batch prints it `(doc <path>)`), one
+on the doc set list to `doc:` alone. The doc sections stay out of the published page, the
+vault export, the publish fingerprint and `check`, which read the outline's sections
+only. The base mark compares
 a doc's worktree file (uncommitted changes included) with the same doc at the merge base
 of the branch and its base branch (`merge_base`, `base_text`); a doc absent there was
 created on the branch. A rewrite request is a batch whose action is "rewrite-readme",
@@ -1171,14 +1182,91 @@ class Session:
 
     # ---- the doc set ----
     def read_doc_set(self) -> dict[str, Any]:
-        """The doc set: {docs: [{path, reason}], removed: [paths]}, empty without a file."""
+        """The doc set: {docs: [{path, reason, minor?, diff?, failing?}], removed: [paths]},
+        empty without a file."""
         data = _read_json(self.doc_set_path, {})
         return {"docs": list(data.get("docs", [])), "removed": list(data.get("removed", []))}
 
+    def _listed_doc(self, data: dict[str, Any], path: str) -> dict[str, Any]:
+        """The entry of doc `path` in the doc set `data`; refused when it is not listed."""
+        entry = next((d for d in data["docs"] if d.get("path") == path), None)
+        if entry is None:
+            raise SessionError(f"{path} is not in the doc set")
+        return entry
+
+    def set_minor(self, path: str, reason: str, added: int, removed: int) -> dict[str, Any]:
+        """Class a doc of the doc set minor: `reason` is the one line that says why, `added`
+        and `removed` its diff size in lines (the doc pass commit, or in a docs review the
+        diff against the base branch)."""
+        path = doc_path(path)
+        if not reason.strip():
+            raise SessionError("a minor doc needs its reason")
+        if added < 0 or removed < 0:
+            raise SessionError("a diff size counts lines: --added and --removed are 0 or more")
+        data = self.read_doc_set()
+        entry = self._listed_doc(data, path)
+        entry["minor"] = " ".join(reason.split())
+        entry["diff"] = {"added": added, "removed": removed}
+        _write_json(self.doc_set_path, data)
+        return entry
+
+    def set_major(self, path: str) -> dict[str, Any]:
+        """Take the minor class off a doc of the doc set: it is back in the review list."""
+        path = doc_path(path)
+        data = self.read_doc_set()
+        entry = self._listed_doc(data, path)
+        entry.pop("minor", None)
+        entry.pop("diff", None)
+        _write_json(self.doc_set_path, data)
+        return entry
+
+    def set_failing(
+        self, path: str, fail: int | None, total: int = 0, structure: bool = False
+    ) -> dict[str, Any]:
+        """Record the failure indicator of a README of the doc set that write-readme edited:
+        `fail` of its `total` passages failed the checks before the edit, and `structure`
+        whether its structure fails. `fail` None clears it."""
+        path = doc_path(path)
+        data = self.read_doc_set()
+        entry = self._listed_doc(data, path)
+        if fail is None:
+            entry.pop("failing", None)
+        else:
+            if PurePosixPath(path).name != "README.md":
+                raise SessionError(f"{path} is not a README.md: only a README has an indicator")
+            if total < 1 or not 0 <= fail <= total:
+                raise SessionError(
+                    "the indicator is <fail> of <total> passages: 0 <= fail <= total"
+                )
+            entry["failing"] = {"fail": fail, "total": total, "structure": structure}
+        _write_json(self.doc_set_path, data)
+        return entry
+
+    def order_docs(self, paths: list[str]) -> list[str]:
+        """Put the doc set in the write order: `paths` names every doc of the set once."""
+        paths = [doc_path(p) for p in paths]
+        data = self.read_doc_set()
+        listed = [d["path"] for d in data["docs"]]
+        if len(set(paths)) != len(paths):
+            raise SessionError("order names each doc once")
+        unknown = [p for p in paths if p not in listed]
+        if unknown:
+            raise SessionError(f"not in the doc set: {', '.join(unknown)}")
+        missing = [p for p in listed if p not in paths]
+        if missing:
+            raise SessionError(
+                f"order names every doc of the doc set; missing: {', '.join(missing)}"
+            )
+        by_path = {d["path"]: d for d in data["docs"]}
+        data["docs"] = [by_path[p] for p in paths]
+        _write_json(self.doc_set_path, data)
+        return paths
+
     def add_doc(self, path: str, reason: str, user: bool = False) -> dict[str, Any]:
-        """Add a doc to the doc set, or change its reason. A doc the user removed is
-        refused unless `user` (the user asked for it in a comment), which takes it out of
-        `removed`. The doc need not exist yet: the branch may create it."""
+        """Add a doc to the doc set, or change its reason (its minor class and failure
+        indicator stay). A doc the user removed is refused unless `user` (the user asked
+        for it in a comment), which takes it out of `removed`. The doc need not exist yet:
+        the branch may create it."""
         path = doc_path(path)
         if not reason.strip():
             raise SessionError("a doc of the doc set needs a reason")
@@ -1194,7 +1282,7 @@ class Session:
         if at is None:
             data["docs"].append(entry)
         else:
-            data["docs"][at] = entry
+            entry = data["docs"][at] = {**data["docs"][at], **entry}
         _write_json(self.doc_set_path, data)
         return entry
 
