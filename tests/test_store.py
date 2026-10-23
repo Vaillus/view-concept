@@ -980,6 +980,76 @@ def test_a_readme_carries_its_failure_indicator(docs_review):
     assert "failing" not in s.read_doc_set()["docs"][0]
 
 
+def _commit(repo, path, when):
+    """Commit file `path` of `repo`, its committer date `when` (an ISO time)."""
+    import subprocess
+
+    git = ["git", "-C", str(repo), "-c", "user.email=a@b", "-c", "user.name=a"]
+    env = {**os.environ, "GIT_COMMITTER_DATE": when, "GIT_AUTHOR_DATE": when}
+    subprocess.run([*git, "add", path], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", path], check=True, env=env)
+
+
+@pytest.fixture
+def branch_docs(tmp_path):
+    """A branch review on a git repo: README.md on main, src/README.md added on the
+    branch by a code commit, before any doc pass."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    (repo / "README.md").write_text("# Tool\n")
+    _commit(repo, "README.md", "2001-01-01T00:00:00+00:00")
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "feat"], check=True)
+    (repo / "src" / "README.md").write_text("# src\n")
+    _commit(repo, "src/README.md", "2001-01-02T00:00:00+00:00")
+    s = Session("doc-pass", tmp_path / "sessions")
+    s.create("Doc pass", kind="code", repo=str(repo), base="main")
+    for p in ("README.md", "src/README.md", "lib/README.md", "new/README.md"):
+        s.add_doc(p, "why")
+    return s
+
+
+def test_a_doc_the_doc_pass_creates_is_never_minor_and_has_no_indicator(branch_docs):
+    s = branch_docs
+    repo = s.repo_dir()
+    # Before « Write docs », a doc new on the branch came with the code: it may be minor.
+    s.set_minor("src/README.md", "a name", 1, 0)
+    s.set_failing("src/README.md", 1, 4)
+    s.add_batch([], action="write-docs")
+    (repo / "lib").mkdir()
+    (repo / "lib" / "README.md").write_text("# lib\n")
+    _commit(repo, "lib/README.md", "2099-01-01T00:00:00+00:00")  # the doc pass commit
+    assert not s.created_by_doc_pass("README.md")
+    assert not s.created_by_doc_pass("src/README.md")  # added before the doc pass
+    assert s.created_by_doc_pass("lib/README.md")
+    assert s.created_by_doc_pass("new/README.md")  # not written yet
+    s.set_minor("README.md", "a name", 1, 1)
+    s.set_minor("src/README.md", "a name", 1, 1)
+    with pytest.raises(SessionError, match="lib/README.md is new: a doc the doc pass creates"):
+        s.set_minor("lib/README.md", "a name", 1, 0)
+    with pytest.raises(SessionError, match="new/README.md is new"):
+        s.set_minor("new/README.md", "a name", 1, 0)
+    with pytest.raises(SessionError, match="has no indicator"):
+        s.set_failing("lib/README.md", 1, 4)
+    s.set_failing("lib/README.md", None)  # --clear stays allowed
+    # Written and not committed yet, once the doc pass started: created by it.
+    (repo / "new").mkdir()
+    (repo / "new" / "README.md").write_text("# new\n")
+    assert s.created_by_doc_pass("new/README.md")
+
+
+def test_in_a_docs_review_every_doc_new_on_the_branch_is_created(branch_docs, tmp_path):
+    s = Session("docs-review", tmp_path / "sessions")
+    s.create("Docs", kind="code", repo=str(branch_docs.repo_dir()), workflow="view-docs",
+             base="main")  # fmt: skip
+    s.add_doc("src/README.md", "why")
+    assert s.created_by_doc_pass("src/README.md")
+    with pytest.raises(SessionError, match="is new"):
+        s.set_minor("src/README.md", "a name", 1, 0)
+
+
 def test_the_doc_set_takes_the_write_order(docs_review):
     s = docs_review
     for p in ("README.md", "docs/reference.md", "CLAUDE.md"):

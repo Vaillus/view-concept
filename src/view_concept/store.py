@@ -172,15 +172,16 @@ removed} lines, in the doc pass commit (in a docs review, against the base branc
 Doc tab folds the minor docs out of the review list, the docs it asks the user to read.
 `failing` is the failure indicator of a README write-readme edited: {fail, total,
 structure}, the passages that failed its checks before the edit, out of all, and whether
-its structure fails (`doc-set failing`). `add` on a listed doc keeps these fields. A doc
-of the set is a doc section: its text is the file read from the worktree at each render,
-never copied into the session, so the user's own edits show as the agent's do; a doc
-missing there reads as missing. Its highlight baseline is kept in seen.json under
-`doc:<path>` and moves with every batch, like a section's. A comment, a draft or a side
-thread on a doc's text is anchored to `doc:<path>` (a batch prints it `(doc <path>)`), one
-on the doc set list to `doc:` alone. The doc sections stay out of the published page, the
-vault export, the publish fingerprint and `check`, which read the outline's sections
-only. The base mark compares
+its structure fails (`doc-set failing`). A doc the doc pass (or a docs review) created
+is never minor and carries no indicator: it is a draft (`created_by_doc_pass`). `add`
+on a listed doc keeps these fields. A doc of the set is a doc section: its text is the
+file read from the worktree at each render, never copied into the session, so the
+user's own edits show as the agent's do; a doc missing there reads as missing. Its
+highlight baseline is kept in seen.json under `doc:<path>` and moves with every batch,
+like a section's. A comment, a draft or a side thread on a doc's text is anchored to
+`doc:<path>` (a batch prints it `(doc <path>)`), one on the doc set list to `doc:`
+alone. The doc sections stay out of the published page, the vault export, the publish
+fingerprint and `check`, which read the outline's sections only. The base mark compares
 a doc's worktree file (uncommitted changes included) with the same doc at the merge base
 of the branch and its base branch (`merge_base`, `base_text`); a doc absent there was
 created on the branch. A rewrite request is a batch whose action is "rewrite-readme",
@@ -1233,6 +1234,8 @@ class Session:
             raise SessionError("a diff size counts lines: --added and --removed are 0 or more")
         data = self.read_doc_set()
         entry = self._listed_doc(data, path)
+        if self.created_by_doc_pass(path):
+            raise SessionError(f"{path} is new: a doc the doc pass creates is never minor")
         entry["minor"] = " ".join(reason.split())
         entry["diff"] = {"added": added, "removed": removed}
         _write_json(self.doc_set_path, data)
@@ -1253,7 +1256,8 @@ class Session:
     ) -> dict[str, Any]:
         """Record the failure indicator of a README of the doc set that write-readme edited:
         `fail` of its `total` passages failed the checks before the edit, and `structure`
-        whether its structure fails. `fail` None clears it."""
+        whether its structure fails. `fail` None clears it. A README the doc pass created
+        is a draft, which has no indicator."""
         path = doc_path(path)
         data = self.read_doc_set()
         entry = self._listed_doc(data, path)
@@ -1262,6 +1266,8 @@ class Session:
         else:
             if PurePosixPath(path).name != "README.md":
                 raise SessionError(f"{path} is not a README.md: only a README has an indicator")
+            if self.created_by_doc_pass(path):
+                raise SessionError(f"{path} is new: a draft the doc pass writes has no indicator")
             if total < 1 or not 0 <= fail <= total:
                 raise SessionError(
                     "the indicator is <fail> of <total> passages: 0 <= fail <= total"
@@ -1269,6 +1275,34 @@ class Session:
             entry["failing"] = {"fail": fail, "total": total, "structure": structure}
         _write_json(self.doc_set_path, data)
         return entry
+
+    def created_by_doc_pass(self, path: str) -> bool:
+        """Whether doc `path` is one the doc pass created, so never minor and with no
+        failure indicator: absent at the merge base, and added on the branch once the doc
+        pass started (the `sent` time of the first "write-docs" batch), or not committed
+        yet once it started (missing from the worktree, or written and not committed).
+        Before that batch, a doc new on the branch came with the code commits. In a docs
+        review (workflow view-docs), which has no doc pass and whose commits are all doc
+        work, every doc absent from the merge base is one the review created. False when
+        git cannot tell."""
+        path = doc_path(path)
+        commit = self.merge_base()
+        if self.base_text(path, commit) != "":
+            return False
+        if self.read_plan().get("workflow") == "view-docs":
+            return True
+        batches = self.read_comments()["batches"]
+        start = next((b["sent"] for b in batches if b.get("action") == "write-docs"), None)
+        if start is None:
+            return False
+        repo, file = self.repo_dir(), self.doc_file(path)
+        if repo is None or file is None or not file.exists():
+            return True
+        log = _git(repo, "log", "--diff-filter=A", "--format=%cI", f"{commit}..HEAD", "--", path)
+        added = (log or "").split()
+        if not added:
+            return True
+        return datetime.fromisoformat(added[0]) >= datetime.fromisoformat(start)
 
     def order_docs(self, paths: list[str]) -> list[str]:
         """Put the doc set in the write order: `paths` names every doc of the set once."""
