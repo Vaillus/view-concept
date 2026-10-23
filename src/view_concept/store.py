@@ -1505,10 +1505,12 @@ class Session:
         if passage is not None and passage < 1:
             raise SessionError("a passage number counts from 1")
         data = self.read_missing_facts()
-        # The ids go on past a cleared list: a sent comment may still name an old one.
+        # The ids go on past a cleared list: a sent comment or an open draft may still
+        # name an old one.
         ids = [str(f.get("id", "")) for facts in data.values() for f in facts]
         batches = self.read_comments()["batches"]
         ids += [str(c.get("fact", "")) for b in batches for c in b["comments"]]
+        ids += [str(d.get("fact", "")) for d in self.read_drafts()["drafts"]]
         n = max((int(i[1:]) for i in ids if FACT_ID_RE.match(i)), default=0)
         entry = {
             "id": f"f{n + 1}",

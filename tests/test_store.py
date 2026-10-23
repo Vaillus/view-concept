@@ -1135,6 +1135,17 @@ def test_a_draft_on_a_missing_fact_keeps_the_fact(docs_review):
     assert drafts[0]["fact"] == "f1" and "fact" not in drafts[1]
 
 
+def test_a_fact_id_named_by_a_draft_never_serves_again(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_missing_fact("README.md", "Run serve.", "leave", "the code says open")
+    s.add_missing_fact("README.md", "Offline.", "keep", "a link")
+    s.save_draft({"id": "d1", "section": "doc:README.md", "quote": "Offline.", "text": "a",
+                  "fact": "f2"})  # fmt: skip
+    s.clear_missing_facts("README.md")
+    assert s.add_missing_fact("README.md", "x", "keep", "y")["id"] == "f3"
+
+
 @pytest.mark.parametrize("path", ["/etc/passwd", "../other/README.md", "docs/../../x.md", " "])
 def test_a_doc_of_the_doc_set_stays_inside_the_repo(docs_review, path):
     with pytest.raises(SessionError):
