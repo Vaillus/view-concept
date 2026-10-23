@@ -30,7 +30,7 @@ reach the agent session through the inbox.
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text, each doc's under
-                        `doc:<path>`                                       (server)
+                        `doc:<path>`, a README's missing facts under `facts:<path>`  (server)
         drafts.json     the drafts and the general note, shared by every page (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
@@ -200,7 +200,10 @@ or "leave": what the agent proposes), reason (one line), state ("pending", "kept
 the user does not comment on stays out of the README, whatever the proposal. The Doc tab
 lists them under their README; a comment, a draft or a side thread on one is anchored to
 `doc:<path>` with the fact's text as its quote, and a comment or a draft also carries the
-fact's id, `fact` (a batch prints it `(doc <path> · fact <id>)`).
+fact's id, `fact` (a batch prints it `(doc <path> · fact <id>)`). Their highlight
+baseline is kept in seen.json under `facts:<path>`, the list as one line per fact
+(`fact_texts`), and moves with every batch and with « mark read » on the README: a new
+fact or a changed state shows highlighted.
 
 A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
 doc (its path), quote (the passage's exact text in the file), section (the model section
@@ -318,6 +321,9 @@ DOC_KEY = "doc:"
 # The repo lexicon, relative to the repo root: what a "write-lexicon" batch asks to write.
 REPO_LEXICON = ".agents/lexicon.md"
 DOC_SET_ANCHOR = DOC_KEY
+# The key prefix of the highlight baseline of a README's missing facts in seen.json:
+# `facts:<path>`. No section id may start with it either (write_plan refuses it).
+FACTS_KEY = "facts:"
 # A missing fact: what the agent proposes to do with it, and where the user's decision stands.
 FACT_PROPOSALS = ("keep", "leave")
 FACT_STATES = ("pending", "kept", "left")
@@ -631,11 +637,11 @@ class Session:
                 raise SessionError("every outline entry needs an id and a title")
             if len(set(ids)) != len(ids):
                 raise SessionError("outline ids must be unique")
-            taken = [i for i in ids if i.startswith(DOC_KEY)]
+            taken = [i for i in ids if i.startswith((DOC_KEY, FACTS_KEY))]
             if taken:
                 raise SessionError(
-                    f"outline ids may not start with {DOC_KEY!r}, the Doc tab's anchors: "
-                    + ", ".join(taken)
+                    f"outline ids may not start with {DOC_KEY!r} or {FACTS_KEY!r}, the Doc "
+                    "tab's keys: " + ", ".join(taken)
                 )
             long = [sec["id"] for sec in outline if len(str(sec.get("earns", ""))) > EARNS_MAX]
             if long:
@@ -1323,7 +1329,8 @@ class Session:
         # A doc that enters the doc set again starts with no green highlight: its baseline
         # is set anew at its first read.
         seen = _read_json(self.seen_path, {})
-        if seen.pop(DOC_KEY + path, None) is not None:
+        dropped = [seen.pop(k, None) for k in (DOC_KEY + path, FACTS_KEY + path)]
+        if any(v is not None for v in dropped):
             _write_json(self.seen_path, seen)
 
     def repo_dir(self) -> Path | None:
@@ -1487,6 +1494,17 @@ class Session:
         entry["state"] = state
         _write_json(self.missing_facts_path, data)
         return entry
+
+    def fact_texts(self) -> dict[str, str]:
+        """The missing facts of each README of the doc set, keyed as their highlight
+        baseline is (`facts:<path>`): one line per fact (`format_fact`), so a new fact or a
+        changed state is a line the baseline lacks."""
+        listed = {d["path"] for d in self.read_doc_set()["docs"]}
+        return {
+            FACTS_KEY + p: "\n".join(map(format_fact, facts))
+            for p, facts in self.read_missing_facts().items()
+            if p in listed
+        }
 
     def clear_missing_facts(self, path: str) -> int:
         """Drop the missing facts of README `path` (a new full rewrite replaces them).
@@ -2043,8 +2061,8 @@ class Session:
         with self.inbox_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(batch, ensure_ascii=False) + "\n")
         # Highlights show what changed since the last batch: every baseline moves here,
-        # the docs' included.
-        self.mark_seen({**self.read_sections(), **self.doc_texts()})
+        # the docs' and their missing facts' included.
+        self.mark_seen({**self.read_sections(), **self.doc_texts(), **self.fact_texts()})
         if action == "plan":
             self._skip_open_questions(batch["sent"])
         return batch

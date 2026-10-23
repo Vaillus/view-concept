@@ -20,7 +20,15 @@ from pydantic import BaseModel
 
 from . import frame, gate, launch, metrics, publish, push, threads
 from .render import md
-from .store import DOC_KEY, DocConflict, Session, SessionError, list_sessions
+from .store import (
+    DOC_KEY,
+    FACTS_KEY,
+    DocConflict,
+    Session,
+    SessionError,
+    format_fact,
+    list_sessions,
+)
 
 STATIC = Path(__file__).parent / "static"
 # The verdicts an item can get, by session workflow, each list in the review table's order:
@@ -259,7 +267,7 @@ def state(slug: str) -> dict[str, Any]:
         grilling = s.is_grilling()
         docs = s.read_docs()
         doc_texts = {DOC_KEY + p: t for p, t in docs.items() if t is not None}
-        seen = s.read_seen({**sections, **doc_texts})
+        seen = s.read_seen({**sections, **doc_texts, **s.fact_texts()})
         published = published_view(s)
         doc_tab = docs_view(s, docs, seen)
     except SessionError as e:
@@ -299,14 +307,29 @@ def state(slug: str) -> dict[str, Any]:
 
 def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> dict[str, Any]:
     """The Doc tab as the page reads it: {set: [{path, reason, stale (how many of its
-    stale passages are shown)}], removed, views: {path: view}, stale (the stale passages
-    shown), reference (the reference model, or None)}. A doc's view is its section view
-    (the file rendered as Markdown, `updated` against its highlight baseline
-    `doc:<path>`) with `exists` and the base mark's input: `base_html`, the doc at the
-    merge base rendered (None when it was not there, or when git cannot tell), and `new`,
-    whether the branch created it. A doc missing from the worktree is `{exists: false}`
-    only."""
+    stale passages are shown), minor? and diff? (a minor doc), failing? (a README's failure
+    indicator), facts (how many missing facts it has)}] in the write order, removed,
+    views: {path: view}, stale (the stale passages shown), facts: {path: {text, list}},
+    reference (the reference model, or None)}. A doc's view is its section view (the file
+    rendered as Markdown, `updated` against its highlight baseline `doc:<path>`) with
+    `exists` and the base mark's input: `base_html`, the doc at the merge base rendered
+    (None when it was not there, or when git cannot tell), and `new`, whether the branch
+    created it. A doc missing from the worktree is `{exists: false}` only. A README's
+    missing facts are `list`, each fact with `updated` (its line is not in the baseline
+    `facts:<path>`: a new fact, or a changed state), and `text`, what « mark read »
+    records."""
     data = s.read_doc_set()
+    listed = {d["path"] for d in data["docs"]}
+    facts: dict[str, dict[str, Any]] = {}
+    for path, entries in s.read_missing_facts().items():
+        if path not in listed:
+            continue
+        text = "\n".join(map(format_fact, entries))
+        old = set(seen.get(FACTS_KEY + path, text).splitlines())
+        facts[path] = {
+            "text": text,
+            "list": [{**f, "updated": format_fact(f) not in old} for f in entries],
+        }
     commit = s.merge_base() if any(t is not None for t in docs.values()) else ""
     views: dict[str, dict[str, Any]] = {}
     for path, text in docs.items():
@@ -330,12 +353,15 @@ def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> 
                 "path": d["path"],
                 "reason": d.get("reason", ""),
                 "stale": sum(f["doc"] == d["path"] for f in stale),
+                **{k: d[k] for k in ("minor", "diff", "failing") if d.get(k)},
+                "facts": len(facts.get(d["path"], {}).get("list", [])),
             }
             for d in data["docs"]
         ],
         "removed": data["removed"],
         "views": views,
         "stale": stale,
+        "facts": facts,
         "reference": reference_view(s),
     }
 
