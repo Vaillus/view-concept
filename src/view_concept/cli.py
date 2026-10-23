@@ -14,7 +14,6 @@ import time
 import urllib.request
 import webbrowser
 from pathlib import Path
-from typing import Any
 
 from .agents import AGENTS, detect
 from .context import ROLES, build
@@ -29,6 +28,7 @@ from .store import (
     SessionError,
     format_batch,
     format_changes,
+    format_doc,
     format_fact,
     format_precedence,
     format_section_problem,
@@ -343,19 +343,6 @@ def _int_arg(value: str, what: str) -> int:
         raise SessionError(f"{what} is a whole number, not {value!r}") from None
 
 
-def doc_set_line(d: dict[str, Any]) -> str:
-    """One doc of the doc set as `doc-set` prints it: its path and reason, its minor class
-    with its diff size, the failure indicator of a README."""
-    line = f"{d['path']} — {d.get('reason', '')}"
-    if d.get("minor"):
-        diff = d.get("diff") or {}
-        line += f" · minor: {d['minor']} (+{diff.get('added', 0)} −{diff.get('removed', 0)})"
-    if f := d.get("failing"):
-        line += f" · {f.get('fail', 0)}/{f.get('total', 0)} failing"
-        line += ", structure fails" if f.get("structure") else ""
-    return line
-
-
 def cmd_doc_set(a: argparse.Namespace) -> None:
     """Change the doc set (add or remove a doc, class one minor or not, record a README's
     failure indicator, put the docs in the write order), or, with no operation, print it."""
@@ -384,23 +371,23 @@ def cmd_doc_set(a: argparse.Namespace) -> None:
                 "doc-set minor takes a path, a reason and the diff size: "
                 'minor <path> "<reason>" --added N --removed N'
             )
-        print(doc_set_line(s.set_minor(args[0], args[1], a.added, a.removed)))
+        print(format_doc(s.set_minor(args[0], args[1], a.added, a.removed)))
         return
     if a.op == "major":
         if len(args) != 1:
             raise SessionError("doc-set major takes one path")
-        print(doc_set_line(s.set_major(args[0])))
+        print(format_doc(s.set_major(args[0])))
         return
     if a.op == "failing":
         if a.clear:
             if len(args) != 1 or a.structure:
                 raise SessionError("doc-set failing <path> --clear takes the path alone")
-            print(doc_set_line(s.set_failing(args[0], None)))
+            print(format_doc(s.set_failing(args[0], None)))
             return
         if len(args) != 3:
             raise SessionError("doc-set failing takes a README, then <fail> <total> [--structure]")
         fail, total = _int_arg(args[1], "fail"), _int_arg(args[2], "total")
-        print(doc_set_line(s.set_failing(args[0], fail, total, a.structure)))
+        print(format_doc(s.set_failing(args[0], fail, total, a.structure)))
         return
     if a.op == "order":
         if not args:
@@ -410,7 +397,7 @@ def cmd_doc_set(a: argparse.Namespace) -> None:
         raise SessionError("give an operation: add, remove, minor, major, failing or order")
     data = s.read_doc_set()
     for d in data["docs"]:
-        print(doc_set_line(d))
+        print(format_doc(d))
     if not data["docs"]:
         print("(no doc set yet)")
     if data["removed"]:

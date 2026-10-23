@@ -38,10 +38,14 @@ source; its heading names its file, for an agent that needs the source.
 In a code session every role also gets the code map (code-map.md): which modules carry
 the feature and where each concept lives, as the planner wrote it and the implementer
 keeps it, so a run does not explore the same code again. The writer, the implementer and
-the reviewer also get the doc set (doc-set.json: each doc's path and reason, the docs the
-user removed) and the stale passages still shown: the writer writes the first doc set,
-the implementer refreshes it and rewrites the docs at the doc pass, the reviewer flags
-the stale passages. The docs themselves are files of the repository, read there.
+the reviewer also get the doc set (doc-set.json: each doc's path and reason in the write
+order, its minor class, a README's failure indicator, the docs the user removed) and the
+stale passages still shown: the writer writes the first doc set, the implementer
+refreshes it and rewrites the docs at the doc pass, the reviewer flags the stale
+passages. The implementer also gets the missing facts of each README rewritten in full
+(missing-facts.json), with the state of the user's decision on each: it applies the
+comments on them. A side thread on a doc gets that doc's missing facts with its text.
+The docs themselves are files of the repository, read there.
 
 Once the model is approved, every role also sees which changes of the model the code does
 not carry yet, in full however old: the implementer acts on them, the others must know the
@@ -53,7 +57,16 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .store import DOC_KEY, DOC_SET_ANCHOR, Session, SessionError, format_batch, format_comment
+from .store import (
+    DOC_KEY,
+    DOC_SET_ANCHOR,
+    Session,
+    SessionError,
+    format_batch,
+    format_comment,
+    format_doc,
+    format_fact,
+)
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
 ROLES = ("planner", "writer", "implementer", "reviewer", "thread")
@@ -61,6 +74,8 @@ TRANSCRIPT_ROLES = ("planner", "writer")  # the roles that read the request tran
 # The roles that keep the doc set or work on its docs: the writer writes the first one,
 # the implementer refreshes it and rewrites the docs, the reviewer flags stale passages.
 DOC_SET_ROLES = ("writer", "implementer", "reviewer")
+# The roles that get the missing facts: the implementer applies the user's decisions.
+FACT_ROLES = ("implementer",)
 
 QUESTION_ID = re.compile(r"^q\d+$")
 COMMENT_ID = re.compile(r"^c\d+$")
@@ -96,7 +111,7 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     if plan.get("repo"):
         out += ["", "## Code map", s.read_code_map() or "(none written yet)"]
     if plan.get("repo") and role in DOC_SET_ROLES:
-        out += ["", *_doc_tab(s)]
+        out += ["", *_doc_tab(s, role)]
     out += ["", *_change_history(s)]
     out += ["", *_questions(questions)]
     out += ["", *_recent("Terminal messages", s.read_terminal_messages(), _message_line)]
@@ -131,34 +146,64 @@ def doc_passage(s: Session, anchor: str) -> list[str]:
     file = s.doc_file(path)
     text = file.read_text("utf-8", errors="replace") if file and file.is_file() else None
     where = f"read from the worktree: {file}" if file else "the session has no repo"
-    return [f"## Doc of the passage: {path} ({where})", (text or "(missing)").strip()]
+    facts = _missing_facts(s, path)  # a passage may be one of its missing facts
+    return [
+        f"## Doc of the passage: {path} ({where})",
+        (text or "(missing)").strip(),
+        *(["", *facts] if facts else []),
+    ]
 
 
-def _doc_tab(s: Session) -> list[str]:
-    """The doc set and the stale passages still shown, for the roles that work on them."""
+def _doc_tab(s: Session, role: str) -> list[str]:
+    """The doc set and the stale passages still shown, for the roles that work on them;
+    the missing facts too for the implementer, who applies the user's decisions on them."""
     lines = [
         "## Doc set",
-        "The repo docs the Doc tab shows. Each one is a file of the repository: read it there.",
+        "The repo docs the Doc tab shows, in the write order. Each one is a file of the"
+        " repository: read it there.",
         *_doc_set(s),
         "",
         "## Stale passages (flagged, still found in their doc)",
     ]
     flags = s.shown_stale()
     if not flags:
-        return [*lines, "(none)"]
+        lines.append("(none)")
     for f in flags:
         section = f" (contradicts {f['section']})" if f.get("section") else ""
         quote = " ".join(f["quote"].split())
         lines.append(f"- {f['id']} {f['doc']} « {quote} »{section}: {f['note']}")
+    if role in FACT_ROLES:
+        lines += ["", *_missing_facts(s)]
+    return lines
+
+
+def _missing_facts(s: Session, path: str = "") -> list[str]:
+    """The missing facts of each README of the doc set rewritten in full (or of `path`
+    alone), each with its proposal and the state of the user's decision."""
+    listed = {d["path"] for d in s.read_doc_set()["docs"]}
+    facts = {p: f for p, f in s.read_missing_facts().items() if p in listed}
+    if path:
+        facts = {p: f for p, f in facts.items() if p == path}
+        if not facts:
+            return []
+    lines = [
+        "## Missing facts (what a README's old text said and its full rewrite no longer says;"
+        " the README takes back only those the user keeps)"
+    ]
+    if not facts:
+        return [*lines, "(none)"]
+    for p, entries in facts.items():
+        lines += [f"{p}:", *(f"- {format_fact(f)}" for f in entries)]
     return lines
 
 
 def _doc_set(s: Session) -> list[str]:
-    """The doc set, one line per doc with its reason, then the docs the user removed."""
+    """The doc set, one line per doc with its reason (and its minor class, the failure
+    indicator of a README), then the docs the user removed."""
     data = s.read_doc_set()
     if not data["docs"] and not data["removed"]:
         return ["(none written yet)"]
-    lines = [f"- {d['path']}: {d.get('reason', '')}" for d in data["docs"]]
+    lines = [f"- {format_doc(d)}" for d in data["docs"]]
     if data["removed"]:
         lines.append(
             f"Removed by the user (never add them back unless the user asks):"

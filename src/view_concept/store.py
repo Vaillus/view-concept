@@ -2627,6 +2627,19 @@ def _draft_entry(draft: dict[str, Any], did: str) -> dict[str, str]:
     return entry
 
 
+def format_doc(d: dict[str, Any]) -> str:
+    """One doc of the doc set on one line (`doc-set`, the agents' context): its path and
+    reason, its minor class with its diff size, the failure indicator of a README."""
+    line = f"{d['path']} — {d.get('reason', '')}"
+    if d.get("minor"):
+        diff = d.get("diff") or {}
+        line += f" · minor: {d['minor']} (+{diff.get('added', 0)} −{diff.get('removed', 0)})"
+    if f := d.get("failing"):
+        line += f" · {f.get('fail', 0)}/{f.get('total', 0)} failing"
+        line += ", structure fails" if f.get("structure") else ""
+    return line
+
+
 def format_fact(f: dict[str, Any]) -> str:
     """One missing fact on one line: its id, state, text, old passage and the proposal."""
     passage = f" (passage {f['passage']})" if f.get("passage") else ""

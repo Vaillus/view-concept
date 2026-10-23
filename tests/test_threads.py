@@ -429,4 +429,4 @@ def test_a_thread_on_a_doc_gets_the_doc_from_the_worktree(tmp_path):
     assert "Passage: the doc README.md (a file of the repository): « The keys »" in text
     assert "## Doc of the passage: README.md" in text and "The keys 1 to 4." in text
     listed = build(s, "thread", ["x"], "doc:")
-    assert "## Doc set of the passage\n- README.md: the install" in listed
+    assert "## Doc set of the passage\n- README.md — the install" in listed
