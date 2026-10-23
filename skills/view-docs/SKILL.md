@@ -217,7 +217,7 @@ a doc again before rewriting it, and keep the user's edits.
 
 The doc set shows first the **review list**, the docs the user is asked to
 read (every doc that is not minor, and a minor doc on which a stale passage
-is shown), then a fold « n minor docs », each with its reason and `+a −r`;
+is shown or with a missing fact still `pending`), then a fold « n minor docs », each with its reason and `+a −r`;
 the title bar lists the docs in the write order, the minor docs after the
 review list, set back. Each README that carries a failure indicator shows
 « n/total failing » next to it, and its rewrite button (« rewrite <path>

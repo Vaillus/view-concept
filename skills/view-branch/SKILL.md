@@ -568,8 +568,9 @@ first the **review list**, the docs the user is asked to read, then a fold
 of the minor docs, each with its reason and `+added −removed`; the title
 bar puts them after the review list, set back. A minor doc still opens,
 takes comments and edits, and carries its marks. The reviewer reads it too,
-and a stale passage on it puts it back in the review list. A comment on the
-list moves a doc either way.
+and a stale passage on it puts it back in the review list, as does a
+missing fact of it still `pending`. A comment on the list moves a doc
+either way.
 
 The write-readme skill always **edits** an existing README: only the
 passages that fail its checks change. Beside each README it edited, the
