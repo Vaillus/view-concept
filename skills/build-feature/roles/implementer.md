@@ -245,12 +245,23 @@ concept or a line of the to-do list is implemented in one of them.
    edit** (each passage stays in the README: the smallest edits while the
    folder model still holds, a rewrite in full otherwise, with its missing
    facts) or, for a **restructuring** (passages must leave the README),
-   its **move plan** (`view-concept moves`), and writes no README of that
-   restructuring. It never commits. Then act on its run report:
+   its **move plan** (`view-concept moves`), and writes no README a plan
+   names (the restructured README and each README a row sends a passage
+   to). It never commits. Then act on its run report:
    - each README marked `role change` (its folder changes role, and its
      reader with it): run write-readme on it again, a full rewrite of its
      parts, as **Running write-readme** says;
-   - a line `move plan waiting`: see step 7;
+   - record the missing facts of each full rewrite write-readme made in
+     this pass (**Running write-readme**, step 5), now that document-feature
+     has recorded its own;
+   - a line `move plan waiting`: put back each README it names, the
+     restructured one and those after `holds`, as it was before the doc
+     pass, since step 3 ran write-readme on it: `git checkout HEAD --
+     <path>` (a README the doc pass created is deleted; one it moved with
+     `git mv` keeps its new path with its old text), then `view-concept
+     doc-set <slug> failing <path> --clear`, and `view-concept facts <slug>
+     clear <path>` when this pass recorded facts on it. These READMEs wait
+     for step 8;
    - put the run report into your report.
 5. **One commit** for the doc pass, whose message names the docs it
    wrote.
@@ -265,22 +276,26 @@ concept or a line of the to-do list is implemented in one of them.
    <commit> -- <path>`). A doc the doc pass creates is never minor, nor one
    it did not touch.
 7. **The stop on the move plan.** When document-feature's report has a
-   line `move plan waiting`, the doc pass ends after step 6, the READMEs of
-   each restructuring unwritten: your report says « move plan waiting » and
-   names them. The coordinator sets the phase `awaiting-moves`; the user
+   line `move plan waiting`, the doc pass ends after step 6, every README a
+   plan names unwritten (step 4 put them back): your report says « move
+   plan waiting » and names them. The coordinator sets the phase `awaiting-moves`; the user
    reads the plans in the Doc tab, comments on their rows, and sends
    « Write READMEs ».
 8. **Write the restructured READMEs**, on the trigger « Write READMEs »
    (`action: write-readmes`), whose batch carries the comments on the
-   plans' rows (`(moves <readme> · passage <id>)`). Run document-feature
-   again on them: it brings each plan in line with the comments, writes
-   the READMEs from it (a README the code moved with its folder at its new
+   plans' rows (`(moves <readme> · passage <id>)`). For each README the
+   plans name, run write-readme first, as step 3 says (a draft for a
+   missing one, a full rewrite for one a rewrite request names, an edit
+   otherwise), holding its missing facts. Then run document-feature again
+   on them: it brings each plan in line with the comments, writes the
+   READMEs from it (a README the code moved with its folder at its new
    place, nothing left at the old path), and records the missing facts of
    each old README on the README it became. Then run write-readme, an
    edit, on each README its report lists under write-readme's parts (the
    passages of those parts the plan put there), and a full rewrite of its
-   parts on each one marked `role change`. Then steps 5 and 6 for these
-   READMEs, and resolve the comments on the plans.
+   parts on each one marked `role change`, and record the missing facts
+   write-readme gave. Then steps 5 and 6 for these READMEs, and resolve the
+   comments on the plans.
 
 After the doc pass, you keep the docs:
 
@@ -393,8 +408,10 @@ next pass. For each README:
    old parts said that the new README does not say, in words or by a link, with
    its proposal (`keep` or `leave`, one-line reason; a fact the code
    contradicts is proposed `leave`, with that reason). In a review its run
-   report gives only their number: record them. Clear the README's old
-   list first, `view-concept facts <slug> clear <path>`, unless
+   report gives only their number: record them, in the doc pass after
+   document-feature's run (step 4 or 8), since document-feature clears the
+   list of a README whose facts it records. Clear the README's old list
+   first, `view-concept facts <slug> clear <path>`, unless
    document-feature recorded facts on it in this run, then one call per
    fact, `view-concept facts <slug> add <path> "<fact>" --propose
    keep|leave --reason "<one line>"`, with `--passage N` for the old

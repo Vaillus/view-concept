@@ -274,7 +274,9 @@ figures go to the study that draws them and the WER rules to
 
 A restructuring takes two runs, with a stop between them:
 
-1. **The move plan.** Before writing any README, write the **move plan**:
+1. **The move plan.** Before writing any README of the run, decide for
+   every README whether it is restructured, and write the **move plan** of
+   each one that is:
    each passage of the README, the README it goes to, and what it becomes
    there, `as-is`, `rewritten`, or `nowhere`. Clear the README's old plan,
    then one call per passage, in the README's order:
@@ -299,16 +301,20 @@ A restructuring takes two runs, with a stop between them:
    | the report chain, the reading of `summary.csv`, the four figures | readme | the report study | as-is, paths corrected |
    | results from before 30 September, « to remove after 31 October » | model | — | nowhere |
 
-2. **The stop.** End the run on the plan, writing no README of the
-   restructuring (the other READMEs of the run are written as usual), and
-   say in the run report that the move plan waits. The caller then puts
-   the session in its waiting phase: a wrong destination is corrected on
-   one row of the plan, before three READMEs carry it. The user comments on
-   the rows (`(moves <readme> · passage <id>)` in a batch) and presses
+2. **The stop.** End the run on the plans, writing no README a plan
+   names: neither the restructured README nor any README a row sends a
+   passage to (its `--to`), even for a concept the triage puts there; the
+   other READMEs of the run are written as usual. Say in the run report
+   that the move plan waits, with the READMEs it holds. The caller then
+   puts the session in its waiting phase: a wrong destination is corrected
+   on one row of the plan, before three READMEs carry it. The user comments
+   on the rows (`(moves <readme> · passage <id>)` in a batch) and presses
    « Write READMEs ».
 3. **The writing.** The run that follows « Write READMEs » (`action:
-   write-readmes`) writes the restructured READMEs from the plan and the
-   comments on it. You write the folder model passages, each where its row
+   write-readmes`) writes the READMEs the plans name, together, from the
+   plans and the comments on them: the passages each row sends, and in a
+   destination, what the rest of this skill puts there (its concepts, its
+   local model edit). You write the folder model passages, each where its row
    sends it; a passage of write-readme's parts is put in its destination's
    parts as the row says, and write-readme checks it there (list those
    READMEs in the run report). A README the code moved with its folder is
@@ -336,7 +342,9 @@ say so). The proposal drops nothing: you take none back on your own, the
 user decides.
 
 Record them on the README the old file became (its new path, in the doc
-set), clearing its old list first:
+set), clearing its old list first, unless the caller recorded write-readme's
+missing facts on that README in this run (they are about its other parts,
+and stay):
 
 ```
 view-concept facts <slug> clear <path>
@@ -366,20 +374,30 @@ nothing else. You never commit: the caller does.
 
 ## The run report
 
-The run's last message, one line per README, then the findings:
+The run's last message, one line per README, then the findings. The
+first run of benchmark-package, which stops on the plan:
 
 ```
 document-feature · triage: 5 enter · 4 stay out
-core/transcript/README.md · folder model rewritten · missing facts: 1
-benchmark/README.md · local model edit: 2 passages edited · role change
 experiments/finetuning/gign/README.md · local model edit: 1 passage edited
-experiments/benchmark/README.md · restructuring: move plan waiting (12 passages)
-write-readme's parts: benchmark/README.md, usage, a path to experiments/benchmark/ (left to write-readme)
+experiments/benchmark/README.md · restructuring: move plan waiting (12 passages) · holds core/transcript/README.md, benchmark/README.md, experiments/stt_benchmark_ft2/README.md
 candidates: subset (benchmark/, experiments/)
+code: none
+```
+
+The run after « Write READMEs »:
+
+```
+document-feature · Write READMEs
+core/transcript/README.md · folder model written · 3 passages received
+benchmark/README.md · moved from experiments/benchmark/README.md · role change · missing facts: 2
+experiments/stt_benchmark_ft2/README.md · 1 passage received
+write-readme's parts: benchmark/README.md, usage, a path to experiments/benchmark/ (left to write-readme); experiments/stt_benchmark_ft2/README.md, the report chain
 code: none
 ```
 
 `role change` asks the caller for write-readme's full rewrite of that
 README's parts. A line `move plan waiting` asks the caller to stop until
-« Write READMEs ». `code` lists each rule of the model the code applies
+« Write READMEs », and names after `holds` the READMEs the plan names
+besides the restructured one, which wait with it. `code` lists each rule of the model the code applies
 otherwise, as written from the code.

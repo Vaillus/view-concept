@@ -606,8 +606,10 @@ README whose folder changes role. write-readme holds only its parts of a
 README (the first sentence, the status line, `## Files`, `## Usage`, a
 section the repo's conventions impose); every other passage is the
 **folder model**, which the document-feature skill holds. After a full
-rewrite, write-readme lists the **missing facts**, each fact the old README said
-that the new one does not say, in words or by a link, with the agent's
+rewrite by write-readme, a folder model document-feature rewrote whole, or
+a restructuring, the agent lists the **missing facts**, each fact the old
+README said that no README written says any more, in words or by a link,
+recorded on the README the old file became, with the agent's
 proposal (`keep` or `leave`) and a one-line reason; the implementer records
 them (`view-concept facts`), and the Doc tab lists them under the README,
 each with its state (`pending`, `kept` or `left`). The user comments on a
@@ -722,7 +724,9 @@ into the docs by the implementer run that makes it, and the page never shows
    folder model: it writes the **concept triage**, then, README by README,
    a **local model edit** (each passage stays in the README) or, for a
    **restructuring** (passages must leave it), the **move plan**, writing
-   no README of that restructuring yet. A doc that is not a README only
+   no README a plan names yet (the restructured README and each README a
+   row sends a passage to; it puts back what write-readme changed in
+   them). A doc that is not a README only
    gets the sentences the code contradicts corrected; in a `CLAUDE.md` or
    an `AGENTS.md` it keeps only the sentences it adds or changes that pass
    the **sentence test** (without the sentence, an agent would act
@@ -743,9 +747,9 @@ into the docs by the implementer run that makes it, and the page never shows
    their rows, and sends « Write READMEs » (a batch with `action:
    write-readmes`). Hold the comments on the plans' rows until it comes.
    Then start the implementer with the trigger `"« Write READMEs »"`, the
-   batch id and the held comments: it writes the restructured READMEs from
-   the plans and the comments, then records the missing facts of each old
-   README on the README it became. Then start the reviewer with its report,
+   batch id and the held comments: it writes the READMEs the plans name
+   from the plans and the comments, then records the missing facts of each
+   old README on the README it became. Then start the reviewer with its report,
    as in step 3, and go on to step 5.
 5. With « Write docs », go on as **Implementation** says (an item judged
    `diverges` or `move` goes back to the implementer), then set
