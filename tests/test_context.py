@@ -249,3 +249,17 @@ def test_the_implementer_and_the_reviewer_get_the_concept_triage(review):
     assert "## Concept triage" not in build(review, "writer")
     # A side thread on a row gets the triage.
     assert "- k1 [enters] pooled WER" in build(review, "thread", section="triage:k1")
+
+
+def test_the_implementer_and_the_reviewer_get_the_move_plans(review):
+    review.add_doc("README.md", "the keys")
+    review.add_move("README.md", "the WER rules", "model", "rewritten", to="core/README.md")
+    for role in ("implementer", "reviewer"):
+        text = build(review, role)
+        assert "## Move plans" in text
+        assert "README.md:\n- p1 [model] the WER rules → core/README.md, rewritten" in text
+    assert "## Move plans" not in build(review, "writer")
+    assert "- p1 [model]" in build(review, "thread", section="moves:p1")
+    # A batch on a row names the row's README.
+    b = review.add_batch([{"section": "moves:p1", "quote": "the WER rules", "text": "ok"}])
+    assert "(moves README.md · passage p1)" in build(review, "implementer", [b["id"]])

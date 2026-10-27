@@ -70,6 +70,7 @@ WAITING_PHASES = {
     "awaiting-answer",
     "awaiting-model",
     "awaiting-docs",
+    "awaiting-moves",
     "awaiting-pr",
     "awaiting-approval",
     "scoping",

@@ -142,10 +142,11 @@ const docViews = () => [$("#model"), $("#refactor"), $("#doc")];
 /* The Doc tab (id "doc"): the repo docs the branch concerns, from `state.docs` (see "the
    Doc tab"). It shows once the doc set is written; a docs review (workflow review-docs)
    shows it alone, from the start. A server that sends no `docs` counts as no doc set. */
-const NO_DOCS = { set: [], views: {}, stale: [], removed: [], facts: {}, triage: { text: "", list: [] }, reference: null };
+const NO_DOCS = { set: [], views: {}, stale: [], removed: [], facts: {}, triage: { text: "", list: [] }, moves: {}, reference: null };
 const docsOf = () => ({ ...NO_DOCS, ...((state && state.docs) || {}) });
 const isDocsReview = () => !!state && state.workflow === "review-docs";
-const hasDocTab = () => isDocsReview() || docsOf().set.length > 0 || docsOf().triage.list.length > 0;
+const hasDocTab = () => isDocsReview() || docsOf().set.length > 0 || docsOf().triage.list.length > 0
+  || Object.keys(docsOf().moves).length > 0;
 // The tab a missing tab gives way to: the Doc tab in a docs review, the model tab otherwise.
 const homeTab = () => (isDocsReview() ? "doc" : "model");
 // A comment, a draft or a side thread on a doc's text is anchored on the section id
@@ -159,11 +160,13 @@ const docPathOf = (id) => {
 };
 const isDocAnchor = (id) => String(id || "").startsWith(DOC_PREFIX);
 /* A row of a Doc tab table is commented on its own anchor: "triage:<id>" for a row of the
-   concept triage (store.py's TRIAGE_KEY). The triage's highlight baseline is kept under
-   "triage:" alone. No section id starts with it either. `rowOf` gives the kind and id of
-   a row anchor, null for any other id. */
+   concept triage (store.py's TRIAGE_KEY), "moves:<id>" for a row of a README's move plan
+   (MOVES_KEY). The triage's highlight baseline is kept under "triage:" alone, a move
+   plan's under "moves:<path>". No section id starts with either. `rowOf` gives the kind
+   and id of a row anchor, null for any other id. */
 const TRIAGE_PREFIX = "triage:";
-const ROW_KINDS = { [TRIAGE_PREFIX]: "triage" };
+const MOVES_PREFIX = "moves:";
+const ROW_KINDS = { [TRIAGE_PREFIX]: "triage", [MOVES_PREFIX]: "passage" };
 const rowOf = (id) => {
   const s = String(id || "");
   const prefix = Object.keys(ROW_KINDS).find((p) => s.startsWith(p) && s.length > p.length);
@@ -266,7 +269,8 @@ function followSession() {
   // their highlight baseline.
   const docs = docsOf();
   const n = docs.set.filter((d) => (docs.views[d.path] || {}).updated || factsUpdated(d.path)).length
-    + (docs.triage.list.some((r) => r.updated) ? 1 : 0);
+    + (docs.triage.list.some((r) => r.updated) ? 1 : 0)
+    + Object.values(docs.moves).filter((m) => m.list.some((r) => r.updated)).length;
   $('.tab[data-tab="doc"]').replaceChildren(...["doc", n ? el("span", { class: "badge new", text: `${n} updated` }) : null].filter(Boolean));
 }
 
@@ -362,10 +366,12 @@ function writingLabel() {
    scope block (see "agent questions" below), so it has no button here. */
 const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "answered · the agent is reading it" };
 
-/* Four phases wait for the user: the plan of an explanation ("awaiting-approval"), the
+/* Five phases wait for the user: the plan of an explanation ("awaiting-approval"), the
    model of a feature at the end of model consolidation ("awaiting-model", set by the
    build-feature skill only), the doc pass once the code carries the model ("awaiting-docs",
-   build-feature too), and the opening of its PR ("awaiting-pr", build-feature and review-docs).
+   build-feature too), the doc pass stopped on the move plans of restructured READMEs
+   ("awaiting-moves", build-feature too: « Write READMEs » under the plans in the Doc tab,
+   action "write-readmes"), and the opening of its PR ("awaiting-pr", build-feature and review-docs).
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until the agent moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it.
@@ -377,6 +383,8 @@ const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "a
    them. */
 const modelButton = el("button", { id: "model-approve", class: "btn primary approve doc-approve", hidden: true });
 const prButton = el("button", { id: "pr-create", class: "btn primary approve doc-approve", hidden: true });
+const movesButton = el("button", { id: "readmes-write", class: "btn primary approve doc-approve", hidden: true,
+                                   title: "The doc pass writes the restructured READMEs from the move plans and your comments on them" });
 const docsButton = el("button", { id: "docs-write", class: "btn primary approve doc-approve", hidden: true,
                                   title: "The doc pass: the implementer refreshes the doc set and rewrites the docs from the model" });
 const docsPrButton = el("button", { id: "docs-write-pr", class: "btn approve doc-approve", hidden: true,
@@ -423,6 +431,9 @@ const APPROVALS = {
                      // The second button: the same action, the PR chained after the doc pass.
                      also: { button: docsPrButton, label: "Write docs and create PR", toast: "Docs and PR requested",
                              extra: { then_pr: true }, sent: "docs and PR requested · the implementer is writing the docs" } },
+  "awaiting-moves": { action: "write-readmes", label: "Write READMEs", toast: "READMEs requested", button: movesButton,
+                      ready: "move plan ready · waiting for you to read it",
+                      sent: "READMEs requested · the implementer is writing them" },
   "awaiting-pr": { action: "create-pr", label: "Create PR", toast: "PR requested", button: prButton,
                    ready: "refactoring written · waiting for you to create the PR",
                    sent: "PR requested · the agent is opening it" },
@@ -447,7 +458,8 @@ function approvalPending() {
 const BATCH_WHAT = { answer: "answered", "go-on": "going on", "approve-plan": "plan approved",
                      "approve-model": "model approved", "write-docs": "docs requested", "create-pr": "PR requested", plan: "scoping ended",
                      grill: "grill", "stop-grill": "grill stopped",
-                     "rewrite-readme": "README rewrite requested", "write-lexicon": "repo lexicon requested" };
+                     "rewrite-readme": "README rewrite requested", "write-lexicon": "repo lexicon requested",
+                     "write-readmes": "READMEs requested" };
 const BATCH_STAGE = { sent: "in the inbox", received: "the agent has it" };
 
 function batchProgress() {
@@ -549,7 +561,7 @@ function renderStatus() {
   p.className = `phase ${b.active ? "active" : ""} ${b.ask ? "ask" : ""}`;
   p.textContent = [b.text, b.active && !b.ask ? quietNotice() : ""].filter(Boolean).join(" · ");
 
-  $("#approve").hidden = modelButton.hidden = prButton.hidden = docsButton.hidden = docsPrButton.hidden = true;
+  $("#approve").hidden = modelButton.hidden = prButton.hidden = docsButton.hidden = docsPrButton.hidden = movesButton.hidden = true;
   if (!approval) return;
   const n = drafts.filter(ready).length;
   const withDrafts = (label) => (n ? `${label} + send ${n} comment${n > 1 ? "s" : ""}` : label);
@@ -562,7 +574,7 @@ function renderStatus() {
   }
 }
 
-for (const b of [$("#approve"), modelButton, prButton, docsButton]) b.addEventListener("click", () => {
+for (const b of [$("#approve"), modelButton, prButton, docsButton, movesButton]) b.addEventListener("click", () => {
   const approval = APPROVALS[state.status.phase];
   if (approval) send(approval.action);
 });
@@ -968,7 +980,12 @@ function sectionBlock(s, { bare = false } = {}) {
    doc set list: one row per concept of the model, the reason (who ignores it gets what
    wrong) and whether it enters the docs. Each row has « + comment » and « ask », anchored
    to "triage:<id>" with the concept as quote; a row new or changed since the baseline
-   "triage:" gets the green bar, and « mark read » on the table moves the baseline. */
+   "triage:" gets the green bar, and « mark read » on the table moves the baseline.
+   Under it, the move plan of each restructured README (`state.docs.moves`), one table per
+   README: each passage, whose it is (write-readme's parts or the folder model), the README
+   it goes to and what it becomes there. Its rows are commented like the triage's, on
+   "moves:<id>" with the passage as quote, against the baseline "moves:<path>". While the
+   doc pass waits on the plans ("awaiting-moves"), « Write READMEs » sits under them. */
 
 let shownDoc = null; // path of the doc shown in the Doc tab
 const REPO_LEXICON = ".agents/lexicon.md"; // store.py's REPO_LEXICON
@@ -982,12 +999,12 @@ function renderDocTab(ending) {
   // In a docs review the scope block (its agent questions) sits at the top of the Doc tab.
   const top = isDocsReview() ? [$("#scope")] : [];
   if (!docs.set.length) {
-    view.replaceChildren(...top, triageBlock(docs), isDocsReview() ? el("p", { class: "dim empty", text: "Waiting for the doc set…" }) : "", ...ending);
+    view.replaceChildren(...top, triageBlock(docs), ...moveBlocks(docs), movesButton, isDocsReview() ? el("p", { class: "dim empty", text: "Waiting for the doc set…" }) : "", ...ending);
     return;
   }
   if (!docs.set.some((d) => d.path === shownDoc)) shownDoc = reviewOrder(docs)[0].path;
   const entry = docs.set.find((d) => d.path === shownDoc);
-  view.replaceChildren(...top, triageBlock(docs), docSetBlock(docs), docBar(docs), docRewrite(shownDoc, entry),
+  view.replaceChildren(...top, triageBlock(docs), ...moveBlocks(docs), movesButton, docSetBlock(docs), docBar(docs), docRewrite(shownDoc, entry),
     docBlock(shownDoc, docs.views[shownDoc] || {}), ...ending);
 }
 
@@ -1070,6 +1087,24 @@ function triageBlock(docs) {
     el("div", { class: "body" }, el("table", { class: "doc-table" },
       el("thead", {}, el("tr", {}, ...["concept", "who ignores it gets it wrong?", "enters the docs", ""].map((h) => el("th", { text: h })))),
       el("tbody", {}, ...list.map(row)))));
+}
+
+const MOVE_PART = { readme: "write-readme", model: "folder model" };
+function moveBlocks(docs) {
+  return Object.entries(docs.moves).map(([path, { list, text }]) => {
+    const row = (r) => el("tr", { id: `sec-${MOVES_PREFIX}${r.id}`, class: r.updated ? "updated" : "", "data-anchor": MOVES_PREFIX + r.id },
+      el("td", { class: "row-quote", text: r.passage }, r.note ? el("div", { class: "dim row-note", text: r.note }) : null),
+      el("td", { text: MOVE_PART[r.part] || r.part }),
+      el("td", {}, r.to ? el("code", { text: r.to }) : el("span", { class: "dim", text: "—" })),
+      el("td", {}, el("span", { class: `badge ${r.becomes === "nowhere" ? "tone-flag" : ""}`, text: r.becomes })),
+      rowButtons(MOVES_PREFIX + r.id, r.passage, "passage"));
+    return el("section", { class: "sec doc-table-sec", id: `sec-moves-${path}` },
+      tableHeading(el("span", {}, "move plan · ", el("code", { text: path })), "Where each passage of this README goes: the doc pass writes the READMEs from this plan",
+                   MOVES_PREFIX + path, text, list.some((r) => r.updated)),
+      el("div", { class: "body" }, el("table", { class: "doc-table" },
+        el("thead", {}, el("tr", {}, ...["passage", "part", "goes to", "becomes", ""].map((h) => el("th", { text: h })))),
+        el("tbody", {}, ...list.map(row)))));
+  });
 }
 
 function docSetBlock(docs) {

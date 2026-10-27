@@ -1479,3 +1479,54 @@ def test_a_batch_moves_the_concept_triage_baseline(docs_review):
     assert json.loads(s.seen_path.read_text())["triage:"].count("\n") == 0
     s.add_batch([], note="read")
     assert json.loads(s.seen_path.read_text())["triage:"] == s.triage_text()["triage:"]
+
+
+def test_a_restructured_readme_keeps_its_move_plan(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/reference.md", "the tabs")
+    assert s.read_moves() == {} and s.move_texts() == {}
+    p1 = s.add_move("README.md", "the  WER rules", "model", "rewritten", to="core/README.md",
+                    note="as a link")  # fmt: skip
+    s.add_move("./README.md", "the old results", "model", "nowhere")
+    assert p1 == {"id": "p1", "passage": "the WER rules", "part": "model",
+                  "to": "core/README.md", "becomes": "rewritten", "note": "as a link"}  # fmt: skip
+    assert s.move_texts() == {
+        "moves:README.md": "p1 [model] the WER rules → core/README.md, rewritten · as a link\n"
+        "p2 [model] the old results → nowhere"
+    }
+    assert s.move_readmes() == {"p1": "README.md", "p2": "README.md"}
+    with pytest.raises(SessionError, match="not a README.md"):
+        s.add_move("docs/reference.md", "x", "model", "as-is", to="README.md")
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.add_move("src/README.md", "x", "model", "as-is", to="README.md")
+    with pytest.raises(SessionError, match="part is one of"):
+        s.add_move("README.md", "x", "usage", "as-is", to="README.md")
+    with pytest.raises(SessionError, match="becomes is one of"):
+        s.add_move("README.md", "x", "model", "moved", to="README.md")
+    with pytest.raises(SessionError, match="goes nowhere"):
+        s.add_move("README.md", "x", "model", "as-is")
+    with pytest.raises(SessionError, match="goes nowhere"):
+        s.add_move("README.md", "x", "model", "nowhere", to="README.md")
+    with pytest.raises(SessionError, match="goes to a README"):
+        s.add_move("README.md", "x", "model", "as-is", to="docs/reference.md")
+    # A comment on a row names its README in the batch; ids go on past a cleared plan.
+    b = s.add_batch([{"section": "moves:p2", "quote": "the old results", "text": "keep it"}])
+    text = format_batch("doc-tab", b, [], moves=s.move_readmes())
+    assert "[c1] (moves README.md · passage p2) « the old results »" in text
+    assert s.clear_moves("README.md") == 2
+    assert s.add_move("README.md", "x", "readme", "as-is", to="README.md")["id"] == "p3"
+    with pytest.raises(SessionError, match="moves:<id>"):
+        s.add_batch([{"section": "moves:README.md", "text": "x"}])
+    with pytest.raises(SessionError, match="may not start with"):
+        s.write_plan(outline=[{"id": "moves:p1", "title": "X"}])
+    # The plan goes with its README out of the doc set.
+    s.remove_doc("README.md")
+    assert s.read_moves() == {}
+
+
+def test_write_readmes_ends_the_stop_on_the_move_plans(docs_review):
+    s = docs_review
+    assert s.write_status("awaiting-moves")["phase"] == "awaiting-moves"
+    b = s.add_batch([], action="write-readmes")
+    assert "action: write-readmes (the user read the move plans" in format_batch("doc-tab", b, [])

@@ -46,8 +46,10 @@ passages. The implementer also gets the missing facts of each README rewritten i
 (missing-facts.json), with the state of the user's decision on each: it applies the
 comments on them. The implementer and the reviewer also get the concept triage
 (concept-triage.json: whether each concept of the model enters the docs): the doc pass
-follows it, the reviewer checks the docs against it. A side thread on a doc gets that
-doc's missing facts with its text; one on a row of the concept triage gets the triage.
+follows it, the reviewer checks the docs against it; and the move plans (moves.json: where
+each passage of a restructured README goes). A side thread on a doc gets that doc's
+missing facts with its text; one on a row of the concept triage gets the triage, one on a
+row of a move plan the move plans.
 The docs themselves are files of the repository, read there.
 
 Once the model is approved, every role also sees which changes of the model the code does
@@ -63,6 +65,7 @@ from typing import Any
 from .store import (
     DOC_KEY,
     DOC_SET_ANCHOR,
+    MOVES_KEY,
     TRIAGE_KEY,
     Session,
     SessionError,
@@ -70,6 +73,7 @@ from .store import (
     format_comment,
     format_doc,
     format_fact,
+    format_move,
     format_triage,
 )
 
@@ -81,7 +85,8 @@ TRANSCRIPT_ROLES = ("planner", "writer")  # the roles that read the request tran
 DOC_SET_ROLES = ("writer", "implementer", "reviewer")
 # The roles that get the missing facts: the implementer applies the user's decisions.
 FACT_ROLES = ("implementer",)
-# The roles that get the concept triage: the doc pass follows it, the reviewer checks it.
+# The roles that get the concept triage and the move plans: the doc pass follows them, the
+# reviewer checks the docs against them.
 TRIAGE_ROLES = ("implementer", "reviewer")
 
 QUESTION_ID = re.compile(r"^q\d+$")
@@ -140,6 +145,8 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
             out += ["", *doc_passage(s, section)]
         elif section.startswith(TRIAGE_KEY):  # a row of the concept triage
             out += ["", *_triage(s)]
+        elif section.startswith(MOVES_KEY):  # a row of a move plan
+            out += ["", *_moves(s)]
         else:
             sec = _sections(outline, sections, section, html=html)
             out += ["", "## Section of the passage", *sec]
@@ -184,7 +191,22 @@ def _doc_tab(s: Session, role: str) -> list[str]:
     if role in FACT_ROLES:
         lines += ["", *_missing_facts(s)]
     if role in TRIAGE_ROLES:
-        lines += ["", *_triage(s)]
+        lines += ["", *_triage(s), "", *_moves(s)]
+    return lines
+
+
+def _moves(s: Session) -> list[str]:
+    """The move plan of each restructured README of the doc set, one line per passage."""
+    listed = {d["path"] for d in s.read_doc_set()["docs"]}
+    plans = {p: rows for p, rows in s.read_moves().items() if p in listed}
+    lines = [
+        "## Move plans (each passage of a restructured README: whose it is, the README it"
+        " goes to, what it becomes there)"
+    ]
+    if not plans:
+        return [*lines, "(none)"]
+    for p, rows in plans.items():
+        lines += [f"{p}:", *(f"- {format_move(r)}" for r in rows)]
     return lines
 
 
@@ -277,12 +299,12 @@ def _trigger(
         if QUESTION_ID.match(event) and event in by_question:
             lines.append(_question_line(by_question[event], full=True))
         elif COMMENT_ID.match(event) and event in comments:
-            lines.append(format_comment(comments[event], _number(outline)))
+            lines.append(format_comment(comments[event], _number(outline), s.move_readmes()))
         elif BATCH_ID.match(event):
             batch = next((b for b in batches if b["id"] == event), None)
             if batch is None:
                 raise SessionError(f"no batch {event!r}")
-            lines.append(format_batch(s.slug, batch, outline, questions))
+            lines.append(format_batch(s.slug, batch, outline, questions, s.move_readmes()))
         elif MESSAGE_ID.match(event) and event in messages:
             lines.append(_message_line(messages[event]))
         elif CHANGE_ID.match(event) and event in changes:

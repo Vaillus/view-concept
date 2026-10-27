@@ -22,6 +22,8 @@ from .store import (
     HEARTBEAT_EVERY,
     HOME,
     KINDS,
+    MOVE_FATES,
+    MOVE_PARTS,
     PHASES,
     WORKFLOWS,
     Session,
@@ -30,6 +32,7 @@ from .store import (
     format_changes,
     format_doc,
     format_fact,
+    format_move,
     format_precedence,
     format_section_problem,
     format_triage,
@@ -178,7 +181,7 @@ def _batches(s: Session, slug: str):
                     cursor += len(raw)
                     if raw.strip():
                         batch = json.loads(raw)
-                        text = format_batch(slug, batch, outline, questions)
+                        text = format_batch(slug, batch, outline, questions, s.move_readmes())
                         yield text, cursor, str(batch.get("id", ""))
                     else:
                         s.cursor_path.write_text(str(cursor))
@@ -493,6 +496,39 @@ def cmd_triage(a: argparse.Namespace) -> None:
         print("(no concept triage yet)")
 
 
+def cmd_moves(a: argparse.Namespace) -> None:
+    """Add a row to a README's move plan, clear a plan, or, with no operation, print the
+    plans by README."""
+    s = _existing(a.slug)
+    args = a.args
+    if a.op != "add" and (a.part or a.becomes or a.to or a.note):
+        raise SessionError("--part, --becomes, --to and --note go with add only")
+    if a.op == "add":
+        if len(args) != 2 or not a.part or not a.becomes:
+            raise SessionError(
+                'moves add takes a README and the passage: add <readme> "<passage>" '
+                "--part readme|model --becomes as-is|rewritten|nowhere [--to <readme>] "
+                '[--note "<one line>"]'
+            )
+        row = s.add_move(args[0], args[1], a.part, a.becomes, a.to or "", a.note or "")
+        print(format_move(row))
+        return
+    if a.op == "clear":
+        if len(args) != 1:
+            raise SessionError("moves clear takes one README path")
+        print(f"cleared {s.clear_moves(args[0])} rows of the move plan of {args[0]}")
+        return
+    if args:
+        raise SessionError("give an operation: add or clear")
+    data = s.read_moves()
+    for path, rows in data.items():
+        print(f"{path} · {len(rows)} passages")
+        for r in rows:
+            print(f"  {format_move(r)}")
+    if not data:
+        print("(no move plan)")
+
+
 def cmd_reference(a: argparse.Namespace) -> None:
     """Set or clear the reference model, list its candidates, or, with none of these,
     print it."""
@@ -583,11 +619,11 @@ def cmd_check(a: argparse.Namespace) -> None:
 
 def cmd_pending(a: argparse.Namespace) -> None:
     s = Session(a.slug)
-    outline = s.read_plan()["outline"]
+    outline, moves = s.read_plan()["outline"], s.move_readmes()
     for b in s.read_comments()["batches"]:
         open_ = [c for c in b["comments"] if c["status"] == "sent"]
         if open_:
-            print(format_batch(a.slug, {**b, "comments": open_}, outline))
+            print(format_batch(a.slug, {**b, "comments": open_}, outline, moves=moves))
             print()
 
 
@@ -863,6 +899,24 @@ def main() -> None:
         "id) · remove <id>",
     )
     q.set_defaults(fn=cmd_triage)
+
+    q = sub.add_parser(
+        "moves",
+        help="print the move plans of the restructured READMEs, add a row to one, or clear one",
+    )
+    q.add_argument("slug")
+    q.add_argument("op", nargs="?", choices=("add", "clear"))
+    q.add_argument(
+        "args",
+        nargs="*",
+        help="add <readme> <passage> (a README of the doc set; the passage in one line) · "
+        "clear <readme>",
+    )
+    q.add_argument("--part", choices=MOVE_PARTS, help="with add: whose the passage is")
+    q.add_argument("--becomes", choices=MOVE_FATES, help="with add: what it becomes")
+    q.add_argument("--to", help="with add: the README it goes to (none with --becomes nowhere)")
+    q.add_argument("--note", help="with add: one optional line")
+    q.set_defaults(fn=cmd_moves)
 
     q = sub.add_parser(
         "reference",

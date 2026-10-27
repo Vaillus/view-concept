@@ -704,3 +704,26 @@ def test_state_carries_the_concept_triage_highlighted_until_read(client, doc_rev
     assert client.post("/api/s/doc-tab/batch", json=body).status_code == 200
     body = {"comments": [{"section": "triage:", "text": "x"}]}
     assert client.post("/api/s/doc-tab/batch", json=body).status_code == 400
+
+
+def test_state_carries_the_move_plans_highlighted_until_read(client, doc_review):
+    doc_review.add_doc("README.md", "the install")
+    doc_review.add_move("README.md", "the WER rules", "model", "rewritten", to="core/README.md")
+    moves = client.get("/api/s/doc-tab").json()["docs"]["moves"]  # the baseline
+    assert moves["README.md"]["list"] == [{"id": "p1", "passage": "the WER rules",
+                                           "part": "model", "to": "core/README.md",
+                                           "becomes": "rewritten", "note": "",
+                                           "updated": False}]  # fmt: skip
+    doc_review.add_move("README.md", "old results", "model", "nowhere")
+    plan = client.get("/api/s/doc-tab").json()["docs"]["moves"]["README.md"]
+    assert [r["updated"] for r in plan["list"]] == [False, True]
+    seen = {"sections": {"moves:README.md": plan["text"]}}
+    assert client.post("/api/s/doc-tab/seen", json=seen).status_code == 200
+    plan = client.get("/api/s/doc-tab").json()["docs"]["moves"]["README.md"]
+    assert [r["updated"] for r in plan["list"]] == [False, False]
+    body = {
+        "action": "write-readmes",
+        "comments": [{"section": "moves:p2", "quote": "old results", "text": "keep"}],
+    }
+    b = client.post("/api/s/doc-tab/batch", json=body).json()
+    assert b["action"] == "write-readmes" and b["comments"][0]["section"] == "moves:p2"
