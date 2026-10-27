@@ -248,7 +248,8 @@ a.cite code { color: var(--info); background: var(--infobg); }
 /* the rewrite request's line, under the bar while a README.md is in sight */
 .doc-rewrite { padding: 8px 0 0; }
 .doc-rewrite-why { font-size: 12px; }
-/* the missing facts of a README rewritten in full, under its text */
+/* the missing facts of a README (after a full rewrite, a restructuring or a folder model
+   rewritten in full), under its text */
 .doc-facts { margin-top: 16px; padding-top: 8px; border-top: 1px dashed var(--line); }
 .doc-facts h3 { font-size: 13px; margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .doc-facts ul { list-style: none; margin: 0; padding: 0; }

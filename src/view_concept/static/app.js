@@ -972,10 +972,12 @@ function sectionBlock(s, { bare = false } = {}) {
    review list, set back. A README with a failure indicator (`failing`) shows « n/total
    failing » in the list; when more than REWRITE_HINT of its passages fail, or its
    structure fails, its rewrite button is put forward (accent).
-   A README rewritten in full lists its missing facts under its text (`state.docs.facts`):
-   each fact with the agent's proposal, its reason and its state. A fact is commented
-   like a passage of the doc: its comment is anchored to "doc:<path>", quotes the fact and
-   carries its id (`fact`); a passage selected in a fact anchors the same way. A fact new
+   A README lists its missing facts under its text (`state.docs.facts`), what its old text
+   said and no README written says any more, after a full rewrite, a restructuring or a
+   folder model rewritten in full: each fact with the agent's proposal, its reason and its
+   state. A fact is commented like a passage of the doc: its comment is anchored to
+   "doc:<path>", quotes the fact and carries its id (`fact`); a passage selected in a fact
+   anchors the same way. A fact new
    or changed since the baseline "facts:<path>" gets the green bar, and « mark read » on
    the README marks its facts read too.
    The concept triage (`state.docs.triage`), when the agent wrote one, is a table above the
@@ -1169,9 +1171,10 @@ function docRewrite(path, entry) {
 }
 const failingWhy = (f) => (f.structure ? "its structure fails" : `${f.fail} of its ${f.total} passages fail`);
 
-/* The missing facts of a README rewritten in full, under its text: each fact with its old
-   passage, the agent's proposal and reason, and its state; « + comment » and « ask » open
-   the composer on the fact, as on a passage of the doc. */
+/* The missing facts of a README, under its text (after a full rewrite, a restructuring or
+   a folder model rewritten in full): each fact with its old passage, the agent's proposal
+   and reason, and its state; « + comment » and « ask » open the composer on the fact, as
+   on a passage of the doc. */
 const FACT_STATE = { pending: "waits on you", kept: "kept", left: "left" };
 const FACT_PROPOSAL = { keep: "keep", leave: "leave" };
 function docFacts(path) {
@@ -1181,7 +1184,7 @@ function docFacts(path) {
   const target = (f) => ({ section: id, quote: f.fact, prefix: "", fact: f.id });
   return el("div", { class: "doc-facts", "data-doc": path },
     el("h3", { text: `${facts.length} missing fact${facts.length > 1 ? "s" : ""}`,
-               title: "What the old README said and its full rewrite no longer says; a fact you do not comment on is not taken back" }),
+               title: "What the old README said and no README written says any more, after a full rewrite, a restructuring or a folder model rewritten in full; a fact you do not comment on is not taken back" }),
     el("ul", {}, ...facts.map((f) => el("li", { class: `doc-fact state-${f.state} ${f.updated ? "updated" : ""}`, "data-fact": f.id },
       el("span", { class: "fact-text", text: f.fact }),
       f.passage ? el("span", { class: "dim", text: ` (passage ${f.passage})` }) : null,
