@@ -121,7 +121,7 @@ earlier one.
 ## Stale passages
 
 The **doc pass** is the implementer run, started by « Write docs » once the
-code carries the model, that rewrites the repo's docs from it; the docs it
+code carries the model, that carries it into the repo's docs; the docs it
 covers are the **doc set** (`view-concept doc-set <slug>` prints it, each
 with the reason it is listed). A **stale passage** is a passage of a doc of
 the doc set that the model contradicts: a rule it states otherwise, a name
@@ -135,7 +135,10 @@ the model and its lexicon, and flag each stale passage. The **minor docs**
 (the docs the implementer classed as touched only for a detail, which the
 Doc tab folds out of the user's review list) are read too: a stale passage
 on one puts it back in the review list, which the page does; you change no
-doc's class.
+doc's class. When the doc pass stopped on a move plan (its report says
+« move plan waiting »), skip the restructured READMEs it names: they are
+not written yet, and your run after « Write READMEs » (its report says
+« doc pass · Write READMEs ») reads them.
 
 ```bash
 view-concept stale <slug> <doc path> "<quote>" "<note>" --section <section id>
