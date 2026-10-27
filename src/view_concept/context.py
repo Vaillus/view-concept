@@ -42,9 +42,10 @@ the reviewer also get the doc set (doc-set.json: each doc's path and reason in t
 order, its minor class, a README's failure indicator, the docs the user removed) and the
 stale passages still shown: the writer writes the first doc set, the implementer
 refreshes it and rewrites the docs at the doc pass, the reviewer flags the stale
-passages. The implementer also gets the missing facts of each README rewritten in full
-(missing-facts.json), with the state of the user's decision on each: it applies the
-comments on them. The implementer and the reviewer also get the concept triage
+passages. The implementer also gets the missing facts of each README (missing-facts.json:
+what its old text said and no README written says any more, after a full rewrite, a
+restructuring or a rewritten folder model), with the state of the user's decision on
+each: it applies the comments on them. The implementer and the reviewer also get the concept triage
 (concept-triage.json: whether each concept of the model enters the docs): the doc pass
 follows it, the reviewer checks the docs against it; and the move plans (moves.json: where
 each passage of a restructured README goes). A side thread on a doc gets that doc's
@@ -221,8 +222,9 @@ def _triage(s: Session) -> list[str]:
 
 
 def _missing_facts(s: Session, path: str = "") -> list[str]:
-    """The missing facts of each README of the doc set rewritten in full (or of `path`
-    alone), each with its proposal and the state of the user's decision."""
+    """The missing facts of each README of the doc set (or of `path` alone): what its old
+    text said and no README written says any more, after a full rewrite, a restructuring or
+    a rewritten folder model, each with its proposal and the state of the user's decision."""
     listed = {d["path"] for d in s.read_doc_set()["docs"]}
     facts = {p: f for p, f in s.read_missing_facts().items() if p in listed}
     if path:
@@ -230,8 +232,9 @@ def _missing_facts(s: Session, path: str = "") -> list[str]:
         if not facts:
             return []
     lines = [
-        "## Missing facts (what a README's old text said and its full rewrite no longer says;"
-        " the README takes back only those the user keeps)"
+        "## Missing facts (what a README's old text said and no README written says any more,"
+        " after a full rewrite, a restructuring or a rewritten folder model; the README takes"
+        " back only those the user keeps)"
     ]
     if not facts:
         return [*lines, "(none)"]

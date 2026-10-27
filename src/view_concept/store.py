@@ -40,7 +40,8 @@ reach the agent session through the inbox.
                         each with its reason, its minor class and the failure indicator
                         of a README, and the docs the user removed       (`doc-set`)
         stale.json      the stale passages: doc passages the model contradicts  (`stale`)
-        missing-facts.json  the missing facts of each README rewritten in full  (`facts`)
+        missing-facts.json  the missing facts of each README whose old text a full
+                        rewrite, a restructuring or a rewritten folder model lost (`facts`)
         concept-triage.json  the concept triage: whether each concept of the model enters
                         the docs                                          (`triage`)
         moves.json      the move plan of each restructured README: where each passage
@@ -201,13 +202,16 @@ repo lexicon (REPO_LEXICON: the reader line and the terms the repo's folders sha
 agents) is missing from the worktree, « write repo lexicon » on its doc set entry sends a
 batch whose action is "write-lexicon"; it is refused once the file exists.
 
-A missing fact is a fact the old text of a README said and its full rewrite (asked by a
-rewrite request, written from the code alone) no longer says, in words or by a link.
-missing-facts.json keeps them by README: {path: [{id (f1…, unique in the session), fact,
-passage (the number of the old README's passage it came from, or null), proposal ("keep"
-or "leave": what the agent proposes), reason (one line), state ("pending", "kept" or
-"left")}]} (written by `facts`; a new full rewrite of a README replaces its list, and
-`remove_doc` drops it). A fact
+A missing fact is a fact the old text of a README said and no README written says any
+more, in words or by a link, after a full rewrite of write-readme's parts (asked by a
+rewrite request or a role change, written from the code alone), a restructuring (its
+passages moved to other READMEs) or a folder model document-feature rewrote whole. It is
+recorded on the README the old file became (its new path when the code moved it), its
+passage number counted in the old README. missing-facts.json keeps them by README:
+{path: [{id (f1…, unique in the session), fact, passage (the number of the old README's
+passage it came from, or null), proposal ("keep" or "leave": what the agent proposes),
+reason (one line), state ("pending", "kept" or "left")}]} (written by `facts`; a new
+rewrite of a README replaces its list, and `remove_doc` drops it). A fact
 the user does not comment on stays out of the README, whatever the proposal. The Doc tab
 lists them under their README; a comment, a draft or a side thread on one is anchored to
 `doc:<path>` with the fact's text as its quote, and also carries the fact's id, `fact`
@@ -1594,13 +1598,14 @@ class Session:
     def add_missing_fact(
         self, path: str, fact: str, proposal: str, reason: str, passage: int | None = None
     ) -> dict[str, Any]:
-        """Record a missing fact of README `path`, a README.md of the doc set rewritten in
-        full: `fact` in one sentence, `proposal` "keep" or "leave" with its one-line
-        `reason`, `passage` the number of the old README's passage it came from. It waits
-        on the user's decision: state "pending"."""
+        """Record a missing fact of README `path`, a README.md of the doc set whose old text a full
+        rewrite, a restructuring or a rewritten folder model lost: `fact` in one
+        sentence, `proposal` "keep" or "leave" with its one-line `reason`, `passage` the
+        number of the old README's passage it came from. It waits on the user's
+        decision: state "pending"."""
         path = doc_path(path)
         if PurePosixPath(path).name != "README.md":
-            raise SessionError(f"{path} is not a README.md: only a full rewrite has missing facts")
+            raise SessionError(f"{path} is not a README.md: only a README has missing facts")
         if path not in {d["path"] for d in self.read_doc_set()["docs"]}:
             raise SessionError(f"{path} is not in the doc set")
         if proposal not in FACT_PROPOSALS:
@@ -1660,7 +1665,7 @@ class Session:
         return {**self.fact_texts(), **self.triage_text(), **self.move_texts()}
 
     def clear_missing_facts(self, path: str) -> int:
-        """Drop the missing facts of README `path` (a new full rewrite replaces them).
+        """Drop the missing facts of README `path` (a new rewrite replaces them).
         Returns how many were dropped."""
         path = doc_path(path)
         data = self.read_missing_facts()

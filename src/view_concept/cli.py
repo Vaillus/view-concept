@@ -444,8 +444,10 @@ def cmd_stale(a: argparse.Namespace) -> None:
 
 
 def cmd_facts(a: argparse.Namespace) -> None:
-    """Record a missing fact of a README rewritten in full, mark the user's decision on
-    one, drop a README's list, or, with no operation, print them by README."""
+    """Record a missing fact of a README (what its old text said and no README written
+    says any more, after a full rewrite, a restructuring or a rewritten folder model),
+    mark the user's decision on one, drop a README's list, or, with no operation, print
+    them by README."""
     s = _existing(a.slug)
     args = a.args
     if a.op != "add" and (a.propose or a.reason or a.passage is not None):
@@ -889,8 +891,9 @@ def main() -> None:
 
     q = sub.add_parser(
         "facts",
-        help="record the missing facts of a README rewritten in full, mark the user's "
-        "decision on one, or print them",
+        help="record the missing facts of a README (what its old text said and no README "
+        "written says any more, after a full rewrite, a restructuring or a rewritten "
+        "folder model), mark the user's decision on one, or print them",
     )
     q.add_argument("slug")
     q.add_argument("op", nargs="?", choices=("add", "mark", "clear"))
