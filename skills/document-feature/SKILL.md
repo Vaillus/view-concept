@@ -1,0 +1,385 @@
+---
+name: document-feature
+description: >-
+  Carry the model of the feature in progress into the repo's READMEs once
+  the code carries it, by three decisions taken in order: IF a concept of
+  the model enters the docs (the concept triage), WHERE it goes (the folder
+  model of the README whose folder writes it, beside write-readme's parts),
+  and HOW the README changes (a local model edit, or a restructuring whose
+  move plan the user corrects before any README is written). The code is
+  the source of truth. Use when a feature's doc pass writes the folder
+  models of its READMEs — "document the feature", "carry the model into
+  the READMEs", invokes /document-feature.
+argument-hint: "[the session folder or slug] [the READMEs: default, every README of the doc set]"
+---
+
+# /document-feature
+
+Carries the **model** of the feature in progress (the concepts its branch
+introduces or changes, with their rules, written in the sections of its
+session) into the repo's `README.md` files. The request names the session
+(`~/.view-concept/sessions/<slug>/`) and, optionally, the READMEs to work
+on; by default, every `README.md` of the session's doc set (`view-concept
+doc-set <slug>`). With no session named, stop: the skill has no model to
+carry.
+
+**Input**: the session's model (its `sections/`, the outline and the
+`lexicon` of its `plan.json`, `change-history.json`, `code-map.md`) and the
+**diff**, the branch's changes against its base (`git diff <base>...HEAD`,
+the base in `plan.json`).
+
+**The code is the source of truth.** A README tells an agent where to look
+and why; the agent checks in the code. Every fact you write is checked in
+the code first: a rule the model states and the code applies otherwise is
+written as the code has it, and goes in the run report. The README holds
+this role because it sits next to the code, in front of whoever changes
+the folder, with or without this tool.
+
+The run takes three decisions, in this order, for the whole model first and
+then README by README:
+
+1. **IF**: which concepts of the model enter the docs (**The concept
+   triage**).
+2. **WHERE**: in which README each goes, and in which part of it (**Where a
+   concept goes**, **Sharing a README with write-readme**).
+3. **HOW**: what changes in each README: a **local model edit** or a
+   **restructuring** (**How a README changes**).
+
+The rules below are principles, each with cases to recognise it. The cases
+are examples, not a closed list: judge each README yourself, with no
+threshold, and say what you decided in the run report. The user corrects a
+decision by a comment.
+
+The running example is benchmark-package, a branch of an audio repo that
+moves `experiments/benchmark/` up to `benchmark/`, gives it a public API
+(`load_dataset` and `score`), and gives the WER of a set of clips one
+definition, the **pooled WER**, in `core/transcript/`, which the benchmark,
+the fine-tunings and the studies call.
+
+## Reader and lexicons
+
+The **repo lexicon** is `.agents/lexicon.md` at the repo root, read by the
+agents that write the docs; no README links to it:
+
+```md
+# <repo name>
+
+## Reader
+Knows speech processing and ASR evaluation (VAD, transcription, WER);
+has never opened this repo.
+
+## Terms
+
+**Gate**:
+A rule fitted per model that deletes a transcribed segment likely to be made up by the model.
+```
+
+The **reader** of a doc is the one it is written for, with what they
+already know; a doc has one. The **reader line** (`## Reader`) is the field
+that reader knows, and that they have never opened this repo. A **folder
+lexicon** is the same file in a folder below the root, for the terms only
+the folders under it share. Read the repo lexicon, then each folder lexicon
+down to the README's folder; where two disagree (reader line or a term),
+the closest wins. A lexicon outside the README's path is not read for it.
+Never edit a lexicon: the doc pass writes them.
+
+The reader line sorts the terms a folder model uses:
+
+- a **field term** is one anyone in the reader's field knows: use it bare
+  (the folder model of `core/transcript/` does not say what a WER is, only
+  what the repo does with it);
+- a **repo term** exists only in this repo: define it in a clause where the
+  reader first needs it, in a lexicon entry's words, word for word, when
+  one has it; else under the name and in the words of the session's
+  lexicon. A repo term several folders use that no lexicon on the path has
+  is a **candidate**: list it in the run report.
+
+## The inclusion test
+
+Every sentence you write in a folder model stays only if:
+
+1. the reader needs it to use or change what the README covers;
+2. no other doc file already says it. Another passage of the same README
+   does not count.
+
+A sentence that fails only the second shrinks to a few words and a link. A
+rule of the folder model passes the first by construction: whoever uses
+what the folder returns or exposes would get something wrong without it.
+
+## The concept triage
+
+The model holds concepts of unequal weight: a rule the numbers a folder
+returns depend on, a setting internal to one file, an observation the code
+does not apply. The **concept triage** asks each concept of the model one
+question: **would whoever uses what the folder returns (a file, a number)
+or exposes (the names others import from it) get something wrong without
+knowing its rule?** Yes: the concept enters the docs, in a folder model.
+No: it stays out of the docs, and where it goes instead is not this
+skill's business.
+
+The test counts the error, not the change:
+
+- the pooled WER and its rule on clips without speech enter: whoever
+  ignores it compares that number to a WER computed otherwise, and thinks a
+  model better than it is;
+- the columns of `summary.csv` enter: a study reads them by name, and
+  whoever renames one breaks its figures with no error;
+- the offline mode of Hugging Face, set when the harness is imported,
+  stays out: a study only imports the public API, which it does not touch;
+- rounding the scores of `summary.csv` from three decimals to two changes
+  what the folder returns and misleads nobody: it stays out;
+- an observation, or the reason for a decision (why the old WER function
+  was removed), fails on its own: the code does not apply it, and nobody
+  gets anything wrong by ignoring it.
+
+Record one row per concept of the model, in the model's order, even for
+the concepts that stay out (the user then sees what stays out without
+looking for an absence):
+
+```
+view-concept triage <slug> set "<concept>" enters|out "<reason>"
+```
+
+`<reason>` is one line, the answer to « who ignores it would get what
+wrong? ». `view-concept triage <slug>` prints the rows; `remove <id>`
+drops a concept the model no longer has. The Doc tab shows the triage as a
+table above the doc set. It appears with the written docs, with no stop
+before writing: the user changes an answer by commenting on its row (`(triage
+<id>)` in a batch). On such a comment, change the row (`set`, same concept
+text, which keeps its id) and rewrite the folder models it touches.
+
+## Where a concept goes
+
+A concept that enters goes, **whole**, into the folder model of the README
+of the folder whose files **write** it (compute it, define it, produce
+it), not of the folders that call it:
+
+- a concept only one subfolder writes goes into that subfolder's README,
+  not higher;
+- a **cross-cutting concept**, a rule or a format the files of several
+  folders share, goes into the README of the folder whose files write it:
+  the pooled WER goes into `core/transcript/README.md`, even though
+  `benchmark/` calls it more than anyone. The README of a folder that calls
+  it names it and links to the README that defines it, without defining it
+  again; the module that computes it links there from its docstring. The
+  README that defines it does not name its callers: their list changes
+  while its folder does not;
+- a folder with no README gets its draft from write-readme first (the doc
+  pass runs it); then you add the folder model to it.
+
+**Whole** means the objects the concept defines, the rules they follow,
+their relations and what follows from them, what the code does not check
+included. An isolated rule does not say what it applies to.
+
+The triage only decides what enters. The folder model is one prose,
+ordered for its reader, from all the concepts of the folder, those the
+README already held and those the triage lets in: a row of the triage never
+becomes a passage of its own. In `benchmark/README.md`, the public API and
+the columns of `summary.csv`, two rows of the triage, make one rule: what a
+study may read from the folder.
+
+```md
+## The public API
+
+A study imports `load_dataset` and `score` (with `Dataset` and `Utterance`)
+from `benchmark`, and nothing else.
+
+- `score` gives the pooled WER of each subset, as
+  [core/transcript/README.md](../core/transcript/README.md) defines it.
+- `summarize` writes summary.csv, one row per model and subset. A study
+  reads it by column name and imports nothing from `benchmark`: the column
+  names are its whole contract with the folder.
+```
+
+Once a folder model is written, re-read each sentence against the triage: a
+sentence that names a concept the triage leaves out is cut, even when it
+only serves to set off another (a sentence contrasting the public API with
+the offline mode of Hugging Face goes; the rule of the public API stays
+alone).
+
+A concept enters one folder model only. Another doc that already describes
+it does not receive it a second time: it receives only the correction of
+its sentences the code now contradicts (a doc on fine-tuning that names the
+removed WER function gets that name corrected, not the pooled WER's
+definition). A doc of `docs/` receives a concept only when no README can
+hold it: a choice that binds several modules, with the options set aside.
+
+## Sharing a README with write-readme
+
+write-readme, the skill that writes a README's structure from the code,
+and this skill share each README passage by passage (a **passage** is a
+paragraph, a list, a table or a code block):
+
+- **write-readme's parts**: the first sentence and the status line,
+  recognised by their place at the top, untitled; the **file map** (one
+  line per file or subfolder, with what it holds) under `## Files`; the
+  **usage** (the folder's commands, each with what it produces) under
+  `## Usage`; plus a section the repo's conventions impose, such as a
+  study header (`**Status.**`, `**Data.**`, `**Result.**`). A placeholder
+  left to fill (« TODO: Notion link ») or a dated migration note belongs to
+  the part it sits in. A repo convention that imposes other headings for
+  the file map or the usage replaces these, and the boundary is read by
+  those headings.
+- **The folder model**: every other passage, under any other heading. It
+  gives the rules to know to use the folder without error, as the code
+  applies them: the ones you write, and the ones the README already held
+  before you, a caveat, a data format, links (« See also »). A **caveat** is
+  a rule to know so as not to go wrong: it belongs to the folder model, and
+  is yours.
+
+Neither skill touches the other's passages. You edit or write the folder
+model only; a wrong path in the usage is write-readme's to correct (its
+edit mode, which the doc pass runs): list it in the run report, do not fix
+it. Write the folder model after write-readme's parts. A passage of the
+folder model that names nothing the branch changes stays word for word,
+even history or an open discussion.
+
+## How a README changes
+
+For each README that receives a concept, or holds a passage naming
+something the branch changes, decide which change it is.
+
+### A local model edit
+
+A **local model edit** is a change after which each passage of the README
+stays in that README, even reworded, whatever its size. Cases: a concept
+renamed, split or merged without changing folder; a rule that changes
+meaning; a folder model that grows more complex or simpler at once; a
+folder that changes role. Most READMEs a feature touches are this case:
+the READMEs of the studies that call the benchmark name it or its WER, and
+none of their passages has to go elsewhere.
+
+Judge whether the folder model **still holds**, its concepts keeping their
+shape:
+
+| The folder model | What you do |
+|---|---|
+| still holds | Find the passages that name what the branch changes (a concept of the model, a name the diff changes) and check each against the code. A false passage gets the smallest edit that makes it true; the others keep their text word for word. You do not re-read the passages that name nothing changed: drift older than the feature stays as it is. |
+| no longer holds: the feature changes its concepts in depth, or the folder changes role | Rewrite it whole, ordered for the README's reader, from the old folder model and the concepts the triage lets in (**Where a concept goes**). Edits piled on a structure that no longer follows the concepts would grow the README by accretion. Then list its **missing facts** (below). |
+
+A folder that changes role (a study that becomes a package others import)
+also changes reader: its whole README is re-read for the new reader, and
+write-readme's parts need a full rewrite by write-readme. You do not write
+them: say it in the run report (`role change`), and the doc pass asks
+write-readme for it.
+
+### A restructuring
+
+A **restructuring** is a change after which passages must leave the
+README. Cases: a folder split in two; two folders merged; a concept that
+changes folder, when another folder starts writing it; a concept split
+between two folders; a folder removed. In benchmark-package, the report's
+figures go to the study that draws them and the WER rules to
+`core/transcript/`: `experiments/benchmark/README.md` is restructured.
+
+A restructuring takes two runs, with a stop between them:
+
+1. **The move plan.** Before writing any README, write the **move plan**:
+   each passage of the README, the README it goes to, and what it becomes
+   there, `as-is`, `rewritten`, or `nowhere`. Clear the README's old plan,
+   then one call per passage, in the README's order:
+
+   ```
+   view-concept moves <slug> clear <readme>
+   view-concept moves <slug> add <readme> "<passage>" --part readme|model --becomes as-is|rewritten|nowhere [--to <readme>] [--note "<one line>"]
+   ```
+
+   `<passage>` describes the passage in one line; `--part` says whose it is
+   (`readme` for write-readme's parts, `model` for the folder model); `--to`
+   is required unless `nowhere`, and names a README of the doc set. A
+   passage keeps its part in the README it goes to. Part of the plan for
+   `experiments/benchmark/README.md`:
+
+   | passage | part | goes to | becomes |
+   |---|---|---|---|
+   | the data: a dataset's manifest, its eval subsets | model | `benchmark/` | as-is |
+   | « clips without transcript count as hallucinations, out of the aggregated WERs » | model | `benchmark/` | rewritten as a link to `core/transcript/README.md` |
+   | the WER over speech clips only, clips without speech, their hallucination rate | model | `core/transcript/` | rewritten as the pooled WER concept |
+   | « a subset's own WER counts all its clips » | model | `core/transcript/` | rewritten: the code contradicts it |
+   | the report chain, the reading of `summary.csv`, the four figures | readme | the report study | as-is, paths corrected |
+   | results from before 30 September, « to remove after 31 October » | model | — | nowhere |
+
+2. **The stop.** End the run on the plan, writing no README of the
+   restructuring (the other READMEs of the run are written as usual), and
+   say in the run report that the move plan waits. The caller then puts
+   the session in its waiting phase: a wrong destination is corrected on
+   one row of the plan, before three READMEs carry it. The user comments on
+   the rows (`(moves <readme> · passage <id>)` in a batch) and presses
+   « Write READMEs ».
+3. **The writing.** The run that follows « Write READMEs » (`action:
+   write-readmes`) writes the restructured READMEs from the plan and the
+   comments on it. You write the folder model passages, each where its row
+   sends it; a passage of write-readme's parts is put in its destination's
+   parts as the row says, and write-readme checks it there (list those
+   READMEs in the run report). A README the code moved with its folder is
+   written at its new place, and no file stays at the old path; record the
+   move on its doc set entry, so the Doc tab compares it with the old
+   README at its old path:
+
+   ```
+   view-concept doc-set <slug> moved <path> <old path>
+   ```
+
+4. **The missing facts**, below, of the old README.
+
+## The missing facts
+
+After a folder model rewritten whole, or a restructuring, compare the old
+text with what you wrote: read the old folder model (or the old README)
+fact by fact (one thing it states: a command, a path, a rule, a reason)
+and keep each fact that no README you wrote says, in words or by a link to
+a doc that says it. These are the **missing facts**; one said in other
+words, once instead of three times, or as a link, is not missing. For
+each, propose `keep` (the reader needs it; say in what form it would come
+back) or `leave` (it fails the inclusion test, or the code contradicts it:
+say so). The proposal drops nothing: you take none back on your own, the
+user decides.
+
+Record them on the README the old file became (its new path, in the doc
+set), clearing its old list first:
+
+```
+view-concept facts <slug> clear <path>
+view-concept facts <slug> add <path> "<fact>" --propose keep|leave --reason "<one line>" [--passage N]
+```
+
+`--passage N` is the number of the old passage that held it, counted from
+the top. From benchmark-package: « Results from before 30 September do not
+compare with the new ones: the models' names and decoding changed. »
+
+## Writing
+
+- Write in the README's language, under the session lexicon's names, the
+  concepts as they now stand, without the before/after comparison the
+  model makes.
+- **Name the term.** Write the term itself, defined where it appears,
+  never a paraphrase that takes its name later.
+- **Mechanism over analogy.** A real command, file, function or flag with
+  what it produces; no metaphor for a mechanism.
+
+Once written, re-read each folder model for undefined repo terms,
+metaphors, overloaded words and bare references (« the pipeline » never
+introduced), and fix each: the precise term, a defining clause, or a cut.
+
+You write the READMEs and the session files the commands above name, and
+nothing else. You never commit: the caller does.
+
+## The run report
+
+The run's last message, one line per README, then the findings:
+
+```
+document-feature · triage: 5 enter · 4 stay out
+core/transcript/README.md · folder model rewritten · missing facts: 1
+benchmark/README.md · local model edit: 2 passages edited · role change
+experiments/finetuning/gign/README.md · local model edit: 1 passage edited
+experiments/benchmark/README.md · restructuring: move plan waiting (12 passages)
+write-readme's parts: benchmark/README.md, usage, a path to experiments/benchmark/ (left to write-readme)
+candidates: subset (benchmark/, experiments/)
+code: none
+```
+
+`role change` asks the caller for write-readme's full rewrite of that
+README's parts. A line `move plan waiting` asks the caller to stop until
+« Write READMEs ». `code` lists each rule of the model the code applies
+otherwise, as written from the code.
