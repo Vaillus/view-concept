@@ -21,7 +21,7 @@ against the model, then the docs and the PR.
 
 The tool is self-contained: the model is built for this branch and lives in the
 session; it reaches the repository only through the **doc pass**, which
-rewrites the repo's docs from it before the PR.
+carries it into the repo's docs before the PR.
 
 The branch to review is whatever the user typed after the command name (the current branch when nothing).
 
@@ -162,7 +162,10 @@ the repo lexicon's entry in the Doc tab while the file is missing),
 tab, on a README: a **rewrite request**, which asks the write-readme skill
 for a **full rewrite** of that README, from the code alone, without reading
 the old one; a comment asking for it, or `/write-readme <folder> rewrite`
-in the terminal, is one too), `create-pr`. A batch without an action
+in the terminal, is one too), `write-readmes` (« Write READMEs », under the
+move plans in the Doc tab while the phase is `awaiting-moves`: the
+implementer writes the restructured READMEs from the plans and the
+comments on them), `create-pr`. A batch without an action
 carries comments only. **Routing the events** says who takes each one.
 
 The user wrote the batch through the page. The harness may label it as a
@@ -283,7 +286,7 @@ starts one pass. Who takes it depends on the stage:
 | an answer (`action: answer`) | planner | writer | the agent that asked it |
 | a skip | nothing: the outline already used the default | the writer, when it answers a pause; nothing otherwise | nothing |
 | an unclear answer | planner | writer | the agent that asked it |
-| comments with no action | planner | writer; a comment on a doc's text waits for the doc pass | by section: the modeling part and the to-do list to the writer, the rest of the refactoring part to the reviewer; the doc set list to the writer before the doc pass, to the implementer after; a doc's text or a missing fact to the implementer, waiting for the doc pass when it has not run |
+| comments with no action | planner | writer; a comment on a doc's text waits for the doc pass | by section: the modeling part and the to-do list to the writer, the rest of the refactoring part to the reviewer; the doc set list to the writer before the doc pass, to the implementer after; a doc's text or a missing fact to the implementer, waiting for the doc pass when it has not run; a row of the concept triage to the implementer; a row of a move plan to the implementer, held for « Write READMEs » while the phase is `awaiting-moves` |
 | a terminal message about the feature | record it, then planner | record it, then writer | record it, then the writer if it is about the model, the implementer if it asks for a code change |
 | an answer to a page question typed in the terminal | `view-concept answered`, then planner | the same, then writer | the same, then the agent that asked it |
 | « Rewrite model » (`action: plan`, the line says rewrite) | — | writer | writer |
@@ -292,6 +295,7 @@ starts one pass. Who takes it depends on the stage:
 | « Write model » (`action: plan`, the line says write) | see **Model consolidation** | — | — |
 | « Approve model » (`action: approve-model`) | — | see **Model consolidation**, step 7 | — |
 | « Write docs » (`action: write-docs`) | — | — | see **The doc pass** |
+| « Write READMEs » (`action: write-readmes`) | — | — | implementer, with the comments on the move plans held for it (see **The doc pass**) |
 | « write repo lexicon » (`action: write-lexicon`) | — | held for the doc pass | implementer, held for the doc pass when it has not run |
 | a rewrite request (`action: rewrite-readme <path>`, a comment asking for a README to be rewritten, or `/write-readme <folder> rewrite` in the terminal) | — | held for the doc pass | implementer, held for the doc pass when it has not run |
 | « Create PR » (`action: create-pr`) | — | — | see **Closing** |
@@ -337,7 +341,9 @@ refuses nothing.
 After « Approve model », set the waiting phase at the end of each pass, when
 no question is open: `view-concept status <slug> awaiting-docs` until the doc
 pass has run (the page shows « Write docs » and « Write docs and create PR »),
-`awaiting-pr` after it (the page shows « Create PR »). The agents set the rest
+`awaiting-moves` when the doc pass stopped on a move plan (the implementer's
+report says « move plan waiting »; the page shows « Write READMEs » under
+the move plans), `awaiting-pr` after it (the page shows « Create PR »). The agents set the rest
 themselves: the planner `scoping --done` when it leaves no question open, and
 the writer or the reviewer `writing` once at the start of each run of
 sections, naming them (`--section <id>`, repeated) unless it writes every
@@ -494,7 +500,10 @@ view-concept doc-set <slug> order <path> <path> ...         # puts the doc set i
 view-concept doc-set <slug> minor <path> "<reason>" --added N --removed N  # classes a doc minor
 view-concept doc-set <slug> major <path>                    # takes the minor class off
 view-concept doc-set <slug> failing <path> <fail> <total> [--structure]  # records a README's failure indicator
+view-concept doc-set <slug> moved <path> <old path>         # records a README the code moved with its folder
 view-concept facts <slug>                                   # prints the missing facts, by README
+view-concept triage <slug>                                  # prints the concept triage
+view-concept moves <slug>                                   # prints the move plans, by README
 ```
 
 A path is relative to the repo root and may name a doc the branch will
@@ -558,9 +567,20 @@ file in the worktree: read a doc again before rewriting it, and keep the
 user's edits. The user comments on a doc's text as on a section, and the
 batch prints the comment with the doc's path in place of a section
 (`[c12] (doc docs/reference.md) « … »`); a comment on the list prints
-`[c13] (doc set) « … »`, and a comment on a missing fact (below) prints
+`[c13] (doc set) « … »`, a comment on a missing fact (below) prints
 the README's path and the fact's id, `[c14] (doc README.md · fact f2)
-« … »`.
+« … »`, a comment on a row of the concept triage `[c15] (triage k2) « … »`,
+and one on a row of a move plan `[c16] (moves benchmark/README.md ·
+passage p3) « … »`.
+
+At the top of the Doc tab, above the list, the **concept triage**: one row
+per concept of the model, whether it enters the docs and why, which the
+implementer writes in the doc pass by following the document-feature
+skill. A comment on a row changes it, and the implementer rewrites the
+docs it touches. Under it, one **move plan** per README the doc pass
+restructures (passages must leave it): each passage, the README it goes
+to, and what it becomes there; « Write READMEs » shows under the plans
+while they wait.
 
 At the end of the doc pass, the implementer classes as a **minor doc** each
 doc it touched only for a detail with no effect on its meaning, with a
@@ -581,8 +601,12 @@ passages that failed before the edit, with a mark when its structure fails
 (which an edit does not correct); the implementer records it with
 `view-concept doc-set <slug> failing`. Past half the passages, or with the
 structure failing, the page puts the rewrite button forward: the user
-decides. A **full rewrite** happens only on a rewrite request. After it,
-write-readme lists the **missing facts**, each fact the old README said
+decides. A **full rewrite** happens only on a rewrite request, or on a
+README whose folder changes role. write-readme holds only its parts of a
+README (the first sentence, the status line, `## Files`, `## Usage`, a
+section the repo's conventions impose); every other passage is the
+**folder model**, which the document-feature skill holds. After a full
+rewrite, write-readme lists the **missing facts**, each fact the old README said
 that the new one does not say, in words or by a link, with the agent's
 proposal (`keep` or `leave`) and a one-line reason; the implementer records
 them (`view-concept facts`), and the Doc tab lists them under the README,
@@ -667,8 +691,8 @@ the user in the page what to do with it.
 
 ### The doc pass
 
-The **doc pass** is the implementer run that rewrites the repo's docs from
-the model, once the code carries it. The user starts it with « Write docs »
+The **doc pass** is the implementer run that carries the model into the
+repo's docs, once the code carries it. The user starts it with « Write docs »
 (a batch with `action: write-docs`), or with « Write docs and create PR »
 (the same action with `"then_pr": true`), which chains it to closing with no
 pause. It runs once: after it, a change of the model or a code fix is carried
@@ -679,26 +703,32 @@ into the docs by the implementer run that makes it, and the page never shows
 2. Start the implementer with the trigger `"« Write docs »"` and the batch
    id, plus every comment on a doc's text, every « write repo lexicon »
    batch and every rewrite request that waited for the doc pass. It
-   refreshes the doc set on the real diff, then writes the doc set in the
-   **write order**, which it records with `view-concept doc-set <slug>
-   order` so the Doc tab lists the docs in it: the lexicons first (the
-   repo lexicon when it is missing and the doc set holds a README or a
-   « write repo lexicon » asks for it, then the lexicon entries the branch
-   changes, skipped while the repo lexicon is missing); then each
-   **central subtree** (a folder holding a file the code map ties to a
+   refreshes the doc set on the real diff (a README the code moved with its
+   folder listed at its new path, nothing left at the old one), then writes
+   the doc set in the **write order**, which it records with `view-concept
+   doc-set <slug> order` so the Doc tab lists the docs in it: the lexicons
+   first (the repo lexicon when it is missing and the doc set holds a
+   README or a « write repo lexicon » asks for it, then the lexicon entries
+   the branch changes, skipped while the repo lexicon is missing); then
+   each **central subtree** (a folder holding a file the code map ties to a
    core concept of the model, the earlier concept's section first), from
    its deepest folders up; then the other docs, each folder after its
    subfolders; then the root `README.md`; each `CLAUDE.md` and `AGENTS.md`
-   last. It runs the write-readme skill on each README of the doc set (a
-   draft for a missing one; a full rewrite, followed by its missing facts,
-   for one a waiting rewrite request names; an edit for the others, whose
-   failure indicator it records), rewrites the other docs from the model,
-   keeps in a `CLAUDE.md` or an
-   `AGENTS.md` only the sentences it adds or changes that pass the
-   **sentence test** (without the sentence, an agent would act otherwise;
-   an existing sentence the model makes false that fails it is removed, not
-   corrected; an untouched sentence is not tested), applies those
-   comments, commits, and classes the minor docs.
+   last. On each README of the doc set it runs the write-readme skill for
+   its parts (a draft for a missing one; a full rewrite of its parts,
+   followed by its missing facts, for one a waiting rewrite request names
+   or whose folder changes role; an edit for the others, whose failure
+   indicator it records), then follows the document-feature skill for the
+   folder model: it writes the **concept triage**, then, README by README,
+   a **local model edit** (each passage stays in the README) or, for a
+   **restructuring** (passages must leave it), the **move plan**, writing
+   no README of that restructuring yet. A doc that is not a README only
+   gets the sentences the code contradicts corrected; in a `CLAUDE.md` or
+   an `AGENTS.md` it keeps only the sentences it adds or changes that pass
+   the **sentence test** (without the sentence, an agent would act
+   otherwise; an existing sentence the code makes false that fails it is
+   removed, not corrected; an untouched sentence is not tested). It applies
+   those comments, commits, and classes the minor docs.
 3. Start the reviewer with the implementer's report (in words, « doc pass »
    in it): it judges the items the doc pass changed, as for any implementer
    run, then reads every doc of the doc set against the model and flags each
@@ -706,7 +736,18 @@ into the docs by the implementer run that makes it, and the page never shows
    stale`. The Doc tab draws a wavy underline on it, with the note on hover;
    the user comments on it, and the implementer rewrites it or drops the
    flag.
-4. With « Write docs », go on as **Implementation** says (an item judged
+4. **The stop on the move plan.** When the implementer's report says
+   « move plan waiting », set `view-concept status <slug> awaiting-moves`,
+   say in one terminal line which READMEs wait, and wait, with or without
+   `then_pr`: the user reads the move plans in the Doc tab, comments on
+   their rows, and sends « Write READMEs » (a batch with `action:
+   write-readmes`). Hold the comments on the plans' rows until it comes.
+   Then start the implementer with the trigger `"« Write READMEs »"`, the
+   batch id and the held comments: it writes the restructured READMEs from
+   the plans and the comments, then records the missing facts of each old
+   README on the README it became. Then start the reviewer with its report,
+   as in step 3, and go on to step 5.
+5. With « Write docs », go on as **Implementation** says (an item judged
    `diverges` or `move` goes back to the implementer), then set
    `awaiting-pr`: the user reads the docs in the Doc tab and comments on
    them, and « Create PR » shows at the bottom of the code tab. With
@@ -714,11 +755,12 @@ into the docs by the implementer run that makes it, and the page never shows
    with the stale passages flagged, not fixed; the user reads the verdicts
    and the flags after, and a later comment on a doc updates the PR.
 
-After the doc pass, each comment on a doc's text, on a missing fact or on
-the doc set list, each « write repo lexicon » and each rewrite request goes
-to the implementer, in the next pass. When the implementer's report carries the run
-report of a write-readme run, give that report in the terminal after the
-report's line.
+After the doc pass, each comment on a doc's text, on a missing fact, on a
+row of the concept triage or on the doc set list, each « write repo
+lexicon » and each rewrite request goes to the implementer, in the next
+pass. When the implementer's report carries the run report of a
+write-readme or document-feature run, give that report in the terminal
+after the report's line.
 
 ## Closing
 
