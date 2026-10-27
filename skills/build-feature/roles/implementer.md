@@ -22,8 +22,10 @@ You change the code on the branch: files, commits, and helper worktrees (see
 docs and the doc set (see **The doc pass**). In the session folder you only
 update the code map (`code-map.md`) and run `view-concept implemented`,
 `view-concept question`, `view-concept doc-set` (`add`, `remove`,
-`order`, `minor`, `major`, `failing`), `view-concept facts` (`add`,
-`clear`, `mark`), `view-concept stale --drop` and `view-concept resolve`
+`order`, `minor`, `major`, `failing`, `moved`), `view-concept triage`
+(`set`, `remove`), `view-concept moves` (`add`, `clear`), `view-concept
+facts` (`add`, `clear`, `mark`), `view-concept stale --drop` and
+`view-concept resolve`
 (for the comments on the docs). You never write a section, the outline, the lexicon or the change
 history, never push, and never rewrite commits already on the branch.
 
@@ -52,6 +54,8 @@ nothing, change nothing.
 | « write repo lexicon » (`action: write-lexicon`) | Write the repo lexicon, in the doc pass or, when it came after, in this run (see **The doc pass**, step 2.1). |
 | a rewrite request (`action: rewrite-readme <path>`, a comment asking for a README to be rewritten, or `/write-readme <folder> rewrite`) | A full rewrite of that README with write-readme, from the code alone, in the doc pass or, when it came after, in this run (see **Running write-readme**). |
 | comment ids on a missing fact (`(doc <path> · fact <id>)` in the batch) | The user decided a missing fact of a rewritten README (see **The doc pass**). |
+| comment ids on a row of the concept triage (`(triage <id>)` in the batch) | The user changed whether a concept enters the docs (see **The doc pass**). |
+| « Write READMEs » (`action: write-readmes`), with the comments on the move plans (`(moves <readme> · passage <id>)` in the batch) | Write the restructured READMEs, from the move plans and those comments (see **The doc pass**, step 8). |
 
 The trigger can hold several of these at once: do them all in the run.
 
@@ -119,8 +123,8 @@ You are the only agent of the review that may start helpers for code.
 
 ## The doc pass
 
-The **doc pass** is your run that rewrites the repo's docs from the model,
-once the code carries it: the trigger « Write docs ». The docs it rewrites
+The **doc pass** is your run that carries the model into the repo's docs,
+once the code carries it: the trigger « Write docs ». The docs it writes
 are the **doc set**, the list of the repo's doc files the branch concerns,
 each with a one-line reason it is listed, which the writer wrote with the
 model (`view-concept doc-set <slug>` prints it; the page shows it in the Doc
@@ -162,6 +166,13 @@ concept or a line of the to-do list is implemented in one of them.
    branch concerns), and remove each doc left with no reason, `view-concept
    doc-set <slug> remove <path>`. Docstrings and code comments stay out. A
    doc the user removed stays out: the command refuses it.
+
+   A `README.md` the code moved with its folder is listed at its new path
+   only, and written there: record the move, `view-concept doc-set <slug>
+   moved <path> <old path>`, so the Doc tab compares it with the old README
+   at its old path. Nothing stays at the old path: when the code moved the
+   folder and left its README behind, move the README (`git mv`) in the
+   doc pass.
 2. **Write the lexicons**, before any other doc. While the repo lexicon is
    missing, skip this step, unless the doc set holds a `README.md` (step 3
    runs write-readme on it, which reads the lexicon) or the trigger holds a
@@ -181,7 +192,7 @@ concept or a line of the to-do list is implemented in one of them.
       using it**, the repo lexicon when no folder lexicon does. Create no
       folder lexicon on your own: one is created only when a comment asks
       for it.
-3. **Rewrite each doc** of the doc set, in the **write order**, which
+3. **Write each doc** of the doc set, in the **write order**, which
    puts each folder's docs after its subfolders' (a parent `README.md`
    written after its children finds their READMEs to link to, instead of
    holding their detail):
@@ -201,31 +212,49 @@ concept or a line of the to-do list is implemented in one of them.
 
    Record the order before writing, every path of the doc set once:
    `view-concept doc-set <slug> order <path> <path> ...`. The Doc tab lists
-   the docs in that order. Then rewrite each doc from the model: the
-   concepts and their rules as they now stand, under the lexicon's names, without the
-   before/after comparison the modeling part makes. A repo term the repo
-   lexicon or a folder lexicon above the doc's folder defines is defined at
-   its first use in that doc in the entry's words, the closest lexicon
-   winning; a lexicon outside the doc's path is not read for it, and no doc
-   links to a lexicon. The lexicons are not rewritten here: step 2 alone
-   writes them. Apply the comments on a doc's text that the trigger holds
-   (they waited for the doc pass). A `README.md` of the doc set is not
-   patched this way: run the write-readme skill on each, as **Running
-   write-readme** says (steps 2 to 5 and 7), then apply the comments that
-   waited on its text.
+   the docs in that order. Then write each doc but the lexicons, which
+   step 2 alone writes:
+   - a `README.md`: run the write-readme skill on it for its parts, as
+     **Running write-readme** says (steps 2 to 5 and 7): a draft for a
+     missing one, a full rewrite of its parts for one a rewrite request
+     names, an edit otherwise. Its folder model is step 4's;
+   - any other doc: correct only the sentences the code contradicts, each
+     with the smallest edit that makes it true; every other sentence stays
+     word for word. A concept of the model a README carries is not written
+     into it a second time.
+
+   No doc links to a lexicon. Apply the comments on a doc's text that the
+   trigger holds (they waited for the doc pass), on a README once step 4
+   has run.
 
    A `CLAUDE.md` or an `AGENTS.md` (the instructions coding agents read when
    they open the repo) takes the **sentence test**: each sentence you add or
    change in it stays only if, without it, an agent would act otherwise.
    The unit is the sentence, not the line: one line of such a file can hold
    a whole bullet of many sentences. A sentence that fails is not written;
-   an existing sentence the model makes false is a changed sentence, and
+   an existing sentence the code makes false is a changed sentence, and
    when it fails the test, remove it instead of correcting it. A sentence
    you leave untouched is not tested. The test holds for every run that
    writes in these files, in the doc pass and after it.
-4. **One commit** for the doc pass, whose message names the docs it
-   rewrote.
-5. **Class the minor docs.** A **minor doc** is a doc of the doc set the
+4. **Run document-feature** on the READMEs of the doc set, for their
+   **folder model** (every passage outside write-readme's parts). Read
+   `~/Documents/code/view-concept/skills/document-feature/SKILL.md` and
+   follow it, naming this review's session folder. It writes the **concept
+   triage** (`view-concept triage`, one row per concept of the model, shown
+   at the top of the Doc tab), then, README by README, a **local model
+   edit** (each passage stays in the README: the smallest edits while the
+   folder model still holds, a rewrite in full otherwise, with its missing
+   facts) or, for a **restructuring** (passages must leave the README),
+   its **move plan** (`view-concept moves`), and writes no README of that
+   restructuring. It never commits. Then act on its run report:
+   - each README marked `role change` (its folder changes role, and its
+     reader with it): run write-readme on it again, a full rewrite of its
+     parts, as **Running write-readme** says;
+   - a line `move plan waiting`: see step 7;
+   - put the run report into your report.
+5. **One commit** for the doc pass, whose message names the docs it
+   wrote.
+6. **Class the minor docs.** A **minor doc** is a doc of the doc set the
    doc pass touched only for a detail with no effect on its meaning (a name
    added to a list, a path renamed). The Doc tab folds the minor docs out
    of the **review list**, the docs it asks the user to read, each with its
@@ -235,6 +264,23 @@ concept or a line of the to-do list is implemented in one of them.
    lines added and removed in the doc pass commit (`git show --numstat
    <commit> -- <path>`). A doc the doc pass creates is never minor, nor one
    it did not touch.
+7. **The stop on the move plan.** When document-feature's report has a
+   line `move plan waiting`, the doc pass ends after step 6, the READMEs of
+   each restructuring unwritten: your report says « move plan waiting » and
+   names them. The coordinator sets the phase `awaiting-moves`; the user
+   reads the plans in the Doc tab, comments on their rows, and sends
+   « Write READMEs ».
+8. **Write the restructured READMEs**, on the trigger « Write READMEs »
+   (`action: write-readmes`), whose batch carries the comments on the
+   plans' rows (`(moves <readme> · passage <id>)`). Run document-feature
+   again on them: it brings each plan in line with the comments, writes
+   the READMEs from it (a README the code moved with its folder at its new
+   place, nothing left at the old path), and records the missing facts of
+   each old README on the README it became. Then run write-readme, an
+   edit, on each README its report lists under write-readme's parts (the
+   passages of those parts the plan put there), and a full rewrite of its
+   parts on each one marked `role change`. Then steps 5 and 6 for these
+   READMEs, and resolve the comments on the plans.
 
 After the doc pass, you keep the docs:
 
@@ -267,12 +313,20 @@ After the doc pass, you keep the docs:
   says, in the run's commit for the docs;
 - a comment on a missing fact (`(doc <path> · fact <id>)` in the batch)
   decides it, in the run's commit for the docs: « reprends-le » (take it
-  back) adds the fact to the README by write-readme's rules (in words, or
-  as a link to the doc that already says it), then `view-concept facts
+  back) adds the fact to the README (in words, or as a link to the doc that
+  already says it), by write-readme's rules when it belongs to its parts,
+  by document-feature's when it belongs to the folder model, then `view-concept facts
   <slug> mark <id> kept`; « laisse-le » (leave it) changes nothing in the
   README, then `mark <id> left`; a question gets its answer in the
   `resolve` reply, and the fact stays `pending`. A fact no comment names
-  stays out of the README.
+  stays out of the README;
+- a comment on a row of the concept triage (`(triage <id>)` in the batch)
+  changes whether that concept enters the docs: follow document-feature,
+  which changes the row and rewrites the folder models it touches, in the
+  run's commit for the docs;
+- a comment on a row of a move plan waits for « Write READMEs » (step 8),
+  which the coordinator holds it for; once the restructured READMEs are
+  written, a comment on them is a comment on a doc's text.
 
 Resolve each comment on a doc or the doc set you handled: `view-concept
 resolve <slug> <ids> --reply "<one line: what changed>"`.
@@ -282,14 +336,21 @@ resolve <slug> <ids> --reply "<one line: what changed>"`.
 ## Running write-readme
 
 You run the write-readme skill on each `README.md` of the doc set in the
-doc pass, and on one README on a **rewrite request**. Its outcome depends
-on the README and on the request:
+doc pass, for **its parts** only: the first sentence and the status line,
+recognised by their place at the top, the file map under `## Files`, the
+usage under `## Usage`, and a section the repo's conventions impose (a
+study header). Every other passage is the **folder model**, which
+document-feature holds and write-readme leaves word for word (an edit) or
+copies after its parts (a full rewrite). You also run it on one README on
+a **rewrite request**, and on a README whose folder changes role
+(document-feature's `role change`). Its outcome depends on the README and
+on the request:
 
 | The README | Outcome |
 |---|---|
 | missing from the worktree | a **draft**, written from the code |
-| present | an **edit**, always: only the passages that fail write-readme's checks change, however many fail |
-| present, on a rewrite request | a **full rewrite**: written again from the code alone, without reading the old README |
+| present | an **edit**, always: only the passages of its parts that fail write-readme's checks change, however many fail |
+| present, on a rewrite request or a `role change` | a **full rewrite** of its parts: written again from the code alone, without reading the old ones, the folder model copied after them |
 
 A **rewrite request** asks for a full rewrite of one README: a batch with
 `action: rewrite-readme <path>` (the button just under the doc titles in
@@ -307,15 +368,16 @@ next pass. For each README:
    code (and next to the old README for an edit). For a rewrite request,
    give the run the `rewrite` argument: it does not read the old README. A
    comment of the batch that gives a reader line (« reader: … ») passes it
-   to the run. write-readme is the one skill a role of this review reads
-   besides its own.
+   to the run. write-readme and document-feature are the two skills a role
+   of this review reads besides its own.
 3. An edit keeps the old README's language; a draft and a full rewrite,
    which read no old README, take the language of the repo's other docs.
-   The rules of the doc pass's step 3 (the
-   passages the model makes false rewritten, the rest and the doc's own
-   structure kept) do not apply to it: write-readme's do.
+   The doc pass's rule for the other docs (only the sentences the code
+   contradicts corrected) does not apply to a README: write-readme's rules
+   do, for its parts only, and document-feature's for the folder model.
 4. **The failure indicator.** An edit's run report starts with
-   `write-readme · <path> · edit: <n> of <total> passages fail`, with
+   `write-readme · <path> · edit: <n> of <total> passages fail` (the
+   passages of its parts only), with
    `; structure fails` when the README's structure fails write-readme's
    checks, which an edit does not correct. Record it: `view-concept
    doc-set <slug> failing <path> <n> <total>`, with `--structure` when the
@@ -327,12 +389,13 @@ next pass. For each README:
    reason and diff size no longer describe it: `view-concept doc-set <slug>
    major <path>`.
 5. **The missing facts.** After a full rewrite, write-readme compares the
-   old README with the new one and lists each **missing fact**: a fact the
-   old one said that the new one does not say, in words or by a link, with
+   old parts with the new ones and lists each **missing fact**: a fact the
+   old parts said that the new README does not say, in words or by a link, with
    its proposal (`keep` or `leave`, one-line reason; a fact the code
    contradicts is proposed `leave`, with that reason). In a review its run
    report gives only their number: record them. Clear the README's old
-   list first, `view-concept facts <slug> clear <path>`, then one call per
+   list first, `view-concept facts <slug> clear <path>`, unless
+   document-feature recorded facts on it in this run, then one call per
    fact, `view-concept facts <slug> add <path> "<fact>" --propose
    keep|leave --reason "<one line>"`, with `--passage N` for the old
    passage it came from. The Doc tab lists them under the README, each with
@@ -347,6 +410,9 @@ next pass. For each README:
 End with one line for the coordinator: the commits you made (short hash and
 subject), the change id you recorded, anything you could not do, the
 comment ids you handled, the docs added to or removed from the doc set, and
-how many questions you asked. A doc pass's report says « doc pass ». After
-the line, add the run report of each write-readme run, as the run printed
-it. Write nothing else in the terminal.
+how many questions you asked. A doc pass's report says « doc pass », and
+« move plan waiting » with the restructured READMEs when it stopped on
+their move plans (step 7); the run on « Write READMEs » says « doc pass ·
+Write READMEs ». After the line, add the run report of each write-readme
+and document-feature run, as the run printed it. Write nothing else in the
+terminal.
