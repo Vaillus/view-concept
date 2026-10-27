@@ -949,7 +949,9 @@ function sectionBlock(s, { bare = false } = {}) {
    Two marks: the green bar and words of the change highlights (markUpdates), and the base
    mark, a bar in the right margin of every block whose text is not among the blocks of the
    doc at the merge base (`base_html`), every block for a doc created on the branch (`new`),
-   and in a doc the base had, a blue background on the words it added (markBase). Stale passages get a wavy underline whose
+   and in a doc the base had, a blue background on the words it added (markBase). A doc
+   the code moved with its folder (`from`, its old path, shown « moved from » in the doc
+   set list) is compared with the old doc at its old path. Stale passages get a wavy underline whose
    hover shows the note (applyHighlights, "stale passages"). Lexicon terms are underlined,
    none as its definition: the model's lexicon, or in a docs review the reference model's
    (annotateDocTerms). Relative images and links load from the worktree,
@@ -1107,10 +1109,14 @@ function moveBlocks(docs) {
   });
 }
 
+// The old path of a doc the code moved with its folder: its base mark reads the doc there.
+const movedFrom = (d) => (d.from ? el("span", { class: "dim doc-moved", text: ` · moved from ${d.from}`,
+                                                 title: "The code moved this doc: its blue bar compares it with the old doc at its old path" }) : null);
+
 function docSetBlock(docs) {
   const item = (d) => el("li", {},
     el("button", { class: "doc-open", text: d.path, title: "Show this doc", onclick: () => openDoc(d.path) }),
-    d.reason ? ` — ${d.reason}` : "",
+    d.reason ? ` — ${d.reason}` : "", movedFrom(d),
     d.minor && !isFolded(docs, d) ? el("span", { class: "badge", text: `minor · ${diffText(d)}`, title: `Minor: ${d.minor}. ${liftedBy(docs, d).replace(/^./, (c) => c.toUpperCase())} brought it back to the review list` }) : null,
     staleBadge(staleCount(docs, d)), failingBadge(d), factsBadge(d), missingBadge(docs.views[d.path] || {}),
     lexiconButton(d.path, docs.views[d.path] || {}));
@@ -1121,7 +1127,7 @@ function docSetBlock(docs) {
         el("summary", { text: `${minor.length} minor doc${minor.length > 1 ? "s" : ""}` }),
         el("ul", { class: "doc-set" }, ...minor.map((d) => el("li", {},
           el("button", { class: "doc-open", text: d.path, title: "Show this doc", onclick: () => openDoc(d.path) }),
-          ` — minor: ${d.minor}`, el("span", { class: "doc-diff", text: diffText(d), title: "Its diff size: lines added and removed" }),
+          ` — minor: ${d.minor}`, movedFrom(d), el("span", { class: "doc-diff", text: diffText(d), title: "Its diff size: lines added and removed" }),
           failingBadge(d), factsBadge(d), missingBadge(docs.views[d.path] || {})))))
     : null;
   return el("section", { class: "sec doc-set-sec", id: `sec-${DOC_SET}`, "data-id": DOC_SET },

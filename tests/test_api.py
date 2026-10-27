@@ -727,3 +727,18 @@ def test_state_carries_the_move_plans_highlighted_until_read(client, doc_review)
     }
     b = client.post("/api/s/doc-tab/batch", json=body).json()
     assert b["action"] == "write-readmes" and b["comments"][0]["section"] == "moves:p2"
+
+
+def test_the_base_mark_reads_a_moved_doc_at_its_old_path(client, doc_review):
+    repo = doc_review.repo_dir()
+    _git(repo, "init", "-b", "main")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "base")
+    _git(repo, "switch", "-c", "feat")
+    _git(repo, "mv", "docs/reference.md", "docs/missing.md")
+    doc_review.set_moved("docs/missing.md", "docs/reference.md")
+    docs = client.get("/api/s/doc-tab").json()["docs"]
+    view = docs["views"]["docs/missing.md"]
+    assert view["base_html"] == "<h1>Reference</h1>\n<p>The keys 1 to 4.</p>\n"
+    assert view["new"] is False
+    assert docs["set"][1]["from"] == "docs/reference.md" and "from" not in docs["set"][0]

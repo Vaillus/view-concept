@@ -166,7 +166,7 @@ it carried and the note. Like seen.json, it is the page's write: it never counts
 agent's activity.
 
 The doc set is the list of repo docs the Doc tab shows: {docs: [{path, reason, minor?,
-diff?, failing?}], removed: [paths]}. `path` is relative to the repo root (plan.json
+diff?, failing?, from?}], removed: [paths]}. `path` is relative to the repo root (plan.json
 `repo`), `reason` the one line that says why the doc is listed. An agent keeps it
 (`doc-set add` and `remove`); a doc the user removed by a comment goes to `removed`, and
 an agent's refresh never adds it back unless the user asks (`--user`). The docs are kept
@@ -190,9 +190,12 @@ alone. The doc sections stay out of the published page, the vault export, the pu
 fingerprint and `check`, which read the outline's sections only. The base mark compares
 a doc's worktree file (uncommitted changes included) with the same doc at the merge base
 of the branch and its base branch (`merge_base`, `base_text`); a doc absent there was
-created on the branch. A rewrite request is a batch whose action is "rewrite-readme",
-sent by the button under the bar of doc titles while a README.md of the doc set is in
-sight: it carries that README's `path` (present in the worktree or not yet), and asks
+created on the branch. A README the code moved with its folder is written at its new
+place, and nothing stays at the old path: its entry's `from` is the old path (`doc-set
+moved`), and the base mark compares it with the old README there (`base_path`), so it is
+neither new nor a draft of the doc pass. A rewrite request is a batch whose action is
+"rewrite-readme", sent by the button under the bar of doc titles while a README.md of the
+doc set is in sight: it carries that README's `path` (present in the worktree or not yet), and asks
 the agent that owns the docs to write it again with the write-readme skill. While the
 repo lexicon (REPO_LEXICON: the reader line and the terms the repo's folders share, for
 agents) is missing from the worktree, « write repo lexicon » on its doc set entry sends a
@@ -1348,6 +1351,29 @@ class Session:
         _write_json(self.doc_set_path, data)
         return entry
 
+    def set_moved(self, path: str, old: str | None) -> dict[str, Any]:
+        """Record that doc `path` of the doc set is the one the code moved from `old`
+        (`from`, its path at the merge base); `old` None clears it."""
+        path = doc_path(path)
+        data = self.read_doc_set()
+        entry = self._listed_doc(data, path)
+        if old is None:
+            entry.pop("from", None)
+        else:
+            old = doc_path(old)
+            if old == path:
+                raise SessionError(f"{path} was not moved: its old path is its path")
+            entry["from"] = old
+        _write_json(self.doc_set_path, data)
+        return entry
+
+    def base_path(self, path: str) -> str:
+        """Where doc `path` was at the merge base: its old path when the code moved it
+        (`from`), else its own."""
+        path = doc_path(path)
+        entry = next((d for d in self.read_doc_set()["docs"] if d.get("path") == path), {})
+        return str(entry.get("from") or path)
+
     def created_by_doc_pass(self, path: str) -> bool:
         """Whether doc `path` is one the doc pass created, so never minor and with no
         failure indicator: absent at the merge base, and added on the branch once the doc
@@ -1356,11 +1382,11 @@ class Session:
         (missing from the worktree, or written and not committed).
         Before that batch, a doc new on the branch came with the code commits. In a docs
         review (workflow review-docs), which has no doc pass and whose commits are all doc
-        work, every doc absent from the merge base is one the review created. False when
-        git cannot tell."""
+        work, every doc absent from the merge base is one the review created. A doc the code
+        moved is looked for at its old path. False when git cannot tell."""
         path = doc_path(path)
         commit = self.merge_base()
-        if self.base_text(path, commit) != "":
+        if self.base_text(self.base_path(path), commit) != "":
             return False
         if self.read_plan().get("workflow") == "review-docs":
             return True
@@ -2910,8 +2936,11 @@ def _draft_entry(draft: dict[str, Any], did: str) -> dict[str, str]:
 
 def format_doc(d: dict[str, Any]) -> str:
     """One doc of the doc set on one line (`doc-set`, the agents' context): its path and
-    reason, its minor class with its diff size, the failure indicator of a README."""
+    reason, the old path it was moved from, its minor class with its diff size, the failure
+    indicator of a README."""
     line = f"{d['path']} — {d.get('reason', '')}"
+    if d.get("from"):
+        line += f" · moved from {d['from']}"
     if d.get("minor"):
         diff = d.get("diff") or {}
         line += f" · minor: {d['minor']} (+{diff.get('added', 0)} −{diff.get('removed', 0)})"

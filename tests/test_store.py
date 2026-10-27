@@ -12,6 +12,7 @@ from view_concept.store import (
     SessionError,
     format_batch,
     format_changes,
+    format_doc,
     list_sessions,
     project_of,
 )
@@ -1530,3 +1531,30 @@ def test_write_readmes_ends_the_stop_on_the_move_plans(docs_review):
     assert s.write_status("awaiting-moves")["phase"] == "awaiting-moves"
     b = s.add_batch([], action="write-readmes")
     assert "action: write-readmes (the user read the move plans" in format_batch("doc-tab", b, [])
+
+
+def test_a_moved_readme_is_compared_at_its_old_path(branch_docs):
+    s = branch_docs
+    repo = s.repo_dir()
+    # The code moved README.md to lib/README.md; nothing stays at the old path.
+    (repo / "README.md").rename(repo / "lib.md")
+    (repo / "lib").mkdir()
+    (repo / "lib.md").rename(repo / "lib" / "README.md")
+    s.add_batch([], action="write-docs")
+    assert s.base_path("lib/README.md") == "lib/README.md"
+    assert s.created_by_doc_pass("lib/README.md")
+    entry = s.set_moved("./lib/README.md", "README.md")
+    assert entry["from"] == "README.md"
+    assert s.base_path("lib/README.md") == "README.md"
+    assert not s.created_by_doc_pass("lib/README.md")  # the old README was there
+    assert s.base_text(s.base_path("lib/README.md"), s.merge_base()) == "# Tool\n"
+    s.add_doc("lib/README.md", "the folder model")  # a refresh keeps it
+    assert s.read_doc_set()["docs"][2]["from"] == "README.md"
+    assert format_doc(s.read_doc_set()["docs"][2]) == (
+        "lib/README.md — the folder model · moved from README.md"
+    )
+    with pytest.raises(SessionError, match="its old path is its path"):
+        s.set_moved("lib/README.md", "lib/README.md")
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.set_moved("docs/README.md", "README.md")
+    assert "from" not in s.set_moved("lib/README.md", None)

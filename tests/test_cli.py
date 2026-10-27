@@ -480,3 +480,18 @@ def test_moves_adds_prints_and_clears_a_move_plan(tmp_path):
     assert r.returncode == 1 and "go with add only" in r.stderr
     r = view_concept(tmp_path, "moves", "gate", "clear", "README.md")
     assert r.stdout.strip() == "cleared 2 rows of the move plan of README.md"
+
+
+def test_doc_set_records_the_old_path_of_a_moved_readme(tmp_path):
+    r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "doc-set", "gate", "add", "core/README.md", "why").returncode == 0
+    r = view_concept(tmp_path, "doc-set", "gate", "moved", "core/README.md", "old/README.md")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "core/README.md — why · moved from old/README.md"
+    r = view_concept(tmp_path, "doc-set", "gate", "moved", "core/README.md")
+    assert r.returncode == 1 and "its old path" in r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate", "moved", "core/README.md", "--clear")
+    assert r.returncode == 0 and r.stdout.strip() == "core/README.md — why"
+    r = view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "why", "--clear")
+    assert r.returncode == 1 and "--clear goes with failing or moved" in r.stderr

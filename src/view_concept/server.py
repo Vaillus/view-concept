@@ -312,19 +312,19 @@ def state(slug: str) -> dict[str, Any]:
 def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> dict[str, Any]:
     """The Doc tab as the page reads it: {set: [{path, reason, stale (how many of its
     stale passages are shown), minor? and diff? (a minor doc), failing? (a README's failure
-    indicator), facts (how many missing facts it has), pending (how many of them wait for the
-    user's decision)}] in the write order, removed,
-    views: {path: view}, stale (the stale passages shown), facts: {path: {text, list}},
-    triage, moves, reference (the reference model, or None)}. A doc's view is its section
-    view (the file rendered as Markdown, `updated` against its highlight baseline `doc:<path>`) with
-    `exists` and the base mark's input: `base_html`, the doc at the merge base rendered
-    (None when it was not there, or when git cannot tell), and `new`, whether the branch
-    created it. A doc missing from the worktree is `{exists: false}` only. A README's
-    missing facts are `list`, each fact with `updated` (its line is not in the baseline
-    `facts:<path>`: a new fact, or a changed state), and `text`, what « mark read »
-    records. The concept triage, `triage`, is {text, list} the same way, against the
-    baseline `triage:`, and so is each README's move plan, `moves`: {path: {text, list}},
-    against `moves:<path>`."""
+    indicator), from? (the old path of a doc the code moved), facts (how many missing facts
+    it has), pending (how many of them wait for the user's decision)}] in the write order,
+    removed, views: {path: view}, stale (the stale passages shown), facts: {path: {text,
+    list}}, triage, moves, reference (the reference model, or None)}. A doc's view is its
+    section view (the file rendered as Markdown, `updated` against its highlight baseline
+    `doc:<path>`) with `exists` and the base mark's input: `base_html`, the doc at the merge
+    base rendered, read at its old path for a doc the code moved (None when it was not
+    there, or when git cannot tell), and `new`, whether the branch created it. A doc
+    missing from the worktree is `{exists: false}` only. A README's missing facts are
+    `list`, each fact with `updated` (its line is not in the baseline `facts:<path>`: a new
+    fact, or a changed state), and `text`, what « mark read » records. The concept triage,
+    `triage`, is {text, list} the same way, against the baseline `triage:`, and so is each
+    README's move plan, `moves`: {path: {text, list}}, against `moves:<path>`."""
     data = s.read_doc_set()
     listed = {d["path"] for d in data["docs"]}
     facts: dict[str, dict[str, Any]] = {}
@@ -360,7 +360,7 @@ def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> 
         if text is None:
             views[path] = {"exists": False}
             continue
-        base = s.base_text(path, commit) if commit else None
+        base = s.base_text(s.base_path(path), commit) if commit else None
         views[path] = {
             "exists": True,
             **section_view(text, seen.get(DOC_KEY + path, text)),
@@ -377,7 +377,7 @@ def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> 
                 "path": d["path"],
                 "reason": d.get("reason", ""),
                 "stale": sum(f["doc"] == d["path"] for f in stale),
-                **{k: d[k] for k in ("minor", "diff", "failing") if d.get(k)},
+                **{k: d[k] for k in ("minor", "diff", "failing", "from") if d.get(k)},
                 "facts": len(facts.get(d["path"], {}).get("list", [])),
                 "pending": sum(
                     f["state"] == "pending" for f in facts.get(d["path"], {}).get("list", [])

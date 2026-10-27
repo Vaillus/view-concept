@@ -354,8 +354,10 @@ def cmd_doc_set(a: argparse.Namespace) -> None:
     args = a.args
     if a.op != "minor" and (a.added is not None or a.removed is not None):
         raise SessionError("--added and --removed go with minor only")
-    if a.op != "failing" and (a.structure or a.clear):
-        raise SessionError("--structure and --clear go with failing only")
+    if a.op != "failing" and a.structure:
+        raise SessionError("--structure goes with failing only")
+    if a.op not in ("failing", "moved") and a.clear:
+        raise SessionError("--clear goes with failing or moved only")
     if a.user and a.op not in ("add", "remove"):
         raise SessionError("--user goes with add or remove only")
     if a.op == "add":
@@ -393,12 +395,22 @@ def cmd_doc_set(a: argparse.Namespace) -> None:
         fail, total = _int_arg(args[1], "fail"), _int_arg(args[2], "total")
         print(format_doc(s.set_failing(args[0], fail, total, a.structure)))
         return
+    if a.op == "moved":
+        if a.clear:
+            if len(args) != 1:
+                raise SessionError("doc-set moved <path> --clear takes the path alone")
+            print(format_doc(s.set_moved(args[0], None)))
+            return
+        if len(args) != 2:
+            raise SessionError("doc-set moved takes the doc's path and its old path")
+        print(format_doc(s.set_moved(args[0], args[1])))
+        return
     if a.op == "order":
         if not args:
             raise SessionError("doc-set order takes every doc of the doc set, in the write order")
         s.order_docs(args)
     elif args:
-        raise SessionError("give an operation: add, remove, minor, major, failing or order")
+        raise SessionError("give an operation: add, remove, minor, major, failing, moved or order")
     data = s.read_doc_set()
     for d in data["docs"]:
         print(format_doc(d))
@@ -831,23 +843,31 @@ def main() -> None:
     q = sub.add_parser(
         "doc-set",
         help="print the doc set, or change it: add or remove a doc, class one minor or "
-        "major, record a README's failure indicator, put the docs in the write order",
+        "major, record a README's failure indicator or the old path of a moved doc, put the "
+        "docs in the write order",
     )
     q.add_argument("slug")
-    q.add_argument("op", nargs="?", choices=("add", "remove", "minor", "major", "failing", "order"))
+    q.add_argument(
+        "op", nargs="?", choices=("add", "remove", "minor", "major", "failing", "moved", "order")
+    )
     q.add_argument(
         "args",
         nargs="*",
         help="add <path> <reason> · remove <path> · minor <path> <reason> · major <path> · "
-        "failing <path> <fail> <total> · order <path> <path>… (every doc, in the write "
-        "order); a path is relative to the repo root",
+        "failing <path> <fail> <total> · moved <path> <old path> (the code moved the doc "
+        "from its old path) · order <path> <path>… (every doc, in the write order); a path "
+        "is relative to the repo root",
     )
     q.add_argument("--added", type=int, help="with minor: the lines the doc's diff adds")
     q.add_argument("--removed", type=int, help="with minor: the lines the doc's diff removes")
     q.add_argument(
         "--structure", action="store_true", help="with failing: the README's structure fails"
     )
-    q.add_argument("--clear", action="store_true", help="with failing: remove the indicator")
+    q.add_argument(
+        "--clear",
+        action="store_true",
+        help="with failing: remove the indicator; with moved: remove the old path",
+    )
     q.add_argument(
         "--user",
         action="store_true",
