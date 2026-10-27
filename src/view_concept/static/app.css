@@ -256,6 +256,11 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .doc-fact.updated::before { content: ""; position: absolute; left: -14px; top: 0; bottom: 0; width: 3px; background: var(--ok); }
 .doc-fact.state-left .fact-text { color: var(--ink-dim); }
 .fact-meta { font-size: 12px; }
+/* the tables of the Doc tab (the concept triage): one commentable row each */
+.doc-table { width: 100%; font-size: 13px; }
+.doc-table tr.updated td:first-child { box-shadow: inset 3px 0 var(--ok); }
+.doc-table .row-actions { white-space: nowrap; width: 1%; }
+.doc-table .row-actions .sec-comment { margin-left: 0; }
 .fact-meta .badge:first-child { margin-left: 0; }
 /* a doc rewritten since its highlight baseline */
 .doc-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }

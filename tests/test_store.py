@@ -1439,3 +1439,43 @@ def test_docs_stay_out_of_the_publish_fingerprint_and_the_check(docs_review):
     (s.repo_dir() / "README.md").write_text("Rewritten <div>\n\nblock</div>\n")
     assert s.fingerprint() == before
     assert s.published_sections() == [] and s.check_sections() == []
+
+
+def test_the_concept_triage_keeps_one_row_per_concept(docs_review):
+    s = docs_review
+    assert s.read_triage() == [] and s.triage_text() == {}
+    k1 = s.set_triage("the  pooled WER", True, "compares it to another WER")
+    s.set_triage("offline mode", False, "no study imports it")
+    assert k1 == {"id": "k1", "concept": "the pooled WER", "enters": True,
+                  "reason": "compares it to another WER"}  # fmt: skip
+    # The same concept changes its row, and keeps its id and place.
+    assert s.set_triage("the pooled WER", False, "nobody reads it")["id"] == "k1"
+    assert [(r["id"], r["enters"]) for r in s.read_triage()] == [("k1", False), ("k2", False)]
+    assert s.triage_text() == {
+        "triage:": "k1 [stays out] the pooled WER — nobody reads it\n"
+        "k2 [stays out] offline mode — no study imports it"
+    }
+    with pytest.raises(SessionError, match="concept and its reason"):
+        s.set_triage("x", True, " ")
+    s.remove_triage("k2")
+    with pytest.raises(SessionError, match="no triage row"):
+        s.remove_triage("k2")
+    # An id a sent comment names never serves again.
+    b = s.add_batch([{"section": "triage:k1", "quote": "the pooled WER", "text": "it enters"}])
+    assert "[c1] (triage k1) « the pooled WER »" in format_batch("doc-tab", b, [])
+    s.remove_triage("k1")
+    assert s.set_triage("clips A to D", False, "in no output")["id"] == "k2"
+    with pytest.raises(SessionError, match="triage:<id>"):
+        s.add_batch([{"section": "triage:x", "text": "x"}])
+    with pytest.raises(SessionError, match="may not start with"):
+        s.write_plan(outline=[{"id": "triage:k1", "title": "X"}])
+
+
+def test_a_batch_moves_the_concept_triage_baseline(docs_review):
+    s = docs_review
+    s.set_triage("the pooled WER", True, "compares it to another WER")
+    s.read_seen(s.baseline_texts())
+    s.set_triage("offline mode", False, "no study imports it")
+    assert json.loads(s.seen_path.read_text())["triage:"].count("\n") == 0
+    s.add_batch([], note="read")
+    assert json.loads(s.seen_path.read_text())["triage:"] == s.triage_text()["triage:"]

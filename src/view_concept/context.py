@@ -44,7 +44,10 @@ stale passages still shown: the writer writes the first doc set, the implementer
 refreshes it and rewrites the docs at the doc pass, the reviewer flags the stale
 passages. The implementer also gets the missing facts of each README rewritten in full
 (missing-facts.json), with the state of the user's decision on each: it applies the
-comments on them. A side thread on a doc gets that doc's missing facts with its text.
+comments on them. The implementer and the reviewer also get the concept triage
+(concept-triage.json: whether each concept of the model enters the docs): the doc pass
+follows it, the reviewer checks the docs against it. A side thread on a doc gets that
+doc's missing facts with its text; one on a row of the concept triage gets the triage.
 The docs themselves are files of the repository, read there.
 
 Once the model is approved, every role also sees which changes of the model the code does
@@ -60,12 +63,14 @@ from typing import Any
 from .store import (
     DOC_KEY,
     DOC_SET_ANCHOR,
+    TRIAGE_KEY,
     Session,
     SessionError,
     format_batch,
     format_comment,
     format_doc,
     format_fact,
+    format_triage,
 )
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
@@ -76,6 +81,8 @@ TRANSCRIPT_ROLES = ("planner", "writer")  # the roles that read the request tran
 DOC_SET_ROLES = ("writer", "implementer", "reviewer")
 # The roles that get the missing facts: the implementer applies the user's decisions.
 FACT_ROLES = ("implementer",)
+# The roles that get the concept triage: the doc pass follows it, the reviewer checks it.
+TRIAGE_ROLES = ("implementer", "reviewer")
 
 QUESTION_ID = re.compile(r"^q\d+$")
 COMMENT_ID = re.compile(r"^c\d+$")
@@ -131,6 +138,8 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     elif role == "thread" and section:
         if section.startswith(DOC_KEY):  # a doc, or the doc set (DOC_SET_ANCHOR)
             out += ["", *doc_passage(s, section)]
+        elif section.startswith(TRIAGE_KEY):  # a row of the concept triage
+            out += ["", *_triage(s)]
         else:
             sec = _sections(outline, sections, section, html=html)
             out += ["", "## Section of the passage", *sec]
@@ -174,7 +183,19 @@ def _doc_tab(s: Session, role: str) -> list[str]:
         lines.append(f"- {f['id']} {f['doc']} « {quote} »{section}: {f['note']}")
     if role in FACT_ROLES:
         lines += ["", *_missing_facts(s)]
+    if role in TRIAGE_ROLES:
+        lines += ["", *_triage(s)]
     return lines
+
+
+def _triage(s: Session) -> list[str]:
+    """The concept triage, one line per concept of the model."""
+    rows = s.read_triage()
+    return [
+        "## Concept triage (whether each concept of the model enters the docs: who ignores"
+        " it would get what wrong?)",
+        *([f"- {format_triage(r)}" for r in rows] or ["(none written yet)"]),
+    ]
 
 
 def _missing_facts(s: Session, path: str = "") -> list[str]:

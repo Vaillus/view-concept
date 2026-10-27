@@ -30,7 +30,8 @@ reach the agent session through the inbox.
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text, each doc's under
-                        `doc:<path>`, a README's missing facts under `facts:<path>`  (server)
+                        `doc:<path>`, a README's missing facts under `facts:<path>`, the
+                        concept triage under `triage:`  (server)
         drafts.json     the drafts and the general note, shared by every page (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
@@ -39,6 +40,8 @@ reach the agent session through the inbox.
                         of a README, and the docs the user removed       (`doc-set`)
         stale.json      the stale passages: doc passages the model contradicts  (`stale`)
         missing-facts.json  the missing facts of each README rewritten in full  (`facts`)
+        concept-triage.json  the concept triage: whether each concept of the model enters
+                        the docs                                          (`triage`)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
@@ -208,6 +211,19 @@ baseline is kept in seen.json under `facts:<path>`, the list as one line per fac
 (`fact_texts`), and moves with every batch and with « mark read » on the README: a new
 fact or a changed state shows highlighted.
 
+The concept triage asks of each concept of the model whether who uses what its folder
+gives out or exposes would get something wrong without knowing its rule: yes, it enters
+the docs (a folder model, in a README), no, it stays out. concept-triage.json keeps one row
+per concept, in the model's order: [{id (k1…, unique in the session, going on past a
+removed row as missing facts' ids do), concept, enters (true or false), reason (one line:
+who ignores it would get what wrong)}] (written by `triage`; `set` on a concept already
+listed changes its row and keeps its id). The Doc tab shows it as a table above the doc
+set list; a comment, a draft or a side thread on a row is anchored to `triage:<id>`, its
+quote the concept (a batch prints it `(triage <id>)`). No section id may start with
+`triage:` (write_plan refuses it). Its highlight baseline is kept in seen.json under
+`triage:` alone, the triage as one line per row (`triage_text`), and moves with every
+batch and with « mark read » on the table: a new or changed row shows highlighted.
+
 A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
 doc (its path), quote (the passage's exact text in the file), section (the model section
 it contradicts, a reference model's, or ""), note (one line: why), at}. The reviewer
@@ -338,6 +354,13 @@ FACTS_KEY = "facts:"
 FACT_PROPOSALS = ("keep", "leave")
 FACT_STATES = ("pending", "kept", "left")
 FACT_ID_RE = re.compile(r"^f[0-9]{1,6}$")
+# The concept triage: a comment, a draft or a side thread on a row is anchored to
+# `triage:<id>`, and its highlight baseline in seen.json is kept under `triage:` alone. No
+# section id may start with it (write_plan refuses it).
+TRIAGE_KEY = "triage:"
+TRIAGE_ID_RE = re.compile(r"^k[0-9]{1,6}$")
+# The key prefixes of the Doc tab, in seen.json and in anchors: no section id starts with one.
+DOC_TAB_KEYS = (DOC_KEY, FACTS_KEY, TRIAGE_KEY)
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -569,6 +592,10 @@ class Session:
     def missing_facts_path(self) -> Path:
         return self.dir / "missing-facts.json"
 
+    @property
+    def concept_triage_path(self) -> Path:
+        return self.dir / "concept-triage.json"
+
     def media_folder(self, sid: str) -> Path:
         """The media folder of section `sid`: sections/<sid>/."""
         if not sid or "/" in sid or sid in (".", ".."):
@@ -649,11 +676,11 @@ class Session:
                 raise SessionError("every outline entry needs an id and a title")
             if len(set(ids)) != len(ids):
                 raise SessionError("outline ids must be unique")
-            taken = [i for i in ids if i.startswith((DOC_KEY, FACTS_KEY))]
+            taken = [i for i in ids if i.startswith(DOC_TAB_KEYS)]
             if taken:
                 raise SessionError(
-                    f"outline ids may not start with {DOC_KEY!r} or {FACTS_KEY!r}, the Doc "
-                    "tab's keys: " + ", ".join(taken)
+                    f"outline ids may not start with {', '.join(map(repr, DOC_TAB_KEYS))}, "
+                    "the Doc tab's keys: " + ", ".join(taken)
                 )
             long = [sec["id"] for sec in outline if len(str(sec.get("earns", ""))) > EARNS_MAX]
             if long:
@@ -1561,6 +1588,11 @@ class Session:
             if p in listed
         }
 
+    def baseline_texts(self) -> dict[str, str]:
+        """The Doc tab's lists that carry a highlight baseline, keyed as it is: each
+        README's missing facts and the concept triage."""
+        return {**self.fact_texts(), **self.triage_text()}
+
     def clear_missing_facts(self, path: str) -> int:
         """Drop the missing facts of README `path` (a new full rewrite replaces them).
         Returns how many were dropped."""
@@ -1569,6 +1601,54 @@ class Session:
         dropped = len(data.pop(path, []))
         _write_json(self.missing_facts_path, data)
         return dropped
+
+    # ---- concept triage ----
+    def read_triage(self) -> list[dict[str, Any]]:
+        """The concept triage, one row per concept in the model's order: [{id, concept,
+        enters, reason}]; empty without a file."""
+        return list(_read_json(self.concept_triage_path, []))
+
+    def set_triage(self, concept: str, enters: bool, reason: str) -> dict[str, Any]:
+        """Add the row of `concept` to the concept triage, or change the row of a concept
+        already listed (the same text), which keeps its id: `enters` whether it enters the
+        docs, `reason` one line, who ignores it would get what wrong."""
+        concept, reason = " ".join(concept.split()), " ".join(reason.split())
+        if not concept or not reason:
+            raise SessionError("a triage row needs its concept and its reason")
+        rows = self.read_triage()
+        row = next((r for r in rows if r.get("concept") == concept), None)
+        if row is None:
+            ids = [str(r.get("id", "")) for r in rows] + self._anchored_ids(TRIAGE_KEY)
+            n = max((int(i[1:]) for i in ids if TRIAGE_ID_RE.match(i)), default=0)
+            row = {"id": f"k{n + 1}", "concept": concept}
+            rows.append(row)
+        row["enters"] = bool(enters)
+        row["reason"] = reason
+        _write_json(self.concept_triage_path, rows)
+        return row
+
+    def remove_triage(self, tid: str) -> None:
+        """Remove row `tid` of the concept triage (its id never serves again)."""
+        rows = self.read_triage()
+        if not any(r.get("id") == tid for r in rows):
+            raise SessionError(f"no triage row {tid!r}")
+        _write_json(self.concept_triage_path, [r for r in rows if r.get("id") != tid])
+
+    def triage_text(self) -> dict[str, str]:
+        """The concept triage keyed as its highlight baseline is (`triage:`): one line per
+        row (`format_triage`), so a new or changed row is a line the baseline lacks. Empty
+        with no row."""
+        rows = self.read_triage()
+        return {TRIAGE_KEY: "\n".join(map(format_triage, rows))} if rows else {}
+
+    def _anchored_ids(self, prefix: str) -> list[str]:
+        """The ids that sent comments, drafts and side threads anchored to `<prefix><id>`
+        name: an id one of them names never serves again for another row."""
+        batches = self.read_comments()["batches"]
+        anchors = [c.get("section", "") for b in batches for c in b["comments"]]
+        anchors += [d.get("section", "") for d in self.read_drafts()["drafts"]]
+        anchors += [t.get("section", "") for t in self.read_threads()]
+        return [str(a).removeprefix(prefix) for a in anchors if str(a).startswith(prefix)]
 
     def merge_base(self) -> str:
         """The commit where the branch left its base branch (plan.json `base`, else main):
@@ -1827,6 +1907,7 @@ class Session:
             self.doc_set_path,
             self.stale_path,
             self.missing_facts_path,
+            self.concept_triage_path,
             *self.section_files().values(),
         ]
         times = [iso_time(t) for p in paths if (t := _mtime(p))]
@@ -1905,6 +1986,7 @@ class Session:
             paths += sorted([*self.sections_dir.glob("*.md"), *self.sections_dir.glob("*.html")])
         # The docs of the doc set are files of the worktree: an edit there re-renders too.
         paths += [self.doc_set_path, self.stale_path, self.missing_facts_path]
+        paths.append(self.concept_triage_path)
         with contextlib.suppress(SessionError):
             paths += self.doc_files()
         return _stat_signature(paths)
@@ -2003,6 +2085,7 @@ class Session:
         nothing. A thread on a missing fact carries the fact's id (`fact`, kept only when
         set), which the comment it becomes carries too."""
         _check_fact(fact, section)
+        _check_row(section)
         if question:
             self._open_question(self.read_questions(), question)
         n = max((int(t["id"][1:]) for t in self.read_threads()), default=0) + 1
@@ -2085,6 +2168,7 @@ class Session:
             raise SessionError("empty batch")
         for c in comments:
             _check_fact(str(c.get("fact") or ""), str(c.get("section", "")))
+            _check_row(str(c.get("section", "")))
         data = self.read_comments()
         batches = data["batches"]
         n_comments = sum(len(b["comments"]) for b in batches)
@@ -2122,7 +2206,7 @@ class Session:
             f.write(json.dumps(batch, ensure_ascii=False) + "\n")
         # Highlights show what changed since the last batch: every baseline moves here,
         # the docs' and their missing facts' included.
-        self.mark_seen({**self.read_sections(), **self.doc_texts(), **self.fact_texts()})
+        self.mark_seen({**self.read_sections(), **self.doc_texts(), **self.baseline_texts()})
         if action == "plan":
             self._skip_open_questions(batch["sent"])
         return batch
@@ -2575,6 +2659,12 @@ def _check_fact(fact: str, section: str) -> None:
         raise SessionError(f"a missing fact's comment is anchored to its README: {fact!r}")
 
 
+def _check_row(section: str) -> None:
+    """Refuse an anchor on a row of the Doc tab (the concept triage) that names no row id."""
+    if section.startswith(TRIAGE_KEY) and not TRIAGE_ID_RE.match(section[len(TRIAGE_KEY) :]):
+        raise SessionError(f"a triage row's anchor is triage:<id>: {section!r}")
+
+
 def _upgrade_thread(thread: dict[str, Any]) -> dict[str, Any]:
     """A thread written before sessions could run on other agents keeps its conversation id
     under `claude_id`: read it as `agent_session`, so the thread still resumes."""
@@ -2717,13 +2807,22 @@ def format_fact(f: dict[str, Any]) -> str:
     )
 
 
+def format_triage(r: dict[str, Any]) -> str:
+    """One row of the concept triage on one line: its id, whether the concept enters the
+    docs, the concept and the reason."""
+    enters = "enters" if r.get("enters") else "stays out"
+    return f"{r.get('id', '')} [{enters}] {r.get('concept', '')} — {r.get('reason', '')}"
+
+
 def format_comment(c: dict[str, Any], number: dict[str, int]) -> str:
     """One comment of a batch: where it is anchored (a section, a doc of the Doc tab by its
-    path, a missing fact of a README, the doc set list), its text, the thread it comes
-    from."""
+    path, a missing fact of a README, the doc set list, a row of the concept triage), its
+    text, the thread it comes from."""
     sec = c["section"]
     if sec == DOC_SET_ANCHOR:
         where = "(doc set)"
+    elif sec.startswith(TRIAGE_KEY):
+        where = f"(triage {sec.removeprefix(TRIAGE_KEY)})"
     elif sec.startswith(DOC_KEY):
         fact = f" · fact {c['fact']}" if c.get("fact") else ""
         where = f"(doc {sec.removeprefix(DOC_KEY)}{fact})"

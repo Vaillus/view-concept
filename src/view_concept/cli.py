@@ -32,6 +32,7 @@ from .store import (
     format_fact,
     format_precedence,
     format_section_problem,
+    format_triage,
     list_sessions,
     slugify,
 )
@@ -464,6 +465,34 @@ def cmd_facts(a: argparse.Namespace) -> None:
         print("(no missing fact)")
 
 
+def cmd_triage(a: argparse.Namespace) -> None:
+    """Set a concept's row of the concept triage, remove one, or, with no operation,
+    print the triage."""
+    s = _existing(a.slug)
+    args = a.args
+    if a.op == "set":
+        if len(args) != 3 or args[1] not in ("enters", "out"):
+            raise SessionError(
+                "triage set takes a concept, enters or out, and the reason: "
+                'set "<concept>" enters|out "<reason>"'
+            )
+        print(format_triage(s.set_triage(args[0], args[1] == "enters", args[2])))
+        return
+    if a.op == "remove":
+        if len(args) != 1:
+            raise SessionError("triage remove takes one row id")
+        s.remove_triage(args[0])
+        print(f"removed {args[0]}")
+        return
+    if args:
+        raise SessionError("give an operation: set or remove")
+    rows = s.read_triage()
+    for r in rows:
+        print(format_triage(r))
+    if not rows:
+        print("(no concept triage yet)")
+
+
 def cmd_reference(a: argparse.Namespace) -> None:
     """Set or clear the reference model, list its candidates, or, with none of these,
     print it."""
@@ -819,6 +848,21 @@ def main() -> None:
     q.add_argument("--reason", help="with add: one line, why that proposal")
     q.add_argument("--passage", type=int, help="with add: the number of the old README's passage")
     q.set_defaults(fn=cmd_facts)
+
+    q = sub.add_parser(
+        "triage",
+        help="print the concept triage (whether each concept of the model enters the docs), "
+        "or set or remove a row",
+    )
+    q.add_argument("slug")
+    q.add_argument("op", nargs="?", choices=("set", "remove"))
+    q.add_argument(
+        "args",
+        nargs="*",
+        help="set <concept> enters|out <reason> (a concept already listed keeps its row and "
+        "id) · remove <id>",
+    )
+    q.set_defaults(fn=cmd_triage)
 
     q = sub.add_parser(
         "reference",

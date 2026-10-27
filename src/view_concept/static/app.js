@@ -120,7 +120,7 @@ const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).titl
    the same section blocks. Sessions written before the rename mark them "part": 2. */
 const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
-const tabOf = (id) => (isDocAnchor(id) ? "doc" : inRefactoringPart(id) ? "refactor" : "model");
+const tabOf = (id) => (isDocAnchor(id) || rowOf(id) ? "doc" : inRefactoringPart(id) ? "refactor" : "model");
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
 /* The narrow layout: the page in one column whenever its window is under 700px wide
    (app.css holds the same threshold), whatever the device. The metrics tab is gone from
@@ -142,10 +142,10 @@ const docViews = () => [$("#model"), $("#refactor"), $("#doc")];
 /* The Doc tab (id "doc"): the repo docs the branch concerns, from `state.docs` (see "the
    Doc tab"). It shows once the doc set is written; a docs review (workflow review-docs)
    shows it alone, from the start. A server that sends no `docs` counts as no doc set. */
-const NO_DOCS = { set: [], views: {}, stale: [], removed: [], facts: {}, reference: null };
+const NO_DOCS = { set: [], views: {}, stale: [], removed: [], facts: {}, triage: { text: "", list: [] }, reference: null };
 const docsOf = () => ({ ...NO_DOCS, ...((state && state.docs) || {}) });
 const isDocsReview = () => !!state && state.workflow === "review-docs";
-const hasDocTab = () => isDocsReview() || docsOf().set.length > 0;
+const hasDocTab = () => isDocsReview() || docsOf().set.length > 0 || docsOf().triage.list.length > 0;
 // The tab a missing tab gives way to: the Doc tab in a docs review, the model tab otherwise.
 const homeTab = () => (isDocsReview() ? "doc" : "model");
 // A comment, a draft or a side thread on a doc's text is anchored on the section id
@@ -158,6 +158,17 @@ const docPathOf = (id) => {
   return s.startsWith(DOC_PREFIX) && s !== DOC_SET ? s.slice(DOC_PREFIX.length) : null;
 };
 const isDocAnchor = (id) => String(id || "").startsWith(DOC_PREFIX);
+/* A row of a Doc tab table is commented on its own anchor: "triage:<id>" for a row of the
+   concept triage (store.py's TRIAGE_KEY). The triage's highlight baseline is kept under
+   "triage:" alone. No section id starts with it either. `rowOf` gives the kind and id of
+   a row anchor, null for any other id. */
+const TRIAGE_PREFIX = "triage:";
+const ROW_KINDS = { [TRIAGE_PREFIX]: "triage" };
+const rowOf = (id) => {
+  const s = String(id || "");
+  const prefix = Object.keys(ROW_KINDS).find((p) => s.startsWith(p) && s.length > p.length);
+  return prefix ? { kind: ROW_KINDS[prefix], id: s.slice(prefix.length) } : null;
+};
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
 const isUpdated = (id) => !!(state.sections[id] || {}).updated;
@@ -254,7 +265,8 @@ function followSession() {
   // The Doc tab's badge counts the docs rewritten, or whose missing facts changed, since
   // their highlight baseline.
   const docs = docsOf();
-  const n = docs.set.filter((d) => (docs.views[d.path] || {}).updated || factsUpdated(d.path)).length;
+  const n = docs.set.filter((d) => (docs.views[d.path] || {}).updated || factsUpdated(d.path)).length
+    + (docs.triage.list.some((r) => r.updated) ? 1 : 0);
   $('.tab[data-tab="doc"]').replaceChildren(...["doc", n ? el("span", { class: "badge new", text: `${n} updated` }) : null].filter(Boolean));
 }
 
@@ -951,7 +963,12 @@ function sectionBlock(s, { bare = false } = {}) {
    like a passage of the doc: its comment is anchored to "doc:<path>", quotes the fact and
    carries its id (`fact`); a passage selected in a fact anchors the same way. A fact new
    or changed since the baseline "facts:<path>" gets the green bar, and « mark read » on
-   the README marks its facts read too. */
+   the README marks its facts read too.
+   The concept triage (`state.docs.triage`), when the agent wrote one, is a table above the
+   doc set list: one row per concept of the model, the reason (who ignores it gets what
+   wrong) and whether it enters the docs. Each row has « + comment » and « ask », anchored
+   to "triage:<id>" with the concept as quote; a row new or changed since the baseline
+   "triage:" gets the green bar, and « mark read » on the table moves the baseline. */
 
 let shownDoc = null; // path of the doc shown in the Doc tab
 const REPO_LEXICON = ".agents/lexicon.md"; // store.py's REPO_LEXICON
@@ -965,12 +982,12 @@ function renderDocTab(ending) {
   // In a docs review the scope block (its agent questions) sits at the top of the Doc tab.
   const top = isDocsReview() ? [$("#scope")] : [];
   if (!docs.set.length) {
-    view.replaceChildren(...top, isDocsReview() ? el("p", { class: "dim empty", text: "Waiting for the doc set…" }) : "", ...ending);
+    view.replaceChildren(...top, triageBlock(docs), isDocsReview() ? el("p", { class: "dim empty", text: "Waiting for the doc set…" }) : "", ...ending);
     return;
   }
   if (!docs.set.some((d) => d.path === shownDoc)) shownDoc = reviewOrder(docs)[0].path;
   const entry = docs.set.find((d) => d.path === shownDoc);
-  view.replaceChildren(...top, docSetBlock(docs), docBar(docs), docRewrite(shownDoc, entry),
+  view.replaceChildren(...top, triageBlock(docs), docSetBlock(docs), docBar(docs), docRewrite(shownDoc, entry),
     docBlock(shownDoc, docs.views[shownDoc] || {}), ...ending);
 }
 
@@ -1018,6 +1035,41 @@ function docHeading(id, label, updated, what, edit = null) {
     el("button", { class: "sec-comment ask", text: "ask", title: `Open a side thread about this ${what}`,
                    onclick: () => openComposer({ section: id, quote: "", prefix: "" }, "ask") }),
     edit);
+}
+
+// A commentable row of a Doc tab table: `anchor` its comment anchor, `quote` what a
+// comment on it quotes, `what` how its buttons name it.
+function rowButtons(anchor, quote, what) {
+  const target = (e) => ({ section: anchor, quote, prefix: "", rect: e.currentTarget.getBoundingClientRect() });
+  return el("td", { class: "row-actions" },
+    el("button", { class: "sec-comment", text: "+ comment", title: `Comment on this ${what}`, onclick: (e) => openComposer(target(e)) }),
+    el("button", { class: "sec-comment ask", text: "ask", title: `Open a side thread about this ${what}`, onclick: (e) => openComposer(target(e), "ask") }));
+}
+
+// The heading of a Doc tab table: its title, then « mark read » while a row is updated
+// (the baseline `key` moves to `text`).
+function tableHeading(title, tip, key, text, updated) {
+  return el("h2", { title: tip }, title,
+    updated
+      ? el("button", { class: "badge new", text: "updated · mark read", title: "Mark this table as read: its highlights go away",
+                       onclick: (e) => { e.stopPropagation(); markRead({ [key]: text }); } })
+      : null);
+}
+
+function triageBlock(docs) {
+  const { list, text } = docs.triage;
+  if (!list.length) return "";
+  const row = (r) => el("tr", { id: `sec-${TRIAGE_PREFIX}${r.id}`, class: r.updated ? "updated" : "", "data-anchor": TRIAGE_PREFIX + r.id },
+    el("td", { class: "row-quote", text: r.concept }),
+    el("td", { text: r.reason }),
+    el("td", {}, el("span", { class: `badge ${r.enters ? "tone-ok" : ""}`, text: r.enters ? "yes" : "no" })),
+    rowButtons(TRIAGE_PREFIX + r.id, r.concept, "concept"));
+  return el("section", { class: "sec doc-table-sec", id: "sec-triage" },
+    tableHeading("concept triage", "Whether each concept of the model enters the docs: who uses what its folder gives out or exposes, and ignores it, gets something wrong",
+                 TRIAGE_PREFIX, text, list.some((r) => r.updated)),
+    el("div", { class: "body" }, el("table", { class: "doc-table" },
+      el("thead", {}, el("tr", {}, ...["concept", "who ignores it gets it wrong?", "enters the docs", ""].map((h) => el("th", { text: h })))),
+      el("tbody", {}, ...list.map(row)))));
 }
 
 function docSetBlock(docs) {
@@ -1868,9 +1920,11 @@ function textIndex(root) {
 }
 
 /* The range of a quote in section `sectionId`. A quote on a missing fact (`fact`, its id)
-   is looked for in that fact; one not found in a doc's text, in the doc's missing facts. */
+   is looked for in that fact; one not found in a doc's text, in the doc's missing facts;
+   one on a row of a Doc tab table (`rowOf`), in that row. */
 function findQuote(sectionId, quote, prefix, fact = "") {
   const sec = `#sec-${CSS.escape(sectionId)}`;
+  if (rowOf(sectionId)) return findIn(document.querySelector(`[data-anchor="${CSS.escape(sectionId)}"]`), quote, "");
   if (fact) return findIn(document.querySelector(`${sec} .doc-facts [data-fact="${CSS.escape(fact)}"]`), quote, "");
   return findIn(document.querySelector(`${sec} .body`), quote, prefix)
     || findIn(document.querySelector(`${sec} .doc-facts`), quote, prefix);
@@ -2123,8 +2177,13 @@ async function markSeen(ids) {
     const facts = (docsOf().facts || {})[docPathOf(id)];
     if (facts) read.push([FACTS_PREFIX + docPathOf(id), facts.text]);
   }
+  await markRead(Object.fromEntries(read));
+}
+
+// Move highlight baselines: {key: text}.
+async function markRead(sections) {
   try {
-    await postJSON(`/api/s/${SLUG}/seen`, { sections: Object.fromEntries(read) });
+    await postJSON(`/api/s/${SLUG}/seen`, { sections });
   } catch (e) { toast(`Could not mark as read: ${e.message}`); return; }
   await load();
 }
@@ -2171,6 +2230,10 @@ function currentSelection() {
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;
+  // A passage of a row of a Doc tab table: anchored to the row.
+  const row = start.closest("[data-anchor]");
+  if (row) return { section: row.dataset.anchor, quote, prefix: "", rect: range.getBoundingClientRect() };
+  if (!sec.dataset.id) return null; // a table's heading: only its rows are commented
   // A passage of a missing fact: anchored to the doc, carrying the fact's id.
   const fact = start.closest("[data-fact]");
   if (fact) return { section: sec.dataset.id, quote, prefix: "", fact: fact.dataset.fact, rect: range.getBoundingClientRect() };
@@ -2283,6 +2346,7 @@ function openComposer(target, mode = "comment") {
   c._mode = mode;
   $(".composer-quote", c).textContent = target.question ? `agent question ${target.question}`
     : target.fact ? `missing fact ${target.fact} « ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
+    : rowOf(target.section) ? `${rowLabel(target.section)} « ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
     : target.quote ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
     : target.section === DOC_SET ? "the doc set"
     : docPathOf(target.section) !== null ? `whole doc ${docPathOf(target.section)}`
@@ -2575,9 +2639,14 @@ $(".review").addEventListener("scroll", (e) => {
   reviewAtEnd = p.scrollHeight - p.scrollTop - p.clientHeight < 24;
 }, { passive: true });
 
-// Where a comment sits: its section's number, « doc set », or the file name of its doc.
+// How a row anchor reads in the page: « triage k1 ».
+const rowLabel = (id) => `${rowOf(id).kind} ${rowOf(id).id}`;
+
+// Where a comment sits: its section's number, « doc set », the file name of its doc, or
+// the row of a Doc tab table.
 function whereOf(id) {
   if (id === DOC_SET) return "doc set";
+  if (rowOf(id)) return rowLabel(id);
   const p = docPathOf(id);
   return p !== null ? p.slice(p.lastIndexOf("/") + 1) : `§${numberOf(id)}`;
 }

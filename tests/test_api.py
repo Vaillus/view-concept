@@ -687,3 +687,20 @@ def test_the_reference_model_is_read_from_another_session(client, doc_review):
     doc_review.plan_path.write_text(json.dumps(plan))  # re-read as it is now
     ref = client.get("/api/s/install-docs").json()["docs"]["reference"]
     assert ref["lexicon"][0]["tip_html"] == "the docs"
+
+
+def test_state_carries_the_concept_triage_highlighted_until_read(client, doc_review):
+    doc_review.set_triage("pooled WER", True, "a wrong WER")
+    triage = client.get("/api/s/doc-tab").json()["docs"]["triage"]  # the baseline
+    assert triage["list"] == [{"id": "k1", "concept": "pooled WER", "enters": True,
+                               "reason": "a wrong WER", "updated": False}]  # fmt: skip
+    doc_review.set_triage("pooled WER", False, "nobody reads it")
+    triage = client.get("/api/s/doc-tab").json()["docs"]["triage"]
+    assert triage["list"][0]["updated"] is True
+    r = client.post("/api/s/doc-tab/seen", json={"sections": {"triage:": triage["text"]}})
+    assert r.status_code == 200
+    assert client.get("/api/s/doc-tab").json()["docs"]["triage"]["list"][0]["updated"] is False
+    body = {"comments": [{"section": "triage:k1", "quote": "pooled WER", "text": "it enters"}]}
+    assert client.post("/api/s/doc-tab/batch", json=body).status_code == 200
+    body = {"comments": [{"section": "triage:", "text": "x"}]}
+    assert client.post("/api/s/doc-tab/batch", json=body).status_code == 400

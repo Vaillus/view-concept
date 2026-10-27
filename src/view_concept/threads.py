@@ -41,7 +41,15 @@ from typing import Any
 
 from .agents import Backend, TurnState, resolve
 from .context import build, doc_passage
-from .store import DOC_KEY, DOC_SET_ANCHOR, Session, SessionError, now_iso, now_iso_ms
+from .store import (
+    DOC_KEY,
+    DOC_SET_ANCHOR,
+    TRIAGE_KEY,
+    Session,
+    SessionError,
+    now_iso,
+    now_iso_ms,
+)
 
 FLUSH_EVERY = 0.25  # seconds between writes of a streaming reply
 
@@ -288,6 +296,8 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
             where = "the doc set (the list of repo docs the Doc tab shows)"
         elif sec.startswith(DOC_KEY):
             where = f"the doc {sec.removeprefix(DOC_KEY)} (a file of the repository)"
+        elif sec.startswith(TRIAGE_KEY):
+            where = f"row {sec.removeprefix(TRIAGE_KEY)} of the concept triage (the Doc tab)"
         else:
             where = f"§{number.get(sec, '?')} {titles.get(sec, sec)} ({sec})"
         anchor = f"{where}: « {thread['quote']} »" if thread["quote"] else f"the whole of {where}"

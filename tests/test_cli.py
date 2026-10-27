@@ -437,3 +437,21 @@ def test_reference_sets_prints_and_clears_the_reference_model(tmp_path):
     assert r.returncode == 1 and "no other session" in r.stderr
     r = view_concept(tmp_path, "reference", "docs", "gate", "--clear")
     assert r.returncode == 1 and "one at a time" in r.stderr
+
+
+def test_triage_sets_prints_and_removes_rows(tmp_path):
+    r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "triage", "gate").stdout.strip() == "(no concept triage yet)"
+    r = view_concept(tmp_path, "triage", "gate", "set", "pooled WER", "enters", "a wrong WER")
+    assert r.returncode == 0 and r.stdout.strip() == "k1 [enters] pooled WER — a wrong WER"
+    r = view_concept(tmp_path, "triage", "gate", "set", "offline mode", "out", "no study")
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "triage", "gate").stdout.splitlines() == [
+        "k1 [enters] pooled WER — a wrong WER",
+        "k2 [stays out] offline mode — no study",
+    ]
+    r = view_concept(tmp_path, "triage", "gate", "set", "pooled WER", "maybe", "x")
+    assert r.returncode == 1 and "enters|out" in r.stderr
+    r = view_concept(tmp_path, "triage", "gate", "remove", "k2")
+    assert r.returncode == 0 and r.stdout.strip() == "removed k2"

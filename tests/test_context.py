@@ -239,3 +239,13 @@ def test_the_implementer_gets_the_missing_facts_and_their_state(review, tmp_path
 def test_a_review_with_no_doc_set_says_so(review):
     assert "## Doc set\nThe repo docs" in build(review, "writer")
     assert "(none written yet)\n\n## Stale passages" in build(review, "writer")
+
+
+def test_the_implementer_and_the_reviewer_get_the_concept_triage(review):
+    review.set_triage("pooled WER", True, "a wrong WER")
+    for role in ("implementer", "reviewer"):
+        assert "## Concept triage" in build(review, role)
+        assert "- k1 [enters] pooled WER — a wrong WER" in build(review, role)
+    assert "## Concept triage" not in build(review, "writer")
+    # A side thread on a row gets the triage.
+    assert "- k1 [enters] pooled WER" in build(review, "thread", section="triage:k1")
