@@ -102,8 +102,8 @@ The skeleton:
    to-do list (point 5), which the implementer carries and the reviewer
    checks. A doc that is out of date is neither a section nor a to-do line:
    it is in the **doc set**, the list of the repo's docs the branch
-   concerns, which the writer writes with the model and the implementer's
-   doc pass rewrites.
+   concerns, which the writer writes with the model and the doc pass
+   rewrites.
 3. **A section per concept only when it needs one**: the user did not state
    its rules, they take more than its lexicon entry can say, and it passes
    the same section test. A concept the user named and described gets none:
