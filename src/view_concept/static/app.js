@@ -1093,20 +1093,18 @@ function triageBlock(docs) {
       el("tbody", {}, ...list.map(row)))));
 }
 
-const MOVE_PART = { readme: "write-readme", model: "folder model" };
 function moveBlocks(docs) {
   return Object.entries(docs.moves).map(([path, { list, text }]) => {
     const row = (r) => el("tr", { id: `sec-${MOVES_PREFIX}${r.id}`, class: r.updated ? "updated" : "", "data-anchor": MOVES_PREFIX + r.id },
       el("td", { class: "row-quote", text: r.passage }, r.note ? el("div", { class: "dim row-note", text: r.note }) : null),
-      el("td", { text: MOVE_PART[r.part] || r.part }),
       el("td", {}, r.to ? el("code", { text: r.to }) : el("span", { class: "dim", text: "—" })),
       el("td", {}, el("span", { class: `badge ${r.becomes === "nowhere" ? "tone-flag" : ""}`, text: r.becomes })),
       rowButtons(MOVES_PREFIX + r.id, r.passage, "passage"));
     return el("section", { class: "sec doc-table-sec", id: `sec-moves-${path}` },
-      tableHeading(el("span", {}, "move plan · ", el("code", { text: path })), "Where each passage of this README goes: the doc pass writes the READMEs from this plan",
+      tableHeading(el("span", {}, "move plan · ", el("code", { text: path })), "Where each passage of this README's folder model goes: the doc pass writes the folder models from this plan",
                    MOVES_PREFIX + path, text, list.some((r) => r.updated)),
       el("div", { class: "body" }, el("table", { class: "doc-table" },
-        el("thead", {}, el("tr", {}, ...["passage", "part", "goes to", "becomes", ""].map((h) => el("th", { text: h })))),
+        el("thead", {}, el("tr", {}, ...["passage", "goes to", "becomes", ""].map((h) => el("th", { text: h })))),
         el("tbody", {}, ...list.map(row)))));
   });
 }

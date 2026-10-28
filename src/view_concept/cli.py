@@ -24,7 +24,6 @@ from .store import (
     HOME,
     KINDS,
     MOVE_FATES,
-    MOVE_PARTS,
     PHASES,
     WORKFLOWS,
     Session,
@@ -524,16 +523,16 @@ def cmd_moves(a: argparse.Namespace) -> None:
     plans by README."""
     s = _existing(a.slug)
     args = a.args
-    if a.op != "add" and (a.part or a.becomes or a.to or a.note):
-        raise SessionError("--part, --becomes, --to and --note go with add only")
+    if a.op != "add" and (a.becomes or a.to or a.note):
+        raise SessionError("--becomes, --to and --note go with add only")
     if a.op == "add":
-        if len(args) != 2 or not a.part or not a.becomes:
+        if len(args) != 2 or not a.becomes:
             raise SessionError(
                 'moves add takes a README and the passage: add <readme> "<passage>" '
-                "--part readme|model --becomes as-is|rewritten|nowhere [--to <readme>] "
+                "--becomes as-is|rewritten|nowhere [--to <readme>] "
                 '[--note "<one line>"]'
             )
-        row = s.add_move(args[0], args[1], a.part, a.becomes, a.to or "", a.note or "")
+        row = s.add_move(args[0], args[1], a.becomes, a.to or "", a.note or "")
         print(format_move(row))
         return
     if a.op == "clear":
@@ -947,10 +946,10 @@ def main() -> None:
     q.add_argument(
         "args",
         nargs="*",
-        help="add <readme> <passage> (a README of the doc set; the passage in one line) · "
+        help="add <readme> <passage> (a README of the doc set; a passage of its folder model "
+        "in one line) · "
         "clear <readme>",
     )
-    q.add_argument("--part", choices=MOVE_PARTS, help="with add: whose the passage is")
     q.add_argument("--becomes", choices=MOVE_FATES, help="with add: what it becomes")
     q.add_argument("--to", help="with add: the README it goes to (none with --becomes nowhere)")
     q.add_argument("--note", help="with add: one optional line")

@@ -475,22 +475,26 @@ def test_moves_adds_prints_and_clears_a_move_plan(tmp_path):
     assert r.returncode == 0, r.stderr
     assert view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "why").returncode == 0
     assert view_concept(tmp_path, "moves", "gate").stdout.strip() == "(no move plan)"
-    add = ("add", "README.md", "the WER rules", "--part", "model", "--becomes", "rewritten")
+    add = ("add", "README.md", "the WER rules", "--becomes", "rewritten")
     r = view_concept(tmp_path, "moves", "gate", *add, "--to", "core/README.md")
     assert r.returncode == 0, r.stderr
-    assert r.stdout.strip() == "p1 [model] the WER rules → core/README.md, rewritten"
+    assert r.stdout.strip() == "p1 the WER rules → core/README.md, rewritten"
     r = view_concept(tmp_path, "moves", "gate", "add", "README.md", "old results",
-                     "--part", "model", "--becomes", "nowhere", "--note", "dated")  # fmt: skip
+                     "--becomes", "nowhere", "--note", "dated")  # fmt: skip
     assert r.returncode == 0, r.stderr
     assert view_concept(tmp_path, "moves", "gate").stdout.splitlines() == [
         "README.md · 2 passages",
-        "  p1 [model] the WER rules → core/README.md, rewritten",
-        "  p2 [model] old results → nowhere · dated",
+        "  p1 the WER rules → core/README.md, rewritten",
+        "  p2 old results → nowhere · dated",
     ]
-    r = view_concept(tmp_path, "moves", "gate", "add", "README.md", "x", "--part", "model")
+    r = view_concept(tmp_path, "moves", "gate", "add", "README.md", "x")
     assert r.returncode == 1 and "--becomes as-is|rewritten|nowhere" in r.stderr
-    r = view_concept(tmp_path, "moves", "gate", "clear", "README.md", "--part", "model")
+    assert "--part" not in r.stderr
+    r = view_concept(tmp_path, "moves", "gate", "clear", "README.md", "--note", "x")
     assert r.returncode == 1 and "go with add only" in r.stderr
+    # A move plan lists only folder-model passages: a row has no part.
+    r = view_concept(tmp_path, "moves", "gate", *add, "--to", "a/README.md", "--part", "model")
+    assert r.returncode == 2 and "unrecognized arguments: --part model" in r.stderr
     r = view_concept(tmp_path, "moves", "gate", "clear", "README.md")
     assert r.stdout.strip() == "cleared 2 rows of the move plan of README.md"
 

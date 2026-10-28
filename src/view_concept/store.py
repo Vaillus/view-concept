@@ -240,11 +240,12 @@ batch and with « mark read » on the table: a new or changed row shows highligh
 A restructuring is a change after which passages must leave a README. Before writing
 such a README, the doc pass writes its move plan and stops on it. moves.json keeps the
 plans by README (a README.md of the doc set): {path: [{id (p1…, unique in the session,
-going on past a cleared plan), passage (a one-line description of it), part ("readme",
-one of write-readme's parts, or "model", the folder model), to (the README it goes to,
-"" when it goes nowhere), becomes ("as-is", "rewritten" or "nowhere"), note (one line,
-optional)}]} (written by `moves`; `remove_doc` drops a README's plan). The Doc tab shows
-one table per README under the concept triage; a comment, a draft or a side thread on a
+going on past a cleared plan), passage (a one-line description of a passage of its
+folder model: write-readme's parts are never in a plan), to (the README it goes to, ""
+when it goes nowhere), becomes ("as-is", "rewritten" or "nowhere"), note (one line,
+optional)}]} (written by `moves`; `remove_doc` drops a README's plan; a row an older run
+wrote may still carry a "part", which is ignored). The Doc tab shows one table per
+README under the concept triage; a comment, a draft or a side thread on a
 row is anchored to `moves:<id>`, its quote the passage (a batch prints it `(moves
 <readme> · passage <id>)`). No section id may start with `moves:`. A plan's highlight
 baseline is kept in seen.json under `moves:<path>`, one line per row (`move_texts`), and
@@ -399,10 +400,10 @@ TRIAGE_KEY = "triage:"
 TRIAGE_ID_RE = re.compile(r"^k[0-9]{1,6}$")
 # The move plan: a comment, a draft or a side thread on a row is anchored to `moves:<id>`,
 # and the highlight baseline of a README's plan in seen.json is `moves:<path>`. No section
-# id may start with it. A row says whose the passage is and what it becomes where it goes.
+# id may start with it. A row says where a passage of the folder model goes and what it
+# becomes there.
 MOVES_KEY = "moves:"
 MOVE_ID_RE = re.compile(r"^p[0-9]{1,6}$")
-MOVE_PARTS = ("readme", "model")
 MOVE_FATES = ("as-is", "rewritten", "nowhere")
 # The key prefixes of the Doc tab, in seen.json and in anchors: no section id starts with one.
 DOC_TAB_KEYS = (DOC_KEY, FACTS_KEY, TRIAGE_KEY, MOVES_KEY)
@@ -1738,18 +1739,19 @@ class Session:
 
     # ---- move plans ----
     def read_moves(self) -> dict[str, list[dict[str, Any]]]:
-        """The move plans by README path: {path: [{id, passage, part, to, becomes, note}]},
-        each in the order its rows were added; empty without a file."""
+        """The move plans by README path: {path: [{id, passage, to, becomes, note}]},
+        each in the order its rows were added; empty without a file. A row an older run
+        wrote may still carry a "part": it is ignored."""
         data = _read_json(self.moves_path, {})
         return {str(p): list(rows) for p, rows in data.items() if rows}
 
     def add_move(
-        self, readme: str, passage: str, part: str, becomes: str, to: str = "", note: str = ""
+        self, readme: str, passage: str, becomes: str, to: str = "", note: str = ""
     ) -> dict[str, Any]:
         """Add a row to the move plan of `readme`, a README.md of the doc set: `passage`
-        one line that describes it, `part` whose it is ("readme" or "model"), `to` the
-        README it goes to (none when it `becomes` "nowhere"), `becomes` "as-is",
-        "rewritten" or "nowhere", `note` one optional line."""
+        one line that describes a passage of its folder model (write-readme's parts are
+        never in a plan), `to` the README it goes to (none when it `becomes` "nowhere"),
+        `becomes` "as-is", "rewritten" or "nowhere", `note` one optional line."""
         readme = doc_path(readme)
         if PurePosixPath(readme).name != "README.md":
             raise SessionError(f"{readme} is not a README.md: a move plan restructures a README")
@@ -1758,8 +1760,6 @@ class Session:
         passage = " ".join(passage.split())
         if not passage:
             raise SessionError("a row of a move plan needs its passage")
-        if part not in MOVE_PARTS:
-            raise SessionError(f"a passage's part is one of {', '.join(MOVE_PARTS)}")
         if becomes not in MOVE_FATES:
             raise SessionError(f"what a passage becomes is one of {', '.join(MOVE_FATES)}")
         if (becomes == "nowhere") == bool(to.strip()):
@@ -1775,7 +1775,6 @@ class Session:
         row = {
             "id": f"p{n + 1}",
             "passage": passage,
-            "part": part,
             "to": to.strip(),
             "becomes": becomes,
             "note": " ".join(note.split()),
@@ -3006,11 +3005,11 @@ def format_triage(r: dict[str, Any]) -> str:
 
 
 def format_move(r: dict[str, Any]) -> str:
-    """One row of a move plan on one line: its id, whose the passage is, the passage,
-    where it goes and what it becomes there, its note."""
+    """One row of a move plan on one line: its id, the passage, where it goes and what it
+    becomes there, its note (an older row's "part" is ignored)."""
     where = "nowhere" if r.get("becomes") == "nowhere" else f"{r.get('to', '')}, {r.get('becomes')}"
     note = f" · {r['note']}" if r.get("note") else ""
-    return f"{r.get('id', '')} [{r.get('part', '')}] {r.get('passage', '')} → {where}{note}"
+    return f"{r.get('id', '')} {r.get('passage', '')} → {where}{note}"
 
 
 def format_comment(

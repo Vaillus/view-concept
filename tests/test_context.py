@@ -266,14 +266,14 @@ def test_the_documenter_and_the_reviewer_get_the_concept_triage(review):
 
 def test_the_documenter_and_the_reviewer_get_the_move_plans(review):
     review.add_doc("README.md", "the keys")
-    review.add_move("README.md", "the WER rules", "model", "rewritten", to="core/README.md")
+    review.add_move("README.md", "the WER rules", "rewritten", to="core/README.md")
     for role in ("documenter", "reviewer"):
         text = build(review, role)
         assert "## Move plans" in text
-        assert "README.md:\n- p1 [model] the WER rules → core/README.md, rewritten" in text
+        assert "README.md:\n- p1 the WER rules → core/README.md, rewritten" in text
     for role in ("writer", "implementer"):
         assert "## Move plans" not in build(review, role)
-    assert "- p1 [model]" in build(review, "thread", section="moves:p1")
+    assert "- p1 the WER rules" in build(review, "thread", section="moves:p1")
     # A batch on a row names the row's README.
     b = review.add_batch([{"section": "moves:p1", "quote": "the WER rules", "text": "ok"}])
     assert "(moves README.md · passage p1)" in build(review, "documenter", [b["id"]])
@@ -285,7 +285,7 @@ def test_the_implementer_gets_nothing_of_the_docs(review, tmp_path):
     review.add_stale("README.md", "The keys", "five keys now")
     review.add_missing_fact("README.md", "Run serve.", "leave", "the code says open")
     review.set_triage("pooled WER", True, "a wrong WER")
-    review.add_move("README.md", "the WER rules", "model", "rewritten", to="core/README.md")
+    review.add_move("README.md", "the WER rules", "rewritten", to="core/README.md")
     text = build(review, "implementer")
     for head in ("## Doc set", "## Stale passages", "## Missing facts", "## Concept triage"):
         assert head not in text

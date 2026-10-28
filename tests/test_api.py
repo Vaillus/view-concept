@@ -708,13 +708,13 @@ def test_state_carries_the_concept_triage_highlighted_until_read(client, doc_rev
 
 def test_state_carries_the_move_plans_highlighted_until_read(client, doc_review):
     doc_review.add_doc("README.md", "the install")
-    doc_review.add_move("README.md", "the WER rules", "model", "rewritten", to="core/README.md")
+    doc_review.add_move("README.md", "the WER rules", "rewritten", to="core/README.md")
     moves = client.get("/api/s/doc-tab").json()["docs"]["moves"]  # the baseline
     assert moves["README.md"]["list"] == [{"id": "p1", "passage": "the WER rules",
-                                           "part": "model", "to": "core/README.md",
+                                           "to": "core/README.md",
                                            "becomes": "rewritten", "note": "",
                                            "updated": False}]  # fmt: skip
-    doc_review.add_move("README.md", "old results", "model", "nowhere")
+    doc_review.add_move("README.md", "old results", "nowhere")
     plan = client.get("/api/s/doc-tab").json()["docs"]["moves"]["README.md"]
     assert [r["updated"] for r in plan["list"]] == [False, True]
     seen = {"sections": {"moves:README.md": plan["text"]}}
