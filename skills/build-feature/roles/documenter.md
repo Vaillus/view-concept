@@ -212,7 +212,11 @@ your report (`doc pass README <path>`), for the whole doc pass on it.
    README, for the user to comment on. You take none back on your own.
 4. **One commit** for the doc pass: every doc it wrote, the READMEs the
    skill agents wrote and the lexicons of your first run included, its
-   message naming the docs.
+   message naming the docs. It also holds each README that a
+   document-feature report marks `restructuring: deleted` (the README of
+   a folder the branch removes, which document-feature deleted and leaves
+   to you to commit): stage the deletion, `git rm --cached <path>` or
+   `git add <path>`, so the branch no longer tracks it.
 5. **Class the minor docs.** A **minor doc** is a doc of the doc set the
    doc pass touched only for a detail with no effect on its meaning (a name
    added to a list, a path renamed). The Doc tab folds the minor docs out
@@ -237,7 +241,7 @@ passage, then to you; the rest comes to you.
 | a comment correcting an entry of a lexicon | Correct the entry, and add to the doc set each README that copies it (the README's definition of the term, in the entry's old words): its clause goes in your report, for the skill agent holding it. A comment taking a **candidate** (a repo term several folders use that no lexicon on their path defines, which a skill agent's report lists) adds its entry; a comment asking for a folder lexicon creates it, with the entries it names. |
 | « write repo lexicon » (`action: write-lexicon`) | Write the missing repo lexicon, as **The lexicons** says, step 1. |
 | a comment on a missing fact (`(doc <path> · fact <id>)`) | « laisse-le » (leave it): change nothing in the README, then `view-concept facts <slug> mark <id> left`. A question: answer it in the `resolve` reply; the fact stays `pending`. « reprends-le » (take it back): the README's text is a skill agent's, so name the fact in your report for the skill of its part, write-readme when it came from the old parts (a command, a line of the map, the usage), document-feature when it came from the old folder model; once that agent's report comes back to you, `mark <id> kept`. A fact no comment names stays out of the README. |
-| the run report of a skill agent, after a comment on a README, a row of the concept triage, a rewrite request or a fact to take back | Record what it reports, as steps 2 and 3 of your second run say (a rewrite request's full rewrite clears the indicator and records its missing facts), mark the facts taken back `kept`, commit, and resolve the comments it handled. |
+| the run report of a skill agent, after a comment on a README, a row of the concept triage, a rewrite request or a fact to take back | Record what it reports, as steps 2 and 3 of your second run say (a rewrite request's full rewrite clears the indicator and records its missing facts), mark the facts taken back `kept`, commit, a README its document-feature report marks `restructuring: deleted` included (its deletion staged, as step 4 says), and resolve the comments it handled. |
 | an implementer report naming docs its run made false | Correct, in each doc that is not a README, the sentences the code now contradicts, as step 1 of your second run says. The READMEs it names go to the skill agents: the coordinator starts them before you. |
 
 Each run after the doc pass makes one commit for the docs, whose message
