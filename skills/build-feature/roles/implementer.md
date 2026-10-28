@@ -55,7 +55,7 @@ nothing, change nothing.
 | a rewrite request (`action: rewrite-readme <path>`, a comment asking for a README to be rewritten, or `/write-readme <folder> rewrite`) | A full rewrite of that README with write-readme, from the code alone, in the doc pass or, when it came after, in this run (see **Running write-readme**). |
 | comment ids on a missing fact (`(doc <path> · fact <id>)` in the batch) | The user decided a missing fact of a rewritten README (see **The doc pass**). |
 | comment ids on a row of the concept triage (`(triage <id>)` in the batch) | The user changed whether a concept enters the docs (see **The doc pass**). |
-| « Write READMEs » (`action: write-readmes`), with the comments on the move plans (`(moves <readme> · passage <id>)` in the batch) | Write the restructured READMEs, from the move plans and those comments (see **The doc pass**, step 8). |
+| « Write READMEs » (`action: write-readmes`), with the comments on the move plans (`(moves <readme> · passage <id>)` in the batch) | Write every README of the doc set, the restructured ones from the move plans and those comments (see **The doc pass**, step 8). |
 
 The trigger can hold several of these at once: do them all in the run.
 
@@ -245,23 +245,25 @@ concept or a line of the to-do list is implemented in one of them.
    edit** (each passage stays in the README: the smallest edits while the
    folder model still holds, a rewrite in full otherwise, with its missing
    facts) or, for a **restructuring** (passages must leave the README),
-   its **move plan** (`view-concept moves`), and writes no README a plan
-   names (the restructured README and each README a row sends a passage
-   to). It never commits. Then act on its run report:
+   its **move plan** (`view-concept moves`), and, when it writes a plan,
+   writes no README of the run at all (the restructured README, each
+   README a row sends a passage to, and each README of a local model
+   edit). It never commits. Then act on its run report:
+   - a line `move plan waiting`: no README of the doc set is written in
+     this pass. Put back every `README.md` of the doc set as it was before
+     the doc pass, since step 3 ran write-readme on it: `git checkout HEAD
+     -- <path>` (a README the doc pass created is deleted; one it moved
+     with `git mv` keeps its new path with its old text), then
+     `view-concept doc-set <slug> failing <path> --clear`, and
+     `view-concept facts <slug> clear <path>` when this pass recorded
+     facts on it. Skip the next two bullets and leave the comments on a
+     README's text unapplied: every README waits for step 8;
    - each README marked `role change` (its folder changes role, and its
      reader with it): run write-readme on it again, a full rewrite of its
      parts, as **Running write-readme** says;
    - record the missing facts of each full rewrite write-readme made in
      this pass (**Running write-readme**, step 5), now that document-feature
      has recorded its own;
-   - a line `move plan waiting`: put back each README it names, the
-     restructured one and those after `holds`, as it was before the doc
-     pass, since step 3 ran write-readme on it: `git checkout HEAD --
-     <path>` (a README the doc pass created is deleted; one it moved with
-     `git mv` keeps its new path with its old text), then `view-concept
-     doc-set <slug> failing <path> --clear`, and `view-concept facts <slug>
-     clear <path>` when this pass recorded facts on it. These READMEs wait
-     for step 8;
    - put the run report into your report.
 5. **One commit** for the doc pass, whose message names the docs it
    wrote.
@@ -276,25 +278,28 @@ concept or a line of the to-do list is implemented in one of them.
    <commit> -- <path>`). A doc the doc pass creates is never minor, nor one
    it did not touch.
 7. **The stop on the move plan.** When document-feature's report has a
-   line `move plan waiting`, the doc pass ends after step 6, every README a
-   plan names unwritten (step 4 put them back): your report says « move
-   plan waiting » and names them. The coordinator sets the phase `awaiting-moves`; the user
+   line `move plan waiting`, the doc pass ends after step 6, every README
+   of the doc set unwritten (step 4 put them back), those no plan names
+   included: your report says « move plan waiting » and names them. The coordinator sets the phase `awaiting-moves`; the user
    reads the plans in the Doc tab, comments on their rows, and sends
    « Write READMEs ».
-8. **Write the restructured READMEs**, on the trigger « Write READMEs »
-   (`action: write-readmes`), whose batch carries the comments on the
-   plans' rows (`(moves <readme> · passage <id>)`). For each README the
-   plans name, run write-readme first, as step 3 says (a draft for a
-   missing one, a full rewrite for one a rewrite request names, an edit
+8. **Write the READMEs**, on the trigger « Write READMEs » (`action:
+   write-readmes`), whose batch carries the comments on the plans' rows
+   (`(moves <readme> · passage <id>)`): every README of the doc set, the
+   restructured ones and those no plan names. For each, in the write
+   order, run write-readme first, as step 3 says (a draft for a missing
+   one, a full rewrite for one a rewrite request names, an edit
    otherwise), holding its missing facts. Then run document-feature again
    on them: it brings each plan in line with the comments, writes the
-   READMEs from it (a README the code moved with its folder at its new
-   place, nothing left at the old path), and records the missing facts of
-   each old README on the README it became. Then run write-readme, an
+   READMEs the plans name from them (a README the code moved with its
+   folder at its new place, nothing left at the old path) and the others
+   by their local model edit, and records the missing facts of each old
+   README on the README it became. Then run write-readme, an
    edit, on each README its report lists under write-readme's parts (the
    passages of those parts the plan put there), and a full rewrite of its
    parts on each one marked `role change`, and record the missing facts
-   write-readme gave. Then steps 5 and 6 for these READMEs, and resolve the
+   write-readme gave. Apply the comments on a README's text that waited
+   for this step. Then steps 5 and 6 for these READMEs, and resolve the
    comments on the plans.
 
 After the doc pass, you keep the docs:
@@ -340,7 +345,7 @@ After the doc pass, you keep the docs:
   which changes the row and rewrites the folder models it touches, in the
   run's commit for the docs;
 - a comment on a row of a move plan waits for « Write READMEs » (step 8),
-  which the coordinator holds it for; once the restructured READMEs are
+  which the coordinator holds it for; once the READMEs are
   written, a comment on them is a comment on a doc's text.
 
 Resolve each comment on a doc or the doc set you handled: `view-concept
@@ -428,8 +433,8 @@ End with one line for the coordinator: the commits you made (short hash and
 subject), the change id you recorded, anything you could not do, the
 comment ids you handled, the docs added to or removed from the doc set, and
 how many questions you asked. A doc pass's report says « doc pass », and
-« move plan waiting » with the restructured READMEs when it stopped on
-their move plans (step 7); the run on « Write READMEs » says « doc pass ·
+« move plan waiting » with the READMEs it holds (every README of the doc
+set) when it stopped on their move plans (step 7); the run on « Write READMEs » says « doc pass ·
 Write READMEs ». After the line, add the run report of each write-readme
 and document-feature run, as the run printed it. Write nothing else in the
 terminal.

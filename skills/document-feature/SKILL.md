@@ -301,20 +301,23 @@ A restructuring takes two runs, with a stop between them:
    | the report chain, the reading of `summary.csv`, the four figures | readme | the report study | as-is, paths corrected |
    | results from before 30 September, « to remove after 31 October » | model | — | nowhere |
 
-2. **The stop.** End the run on the plans, writing no README a plan
-   names: neither the restructured README nor any README a row sends a
-   passage to (its `--to`), even for a concept the triage puts there; the
-   other READMEs of the run are written as usual. Say in the run report
-   that the move plan waits, with the READMEs it holds. The caller then
+2. **The stop.** End the run on the plans, writing no README of the
+   run: neither the restructured README nor any README a row sends a
+   passage to (its `--to`), nor a README whose change is a local model
+   edit, even for a concept the triage puts there. Each README's outcome
+   is decided (step 1), none is written. Say in the run report that the
+   move plan waits, with the READMEs it holds: every README of the run.
+   The caller then
    puts the session in its waiting phase: a wrong destination is corrected
    on one row of the plan, before three READMEs carry it. The user comments
    on the rows (`(moves <readme> · passage <id>)` in a batch) and presses
    « Write READMEs ».
 3. **The writing.** The run that follows « Write READMEs » (`action:
-   write-readmes`) writes the READMEs the plans name, together, from the
-   plans and the comments on them: the passages each row sends, and in a
-   destination, what the rest of this skill puts there (its concepts, its
-   local model edit). You write the folder model passages, each where its row
+   write-readmes`) writes every README of the run, together: the READMEs
+   the plans name from the plans and the comments on them (the passages
+   each row sends, and in a destination, what the rest of this skill puts
+   there: its concepts, its local model edit), and the other READMEs by
+   their local model edit. You write the folder model passages, each where its row
    sends it; a passage of write-readme's parts is put in its destination's
    parts as the row says, and write-readme checks it there (list those
    READMEs in the run report). A README the code moved with its folder is
@@ -379,8 +382,7 @@ first run of benchmark-package, which stops on the plan:
 
 ```
 document-feature · triage: 5 enter · 4 stay out
-experiments/finetuning/gign/README.md · local model edit: 1 passage edited
-experiments/benchmark/README.md · restructuring: move plan waiting (12 passages) · holds core/transcript/README.md, benchmark/README.md, experiments/stt_benchmark_ft2/README.md
+experiments/benchmark/README.md · restructuring: move plan waiting (12 passages) · holds core/transcript/README.md, benchmark/README.md, experiments/stt_benchmark_ft2/README.md, experiments/finetuning/gign/README.md
 candidates: subset (benchmark/, experiments/)
 code: none
 ```
@@ -392,12 +394,14 @@ document-feature · Write READMEs
 core/transcript/README.md · folder model written · 3 passages received
 benchmark/README.md · moved from experiments/benchmark/README.md · role change · missing facts: 2
 experiments/stt_benchmark_ft2/README.md · 1 passage received
+experiments/finetuning/gign/README.md · local model edit: 1 passage edited
 write-readme's parts: benchmark/README.md, usage, a path to experiments/benchmark/ (left to write-readme); experiments/stt_benchmark_ft2/README.md, the report chain
 code: none
 ```
 
 `role change` asks the caller for write-readme's full rewrite of that
 README's parts. A line `move plan waiting` asks the caller to stop until
-« Write READMEs », and names after `holds` the READMEs the plan names
-besides the restructured one, which wait with it. `code` lists each rule of the model the code applies
+« Write READMEs », and names after `holds` every other README of the
+run (the plan's destinations and the READMEs of a local model edit),
+which wait with it. `code` lists each rule of the model the code applies
 otherwise, as written from the code.

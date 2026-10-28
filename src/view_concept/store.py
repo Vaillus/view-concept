@@ -248,7 +248,8 @@ baseline is kept in seen.json under `moves:<path>`, one line per row (`move_text
 moves like the triage's. The stop on the plan is the phase "awaiting-moves" (set by the
 build-feature skill when the doc pass reports a move plan waiting): the page shows
 « Write READMEs » under the plans, which sends a batch whose action is "write-readmes",
-and the doc pass writes the restructured READMEs from the plans and the comments on them.
+and the doc pass writes every README of the doc set, those no plan names included, the
+restructured ones from the plans and the comments on them.
 
 A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
 doc (its path), quote (the passage's exact text in the file), section (the model section
@@ -2291,7 +2292,7 @@ class Session:
         doc set named README.md, in the worktree or not yet) to be written again with
         write-readme, "write-lexicon" that they asked for the repo lexicon
         (REPO_LEXICON), refused once the file exists, and "write-readmes" that they read
-        the move plans and asked the doc pass to write the restructured READMEs. `path`
+        the move plans and asked the doc pass to write the READMEs it held. `path`
         goes with "rewrite-readme" only, which needs it."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
@@ -2864,8 +2865,8 @@ def format_batch(
         )
     if batch.get("action") == "write-readmes":
         lines.append(
-            "action: write-readmes (the user read the move plans: write the restructured "
-            "READMEs from them and the comments on them)"
+            "action: write-readmes (the user read the move plans: write every README of "
+            "the doc set, the restructured ones from the plans and the comments on them)"
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")

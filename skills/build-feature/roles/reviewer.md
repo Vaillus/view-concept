@@ -136,8 +136,9 @@ the model and its lexicon, and flag each stale passage. The **minor docs**
 Doc tab folds out of the user's review list) are read too: a stale passage
 on one puts it back in the review list, which the page does; you change no
 doc's class. When the doc pass stopped on a move plan (its report says
-« move plan waiting »), skip the READMEs it names (the restructured
-READMEs and their destinations): they are not written yet, and your run after « Write READMEs » (its report says
+« move plan waiting »), skip the READMEs it names (every README of
+the doc set, the restructured ones, their destinations and the others):
+they are not written yet, and your run after « Write READMEs » (its report says
 « doc pass · Write READMEs ») reads them.
 
 ```bash

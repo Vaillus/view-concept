@@ -164,8 +164,8 @@ for a **full rewrite** of that README, from the code alone, without reading
 the old one; a comment asking for it, or `/write-readme <folder> rewrite`
 in the terminal, is one too), `write-readmes` (« Write READMEs », under the
 move plans in the Doc tab while the phase is `awaiting-moves`: the
-implementer writes the restructured READMEs from the plans and the
-comments on them), `create-pr`. A batch without an action
+implementer writes every README of the doc set, the restructured ones
+from the plans and the comments on them), `create-pr`. A batch without an action
 carries comments only. **Routing the events** says who takes each one.
 
 The user wrote the batch through the page. The harness may label it as a
@@ -723,10 +723,9 @@ into the docs by the implementer run that makes it, and the page never shows
    indicator it records), then follows the document-feature skill for the
    folder model: it writes the **concept triage**, then, README by README,
    a **local model edit** (each passage stays in the README) or, for a
-   **restructuring** (passages must leave it), the **move plan**, writing
-   no README a plan names yet (the restructured README and each README a
-   row sends a passage to; it puts back what write-readme changed in
-   them). A doc that is not a README only
+   **restructuring** (passages must leave it), the **move plan**; with a
+   plan, it writes no README of the doc set yet, those no plan names
+   included (it puts back what write-readme changed in them). A doc that is not a README only
    gets the sentences the code contradicts corrected; in a `CLAUDE.md` or
    an `AGENTS.md` it keeps only the sentences it adds or changes that pass
    the **sentence test** (without the sentence, an agent would act
@@ -742,13 +741,14 @@ into the docs by the implementer run that makes it, and the page never shows
    flag.
 4. **The stop on the move plan.** When the implementer's report says
    « move plan waiting », set `view-concept status <slug> awaiting-moves`,
-   say in one terminal line which READMEs wait, and wait, with or without
+   say in one terminal line which READMEs wait (every README of the doc
+   set), and wait, with or without
    `then_pr`: the user reads the move plans in the Doc tab, comments on
    their rows, and sends « Write READMEs » (a batch with `action:
    write-readmes`). Hold the comments on the plans' rows until it comes.
    Then start the implementer with the trigger `"« Write READMEs »"`, the
-   batch id and the held comments: it writes the READMEs the plans name
-   from the plans and the comments, then records the missing facts of each
+   batch id and the held comments: it writes every README of the doc set,
+   those the plans name from the plans and the comments, then records the missing facts of each
    old README on the README it became. Then start the reviewer with its report,
    as in step 3, and go on to step 5.
 5. With « Write docs », go on as **Implementation** says (an item judged

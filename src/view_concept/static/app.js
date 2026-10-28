@@ -384,7 +384,7 @@ const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "a
 const modelButton = el("button", { id: "model-approve", class: "btn primary approve doc-approve", hidden: true });
 const prButton = el("button", { id: "pr-create", class: "btn primary approve doc-approve", hidden: true });
 const movesButton = el("button", { id: "readmes-write", class: "btn primary approve doc-approve", hidden: true,
-                                   title: "The doc pass writes the restructured READMEs from the move plans and your comments on them" });
+                                   title: "The doc pass writes every README of the doc set, the restructured ones from the move plans and your comments on them" });
 const docsButton = el("button", { id: "docs-write", class: "btn primary approve doc-approve", hidden: true,
                                   title: "The doc pass: the implementer refreshes the doc set and rewrites the docs from the model" });
 const docsPrButton = el("button", { id: "docs-write-pr", class: "btn approve doc-approve", hidden: true,
