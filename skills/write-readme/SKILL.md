@@ -31,15 +31,7 @@ lexicon when the repo has none) and never commits.
 
 A run has one of three outcomes:
 
-- **draft**: the folder has no `README.md`, or its README has neither a
-  first sentence nor a file map, as the document-feature skill creates it:
-  the folder model (a title and passages under headings that are none of
-  its parts) and at most a passage of its parts a restructuring moved there
-  (under `## Usage`); write the parts it lacks from the code, keep a
-  passage of its parts it already holds word for word unless it fails a
-  check of **Checking an existing README**, which gives it the smallest
-  edit that makes it pass, and copy the folder model after them, word for
-  word;
+- **draft**: the folder has no `README.md`; write its parts from the code;
 - **edit** (always, when it has one and no full rewrite was asked for): keep
   the structure, headings and wording of its parts, change only the
   passages of its parts that fail a check, count the **failure indicator**
@@ -58,7 +50,10 @@ A run is **in a review** when its request names a review's session folder
 (`~/.view-concept/sessions/<slug>/`): a feature's doc pass or a docs review
 started it as an agent of its own, on one README, and the review's page
 shows what the run leaves to the user. Any other run, a `rewrite` argument
-typed in a terminal included, is outside a review.
+typed in a terminal included, is outside a review. In a feature's doc pass,
+this skill runs on each README before the document-feature skill, which
+then reads the boundary of its parts by their headings (see **Its parts**)
+and writes the folder model after them.
 
 In a review, the request may also carry the user's comments on the
 README's parts, each with its id, its quote and its text: apply each in its
@@ -211,9 +206,8 @@ Before writing, read the rules the repo sets for READMEs, in the root
 `CLAUDE.md` (or `AGENTS.md`) and the READMEs from the root down to the
 folder (a study header, a required section). They win over this skill.
 
-An edit keeps the old README's language, and so does a draft of a README
-that document-feature created; a draft of a missing README and a full
-rewrite take the language of the repo's other docs.
+An edit keeps the old README's language; a draft and a full rewrite take
+the language of the repo's other docs.
 
 ## Checking an existing README
 
@@ -301,10 +295,9 @@ A draft or a full rewrite writes its parts in this order, unless the repo's
 conventions set another shape: the untitled top (a study header the
 conventions impose, the first sentence, the status line), then `## Files`,
 then `## Usage`. A full rewrite then copies the folder model's passages
-word for word, headings included, in their old order, and so does a draft
-of a README that document-feature created, after the parts it lacks and
-the ones it already held. A draft of a missing README has no folder
-model.
+word for word, headings included, in their old order. A draft has no
+folder model: document-feature adds one after its parts, under a `##`
+heading of its own, when a feature gives the folder rules.
 
 - **Depth.** A README covers its folder at the level of its direct
   children, and says nothing about what lies inside a subfolder: that
@@ -390,7 +383,7 @@ audit: 2 fixed · 0 left
 ```
 
 The first line is `write-readme · <path> · ` then the outcome: `draft` for
-a missing README or one document-feature created, `edit: <n> of <total> passages fail` (the failure
+a missing README, `edit: <n> of <total> passages fail` (the failure
 indicator, over the passages of its parts, followed by `; structure fails`
 when the structure of its parts fails; `edit: 0 of <total> passages fail`
 when all pass), or `full rewrite` when it was asked for. `retitled`, in the
