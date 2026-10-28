@@ -178,12 +178,12 @@ says why (`doc-set minor`, taken off by `doc-set major`), `diff` its diff size, 
 removed} lines, in the doc pass commit (in a docs review, against the base branch). The
 Doc tab folds the minor docs out of the review list, the docs it asks the user to read.
 `failing` is the failure indicator of a README write-readme edited: {fail, total,
-structure}, the passages that failed its checks before the edit, out of all, and whether
-its structure fails (`doc-set failing`). A doc the doc pass (or a docs review) created
-is never minor and carries no indicator: it is a draft (`created_by_doc_pass`). `add`
-on a listed doc keeps these fields. A doc of the set is a doc section: its text is the
-file read from the worktree at each render, never copied into the session, so the
-user's own edits show as the agent's do; a doc missing there reads as missing. Its
+structure}, the passages of the README's skeleton that failed its checks before the edit,
+out of all of them, and whether its structure fails (`doc-set failing`). A doc the doc
+pass (or a docs review) created is never minor and carries no indicator: it is a draft
+(`created_by_doc_pass`). `add` on a listed doc keeps these fields. A doc of the set is a
+doc section: its text is the file read from the worktree at each render, never copied into the
+session, so the user's own edits show as the agent's do; a doc missing there reads as missing. Its
 highlight baseline is kept in seen.json under `doc:<path>` and moves with every batch,
 like a section's. A comment, a draft or a side thread on a doc's text is anchored to
 `doc:<path>` (a batch prints it `(doc <path>)`), one on the doc set list to `doc:`
@@ -203,7 +203,7 @@ agents) is missing from the worktree, « write repo lexicon » on its doc set en
 batch whose action is "write-lexicon"; it is refused once the file exists.
 
 A missing fact is a fact the old text of a README said and no README written says any
-more, in words or by a link, after a full rewrite of write-readme's parts (asked by a
+more, in words or by a link, after a full rewrite of the README's skeleton (asked by a
 rewrite request or a role change, written from the code alone), a restructuring (its
 passages moved to other READMEs) or a folder model document-feature rewrote whole. It is
 recorded on the README the old file became (its new path when the code moved it), its
@@ -211,12 +211,11 @@ passage number counted in the old README. missing-facts.json keeps them by READM
 {path: [{id (f1…, unique in the session), fact, passage (the number of the old README's
 passage it came from, or null), proposal ("keep" or "leave": what the agent proposes),
 reason (one line), state ("pending", "kept" or "left"), part ("readme": it came from
-write-readme's parts; "model": from the folder model, document-feature's; a fact recorded
-without one is "readme")}]} (written by `facts`; a new rewrite by one skill replaces the
-README's facts of that skill's part alone, the other's kept, and `remove_doc` drops them
-all). A fact
-the user does not comment on stays out of the README, whatever the proposal. The Doc tab
-lists them under their README; a comment, a draft or a side thread on one is anchored to
+the README's skeleton, write-readme's; "model": from the folder model, document-feature's;
+a fact recorded without one is "readme")}]} (written by `facts`; a new rewrite by one skill
+replaces the README's facts of that skill's part alone, the other's kept, and `remove_doc`
+drops them all). A fact the user does not comment on stays out of the README, whatever the proposal.
+The Doc tab lists them under their README; a comment, a draft or a side thread on one is anchored to
 `doc:<path>` with the fact's text as its quote, and also carries the fact's id, `fact`
 (a batch prints it `(doc <path> · fact <id>)`; a thread passes it to the comment it
 becomes). Their highlight
@@ -238,12 +237,12 @@ quote the concept (a batch prints it `(triage <id>)`). No section id may start w
 batch and with « mark read » on the table: a new or changed row shows highlighted.
 
 A restructuring is a change after which passages must leave a README. In the doc pass,
-the write-readme agents write their parts of each README first; then, before writing the
+the write-readme agents write the README's skeleton of each README first; then, before writing the
 folder model of such a README, the document-feature agent writes its move plan and stops
 on it. moves.json keeps the
 plans by README (a README.md of the doc set): {path: [{id (p1…, unique in the session,
 going on past a cleared plan), passage (a one-line description of a passage of its
-folder model: write-readme's parts are never in a plan), to (the README it goes to, ""
+folder model: the README's skeleton is never in a plan), to (the README it goes to, ""
 when it goes nowhere), becomes ("as-is", "rewritten" or "nowhere"), note (one line,
 optional)}]} (written by `moves`; `remove_doc` drops a README's plan; a row an older run
 wrote may still carry a "part", which is ignored). The Doc tab shows one table per
@@ -254,7 +253,7 @@ baseline is kept in seen.json under `moves:<path>`, one line per row (`move_text
 moves like the triage's. The stop on the plan is the phase "awaiting-moves" (set by the
 build-feature skill when the doc pass reports a move plan waiting): it holds only
 document-feature's writing, the folder models of every README of the doc set;
-write-readme's parts, already written from the code, stay, and no README is put back.
+the README's skeleton, already written from the code, stays, and no README is put back.
 The page shows « Write READMEs » under the plans, which sends a batch whose action is
 "write-readmes", and the document-feature agent writes the folder model of every README
 of the doc set, those no plan names included, the restructured ones from the plans and
@@ -396,8 +395,8 @@ FACT_PROPOSALS = ("keep", "leave")
 FACT_STATES = ("pending", "kept", "left")
 FACT_ID_RE = re.compile(r"^f[0-9]{1,6}$")
 # The part of the old README a missing fact came from, which says which skill replaces it:
-# "readme" (write-readme's parts) or "model" (the folder model, document-feature's). Each
-# skill clears only the facts of its own part before recording new ones.
+# "readme" (the README's skeleton, write-readme's) or "model" (the folder model,
+# document-feature's). Each skill clears only the facts of its own part before recording new ones.
 FACT_PARTS = ("readme", "model")
 # The concept triage: a comment, a draft or a side thread on a row is anchored to
 # `triage:<id>`, and its highlight baseline in seen.json is kept under `triage:` alone. No
@@ -1755,7 +1754,7 @@ class Session:
         self, readme: str, passage: str, becomes: str, to: str = "", note: str = ""
     ) -> dict[str, Any]:
         """Add a row to the move plan of `readme`, a README.md of the doc set: `passage`
-        one line that describes a passage of its folder model (write-readme's parts are
+        one line that describes a passage of its folder model (the README's skeleton is
         never in a plan), `to` the README it goes to (none when it `becomes` "nowhere"),
         `becomes` "as-is", "rewritten" or "nowhere", `note` one optional line."""
         readme = doc_path(readme)
@@ -2878,7 +2877,7 @@ def format_batch(
     elif batch.get("action") == "write-docs":
         lines.append(
             "action: write-docs (the user asked for the doc pass: the documenter refreshes the "
-            "doc set and the lexicons, a write-readme agent per README writes its parts, a "
+            "doc set and the lexicons, a write-readme agent per README writes its skeleton, a "
             "document-feature agent writes the concept triage and each README's folder model, "
             "then the documenter corrects the other docs and commits; the reviewer judges the doc "
             "items and flags stale passages; « Create PR » follows)"
@@ -2897,7 +2896,7 @@ def format_batch(
         lines.append(
             "action: write-readmes (the user read the move plans: write the folder model of "
             "every README of the doc set, the restructured ones from the plans and the "
-            "comments on them; write-readme's parts, already written, stay)"
+            "comments on them; the README's skeleton, already written, stays)"
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")
@@ -2997,7 +2996,7 @@ def format_fact(f: dict[str, Any]) -> str:
     """One missing fact on one line: its id, state, text, old passage, the part it came
     from and the proposal."""
     passage = f" (passage {f['passage']})" if f.get("passage") else ""
-    part = "the folder model" if fact_part(f) == "model" else "write-readme's parts"
+    part = "the folder model" if fact_part(f) == "model" else "the README's skeleton"
     return (
         f"{f.get('id', '')} [{f.get('state', 'pending')}] « {f.get('fact', '')} »{passage}"
         f" · from {part} · propose {f.get('proposal', '')}: {f.get('reason', '')}"

@@ -915,7 +915,7 @@ def main() -> None:
         "--part",
         choices=FACT_PARTS,
         help="with add and clear: the part of the old README the fact came from, readme "
-        "(write-readme's parts) or model (the folder model, document-feature's)",
+        "(the README's skeleton, write-readme's) or model (the folder model, document-feature's)",
     )
     q.add_argument("--propose", choices=FACT_PROPOSALS, help="with add: keep or leave the fact")
     q.add_argument("--reason", help="with add: one line, why that proposal")

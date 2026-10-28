@@ -4,13 +4,13 @@ description: >-
   Write a folder's README.md from its code, or bring an existing one up to
   standard, editing only what fails and counting the passages that fail, or
   write it again from the code alone when asked and list the facts the old
-  one said that the new one lost, always on its own parts only: the first
-  sentence, the file map under ## Files, the status line, the usage under
-  ## Usage, and a section the repo's conventions impose. Every other
+  one said that the new one lost, always on the README's skeleton only: the
+  first sentence, the status line, the file map under ## Files, the usage
+  under ## Usage, and a section the repo's conventions impose. Every other
   passage, the folder model the document-feature skill holds, stays word
   for word. Fixed content rules: a reader line and repo terms read from the
-  repo's lexicon files, an inclusion test every sentence of its parts must
-  pass, the repo's own README conventions, and a report printed at the end
+  repo's lexicon files, an inclusion test every sentence of the skeleton
+  must pass, the repo's own README conventions, and a report printed at the end
   of the run.
   Use when the user wants a README written for a folder, or an existing
   README cleaned up, shortened or rewritten, notably one written by an LLM —
@@ -27,33 +27,35 @@ the user asks for a full rewrite (`/write-readme <folder> rewrite`), or by
 `removed` when a review's doc pass names the README of a folder its branch
 removes. The run
 reads the repo's lexicon files, the folder's code and the old README if
-there is one, writes its parts of the README (see **Its parts**), and ends
+there is one, writes the README's skeleton (see **The README's skeleton**), and ends
 by printing its **run report**. It writes no other file (except the repo
 lexicon when the repo has none) and never commits.
 
 A run has one of four outcomes:
 
-- **draft**: the folder has no `README.md`; write its parts from the code;
+- **draft**: the folder has no `README.md`; write the README's skeleton
+  from the code;
 - **edit** (always, when it has one and no full rewrite was asked for): keep
-  the structure, headings and wording of its parts, change only the
-  passages of its parts that fail a check, count the **failure indicator**
+  the structure, headings and wording of the README's skeleton, change
+  only the passages of the skeleton that fail a check, count the **failure indicator**
   (see **Checking an existing README**), and leave every other passage word
   for word;
 - **full rewrite**: only on a **rewrite request**, the `rewrite` argument or
-  a review's request to write a README again from scratch; write its parts
-  again from the code alone, without reading the old ones, as for a draft,
-  copy every other passage after them word for word, then list the
-  **missing facts** of its parts (see **The missing facts**);
+  a review's request to write a README again from scratch; write the
+  README's skeleton again from the code alone, without reading the old
+  one, as for a draft, copy every other passage after it word for word,
+  then list the **missing facts** of the skeleton (see **The missing
+  facts**);
 - **retitle only**: only with the `removed` argument, on the README of a
-  folder the branch removes; retitle it (see **Its parts**) and do nothing
+  folder the branch removes; retitle it (see **The README's skeleton**) and do nothing
   else: there is no code left to describe, so check no passage, write
   nothing from the code, count no failure indicator and list no missing
   fact. The document-feature skill then reads the boundary by these
   headings for its move plan, and deletes the file once every passage of
   its folder model has moved.
 
-The run never chooses a full rewrite on its own, however much of its parts
-fails: the failure indicator tells the user, who decides.
+The run never chooses a full rewrite on its own, however much of the README's
+skeleton fails: the failure indicator tells the user, who decides.
 
 A run is **in a review** when its request names a review's session folder
 (`~/.view-concept/sessions/<slug>/`): a feature's doc pass or a docs review
@@ -61,31 +63,33 @@ started it as an agent of its own, on one README, and the review's page
 shows what the run leaves to the user. Any other run, a `rewrite` argument
 typed in a terminal included, is outside a review. In a feature's doc pass,
 this skill runs on each README before the document-feature skill, which
-then reads the boundary of its parts by their headings (see **Its parts**)
-and writes the folder model after them.
+then reads the boundary of the README's skeleton by its headings (see
+**The README's skeleton**) and writes the folder model after it.
 
 In a review, the request may also carry the user's comments on the
-README's parts, each with its id, its quote and its text: apply each in its
-parts, under this skill's rules, and leave it open (the review resolves
+README's skeleton, each with its id, its quote and its text: apply each in
+the skeleton, under this skill's rules, and leave it open (the review resolves
 it). A comment on a passage of the folder model is not this skill's: name
 it in the run report. The request may carry a missing fact the user keeps
-(see **The missing facts**): add it to its parts.
+(see **The missing facts**): add it to the README's skeleton.
 
 Never ask the user anything, except the one question of **The repo
 lexicon** below: the reader line says who reads, the goal is always that the
 reader can use or change the folder, and the inclusion test says what stays.
 
-## Its parts
+## The README's skeleton
 
 A README is shared, passage by passage (a paragraph, a list, a table, a
 code block), between this skill and the **folder model**. This skill holds
-only its **parts**:
+only the **README's skeleton** (the skeleton, for short), these passages:
 
 1. **the first sentence**: the folder in one sentence;
-2. **the file map**: one line per file or subfolder that matters;
-3. **the status line**: whether the folder is experimental, deprecated or
+2. **the status line**: whether the folder is experimental, deprecated or
    replaced;
-4. **the usage**: the folder's own commands, each with what it produces;
+3. **the file map**, under `## Files`: one line per file or subfolder
+   that matters;
+4. **the usage**, under `## Usage`: the folder's own commands, each with
+   what it produces;
 5. a section the repo's conventions impose (a study header).
 
 Every other passage of a README is the **folder model**: the rules to know
@@ -95,18 +99,18 @@ links, history, an open discussion). The document-feature skill holds it,
 from the model of the feature in progress. This skill never writes, checks,
 moves or cuts a passage of the folder model, in any outcome: an edit leaves
 each one word for word in its place, unchecked; a full rewrite copies them
-word for word after its parts. A placeholder (« TODO: Notion link ») or a
-dated migration note belongs to the part it sits in.
+word for word after the skeleton. A placeholder (« TODO: Notion link ») or a
+dated migration note belongs to the part it sits in, the skeleton or the folder model.
 
 **The headings.** This skill always titles the file map `## Files` and the
-usage `## Usage`, and recognises those two parts by these headings. The
+usage `## Usage`, and recognises those two passages by these headings. The
 first sentence, the status line and a study header stay untitled,
 recognised by their place at the top of the README, before the first `##`
 heading. A passage under any other `##` heading is the folder model. A
 usage section of its own (`## Rebuilding a corpus`) keeps its title as a
 subheading under `## Usage` (`### Rebuilding a corpus`). When the repo's
 conventions impose other headings for the map or the usage, they replace
-`## Files` and `## Usage`, and the parts are recognised by them.
+`## Files` and `## Usage`, and the skeleton is recognised by them.
 
 **The retitling.** An existing README whose map and usage are not under
 these headings (one this skill never ran on since it titles them) is
@@ -121,7 +125,7 @@ a caveat) stays under the section's own heading, in the folder model.
 folder model's sections, in their old order. This is the only time an edit
 moves or retitles a passage; the passages move word for word, and the
 retitling is named in the run report's `retitled:` line. Every later edit
-recognises the parts by their headings, without judging.
+recognises the skeleton by its headings, without judging.
 
 Before the retitling of `experiments/finetuning/gign/README.md`:
 
@@ -154,8 +158,8 @@ Code of the GIGN fine-tuning study, …
 ## See also
 ```
 
-A full rewrite of a README never retitled recognises its parts by the same
-judgment, then writes them under the fixed headings.
+A full rewrite of a README never retitled recognises its skeleton by the
+same judgment, then writes it under the fixed headings.
 
 ## The repo lexicon
 
@@ -199,12 +203,12 @@ asking.
 
 ## Sources
 
-Every fact of its parts comes from the folder's code (always read first:
+Every fact of the README's skeleton comes from the folder's code (always read first:
 modules, commands, entry points, tests, the files it reads and writes), the
-old README's parts for an edit, the missing facts the user keeps after a
+old README's skeleton for an edit, the missing facts the user keeps after a
 full rewrite, and the model of each session folder the request names that
 holds one (its `sections/` and the `lexicon` of its `plan.json`), for what
-its parts need that the code does not show (what a command is for). The
+the skeleton needs that the code does not show (what a command is for). The
 rules of the model are the folder model's, not this skill's. A feature
 names its own folder; a docs review names its own, which holds no model,
 and its reference model's folder when it has one. A fact the code
@@ -221,7 +225,7 @@ the language of the repo's other docs.
 
 ## Checking an existing README
 
-An edit goes through the passages of its parts one by one and marks each
+An edit goes through the passages of the README's skeleton one by one and marks each
 passage that fails:
 
 1. the inclusion test;
@@ -232,28 +236,28 @@ passage that fails:
 4. the repo's README conventions.
 
 Fix each failing passage where it stands and leave the others word for
-word; apart from the retitling (see **Its parts**), never move, merge or
+word; apart from the retitling (see **The README's skeleton**), never move, merge or
 retitle sections. A passage that fails only by leaving something out (a
 file missing from the map) is fixed by adding the line. The folder model's
 passages are not checked: a wrong path in the usage is this skill's to fix,
 a wrong rule in the folder model is document-feature's. A README can come
 out unchanged.
 
-The **failure indicator** is the number of passages of its parts that fail
-a check, counted before the edit, out of the passages of its parts: `3 of 6
-passages fail`. A passage that fails only by leaving something out does not
+The **failure indicator** is the number of passages of the README's
+skeleton that fail a check, counted before the edit, out of the passages
+of the skeleton: `3 of 6 passages fail`. A passage that fails only by leaving something out does not
 count, and the folder model's passages count in neither number. When the
-structure of its parts itself fails (a usage with a subsection per module
+structure of the skeleton itself fails (a usage with a subsection per module
 and a list of return fields), the indicator says so too (`structure
 fails`); the edit does not fix the structure, and the run stays an edit.
 The indicator is in the first line of the run report.
 
 ## The missing facts
 
-A full rewrite never reads the old README's parts while it writes; it reads
-the old README only to set its folder model aside, which it copies word for
-word after the new parts. Once the new README is written, compare the old
-parts with the new: read the old parts fact by fact (one thing they state:
+A full rewrite never reads the old README's skeleton while it writes; it
+reads the old README only to set its folder model aside, which it copies
+word for word after the new skeleton. Once the new README is written,
+compare the old skeleton with the new: read the old skeleton fact by fact (one thing they state:
 a command, a path, a reason) and keep each fact the new README says neither
 in words nor by a link to a doc that says it. These are the **missing
 facts**. A fact the new README says in other words, once instead of three
@@ -273,7 +277,7 @@ For each missing fact, give:
 
 The proposal drops nothing: the new README stays as written, and the user
 decides which facts come back. A fact the user keeps is added to the
-README's parts under this skill's rules, so the inclusion test can make it
+README's skeleton under this skill's rules, so the inclusion test can make it
 a link. Outside a review, the user reads the list in the run report and
 names the facts to keep in a later message; in a review, the run report
 lists them the same way, the review records them in the session, and the
@@ -283,7 +287,7 @@ no missing facts: the passages it changes are named in the report's
 
 ## The inclusion test
 
-Every sentence of its parts, in a draft, a rewrite or an edit, stays only
+Every sentence of the README's skeleton, in a draft, a rewrite or an edit, stays only
 if:
 
 1. the reader needs it to use or change this folder. A sentence that gives
@@ -293,20 +297,20 @@ if:
    does not count.
 
 A sentence that fails only the second shrinks to a few words and a link.
-Drop history and open discussions (ideas, to-dos) from its parts, except a
+Drop history and open discussions (ideas, to-dos) from the skeleton, except a
 **placeholder** for a missing link or fact (« TODO: Notion link », kept and
 listed in the report) and a dated **migration note** on reading outputs
 made before a change, kept until its date. The test never reaches the
 folder model: a history or an open discussion there stays word for word.
 
-## Writing its parts
+## Writing the README's skeleton
 
-A draft or a full rewrite writes its parts in this order, unless the repo's
+A draft or a full rewrite writes the README's skeleton in this order, unless the repo's
 conventions set another shape: the untitled top (a study header the
 conventions impose, the first sentence, the status line), then `## Files`,
 then `## Usage`. A full rewrite then copies the folder model's passages
 word for word, headings included, in their old order. A draft has no
-folder model: document-feature adds one after its parts, under a `##`
+folder model: document-feature adds one after the skeleton, under a `##`
 heading of its own, when a feature gives the folder rules.
 
 - **Depth.** A README covers its folder at the level of its direct
@@ -315,7 +319,7 @@ heading of its own, when a feature gives the folder rules.
   docstrings. A deeper folder gets a line only when a reader would look for
   it by name (an app of its own).
 - **Start minimal.** A draft starts as the first sentence and the file map.
-  Add another part only when the folder has something for it the map
+  Add another passage of the skeleton only when the folder has something for it the map
   cannot show.
 
 1. **The first sentence**: the folder in one sentence, in field terms.
@@ -328,7 +332,7 @@ heading of its own, when a feature gives the folder rules.
    what it produces; for a library, one short call example per public
    entry point. No subsection per module, no list of return fields.
 
-No part for caveats: a caveat is a rule to know to avoid a mistake, which
+No place in the skeleton for caveats: a caveat is a rule to know to avoid a mistake, which
 the folder model holds, so this skill never writes one and leaves an
 existing one word for word. What the run finds wrong with the code (a
 script that fails at import, one with no caller, a file breaking a repo
@@ -371,7 +375,7 @@ subfolder's README says what it holds and how to call it.
 - **Mechanism over analogy.** A real command, file or flag with what it
   produces; no metaphor for a mechanism.
 
-Once written, re-read its parts for undefined repo terms, metaphors,
+Once written, re-read the README's skeleton for undefined repo terms, metaphors,
 overloaded words (« session », « state ») and bare references (« the
 pipeline » never introduced), and fix each: the precise term, a defining
 clause, or a cut. A finding you cannot fix is reported as « left ».
@@ -394,8 +398,8 @@ audit: 2 fixed · 0 left
 
 The first line is `write-readme · <path> · ` then the outcome: `draft` for
 a missing README, `edit: <n> of <total> passages fail` (the failure
-indicator, over the passages of its parts, followed by `; structure fails`
-when the structure of its parts fails; `edit: 0 of <total> passages fail`
+indicator, over the passages of the README's skeleton, followed by `; structure
+fails` when the structure of the skeleton fails; `edit: 0 of <total> passages fail`
 when all pass), `full rewrite` when it was asked for, or `retitle only`
 with `removed`, whose report has its first line and its `retitled:` line
 alone (`retitled: none` when the README already had its headings).
@@ -418,6 +422,6 @@ missing facts: 3
 ```
 
 A run that read a model
-adds `model:` (the facts of the model its parts use that the code does not
+adds `model:` (the facts of the model the skeleton uses that the code does not
 show, and those the code contradicted). Add a line when the run wrote the
 repo lexicon.

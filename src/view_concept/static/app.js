@@ -370,7 +370,7 @@ const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "a
    model of a feature at the end of model consolidation ("awaiting-model", set by the
    build-feature skill only), the doc pass once the code carries the model ("awaiting-docs",
    build-feature too), the doc pass stopped on the move plans of restructured READMEs
-   ("awaiting-moves", build-feature too: write-readme's parts are written, document-feature's
+   ("awaiting-moves", build-feature too: the README's skeleton is written, document-feature's
    folder models wait; « Write READMEs » under the plans in the Doc tab, action
    "write-readmes"), and the opening of its PR ("awaiting-pr", build-feature and review-docs).
    Each is answered from the page by a batch carrying the phase's action, draft comments
@@ -387,7 +387,7 @@ const prButton = el("button", { id: "pr-create", class: "btn primary approve doc
 const movesButton = el("button", { id: "readmes-write", class: "btn primary approve doc-approve", hidden: true,
                                    title: "The doc pass resumes: the document-feature agent writes the folder models of every README of the doc set, the restructured ones from the move plans and your comments on them" });
 const docsButton = el("button", { id: "docs-write", class: "btn primary approve doc-approve", hidden: true,
-                                  title: "The doc pass: the documenter refreshes the doc set, write-readme agents write their parts of each README, then a document-feature agent writes the folder models" });
+                                  title: "The doc pass: the documenter refreshes the doc set, write-readme agents write the README's skeleton of each README, then a document-feature agent writes the folder models" });
 const docsPrButton = el("button", { id: "docs-write-pr", class: "btn approve doc-approve", hidden: true,
                                     title: "The doc pass, the reviewer's run on the doc items and stale passages, then the PR, with no pause" });
 // Once the agent opened the PR (plan.json's `pr`), the page links it in the top bar and at
@@ -987,7 +987,7 @@ function sectionBlock(s, { bare = false } = {}) {
    to "triage:<id>" with the concept as quote; a row new or changed since the baseline
    "triage:" gets the green bar, and « mark read » on the table moves the baseline.
    Under it, the move plan of each restructured README (`state.docs.moves`), one table per
-   README: each passage of its folder model (write-readme's parts are never in a plan), the
+   README: each passage of its folder model (the README's skeleton is never in a plan), the
    README it goes to and what it becomes there. Its rows are commented like the triage's, on
    "moves:<id>" with the passage as quote, against the baseline "moves:<path>". While the
    doc pass waits on the plans ("awaiting-moves", document-feature's folder models held),
@@ -1032,7 +1032,7 @@ const failingBadge = (d) => {
   if (!f) return null;
   return el("span", { class: `badge ${rewriteHinted(d) ? "tone-warn" : ""}`,
                       text: `${f.fail}/${f.total} failing${f.structure ? " · structure fails" : ""}`,
-                      title: "The passages that failed write-readme's checks before its edit, out of all" });
+                      title: "The passages of the README's skeleton that failed write-readme's checks before its edit, out of all of them" });
 };
 const rewriteHinted = (d) => !!(d && d.failing && (d.failing.structure || d.failing.fail > REWRITE_HINT * d.failing.total));
 // The missing facts of README `path`, [] for a doc without.

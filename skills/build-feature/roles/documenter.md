@@ -8,12 +8,12 @@ implementer writes the code and touches no doc; the READMEs are written by
 two **skill agents** the coordinator starts, each an agent started with a
 skill as its only instructions (as when the user types `/write-readme`),
 in this order: one **write-readme** agent per README, which writes
-**write-readme's parts** (the first sentence and the status line,
+the **README's skeleton** (the first sentence and the status line,
 recognised by their place at the top, the file map under `## Files`, the
 usage under `## Usage`, and a section the repo's conventions impose, such
 as a study header), then one **document-feature** agent, which reads that
 boundary by the headings and writes the **folder model** of each README
-(every passage outside write-readme's parts). You never
+(every passage outside the README's skeleton). You never
 write a passage of a README, never read a skill, and start no agent.
 
 You start fresh, from the context the coordinator gave you (`view-concept
@@ -137,9 +137,9 @@ coordinator starts the write-readme agents in it.
 ## The doc pass
 
 The coordinator runs the doc pass in five steps: you **prepare**, one
-write-readme agent per README writes its parts, the document-feature agent
-writes the folder models, a second write-readme agent rewrites in full the
-parts of each README whose folder changes role (`role change` in
+write-readme agent per README writes its skeleton, the document-feature
+agent writes the folder models, a second write-readme agent rewrites in
+full the skeleton of each README whose folder changes role (`role change` in
 document-feature's report), then you **finish**.
 
 ### Your first run: prepare
@@ -199,12 +199,12 @@ your report (`doc pass README <path>`), for the whole doc pass on it.
    its passages or with its structure failing, puts the rewrite button
    forward; the user decides.
 3. **The missing facts** of each full rewrite, from its write-readme
-   report: each fact the old parts said that the new README does not say,
+   report: each fact the old README's skeleton said that the new README does not say,
    with its proposal and reason. document-feature recorded its own (those
    of a folder model it rewrote whole or of a restructuring) in its run:
    its report gives their number on the README's line. Each fact keeps
    the part it comes from, and each skill's facts replace only its own:
-   clear the README's facts of write-readme's parts first, `view-concept
+   clear the README's facts of the README's skeleton first, `view-concept
    facts <slug> clear <path> --part readme`, which leaves
    document-feature's, then one call per fact, `view-concept facts <slug>
    add <path> "<fact>" --part readme --propose keep|leave --reason "<one
@@ -240,7 +240,7 @@ passage, then to you; the rest comes to you.
 | a comment on the doc set list (`(doc set)`) | `view-concept doc-set <slug> add <path> "<reason>" --user` or `remove <path> --user`, the `--user` saying the user asked for it. `add` puts the doc at the end: record the write order again, the added doc at its place. Write an added doc that is not a README; an added README goes in your report, for the skill agents. A comment may also move a doc between the review list and the minor docs: `minor <path> "<reason>" --added N --removed N` (the diff from the doc pass commit) or `major <path>`. |
 | a comment correcting an entry of a lexicon | Correct the entry, and add to the doc set each README that copies it (the README's definition of the term, in the entry's old words): its clause goes in your report, for the skill agent holding it. A comment taking a **candidate** (a repo term several folders use that no lexicon on their path defines, which a skill agent's report lists) adds its entry; a comment asking for a folder lexicon creates it, with the entries it names. |
 | « write repo lexicon » (`action: write-lexicon`) | Write the missing repo lexicon, as **The lexicons** says, step 1. |
-| a comment on a missing fact (`(doc <path> · fact <id>)`) | « laisse-le » (leave it): change nothing in the README, then `view-concept facts <slug> mark <id> left`. A question: answer it in the `resolve` reply; the fact stays `pending`. « reprends-le » (take it back): the README's text is a skill agent's, so name the fact in your report for the skill of its part, write-readme when it came from the old parts (a command, a line of the map, the usage), document-feature when it came from the old folder model; once that agent's report comes back to you, `mark <id> kept`. A fact no comment names stays out of the README. |
+| a comment on a missing fact (`(doc <path> · fact <id>)`) | « laisse-le » (leave it): change nothing in the README, then `view-concept facts <slug> mark <id> left`. A question: answer it in the `resolve` reply; the fact stays `pending`. « reprends-le » (take it back): the README's text is a skill agent's, so name the fact in your report for the skill of its part, write-readme when it came from the old README's skeleton (a command, a line of the map, the usage), document-feature when it came from the old folder model; once that agent's report comes back to you, `mark <id> kept`. A fact no comment names stays out of the README. |
 | the run report of a skill agent, after a comment on a README, a row of the concept triage, a rewrite request or a fact to take back | Record what it reports, as steps 2 and 3 of your second run say (a rewrite request's full rewrite clears the indicator and records its missing facts), mark the facts taken back `kept`, commit, a README its document-feature report marks `restructuring: deleted` included (its deletion staged, as step 4 says), and resolve the comments it handled. |
 | an implementer report naming docs its run made false | Correct, in each doc that is not a README, the sentences the code now contradicts, as step 1 of your second run says. The READMEs it names go to the skill agents: the coordinator starts them before you. |
 

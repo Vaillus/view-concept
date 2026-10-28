@@ -4,11 +4,11 @@ description: >-
   Carry the model of the feature in progress into the repo's READMEs once
   the code carries it, by three decisions taken in order: IF a concept of
   the model enters the docs (the concept triage), WHERE it goes (the folder
-  model of the README whose folder writes it, beside write-readme's parts),
+  model of the README whose folder writes it, beside the README's skeleton, which write-readme holds),
   and HOW the README changes (a local model edit, or a restructuring whose
   move plan the user corrects before any folder model is written). The
-  code is the source of truth. Runs after write-readme, whose parts of
-  each README it reads by their headings. Use when a feature's doc pass writes the
+  code is the source of truth. Runs after write-readme, and reads the
+  README's skeleton of each README by its headings. Use when a feature's doc pass writes the
   folder models of its READMEs — "document the feature", "carry the model
   into the READMEs", invokes /document-feature.
 argument-hint: "[the session folder or slug] [the READMEs: default, every README of the doc set]"
@@ -25,9 +25,9 @@ doc-set <slug>`). With no session named, stop: the skill has no model to
 carry.
 
 In a feature's doc pass, the skill runs once on the READMEs of the doc set,
-after write-readme has written its own parts of each README, from the code:
-a README that was missing has its draft, a README write-readme found
-untitled has its parts under their headings, and the README of a folder
+after write-readme has written the README's skeleton of each README, from
+the code: a README that was missing has its draft, a README write-readme
+found untitled has its skeleton under its headings, and the README of a folder
 the branch removes is retitled, nothing else (see **Sharing a README with
 write-readme**). You create no README. The request may also carry the
 user's comments to apply, each with its id, its quote and its text: on a
@@ -177,7 +177,7 @@ it), not of the folders that call it:
   README that defines it does not name its callers: their list changes
   while its folder does not;
 - a folder that had no README has one by now, the draft write-readme
-  wrote from the code: add the folder model after its parts, under a `##`
+  wrote from the code: add the folder model after its skeleton, under a `##`
   heading of its own (`## The WER` in `core/transcript/README.md`). A
   folder whose README is not in the doc set gets none from you: name it in
   the run report (`no README:`), and the caller adds it to the doc set.
@@ -225,14 +225,14 @@ write-readme, the skill that writes a README's structure from the code,
 and this skill share each README passage by passage (a **passage** is a
 paragraph, a list, a table or a code block):
 
-- **write-readme's parts**: the first sentence and the status line,
-  recognised by their place at the top, untitled; the **file map** (one
-  line per file or subfolder, with what it holds) under `## Files`; the
-  **usage** (the folder's commands, each with what it produces) under
-  `## Usage`; plus a section the repo's conventions impose, such as a
+- **The README's skeleton** (the skeleton, for short), write-readme's: the first sentence and the
+  status line, recognised by their place at the top, untitled; the **file
+  map** (one line per file or subfolder, with what it holds) under
+  `## Files`; the **usage** (the folder's commands, each with what it
+  produces) under `## Usage`; plus a section the repo's conventions impose, such as a
   study header (`**Status.**`, `**Data.**`, `**Result.**`). A placeholder
   left to fill (« TODO: Notion link ») or a dated migration note belongs to
-  the part it sits in. A repo convention that imposes other headings for
+  the part it sits in, the skeleton or the folder model. A repo convention that imposes other headings for
   the file map or the usage replaces these, and the boundary is read by
   those headings.
 - **The folder model**: every other passage, under any other heading. It
@@ -242,8 +242,8 @@ paragraph, a list, a table or a code block):
   a rule to know so as not to go wrong: it belongs to the folder model, and
   is yours.
 
-write-readme, which runs on each README before you, titles its parts
-`## Files` and `## Usage`, and retitles an existing README the first time
+write-readme, which runs on each README before you, titles the file map
+of the README's skeleton `## Files` and its usage `## Usage`, and retitles an existing README the first time
 it finds it otherwise, the README of a folder the branch removes included:
 on that one it only retitles, and checks and writes nothing from the
 code. Read the boundary by these headings and never judge
@@ -254,7 +254,7 @@ the folder model.
 Neither skill touches the other's passages. You edit or write the folder
 model only; a wrong path in the usage is write-readme's to correct: list it
 in the run report, do not fix it. Write the folder model after
-write-readme's parts, always under `##` headings of its own, neither
+the README's skeleton, always under `##` headings of its own, neither
 `## Files` nor `## Usage`: write-readme takes every passage before the
 first `##` heading for its first sentence and status line, so a folder
 model written there, untitled, would read as its own. A passage of the
@@ -286,11 +286,11 @@ shape:
 
 A folder that changes role (a study that becomes a package others import)
 also changes reader: its whole README is re-read for the new reader, and
-write-readme's parts need a full rewrite by write-readme, the edit it made
+the README's skeleton needs a full rewrite by write-readme, the edit it made
 before you no longer being enough. You do not write them: say it in the
 run report (`role change`), and the caller starts a second write-readme
-run on that README, after you, which rewrites its parts in full and copies
-your folder model after them.
+run on that README, after you, which rewrites its skeleton in full and copies
+your folder model after it.
 
 ### A restructuring
 
@@ -304,8 +304,8 @@ folder the branch removes is always a restructuring: its write-readme run
 only retitled it, with no code left to describe, so read the boundary by
 its headings as for any README; its move plan says where each passage of
 its folder model goes, and you delete the file once they have all gone
-(step 3). write-readme's parts of it describe code the branch removes and
-go nowhere.
+(step 3). Its skeleton describes code the branch removes and
+goes nowhere.
 
 A restructuring takes two runs, with a stop between them:
 
@@ -313,8 +313,8 @@ A restructuring takes two runs, with a stop between them:
    for every README whether it is restructured, and write the **move
    plan** of each one that is: each passage of the README's folder model,
    the README it goes to, and what it becomes there, `as-is`, `rewritten`,
-   or `nowhere`. write-readme's parts are not in it: the write-readme runs
-   before you wrote them from each folder's code, which the plan does not
+   or `nowhere`. The README's skeleton is not in it: the write-readme runs
+   before you wrote it from each folder's code, which the plan does not
    change (the report chain and its figures, which the code moved to the
    study that draws them, are that study's usage, and its write-readme run
    wrote them there). Clear the README's old plan, then one call per
@@ -344,7 +344,7 @@ A restructuring takes two runs, with a stop between them:
    sends a passage to (its `--to`), nor that of a README whose change is a
    local model edit, even for a concept the triage puts there. Each
    README's outcome is decided (step 1), none is written. The stop holds
-   only what you write: write-readme's parts stay as its runs wrote them,
+   only what you write: the README's skeleton stays as the write-readme runs wrote it,
    from the code, and no README is to be put back. Say in the run report
    that the move plan waits, with the READMEs it holds: every README of
    the run.
@@ -359,7 +359,7 @@ A restructuring takes two runs, with a stop between them:
    each row sends, and in a destination, what the rest of this skill puts
    there: its concepts, its local model edit), and the other READMEs by
    their local model edit. You write the folder model passages, each where
-   its row sends it, after write-readme's parts of its destination. A
+   its row sends it, after the README's skeleton of its destination. A
    README the code moved with its folder is listed in the doc set at its
    new path: write its folder model there, and leave no file at the old
    path. The README of a folder the branch removes: once every passage of
@@ -383,7 +383,7 @@ user decides.
 Record them on the README the old file became (its new path, in the doc
 set; for a README you deleted, its own path, which the doc set keeps), with the part they come from, `model`. Clear first the README's
 facts of that part alone, those of an earlier run of yours: the facts of
-write-readme's parts, `readme`, stay, whichever skill ran last.
+the README's skeleton, `readme`, stay, whichever skill ran last.
 
 ```
 view-concept facts <slug> clear <path> --part model
@@ -402,7 +402,7 @@ your work is committed.
 
 - a comment on a passage of a README's folder model: rewrite that passage
   as the comment asks, under this skill's rules; a comment on a passage of
-  write-readme's parts is not yours: name it in the run report;
+  the README's skeleton is not yours: name it in the run report;
 - a comment on a row of the concept triage: as **The concept triage**
   says;
 - a comment on a row of a move plan: it comes with « Write READMEs », as
@@ -448,7 +448,7 @@ core/transcript/README.md · folder model added after the draft · 3 passages re
 benchmark/README.md · moved from experiments/benchmark/README.md · role change · missing facts: 2
 experiments/stt_benchmark_ft2/README.md · 1 passage received
 experiments/finetuning/gign/README.md · local model edit: 1 passage edited
-write-readme's parts: benchmark/README.md, usage, a path to experiments/benchmark/ (left to write-readme)
+README's skeleton: benchmark/README.md, usage, a path to experiments/benchmark/ (left to write-readme)
 code: none
 ```
 
@@ -456,7 +456,7 @@ A README you deleted has its line too: `<path> · folder removed ·
 restructuring: deleted · missing facts: <n>`.
 
 `role change` asks the caller for a second write-readme run on that
-README, a full rewrite of its parts. `no README:` names each folder a
+README, a full rewrite of its skeleton. `no README:` names each folder a
 concept goes to whose README is not in the doc set. A line `move plan waiting` asks the caller to stop until
 « Write READMEs », and names after `holds` every other README of the
 run (the plan's destinations and the READMEs of a local model edit),

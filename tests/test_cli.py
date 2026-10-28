@@ -398,7 +398,7 @@ def test_facts_records_marks_prints_and_clears_missing_facts(tmp_path):
     assert r.returncode == 0 and r.stdout.strip() == "f1 left", r.stderr
     assert view_concept(tmp_path, "facts", "gate").stdout.splitlines() == [
         "README.md · 2 missing facts",
-        "  f1 [left] « Run serve. » (passage 4) · from write-readme's parts · propose leave: "
+        "  f1 [left] « Run serve. » (passage 4) · from the README's skeleton · propose leave: "
         "the code",
         "  f2 [pending] « Old rule. » · from the folder model · propose leave: the code",
     ]
