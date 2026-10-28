@@ -174,7 +174,9 @@ it), not of the folders that call it:
   README that defines it does not name its callers: their list changes
   while its folder does not;
 - a folder with no README gets one from you: create its `README.md`
-  holding only a `# <folder path>` title and the folder model. write-readme,
+  holding only a `# <folder path>` title and the folder model, under a
+  `##` heading of its own (`## The WER` in `core/transcript/README.md`).
+  write-readme,
   which runs after you, then writes the draft of its parts around it, from
   the code.
 
@@ -242,7 +244,11 @@ Neither skill touches the other's passages. You edit or write the folder
 model only; a wrong path in the usage is write-readme's to correct
 (write-readme runs on each README after you): list it in the run report, do
 not fix it. Write the folder model after write-readme's parts, or, in a
-README that holds none yet, right under its title. A passage of the
+README that holds none yet, after its title, always under `##` headings of
+its own, neither `## Files` nor `## Usage`: write-readme takes every
+passage before the first `##` heading for its first sentence and status
+line, so a folder model written there, untitled, would read as its own. A
+passage of the
 folder model that names nothing the branch changes stays word for word,
 even history or an open discussion.
 
