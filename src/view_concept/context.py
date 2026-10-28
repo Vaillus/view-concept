@@ -52,10 +52,10 @@ README written says any more, after a full rewrite, a restructuring or a rewritt
 model), with the state of the user's decision on each: it applies the comments on them.
 The documenter and the reviewer also get the concept triage (concept-triage.json: whether
 each concept of the model enters the docs): the doc pass follows it, the reviewer checks
-the docs against it; and the move plans (moves.json: where each passage of a restructured
-README goes). The implementer gets none of these: it writes the code only. A side thread
-on a doc gets that doc's missing facts with its text; one on a row of the concept triage
-gets the triage, one on a row of a move plan the move plans.
+the docs against it; and the move plans (moves.json: where each passage of the folder
+model of a restructured README goes). The implementer gets none of these: it writes the
+code only. A side thread on a doc gets that doc's missing facts with its text; one on a
+row of the concept triage gets the triage, one on a row of a move plan the move plans.
 The docs themselves are files of the repository, read there.
 
 Once the model is approved, every role also sees which changes of the model the code does
@@ -206,7 +206,7 @@ def _moves(s: Session) -> list[str]:
     listed = {d["path"] for d in s.read_doc_set()["docs"]}
     plans = {p: rows for p, rows in s.read_moves().items() if p in listed}
     lines = [
-        "## Move plans (each passage of a restructured README: whose it is, the README it"
+        "## Move plans (each passage of a restructured README's folder model: the README it"
         " goes to, what it becomes there)"
     ]
     if not plans:
