@@ -31,11 +31,15 @@ lexicon when the repo has none) and never commits.
 
 A run has one of three outcomes:
 
-- **draft**: the folder has no `README.md`, or its README holds only the
-  folder model (a title and passages under headings that are none of its
-  parts, as the document-feature skill creates it); write its parts from
-  the code, and in the second case copy the folder model after them, word
-  for word;
+- **draft**: the folder has no `README.md`, or its README has neither a
+  first sentence nor a file map, as the document-feature skill creates it:
+  the folder model (a title and passages under headings that are none of
+  its parts) and at most a passage of its parts a restructuring moved there
+  (under `## Usage`); write the parts it lacks from the code, keep a
+  passage of its parts it already holds word for word unless it fails a
+  check of **Checking an existing README**, which gives it the smallest
+  edit that makes it pass, and copy the folder model after them, word for
+  word;
 - **edit** (always, when it has one and no full rewrite was asked for): keep
   the structure, headings and wording of its parts, change only the
   passages of its parts that fail a check, count the **failure indicator**
@@ -208,7 +212,7 @@ Before writing, read the rules the repo sets for READMEs, in the root
 folder (a study header, a required section). They win over this skill.
 
 An edit keeps the old README's language, and so does a draft of a README
-that holds only the folder model; a draft of a missing README and a full
+that document-feature created; a draft of a missing README and a full
 rewrite take the language of the repo's other docs.
 
 ## Checking an existing README
@@ -298,8 +302,9 @@ conventions set another shape: the untitled top (a study header the
 conventions impose, the first sentence, the status line), then `## Files`,
 then `## Usage`. A full rewrite then copies the folder model's passages
 word for word, headings included, in their old order, and so does a draft
-of a README that holds only the folder model. A draft of a missing README
-has no folder model.
+of a README that document-feature created, after the parts it lacks and
+the ones it already held. A draft of a missing README has no folder
+model.
 
 - **Depth.** A README covers its folder at the level of its direct
   children, and says nothing about what lies inside a subfolder: that
@@ -385,7 +390,7 @@ audit: 2 fixed · 0 left
 ```
 
 The first line is `write-readme · <path> · ` then the outcome: `draft` for
-a missing README or one holding only the folder model, `edit: <n> of <total> passages fail` (the failure
+a missing README or one document-feature created, `edit: <n> of <total> passages fail` (the failure
 indicator, over the passages of its parts, followed by `; structure fails`
 when the structure of its parts fails; `edit: 0 of <total> passages fail`
 when all pass), or `full rewrite` when it was asked for. `retitled`, in the

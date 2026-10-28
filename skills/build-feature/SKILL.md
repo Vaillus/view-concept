@@ -781,7 +781,8 @@ after the previous one ends.
 4. **One write-readme agent per README**, one after the other, in the
    write order, so the README of a folder finds those of its subfolders
    written. Each writes the README's parts: a **draft** for a missing
-   README or one holding only the folder model, an **edit** otherwise,
+   README or one document-feature created (no first sentence nor file
+   map), an **edit** otherwise,
    and a **full rewrite** of its parts with the `rewrite` argument, which
    you give when a waiting rewrite request names the README or the
    document-feature report marks it `role change`. Give each the comments
