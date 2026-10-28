@@ -30,7 +30,9 @@ reach the agent session through the inbox.
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text, each doc's under
-                        `doc:<path>`, a README's missing facts under `facts:<path>`  (server)
+                        `doc:<path>`, a README's missing facts under `facts:<path>`, the
+                        concept triage under `triage:`, a README's move plan under
+                        `moves:<path>`  (server)
         drafts.json     the drafts and the general note, shared by every page (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
@@ -38,7 +40,12 @@ reach the agent session through the inbox.
                         each with its reason, its minor class and the failure indicator
                         of a README, and the docs the user removed       (`doc-set`)
         stale.json      the stale passages: doc passages the model contradicts  (`stale`)
-        missing-facts.json  the missing facts of each README rewritten in full  (`facts`)
+        missing-facts.json  the missing facts of each README whose old text a full
+                        rewrite, a restructuring or a rewritten folder model lost (`facts`)
+        concept-triage.json  the concept triage: whether each concept of the model enters
+                        the docs                                          (`triage`)
+        moves.json      the move plan of each restructured README: where each passage
+                        goes                                               (`moves`)
 
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
@@ -160,7 +167,7 @@ it carried and the note. Like seen.json, it is the page's write: it never counts
 agent's activity.
 
 The doc set is the list of repo docs the Doc tab shows: {docs: [{path, reason, minor?,
-diff?, failing?}], removed: [paths]}. `path` is relative to the repo root (plan.json
+diff?, failing?, from?}], removed: [paths]}. `path` is relative to the repo root (plan.json
 `repo`), `reason` the one line that says why the doc is listed. An agent keeps it
 (`doc-set add` and `remove`); a doc the user removed by a comment goes to `removed`, and
 an agent's refresh never adds it back unless the user asks (`--user`). The docs are kept
@@ -171,12 +178,12 @@ says why (`doc-set minor`, taken off by `doc-set major`), `diff` its diff size, 
 removed} lines, in the doc pass commit (in a docs review, against the base branch). The
 Doc tab folds the minor docs out of the review list, the docs it asks the user to read.
 `failing` is the failure indicator of a README write-readme edited: {fail, total,
-structure}, the passages that failed its checks before the edit, out of all, and whether
-its structure fails (`doc-set failing`). A doc the doc pass (or a docs review) created
-is never minor and carries no indicator: it is a draft (`created_by_doc_pass`). `add`
-on a listed doc keeps these fields. A doc of the set is a doc section: its text is the
-file read from the worktree at each render, never copied into the session, so the
-user's own edits show as the agent's do; a doc missing there reads as missing. Its
+structure}, the passages of the README's skeleton that failed its checks before the edit,
+out of all of them, and whether its structure fails (`doc-set failing`). A doc the doc
+pass (or a docs review) created is never minor and carries no indicator: it is a draft
+(`created_by_doc_pass`). `add` on a listed doc keeps these fields. A doc of the set is a
+doc section: its text is the file read from the worktree at each render, never copied into the
+session, so the user's own edits show as the agent's do; a doc missing there reads as missing. Its
 highlight baseline is kept in seen.json under `doc:<path>` and moves with every batch,
 like a section's. A comment, a draft or a side thread on a doc's text is anchored to
 `doc:<path>` (a batch prints it `(doc <path>)`), one on the doc set list to `doc:`
@@ -184,29 +191,73 @@ alone. The doc sections stay out of the published page, the vault export, the pu
 fingerprint and `check`, which read the outline's sections only. The base mark compares
 a doc's worktree file (uncommitted changes included) with the same doc at the merge base
 of the branch and its base branch (`merge_base`, `base_text`); a doc absent there was
-created on the branch. A rewrite request is a batch whose action is "rewrite-readme",
-sent by the button under the bar of doc titles while a README.md of the doc set is in
-sight: it carries that README's `path` (present in the worktree or not yet), and asks
+created on the branch. A README the code moved with its folder is written at its new
+place, and nothing stays at the old path: its entry's `from` is the old path (`doc-set
+moved`), and the base mark compares it with the old README there (`base_path`), so it is
+neither new nor a draft of the doc pass. A rewrite request is a batch whose action is
+"rewrite-readme", sent by the button under the bar of doc titles while a README.md of the
+doc set is in sight: it carries that README's `path` (present in the worktree or not yet), and asks
 the agent that owns the docs to write it again with the write-readme skill. While the
 repo lexicon (REPO_LEXICON: the reader line and the terms the repo's folders share, for
 agents) is missing from the worktree, « write repo lexicon » on its doc set entry sends a
 batch whose action is "write-lexicon"; it is refused once the file exists.
 
-A missing fact is a fact the old text of a README said and its full rewrite (asked by a
-rewrite request, written from the code alone) no longer says, in words or by a link.
-missing-facts.json keeps them by README: {path: [{id (f1…, unique in the session), fact,
-passage (the number of the old README's passage it came from, or null), proposal ("keep"
-or "leave": what the agent proposes), reason (one line), state ("pending", "kept" or
-"left")}]} (written by `facts`; a new full rewrite of a README replaces its list, and
-`remove_doc` drops it). A fact
-the user does not comment on stays out of the README, whatever the proposal. The Doc tab
-lists them under their README; a comment, a draft or a side thread on one is anchored to
+A missing fact is a fact the old text of a README said and no README written says any
+more, in words or by a link, after a full rewrite of the README's skeleton (asked by a
+rewrite request or a role change, written from the code alone), a restructuring (its
+passages moved to other READMEs) or a folder model document-feature rewrote whole. It is
+recorded on the README the old file became (its new path when the code moved it), its
+passage number counted in the old README. missing-facts.json keeps them by README:
+{path: [{id (f1…, unique in the session), fact, passage (the number of the old README's
+passage it came from, or null), proposal ("keep" or "leave": what the agent proposes),
+reason (one line), state ("pending", "kept" or "left"), part ("readme": it came from
+the README's skeleton, write-readme's; "model": from the folder model, document-feature's;
+a fact recorded without one is "readme")}]} (written by `facts`; a new rewrite by one skill
+replaces the README's facts of that skill's part alone, the other's kept, and `remove_doc`
+drops them all). A fact the user does not comment on stays out of the README, whatever the proposal.
+The Doc tab lists them under their README; a comment, a draft or a side thread on one is anchored to
 `doc:<path>` with the fact's text as its quote, and also carries the fact's id, `fact`
 (a batch prints it `(doc <path> · fact <id>)`; a thread passes it to the comment it
 becomes). Their highlight
 baseline is kept in seen.json under `facts:<path>`, the list as one line per fact
 (`fact_texts`), and moves with every batch and with « mark read » on the README: a new
 fact or a changed state shows highlighted.
+
+The concept triage asks of each concept of the model whether who uses what its folder
+gives out or exposes would get something wrong without knowing its rule: yes, it enters
+the docs (a folder model, in a README), no, it stays out. concept-triage.json keeps one row
+per concept, in the model's order: [{id (k1…, unique in the session, going on past a
+removed row as missing facts' ids do), concept, enters (true or false), reason (one line:
+who ignores it would get what wrong)}] (written by `triage`; `set` on a concept already
+listed changes its row and keeps its id). The Doc tab shows it as a table above the doc
+set list; a comment, a draft or a side thread on a row is anchored to `triage:<id>`, its
+quote the concept (a batch prints it `(triage <id>)`). No section id may start with
+`triage:` (write_plan refuses it). Its highlight baseline is kept in seen.json under
+`triage:` alone, the triage as one line per row (`triage_text`), and moves with every
+batch and with « mark read » on the table: a new or changed row shows highlighted.
+
+A restructuring is a change after which passages must leave a README. In the doc pass,
+the write-readme agents write the README's skeleton of each README first; then, before writing the
+folder model of such a README, the document-feature agent writes its move plan and stops
+on it. moves.json keeps the
+plans by README (a README.md of the doc set): {path: [{id (p1…, unique in the session,
+going on past a cleared plan), passage (a one-line description of a passage of its
+folder model: the README's skeleton is never in a plan), to (the README it goes to, ""
+when it goes nowhere), becomes ("as-is", "rewritten" or "nowhere"), note (one line,
+optional)}]} (written by `moves`; `remove_doc` drops a README's plan; a row an older run
+wrote may still carry a "part", which is ignored). The Doc tab shows one table per
+README under the concept triage; a comment, a draft or a side thread on a
+row is anchored to `moves:<id>`, its quote the passage (a batch prints it `(moves
+<readme> · passage <id>)`). No section id may start with `moves:`. A plan's highlight
+baseline is kept in seen.json under `moves:<path>`, one line per row (`move_texts`), and
+moves like the triage's. The stop on the plan is the phase "awaiting-moves" (set by the
+build-feature skill when the doc pass reports a move plan waiting): it holds only
+document-feature's writing, the folder models of every README of the doc set;
+the README's skeleton, already written from the code, stays, and no README is put back.
+The page shows « Write READMEs » under the plans, which sends a batch whose action is
+"write-readmes", and the document-feature agent writes the folder model of every README
+of the doc set, those no plan names included, the restructured ones from the plans and
+the comments on them.
 
 A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
 doc (its path), quote (the passage's exact text in the file), section (the model section
@@ -267,6 +318,9 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # by the build-feature skill once the code carries the model) « Write docs » and « Write docs
 # and create PR », and "awaiting-pr" (set by the build-feature skill once the docs are
 # written, by the review-docs skill whenever it waits once the doc set exists) « Create PR ».
+# "awaiting-moves" (set by the build-feature skill when the doc pass stops on a move plan,
+# holding the folder models document-feature writes) shows « Write READMEs » under the move
+# plans of the Doc tab.
 # "awaiting-answer" (set by `question`, outside scoping) waits on an agent question shown in
 # the scope block at the top of the Plan tab.
 PHASES = (
@@ -275,6 +329,7 @@ PHASES = (
     "awaiting-approval",
     "awaiting-model",
     "awaiting-docs",
+    "awaiting-moves",
     "awaiting-pr",
     "awaiting-answer",
     "writing",
@@ -295,6 +350,7 @@ ACTIONS = (
     "go-on",
     "rewrite-readme",
     "write-lexicon",
+    "write-readmes",
 )
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
@@ -314,7 +370,7 @@ RENAMED_WORKFLOWS = {
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "build-feature"}
 # The role agents a feature's coordinator starts; a variant sets a model per role.
-AGENT_ROLES = ("planner", "writer", "implementer", "reviewer")
+AGENT_ROLES = ("planner", "writer", "implementer", "documenter", "reviewer")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 # A draft's id: the page makes it (a UUID). Its fields, as a batch comment takes them.
 DRAFT_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
@@ -338,6 +394,24 @@ FACTS_KEY = "facts:"
 FACT_PROPOSALS = ("keep", "leave")
 FACT_STATES = ("pending", "kept", "left")
 FACT_ID_RE = re.compile(r"^f[0-9]{1,6}$")
+# The part of the old README a missing fact came from, which says which skill replaces it:
+# "readme" (the README's skeleton, write-readme's) or "model" (the folder model,
+# document-feature's). Each skill clears only the facts of its own part before recording new ones.
+FACT_PARTS = ("readme", "model")
+# The concept triage: a comment, a draft or a side thread on a row is anchored to
+# `triage:<id>`, and its highlight baseline in seen.json is kept under `triage:` alone. No
+# section id may start with it (write_plan refuses it).
+TRIAGE_KEY = "triage:"
+TRIAGE_ID_RE = re.compile(r"^k[0-9]{1,6}$")
+# The move plan: a comment, a draft or a side thread on a row is anchored to `moves:<id>`,
+# and the highlight baseline of a README's plan in seen.json is `moves:<path>`. No section
+# id may start with it. A row says where a passage of the folder model goes and what it
+# becomes there.
+MOVES_KEY = "moves:"
+MOVE_ID_RE = re.compile(r"^p[0-9]{1,6}$")
+MOVE_FATES = ("as-is", "rewritten", "nowhere")
+# The key prefixes of the Doc tab, in seen.json and in anchors: no section id starts with one.
+DOC_TAB_KEYS = (DOC_KEY, FACTS_KEY, TRIAGE_KEY, MOVES_KEY)
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -569,6 +643,14 @@ class Session:
     def missing_facts_path(self) -> Path:
         return self.dir / "missing-facts.json"
 
+    @property
+    def concept_triage_path(self) -> Path:
+        return self.dir / "concept-triage.json"
+
+    @property
+    def moves_path(self) -> Path:
+        return self.dir / "moves.json"
+
     def media_folder(self, sid: str) -> Path:
         """The media folder of section `sid`: sections/<sid>/."""
         if not sid or "/" in sid or sid in (".", ".."):
@@ -649,11 +731,11 @@ class Session:
                 raise SessionError("every outline entry needs an id and a title")
             if len(set(ids)) != len(ids):
                 raise SessionError("outline ids must be unique")
-            taken = [i for i in ids if i.startswith((DOC_KEY, FACTS_KEY))]
+            taken = [i for i in ids if i.startswith(DOC_TAB_KEYS)]
             if taken:
                 raise SessionError(
-                    f"outline ids may not start with {DOC_KEY!r} or {FACTS_KEY!r}, the Doc "
-                    "tab's keys: " + ", ".join(taken)
+                    f"outline ids may not start with {', '.join(map(repr, DOC_TAB_KEYS))}, "
+                    "the Doc tab's keys: " + ", ".join(taken)
                 )
             long = [sec["id"] for sec in outline if len(str(sec.get("earns", ""))) > EARNS_MAX]
             if long:
@@ -1287,6 +1369,29 @@ class Session:
         _write_json(self.doc_set_path, data)
         return entry
 
+    def set_moved(self, path: str, old: str | None) -> dict[str, Any]:
+        """Record that doc `path` of the doc set is the one the code moved from `old`
+        (`from`, its path at the merge base); `old` None clears it."""
+        path = doc_path(path)
+        data = self.read_doc_set()
+        entry = self._listed_doc(data, path)
+        if old is None:
+            entry.pop("from", None)
+        else:
+            old = doc_path(old)
+            if old == path:
+                raise SessionError(f"{path} was not moved: its old path is its path")
+            entry["from"] = old
+        _write_json(self.doc_set_path, data)
+        return entry
+
+    def base_path(self, path: str) -> str:
+        """Where doc `path` was at the merge base: its old path when the code moved it
+        (`from`), else its own."""
+        path = doc_path(path)
+        entry = next((d for d in self.read_doc_set()["docs"] if d.get("path") == path), {})
+        return str(entry.get("from") or path)
+
     def created_by_doc_pass(self, path: str) -> bool:
         """Whether doc `path` is one the doc pass created, so never minor and with no
         failure indicator: absent at the merge base, and added on the branch once the doc
@@ -1295,11 +1400,11 @@ class Session:
         (missing from the worktree, or written and not committed).
         Before that batch, a doc new on the branch came with the code commits. In a docs
         review (workflow review-docs), which has no doc pass and whose commits are all doc
-        work, every doc absent from the merge base is one the review created. False when
-        git cannot tell."""
+        work, every doc absent from the merge base is one the review created. A doc the code
+        moved is looked for at its old path. False when git cannot tell."""
         path = doc_path(path)
         commit = self.merge_base()
-        if self.base_text(path, commit) != "":
+        if self.base_text(self.base_path(path), commit) != "":
             return False
         if self.read_plan().get("workflow") == "review-docs":
             return True
@@ -1364,7 +1469,8 @@ class Session:
     def remove_doc(self, path: str, user: bool = False) -> None:
         """Remove a doc from the doc set; `user` (the user asked in a comment) records it
         in `removed`, so an agent's refresh never adds it back. The whole entry goes: its
-        minor class, its indicator, its missing facts and its highlight baselines."""
+        minor class, its indicator, its missing facts, its move plan and its highlight
+        baselines."""
         path = doc_path(path)
         data = self.read_doc_set()
         listed = any(d.get("path") == path for d in data["docs"])
@@ -1378,10 +1484,15 @@ class Session:
         facts = self.read_missing_facts()
         if facts.pop(path, None) is not None:
             _write_json(self.missing_facts_path, facts)
+        # Its move plan too.
+        moves = self.read_moves()
+        if moves.pop(path, None) is not None:
+            _write_json(self.moves_path, moves)
         # A doc that enters the doc set again starts with no green highlight: its baseline
         # is set anew at its first read.
         seen = _read_json(self.seen_path, {})
-        dropped = [seen.pop(k, None) for k in (DOC_KEY + path, FACTS_KEY + path)]
+        keys = (DOC_KEY + path, FACTS_KEY + path, MOVES_KEY + path)
+        dropped = [seen.pop(k, None) for k in keys]
         if any(v is not None for v in dropped):
             _write_json(self.seen_path, seen)
 
@@ -1499,15 +1610,23 @@ class Session:
         return {str(p): list(facts) for p, facts in data.items() if facts}
 
     def add_missing_fact(
-        self, path: str, fact: str, proposal: str, reason: str, passage: int | None = None
+        self,
+        path: str,
+        fact: str,
+        proposal: str,
+        reason: str,
+        passage: int | None = None,
+        part: str = "readme",
     ) -> dict[str, Any]:
-        """Record a missing fact of README `path`, a README.md of the doc set rewritten in
-        full: `fact` in one sentence, `proposal` "keep" or "leave" with its one-line
-        `reason`, `passage` the number of the old README's passage it came from. It waits
-        on the user's decision: state "pending"."""
+        """Record a missing fact of README `path`, a README.md of the doc set whose old text a full
+        rewrite, a restructuring or a rewritten folder model lost: `fact` in one
+        sentence, `proposal` "keep" or "leave" with its one-line `reason`, `passage` the
+        number of the old README's passage it came from, `part` the part of the old README
+        it came from ("readme" or "model"). It waits on the user's decision: state
+        "pending"."""
         path = doc_path(path)
         if PurePosixPath(path).name != "README.md":
-            raise SessionError(f"{path} is not a README.md: only a full rewrite has missing facts")
+            raise SessionError(f"{path} is not a README.md: only a README has missing facts")
         if path not in {d["path"] for d in self.read_doc_set()["docs"]}:
             raise SessionError(f"{path} is not in the doc set")
         if proposal not in FACT_PROPOSALS:
@@ -1516,6 +1635,8 @@ class Session:
             raise SessionError("a missing fact needs its text and the reason of its proposal")
         if passage is not None and passage < 1:
             raise SessionError("a passage number counts from 1")
+        if part not in FACT_PARTS:
+            raise SessionError(f"a missing fact's part is one of {', '.join(FACT_PARTS)}")
         data = self.read_missing_facts()
         # The ids go on past a cleared list: a sent comment, an open draft or a side
         # thread may still name an old one.
@@ -1532,6 +1653,7 @@ class Session:
             "proposal": proposal,
             "reason": " ".join(reason.split()),
             "state": "pending",
+            "part": part,
         }
         data.setdefault(path, []).append(entry)
         _write_json(self.missing_facts_path, data)
@@ -1561,14 +1683,142 @@ class Session:
             if p in listed
         }
 
-    def clear_missing_facts(self, path: str) -> int:
-        """Drop the missing facts of README `path` (a new full rewrite replaces them).
-        Returns how many were dropped."""
+    def baseline_texts(self) -> dict[str, str]:
+        """The Doc tab's lists that carry a highlight baseline, keyed as it is: each
+        README's missing facts, the concept triage and each README's move plan."""
+        return {**self.fact_texts(), **self.triage_text(), **self.move_texts()}
+
+    def clear_missing_facts(self, path: str, part: str) -> int:
+        """Drop the missing facts of README `path` that came from `part` ("readme" or
+        "model"): a new rewrite by the skill holding that part replaces them, and the
+        other part's facts stay. Returns how many were dropped."""
+        if part not in FACT_PARTS:
+            raise SessionError(f"a missing fact's part is one of {', '.join(FACT_PARTS)}")
         path = doc_path(path)
         data = self.read_missing_facts()
-        dropped = len(data.pop(path, []))
+        facts = data.pop(path, [])
+        kept = [f for f in facts if fact_part(f) != part]
+        if kept:
+            data[path] = kept
         _write_json(self.missing_facts_path, data)
+        return len(facts) - len(kept)
+
+    # ---- concept triage ----
+    def read_triage(self) -> list[dict[str, Any]]:
+        """The concept triage, one row per concept in the model's order: [{id, concept,
+        enters, reason}]; empty without a file."""
+        return list(_read_json(self.concept_triage_path, []))
+
+    def set_triage(self, concept: str, enters: bool, reason: str) -> dict[str, Any]:
+        """Add the row of `concept` to the concept triage, or change the row of a concept
+        already listed (the same text), which keeps its id: `enters` whether it enters the
+        docs, `reason` one line, who ignores it would get what wrong."""
+        concept, reason = " ".join(concept.split()), " ".join(reason.split())
+        if not concept or not reason:
+            raise SessionError("a triage row needs its concept and its reason")
+        rows = self.read_triage()
+        row = next((r for r in rows if r.get("concept") == concept), None)
+        if row is None:
+            ids = [str(r.get("id", "")) for r in rows] + self._anchored_ids(TRIAGE_KEY)
+            n = max((int(i[1:]) for i in ids if TRIAGE_ID_RE.match(i)), default=0)
+            row = {"id": f"k{n + 1}", "concept": concept}
+            rows.append(row)
+        row["enters"] = bool(enters)
+        row["reason"] = reason
+        _write_json(self.concept_triage_path, rows)
+        return row
+
+    def remove_triage(self, tid: str) -> None:
+        """Remove row `tid` of the concept triage (its id never serves again)."""
+        rows = self.read_triage()
+        if not any(r.get("id") == tid for r in rows):
+            raise SessionError(f"no triage row {tid!r}")
+        _write_json(self.concept_triage_path, [r for r in rows if r.get("id") != tid])
+
+    def triage_text(self) -> dict[str, str]:
+        """The concept triage keyed as its highlight baseline is (`triage:`): one line per
+        row (`format_triage`), so a new or changed row is a line the baseline lacks. Empty
+        with no row."""
+        rows = self.read_triage()
+        return {TRIAGE_KEY: "\n".join(map(format_triage, rows))} if rows else {}
+
+    # ---- move plans ----
+    def read_moves(self) -> dict[str, list[dict[str, Any]]]:
+        """The move plans by README path: {path: [{id, passage, to, becomes, note}]},
+        each in the order its rows were added; empty without a file. A row an older run
+        wrote may still carry a "part": it is ignored."""
+        data = _read_json(self.moves_path, {})
+        return {str(p): list(rows) for p, rows in data.items() if rows}
+
+    def add_move(
+        self, readme: str, passage: str, becomes: str, to: str = "", note: str = ""
+    ) -> dict[str, Any]:
+        """Add a row to the move plan of `readme`, a README.md of the doc set: `passage`
+        one line that describes a passage of its folder model (the README's skeleton is
+        never in a plan), `to` the README it goes to (none when it `becomes` "nowhere"),
+        `becomes` "as-is", "rewritten" or "nowhere", `note` one optional line."""
+        readme = doc_path(readme)
+        if PurePosixPath(readme).name != "README.md":
+            raise SessionError(f"{readme} is not a README.md: a move plan restructures a README")
+        if readme not in {d["path"] for d in self.read_doc_set()["docs"]}:
+            raise SessionError(f"{readme} is not in the doc set")
+        passage = " ".join(passage.split())
+        if not passage:
+            raise SessionError("a row of a move plan needs its passage")
+        if becomes not in MOVE_FATES:
+            raise SessionError(f"what a passage becomes is one of {', '.join(MOVE_FATES)}")
+        if (becomes == "nowhere") == bool(to.strip()):
+            raise SessionError("a passage that goes nowhere has no --to; any other needs one")
+        if to.strip():
+            to = doc_path(to)
+            if PurePosixPath(to).name != "README.md":
+                raise SessionError(f"{to} is not a README.md: a passage goes to a README")
+        data = self.read_moves()
+        ids = [str(r.get("id", "")) for rows in data.values() for r in rows]
+        ids += self._anchored_ids(MOVES_KEY)
+        n = max((int(i[1:]) for i in ids if MOVE_ID_RE.match(i)), default=0)
+        row = {
+            "id": f"p{n + 1}",
+            "passage": passage,
+            "to": to.strip(),
+            "becomes": becomes,
+            "note": " ".join(note.split()),
+        }
+        data.setdefault(readme, []).append(row)
+        _write_json(self.moves_path, data)
+        return row
+
+    def clear_moves(self, readme: str) -> int:
+        """Drop the move plan of `readme`. Returns how many rows were dropped."""
+        readme = doc_path(readme)
+        data = self.read_moves()
+        dropped = len(data.pop(readme, []))
+        _write_json(self.moves_path, data)
         return dropped
+
+    def move_texts(self) -> dict[str, str]:
+        """The move plan of each README of the doc set, keyed as its highlight baseline is
+        (`moves:<path>`): one line per row (`format_move`)."""
+        listed = {d["path"] for d in self.read_doc_set()["docs"]}
+        return {
+            MOVES_KEY + p: "\n".join(map(format_move, rows))
+            for p, rows in self.read_moves().items()
+            if p in listed
+        }
+
+    def move_readmes(self) -> dict[str, str]:
+        """The README of each row of the move plans, by row id: how a batch names the
+        README of a comment on a row."""
+        return {str(r.get("id", "")): p for p, rows in self.read_moves().items() for r in rows}
+
+    def _anchored_ids(self, prefix: str) -> list[str]:
+        """The ids that sent comments, drafts and side threads anchored to `<prefix><id>`
+        name: an id one of them names never serves again for another row."""
+        batches = self.read_comments()["batches"]
+        anchors = [c.get("section", "") for b in batches for c in b["comments"]]
+        anchors += [d.get("section", "") for d in self.read_drafts()["drafts"]]
+        anchors += [t.get("section", "") for t in self.read_threads()]
+        return [str(a).removeprefix(prefix) for a in anchors if str(a).startswith(prefix)]
 
     def merge_base(self) -> str:
         """The commit where the branch left its base branch (plan.json `base`, else main):
@@ -1827,6 +2077,8 @@ class Session:
             self.doc_set_path,
             self.stale_path,
             self.missing_facts_path,
+            self.concept_triage_path,
+            self.moves_path,
             *self.section_files().values(),
         ]
         times = [iso_time(t) for p in paths if (t := _mtime(p))]
@@ -1905,6 +2157,7 @@ class Session:
             paths += sorted([*self.sections_dir.glob("*.md"), *self.sections_dir.glob("*.html")])
         # The docs of the doc set are files of the worktree: an edit there re-renders too.
         paths += [self.doc_set_path, self.stale_path, self.missing_facts_path]
+        paths += [self.concept_triage_path, self.moves_path]
         with contextlib.suppress(SessionError):
             paths += self.doc_files()
         return _stat_signature(paths)
@@ -2003,6 +2256,7 @@ class Session:
         nothing. A thread on a missing fact carries the fact's id (`fact`, kept only when
         set), which the comment it becomes carries too."""
         _check_fact(fact, section)
+        _check_row(section)
         if question:
             self._open_question(self.read_questions(), question)
         n = max((int(t["id"][1:]) for t in self.read_threads()), default=0) + 1
@@ -2063,9 +2317,10 @@ class Session:
         asked the writer of a feature to go on past a pause, leaving its questions
         open, and "rewrite-readme" that they asked for the README at `path` (a doc of the
         doc set named README.md, in the worktree or not yet) to be written again with
-        write-readme, and "write-lexicon" that they asked for the repo lexicon
-        (REPO_LEXICON), refused once the file exists. `path` goes with "rewrite-readme"
-        only, which needs it."""
+        write-readme, "write-lexicon" that they asked for the repo lexicon
+        (REPO_LEXICON), refused once the file exists, and "write-readmes" that they read
+        the move plans and asked the doc pass to write the folder models it held. `path`
+        goes with "rewrite-readme" only, which needs it."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         if (action == "answer") != bool(answers):
@@ -2085,6 +2340,7 @@ class Session:
             raise SessionError("empty batch")
         for c in comments:
             _check_fact(str(c.get("fact") or ""), str(c.get("section", "")))
+            _check_row(str(c.get("section", "")))
         data = self.read_comments()
         batches = data["batches"]
         n_comments = sum(len(b["comments"]) for b in batches)
@@ -2122,7 +2378,7 @@ class Session:
             f.write(json.dumps(batch, ensure_ascii=False) + "\n")
         # Highlights show what changed since the last batch: every baseline moves here,
         # the docs' and their missing facts' included.
-        self.mark_seen({**self.read_sections(), **self.doc_texts(), **self.fact_texts()})
+        self.mark_seen({**self.read_sections(), **self.doc_texts(), **self.baseline_texts()})
         if action == "plan":
             self._skip_open_questions(batch["sent"])
         return batch
@@ -2575,6 +2831,15 @@ def _check_fact(fact: str, section: str) -> None:
         raise SessionError(f"a missing fact's comment is anchored to its README: {fact!r}")
 
 
+def _check_row(section: str) -> None:
+    """Refuse an anchor on a row of a Doc tab table (the concept triage, a move plan) that
+    names no row id."""
+    if section.startswith(TRIAGE_KEY) and not TRIAGE_ID_RE.match(section[len(TRIAGE_KEY) :]):
+        raise SessionError(f"a triage row's anchor is triage:<id>: {section!r}")
+    if section.startswith(MOVES_KEY) and not MOVE_ID_RE.match(section[len(MOVES_KEY) :]):
+        raise SessionError(f"a move plan row's anchor is moves:<id>: {section!r}")
+
+
 def _upgrade_thread(thread: dict[str, Any]) -> dict[str, Any]:
     """A thread written before sessions could run on other agents keeps its conversation id
     under `claude_id`: read it as `agent_session`, so the thread still resumes."""
@@ -2588,9 +2853,11 @@ def format_batch(
     batch: dict[str, Any],
     outline: list[dict[str, Any]],
     questions: list[dict[str, Any]] | None = None,
+    moves: dict[str, str] | None = None,
 ) -> str:
     """How a batch appears in the agent session (one event of the comment channel). `questions`
-    gives the text of the agent questions an answer batch answers."""
+    gives the text of the agent questions an answer batch answers, `moves` the README of
+    each row of the move plans (`move_readmes`)."""
     number = {s["id"]: i + 1 for i, s in enumerate(outline)}
     n = len(batch["comments"])
     lines = [f"view-concept · {slug} · batch {batch['id']} · {n} comment{'s' * (n != 1)}"]
@@ -2609,9 +2876,11 @@ def format_batch(
         )
     elif batch.get("action") == "write-docs":
         lines.append(
-            "action: write-docs (the user asked for the doc pass: refresh the doc set, rewrite "
-            "the docs from the model, then the reviewer judges the doc items and flags stale "
-            "passages; « Create PR » follows)"
+            "action: write-docs (the user asked for the doc pass: the documenter refreshes the "
+            "doc set and the lexicons, a write-readme agent per README writes its skeleton, a "
+            "document-feature agent writes the concept triage and each README's folder model, "
+            "then the documenter corrects the other docs and commits; the reviewer judges the doc "
+            "items and flags stale passages; « Create PR » follows)"
         )
     if batch.get("action") == "rewrite-readme":
         lines.append(
@@ -2622,6 +2891,12 @@ def format_batch(
         lines.append(
             f"action: write-lexicon (the user asked to write the repo lexicon, {REPO_LEXICON}: "
             "its reader line and the terms the repo's folders share)"
+        )
+    if batch.get("action") == "write-readmes":
+        lines.append(
+            "action: write-readmes (the user read the move plans: write the folder model of "
+            "every README of the doc set, the restructured ones from the plans and the "
+            "comments on them; the README's skeleton, already written, stays)"
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")
@@ -2680,7 +2955,7 @@ def format_batch(
             lines += [f"    (from side thread {t}: threads/{t}.json)" for t in a.get("threads", [])]
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
-    lines += [format_comment(c, number) for c in batch["comments"]]
+    lines += [format_comment(c, number, moves) for c in batch["comments"]]
     return "\n".join(lines)
 
 
@@ -2697,8 +2972,11 @@ def _draft_entry(draft: dict[str, Any], did: str) -> dict[str, str]:
 
 def format_doc(d: dict[str, Any]) -> str:
     """One doc of the doc set on one line (`doc-set`, the agents' context): its path and
-    reason, its minor class with its diff size, the failure indicator of a README."""
+    reason, the old path it was moved from, its minor class with its diff size, the failure
+    indicator of a README."""
     line = f"{d['path']} — {d.get('reason', '')}"
+    if d.get("from"):
+        line += f" · moved from {d['from']}"
     if d.get("minor"):
         diff = d.get("diff") or {}
         line += f" · minor: {d['minor']} (+{diff.get('added', 0)} −{diff.get('removed', 0)})"
@@ -2708,22 +2986,54 @@ def format_doc(d: dict[str, Any]) -> str:
     return line
 
 
+def fact_part(f: dict[str, Any]) -> str:
+    """The part of the old README a missing fact came from: "readme" or "model"; a fact
+    recorded without one is "readme"."""
+    return "model" if f.get("part") == "model" else "readme"
+
+
 def format_fact(f: dict[str, Any]) -> str:
-    """One missing fact on one line: its id, state, text, old passage and the proposal."""
+    """One missing fact on one line: its id, state, text, old passage, the part it came
+    from and the proposal."""
     passage = f" (passage {f['passage']})" if f.get("passage") else ""
+    part = "the folder model" if fact_part(f) == "model" else "the README's skeleton"
     return (
         f"{f.get('id', '')} [{f.get('state', 'pending')}] « {f.get('fact', '')} »{passage}"
-        f" · propose {f.get('proposal', '')}: {f.get('reason', '')}"
+        f" · from {part} · propose {f.get('proposal', '')}: {f.get('reason', '')}"
     )
 
 
-def format_comment(c: dict[str, Any], number: dict[str, int]) -> str:
+def format_triage(r: dict[str, Any]) -> str:
+    """One row of the concept triage on one line: its id, whether the concept enters the
+    docs, the concept and the reason."""
+    enters = "enters" if r.get("enters") else "stays out"
+    return f"{r.get('id', '')} [{enters}] {r.get('concept', '')} — {r.get('reason', '')}"
+
+
+def format_move(r: dict[str, Any]) -> str:
+    """One row of a move plan on one line: its id, the passage, where it goes and what it
+    becomes there, its note (an older row's "part" is ignored)."""
+    where = "nowhere" if r.get("becomes") == "nowhere" else f"{r.get('to', '')}, {r.get('becomes')}"
+    note = f" · {r['note']}" if r.get("note") else ""
+    return f"{r.get('id', '')} {r.get('passage', '')} → {where}{note}"
+
+
+def format_comment(
+    c: dict[str, Any], number: dict[str, int], moves: dict[str, str] | None = None
+) -> str:
     """One comment of a batch: where it is anchored (a section, a doc of the Doc tab by its
-    path, a missing fact of a README, the doc set list), its text, the thread it comes
-    from."""
+    path, a missing fact of a README, the doc set list, a row of the concept triage, a row
+    of a README's move plan, whose README `moves` gives by row id), its text, the thread it
+    comes from."""
     sec = c["section"]
     if sec == DOC_SET_ANCHOR:
         where = "(doc set)"
+    elif sec.startswith(TRIAGE_KEY):
+        where = f"(triage {sec.removeprefix(TRIAGE_KEY)})"
+    elif sec.startswith(MOVES_KEY):
+        row = sec.removeprefix(MOVES_KEY)
+        readme = (moves or {}).get(row, "")
+        where = f"(moves {readme} · passage {row})" if readme else f"(moves · passage {row})"
     elif sec.startswith(DOC_KEY):
         fact = f" · fact {c['fact']}" if c.get("fact") else ""
         where = f"(doc {sec.removeprefix(DOC_KEY)}{fact})"

@@ -95,6 +95,13 @@ def test_the_implementer_gets_the_modeling_part_and_the_items_it_must_act_on(bra
     assert "Store." in build(branch, "reviewer")
 
 
+def test_the_documenter_gets_the_same_sections_as_the_implementer(branch):
+    text = build(branch, "documenter", ["i1"])
+    head = "## Sections (the modeling part, the to-do list, and the sections the trigger names)"
+    assert head in text
+    assert "The gate." in text and "Cli." in text and "Store." not in text
+
+
 def test_the_implementer_gets_the_to_do_list_without_naming_it(branch):
     plan = branch.read_plan()
     todo = {"id": "todo", "title": "To-do", "part": "refactoring"}
@@ -163,7 +170,7 @@ def test_deferred_questions_are_listed_with_their_note_and_anchor(session):
 def test_every_role_of_a_code_session_gets_the_code_map(review, session):
     assert "## Code map\n(none written yet)" in build(review, "writer")
     review.code_map_path.write_text("- the gate: `src/gate.py`\n")
-    for role in ("planner", "writer", "implementer", "reviewer", "thread"):
+    for role in ("planner", "writer", "implementer", "documenter", "reviewer", "thread"):
         assert "## Code map\n- the gate: `src/gate.py`\n" in build(review, role)
     # An explanation has no code, so no code map.
     assert "## Code map" not in build(session, "writer")
@@ -173,7 +180,7 @@ TRANSCRIPT = "## User\nrework the gate, as we said\n\n## Agent\nA flag, or a rul
 
 
 def test_without_a_transcript_every_role_gets_the_initial_request(branch):
-    for role in ("planner", "writer", "implementer", "reviewer", "thread"):
+    for role in ("planner", "writer", "implementer", "documenter", "reviewer", "thread"):
         text = build(branch, role)
         assert "## Initial request\nrework the gate\n" in text
         assert "Request transcript" not in text and "request.md" not in text
@@ -189,7 +196,7 @@ def test_the_planner_and_the_writer_read_the_transcript_whole(branch):
 
 def test_the_other_roles_get_the_initial_request_and_the_transcript_path(branch):
     branch.write_request(TRANSCRIPT)
-    for role in ("implementer", "reviewer", "thread"):
+    for role in ("implementer", "documenter", "reviewer", "thread"):
         text = build(branch, role)
         assert "## Initial request\nrework the gate\n" in text
         assert f"{branch.request_path}: open it when a comment needs" in text
@@ -202,13 +209,14 @@ def test_the_doc_set_goes_to_the_roles_that_work_on_the_docs(review, tmp_path):
     review.add_doc("docs/old.md", "out of date")
     review.remove_doc("docs/old.md", user=True)
     review.add_stale("README.md", "keys 1 to 4", "five keys now", section="sheet")
-    for role in ("writer", "implementer", "reviewer"):
+    for role in ("writer", "documenter", "reviewer"):
         text = build(review, role)
         assert "## Doc set\n" in text and "- README.md — the keys" in text
         assert "Removed by the user (never add them back unless the user asks): docs/old.md" in text
         assert "- s1 README.md « keys 1 to 4 » (contradicts sheet): five keys now" in text
-    assert "## Doc set" not in build(review, "planner")
-    assert "## Doc set" not in build(review, "thread")
+    for role in ("planner", "implementer", "thread"):
+        assert "## Doc set" not in build(review, role)
+        assert "## Stale passages" not in build(review, role)
 
 
 def test_the_doc_set_shows_minor_docs_and_failure_indicators(review):
@@ -216,22 +224,26 @@ def test_the_doc_set_shows_minor_docs_and_failure_indicators(review):
     review.add_doc("docs/reference.md", "the tabs")
     review.set_failing("README.md", 3, 6)
     review.set_minor("docs/reference.md", "a name", 1, 1)
-    text = build(review, "implementer")
+    text = build(review, "documenter")
     assert "- README.md — the keys · 3/6 failing\n" in text
     assert "- docs/reference.md — the tabs · minor: a name (+1 −1)\n" in text
 
 
-def test_the_implementer_gets_the_missing_facts_and_their_state(review, tmp_path):
+def test_the_documenter_gets_the_missing_facts_and_their_state(review, tmp_path):
     (tmp_path / "README.md").write_text("The keys.\n")
     review.add_doc("README.md", "the keys")
     review.add_missing_fact("README.md", "Run serve.", "leave", "the code says open", 4)
     review.add_missing_fact("README.md", "Offline, TeX.", "keep", "a link")
     review.mark_missing_fact("f2", "kept")
-    text = build(review, "implementer")
+    text = build(review, "documenter")
     assert "## Missing facts" in text
-    assert "README.md:\n- f1 [pending] « Run serve. » (passage 4) · propose leave: the code" in text
-    assert "- f2 [kept] « Offline, TeX. » · propose keep: a link" in text
-    assert "## Missing facts" not in build(review, "writer")
+    assert (
+        "README.md:\n- f1 [pending] « Run serve. » (passage 4) · from the README's skeleton"
+        " · propose leave: the code" in text
+    )
+    assert "- f2 [kept] « Offline, TeX. » · from the README's skeleton · propose keep: a" in text
+    for role in ("writer", "implementer", "reviewer"):
+        assert "## Missing facts" not in build(review, role)
     # A side thread on the README gets them with its text.
     assert "- f1 [pending]" in build(review, "thread", section="doc:README.md")
 
@@ -239,3 +251,46 @@ def test_the_implementer_gets_the_missing_facts_and_their_state(review, tmp_path
 def test_a_review_with_no_doc_set_says_so(review):
     assert "## Doc set\nThe repo docs" in build(review, "writer")
     assert "(none written yet)\n\n## Stale passages" in build(review, "writer")
+
+
+def test_the_documenter_and_the_reviewer_get_the_concept_triage(review):
+    review.set_triage("pooled WER", True, "a wrong WER")
+    for role in ("documenter", "reviewer"):
+        assert "## Concept triage" in build(review, role)
+        assert "- k1 [enters] pooled WER — a wrong WER" in build(review, role)
+    for role in ("writer", "implementer"):
+        assert "## Concept triage" not in build(review, role)
+    # A side thread on a row gets the triage.
+    assert "- k1 [enters] pooled WER" in build(review, "thread", section="triage:k1")
+
+
+def test_the_documenter_and_the_reviewer_get_the_move_plans(review):
+    review.add_doc("README.md", "the keys")
+    review.add_move("README.md", "the WER rules", "rewritten", to="core/README.md")
+    for role in ("documenter", "reviewer"):
+        text = build(review, role)
+        assert "## Move plans" in text
+        assert "README.md:\n- p1 the WER rules → core/README.md, rewritten" in text
+    for role in ("writer", "implementer"):
+        assert "## Move plans" not in build(review, role)
+    assert "- p1 the WER rules" in build(review, "thread", section="moves:p1")
+    # A batch on a row names the row's README.
+    b = review.add_batch([{"section": "moves:p1", "quote": "the WER rules", "text": "ok"}])
+    assert "(moves README.md · passage p1)" in build(review, "documenter", [b["id"]])
+
+
+def test_the_implementer_gets_nothing_of_the_docs(review, tmp_path):
+    (tmp_path / "README.md").write_text("The keys.\n")
+    review.add_doc("README.md", "the keys")
+    review.add_stale("README.md", "The keys", "five keys now")
+    review.add_missing_fact("README.md", "Run serve.", "leave", "the code says open")
+    review.set_triage("pooled WER", True, "a wrong WER")
+    review.add_move("README.md", "the WER rules", "rewritten", to="core/README.md")
+    text = build(review, "implementer")
+    for head in ("## Doc set", "## Stale passages", "## Missing facts", "## Concept triage"):
+        assert head not in text
+    assert "## Move plans" not in text
+    documenter = build(review, "documenter")
+    for head in ("## Doc set", "## Stale passages", "## Missing facts", "## Concept triage"):
+        assert head in documenter
+    assert "## Move plans" in documenter

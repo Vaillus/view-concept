@@ -16,8 +16,9 @@ argument-hint: "[the docs to review: a folder, files, or a subject]"
 Reviews a repo's docs in the view-concept page (the `view-concept` command):
 the list of docs a scope concerns, each doc shown as it is in a worktree of
 its own, corrected where the code contradicts it, then rewritten on the
-user's comments until a PR carries it. You do the whole review yourself: no
-other agent writes for it.
+user's comments until a PR carries it. You do the review yourself, but for
+the README's skeleton of each README, which a write-readme agent you start
+writes (see **Running write-readme**).
 
 The scope to review is whatever the user typed after the command name: a
 folder, a list of files, or a subject (« everything about the install »).
@@ -46,9 +47,10 @@ requires approval for commands).
 2. **The doc set**: the list of docs the scope concerns, each with its
    reason.
 3. **The first run**: the search for a reference model, the docs written
-   in the write order (each README by write-readme, the stale passages the
-   code contradicts corrected in the others), the minor docs classed, the
-   passages the reference model contradicts flagged.
+   in the write order (each README's skeleton by a write-readme agent, the
+   stale passages the code contradicts corrected in its folder model and
+   in the other docs), the minor docs classed, the passages the reference
+   model contradicts flagged.
 4. **The batches**: each batch's comments rewrite the docs at once.
 5. **« Create PR »**: one commit and the PR; each later batch adds a commit
    and updates the PR.
@@ -224,8 +226,8 @@ README that carries a failure indicator shows « n/total failing » next to
 it, and its rewrite button (« rewrite <path> with write-readme ») is put
 forward when more than half its passages fail or its structure fails. Under
 a README rewritten in full, the tab lists its « n missing facts », each
-with your proposal, its reason and its state (pending, kept, left); the
-user comments on a fact as on a passage of the doc.
+with write-readme's proposal, its reason and its state (pending, kept,
+left); the user comments on a fact as on a passage of the doc.
 
 When the session has a reference model, the terms of its lexicon are
 underlined in the docs with their definition on hover, and the top bar links
@@ -240,12 +242,11 @@ Once the session is open, in the same turn:
 2. Unless the request named one, look for a reference model (see **The
    reference model**).
 3. Run `view-concept status <slug> revising`, record the write order (see
-   **The write order**), and write the docs in it: run the write-readme
-   skill on each `README.md` of the doc set (see **Running write-readme**),
-   which edits an existing README and drafts a missing one, and record the
-   failure indicator of each README it edited with `view-concept doc-set
-   <slug> failing <path> <fail> <total>` (`--structure` when its structure
-   fails); in every other doc, look for the stale passages (see **Stale
+   **The write order**), and write the docs in it: on each `README.md` of
+   the doc set, start a write-readme agent for its skeleton and record what
+   its report gives (see **Running write-readme**), then, once it has
+   ended, correct the stale passages the code contradicts in its folder
+   model; in every other doc, look for the stale passages (see **Stale
    passages**) and correct those the code contradicts, in the doc files.
    A `CLAUDE.md` or `AGENTS.md` comes last, under the sentence test (see
    **Writing a doc**).
@@ -383,75 +384,92 @@ you change what is false or missing, and leave what is right as it is.
   What a removed sentence said is already in the doc that carries it, since
   these files are written last.
 
-These rules hold for every doc but a README the first run or a rewrite
-request runs write-readme on, which write-readme's rules write instead (see
-**Running write-readme**).
+These rules hold for every doc, a README's folder model included; the
+write-readme agent writes the README's skeleton (see **Running
+write-readme**).
 
 ## Running write-readme
 
-The first run and a rewrite request run the write-readme skill on a README:
+A README is shared, passage by passage (a paragraph, a list, a table, a
+code block), between the **README's skeleton** (the first sentence and the
+status line, recognised by their place at the top, before the first `##`
+heading, the file map under `## Files`, the usage under `## Usage`, and a
+section the repo's conventions impose, such as a study header) and the
+**folder model**, every other passage: the rules to know to use the folder
+without error, a caveat, a data format, links. The write-readme skill
+holds the skeleton, and you never write it. The folder model is yours, and
+you correct it like any other doc (see **Writing a doc**): only the
+sentences the code contradicts. A docs review has no feature model to
+triage, so no other skill writes the folder model.
+
+The README's skeleton is written by a **skill agent**: an agent you start
+with the write-readme skill as its only instructions, as when the user
+types `/write-readme`. Its prompt is the invocation, `/write-readme
+<README> [rewrite] [reader: <line>] <this review's session folder>
+[<the reference model's session folder>]`, and, after it, the user's
+comments on the README's skeleton the batch carries (each comment's id, its
+quote and its text) or a missing fact to take back, and nothing else from
+this conversation. `rewrite` asks for a full rewrite of its skeleton (see
+**The rewrite request**); `reader:` passes a reader line a comment of the
+batch gives (« reader: … »). There is no fallback: a harness that cannot
+start an agent on a skill by its name cannot write a README's skeleton, and
+you say so to the user instead. One agent per README, one after
+the other, in the write order. For each:
 
 1. When the repo lexicon is missing, write it first (see **The repo
    lexicon**).
-2. Read `~/Documents/code/view-concept/skills/write-readme/SKILL.md` and
-   follow it for that one README, naming this review's session folder
-   always (the run then knows it is in a review, and its report gives only
-   the number of missing facts) and the reference model's session folder
-   when the review has one, so the run reads that model's sections and
-   lexicon as a source next to the code. A comment of the batch that
-   gives a reader line (« reader: … ») passes it to the run. write-readme is
-   the one skill this review reads besides its own.
-3. An existing README is edited, and the run counts its **failure
-   indicator**: the passages that fail one of write-readme's checks before
-   the edit, out of its passages, and whether its structure fails. A README
-   missing from the worktree is drafted from the code, with no indicator.
-4. Put the run report write-readme prints at its end into your terminal
-   reply. Its first line gives the outcome: `draft`, `edit: <n> of <total>
-   passages fail` (with `; structure fails`), or `full rewrite`.
+2. Start the agent, and wait for it to end. It writes the README, never
+   commits, and ends on its run report.
+3. Put the run report into your terminal reply, and record what it gives.
+   Its first line, `write-readme · <path> · <outcome>`:
+
+   | The outcome | What you record |
+   |---|---|
+   | `edit: <n> of <total> passages fail` | `view-concept doc-set <slug> failing <path> <n> <total>`, with `--structure` when the line adds `; structure fails` |
+   | `draft` | nothing |
+   | `full rewrite` | `view-concept doc-set <slug> failing <path> --clear`, then `view-concept doc-set <slug> major <path>`: a full rewrite takes a minor README back into the review list |
+
+   After a full rewrite, its `missing facts:` line lists each fact with
+   its old passage, its proposal (keep or leave) and its reason: record
+   them as **The rewrite request** says.
+4. Resolve the comments it applied, with the batch's other comments.
 
 ## The rewrite request
 
-A **rewrite request** asks for a **full rewrite** of one README: a batch
-with `action: rewrite-readme <path>`, or a comment on a README asking for a
-write-readme rewrite. A docs review has no pass to wait for: do it in the
-batch's turn, for that README alone:
+A **rewrite request** asks for a **full rewrite** of one README's skeleton: a
+batch with `action: rewrite-readme <path>`, or a comment on a README asking
+for a write-readme rewrite. A docs review has no pass to wait for: do it in
+the batch's turn, for that README alone:
 
-1. Run write-readme as **Running write-readme** says, with the `rewrite`
-   argument: it writes the README again from the code alone, without
-   reading the old one, in the language of the repo's other docs.
-2. write-readme then compares the old README with the new one and lists the
-   **missing facts**: the facts the old one said that the new one says
-   neither in words nor by a link, each with a proposal, keep or leave, and
-   a one-line reason (a fact the code contradicts is listed, proposed leave,
-   with that reason). The proposal drops nothing: the user decides.
-3. Record them in the session, replacing the README's previous list:
+1. Start a write-readme agent on it with the `rewrite` argument, as
+   **Running write-readme** says, and record its failure indicator.
+2. Record the **missing facts** its report lists in the session, replacing
+   the README's previous facts of the README's skeleton (`--part readme`;
+   the facts a feature's document-feature recorded on the folder model,
+   `model`, stay). The proposal drops nothing: the user decides.
 
    ```bash
-   view-concept facts <slug> clear <path>
-   view-concept facts <slug> add <path> "<fact>" --propose keep|leave --reason "<one line>" [--passage N]
+   view-concept facts <slug> clear <path> --part readme
+   view-concept facts <slug> add <path> "<fact>" --part readme --propose keep|leave --reason "<one line>" [--passage N]
    view-concept facts <slug>                    # lists them, with ids, proposals, reasons and states
    ```
 
    `--passage` is the number of the old passage that held the fact. Each
-   fact gets an id (`f1`, `f2`, …) and the state `pending`. The run report
-   gives only their number; the page lists them under the README.
-4. Remove the README's failure indicator (`view-concept doc-set <slug>
-   failing <path> --clear`): a full rewrite counts no failing passages. A
-   full rewrite also takes a minor README back into the review list, since
-   its reason and diff size no longer describe it: `view-concept doc-set
-   <slug> major <path>`.
+   fact gets an id (`f1`, `f2`, …) and the state `pending`; the page lists
+   them under the README.
 
 A comment on a missing fact (printed `(doc <path> · fact <id>)` in the
 batch) is applied in the turn of the batch that carries it:
 
 | The comment | What you do |
 |---|---|
-| « reprends-le » (keep it) | add the fact to the README under write-readme's rules (a sentence, or a link to the doc that says it), then `view-concept facts <slug> mark <id> kept` |
+| « reprends-le » (keep it) | start a write-readme agent on the README with the fact to take back (see **Running write-readme**), then `view-concept facts <slug> mark <id> kept` |
 | « laisse-le » (leave it) | change nothing in the README, then `view-concept facts <slug> mark <id> left` |
 | a question | answer it in the terminal; the fact stays `pending` |
 
-A fact the user does not comment on is not added, whatever your proposal.
-A later full rewrite of the same README replaces its list.
+A fact the user does not comment on is not added, whatever its proposal.
+A later full rewrite of the same README replaces its facts of
+the README's skeleton.
 
 The rewrite is committed with the review's other changes, as **Create PR**
 says.
@@ -516,8 +534,8 @@ asks for what its name says and nothing else:
   in the Doc tab while the file is missing) asks you to write the repo
   lexicon at once: see **The repo lexicon**.
 - **`rewrite-readme <path>`** (the button just under the doc titles, on a
-  README) asks for a full rewrite of that README by the write-readme skill,
-  at once: see **The rewrite request**. A comment on a README asking for a
+  README) asks for a full rewrite of that README's skeleton by a write-readme
+  agent, at once: see **The rewrite request**. A comment on a README asking for a
   write-readme rewrite is the same request.
 - **Without an action**, a batch carries comments only.
 
@@ -525,14 +543,19 @@ Then, for every batch, in the same turn:
 
 1. Run `view-concept status <slug> revising`.
 2. Apply each comment at once: a comment on a doc rewrites that doc in the
-   worktree (see **Writing a doc**); a comment on the list adds or removes a
+   worktree (see **Writing a doc**), but a comment on a passage of a
+   README's skeleton, which goes to a write-readme agent on that README (see
+   **Running write-readme**); a comment on the list adds or removes a
    doc with `--user`, or moves a doc in or out of the minor docs (`minor`
    or `major`); a comment on a missing fact is applied as **The rewrite
    request** says. A comment that says a flagged passage is right drops
    its flag (`view-concept stale <slug> --drop <id>`). A comment correcting
    a lexicon entry also rewrites the clause of each README that copies the
    entry (the README's definition of the term, in the entry's old words),
-   and adds that README to the doc set; a comment taking a **candidate** (a
+   and adds that README to the doc set: you rewrite a clause in the folder
+   model, and a clause in the README's skeleton (its first sentence or its
+   usage) goes to a write-readme agent on that README, as a comment on its
+   skeleton does (see **Running write-readme**); a comment taking a **candidate** (a
    repo term several folders use that no lexicon on their path defines)
    adds its entry; a comment asking for a folder lexicon creates it, with
    the entries it names. A doc that enters the doc set takes its place in

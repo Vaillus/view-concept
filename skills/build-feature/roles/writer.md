@@ -302,9 +302,9 @@ with the first section, so the user can read the docs next to the model.
 The **doc set** is the list of the repo's doc files the branch concerns, each
 with a one-line reason it is listed. The page shows it in the Doc tab, each
 doc read from the worktree, where the user reads the current docs next to the
-model. You write the first one; the implementer refreshes it at the start of
-the **doc pass**, its run that rewrites the docs from the model once the code
-carries it, and keeps it from then on.
+model. You write the first one; the documenter refreshes it at the start of
+the **doc pass**, the phase whose agents rewrite the docs from the model once
+the code carries it, and keeps it from then on.
 
 A doc enters the doc set by six rules:
 
@@ -332,9 +332,8 @@ A doc enters the doc set by six rules:
    it;
 6. the `README.md` of each folder the branch creates and of each folder that
    holds a structural change (rule 2's folder), present or missing. A
-   missing README is listed under its path; the doc pass writes its
-   **draft**, the README write-readme writes from the code for a folder that
-   has none. Listing it does not write it.
+   missing README is listed under its path; the doc pass writes it.
+   Listing it does not write it.
 
 Before the code exists, a path the branch touches is where the model will
 land, which the code map says. Docstrings and code comments are not docs and

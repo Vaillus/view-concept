@@ -120,22 +120,24 @@ earlier one.
 
 ## Stale passages
 
-The **doc pass** is the implementer run, started by « Write docs » once the
-code carries the model, that rewrites the repo's docs from it; the docs it
+The **doc pass** is the phase, started by « Write docs » once the code
+carries the model, whose agents (the documenter and the skill agents the
+coordinator starts) carry it into the repo's docs; the docs it
 covers are the **doc set** (`view-concept doc-set <slug>` prints it, each
 with the reason it is listed). A **stale passage** is a passage of a doc of
 the doc set that the model contradicts: a rule it states otherwise, a name
 the lexicon changed, a list that leaves out what the model adds (a phase, a
-command, a tab). The doc pass rewrites what the implementer thought to
-rewrite; a stale passage is what it missed.
+command, a tab). The doc pass rewrites what its agents thought to rewrite;
+a stale passage is what they missed.
 
-In your run after the doc pass (its report says « doc pass »), once the
+In your run after the doc pass (the documenter's report says « doc pass »), once the
 items are judged, read every doc of the doc set, changed or not, against
 the model and its lexicon, and flag each stale passage. The **minor docs**
-(the docs the implementer classed as touched only for a detail, which the
+(the docs the documenter classed as touched only for a detail, which the
 Doc tab folds out of the user's review list) are read too: a stale passage
 on one puts it back in the review list, which the page does; you change no
-doc's class.
+doc's class. A doc pass stopped on a move plan does not start you: your
+run comes once « Write READMEs » has written the folder models.
 
 ```bash
 view-concept stale <slug> <doc path> "<quote>" "<note>" --section <section id>
@@ -150,8 +152,8 @@ view-concept stale <slug> <doc path> "<quote>" "<note>" --section <section id>
 The command prints the flag's id (`s3`); `view-concept stale <slug>` lists
 the flags still shown. A flag whose quote is no longer in the doc is no
 longer shown, so a rewrite of the passage clears it. You never fix a doc:
-the user comments on the passage, and the implementer rewrites it or drops
-the flag. Flag no passage that is true: each one costs the user a comment.
+the user comments on the passage, and the doc pass's agents rewrite it or
+drop the flag. Flag no passage that is true: each one costs the user a comment.
 
 ## Helpers for the items
 
@@ -185,8 +187,8 @@ since they need every item. So:
 |---|---|
 | an implementer report, after « Approve model » | Write the whole refactoring part. |
 | an implementer report, later | Add the run to the applied changes, and judge again the items whose files it touched. Re-cut the items when files were added or removed. |
-| the implementer's doc pass report | The same for the doc items, then look for the stale passages (see **Stale passages**). |
-| comment ids on a refactor section | Answer or apply them (a verdict changed, a description corrected). A comment that asks for a code change is not yours: leave it open and name it in your report. A comment on a doc is the implementer's. |
+| the documenter's doc pass report | The same for the doc items, then look for the stale passages (see **Stale passages**). |
+| comment ids on a refactor section | Answer or apply them (a verdict changed, a description corrected). A comment that asks for a code change is not yours: leave it open and name it in your report. A comment on a doc is the doc pass's agents'. |
 
 Resolve each comment you handled: `view-concept resolve <slug> <ids> --reply
 "<one line: what changed>"`. You log nothing in the change history: it

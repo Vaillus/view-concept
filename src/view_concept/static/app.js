@@ -120,7 +120,7 @@ const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).titl
    the same section blocks. Sessions written before the rename mark them "part": 2. */
 const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
-const tabOf = (id) => (isDocAnchor(id) ? "doc" : inRefactoringPart(id) ? "refactor" : "model");
+const tabOf = (id) => (isDocAnchor(id) || rowOf(id) ? "doc" : inRefactoringPart(id) ? "refactor" : "model");
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
 /* The narrow layout: the page in one column whenever its window is under 700px wide
    (app.css holds the same threshold), whatever the device. The metrics tab is gone from
@@ -142,10 +142,11 @@ const docViews = () => [$("#model"), $("#refactor"), $("#doc")];
 /* The Doc tab (id "doc"): the repo docs the branch concerns, from `state.docs` (see "the
    Doc tab"). It shows once the doc set is written; a docs review (workflow review-docs)
    shows it alone, from the start. A server that sends no `docs` counts as no doc set. */
-const NO_DOCS = { set: [], views: {}, stale: [], removed: [], facts: {}, reference: null };
+const NO_DOCS = { set: [], views: {}, stale: [], removed: [], facts: {}, triage: { text: "", list: [] }, moves: {}, reference: null };
 const docsOf = () => ({ ...NO_DOCS, ...((state && state.docs) || {}) });
 const isDocsReview = () => !!state && state.workflow === "review-docs";
-const hasDocTab = () => isDocsReview() || docsOf().set.length > 0;
+const hasDocTab = () => isDocsReview() || docsOf().set.length > 0 || docsOf().triage.list.length > 0
+  || Object.keys(docsOf().moves).length > 0;
 // The tab a missing tab gives way to: the Doc tab in a docs review, the model tab otherwise.
 const homeTab = () => (isDocsReview() ? "doc" : "model");
 // A comment, a draft or a side thread on a doc's text is anchored on the section id
@@ -158,6 +159,19 @@ const docPathOf = (id) => {
   return s.startsWith(DOC_PREFIX) && s !== DOC_SET ? s.slice(DOC_PREFIX.length) : null;
 };
 const isDocAnchor = (id) => String(id || "").startsWith(DOC_PREFIX);
+/* A row of a Doc tab table is commented on its own anchor: "triage:<id>" for a row of the
+   concept triage (store.py's TRIAGE_KEY), "moves:<id>" for a row of a README's move plan
+   (MOVES_KEY). The triage's highlight baseline is kept under "triage:" alone, a move
+   plan's under "moves:<path>". No section id starts with either. `rowOf` gives the kind
+   and id of a row anchor, null for any other id. */
+const TRIAGE_PREFIX = "triage:";
+const MOVES_PREFIX = "moves:";
+const ROW_KINDS = { [TRIAGE_PREFIX]: "triage", [MOVES_PREFIX]: "passage" };
+const rowOf = (id) => {
+  const s = String(id || "");
+  const prefix = Object.keys(ROW_KINDS).find((p) => s.startsWith(p) && s.length > p.length);
+  return prefix ? { kind: ROW_KINDS[prefix], id: s.slice(prefix.length) } : null;
+};
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
 const isUpdated = (id) => !!(state.sections[id] || {}).updated;
@@ -254,7 +268,9 @@ function followSession() {
   // The Doc tab's badge counts the docs rewritten, or whose missing facts changed, since
   // their highlight baseline.
   const docs = docsOf();
-  const n = docs.set.filter((d) => (docs.views[d.path] || {}).updated || factsUpdated(d.path)).length;
+  const n = docs.set.filter((d) => (docs.views[d.path] || {}).updated || factsUpdated(d.path)).length
+    + (docs.triage.list.some((r) => r.updated) ? 1 : 0)
+    + Object.values(docs.moves).filter((m) => m.list.some((r) => r.updated)).length;
   $('.tab[data-tab="doc"]').replaceChildren(...["doc", n ? el("span", { class: "badge new", text: `${n} updated` }) : null].filter(Boolean));
 }
 
@@ -350,10 +366,13 @@ function writingLabel() {
    scope block (see "agent questions" below), so it has no button here. */
 const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "answered · the agent is reading it" };
 
-/* Four phases wait for the user: the plan of an explanation ("awaiting-approval"), the
+/* Five phases wait for the user: the plan of an explanation ("awaiting-approval"), the
    model of a feature at the end of model consolidation ("awaiting-model", set by the
    build-feature skill only), the doc pass once the code carries the model ("awaiting-docs",
-   build-feature too), and the opening of its PR ("awaiting-pr", build-feature and review-docs).
+   build-feature too), the doc pass stopped on the move plans of restructured READMEs
+   ("awaiting-moves", build-feature too: the README's skeleton is written, document-feature's
+   folder models wait; « Write READMEs » under the plans in the Doc tab, action
+   "write-readmes"), and the opening of its PR ("awaiting-pr", build-feature and review-docs).
    Each is answered from the page by a batch carrying the phase's action, draft comments
    included. Until the agent moves the status on, the page says the answer is on its way.
    « Approve plan » sits at the top of the Plan tab, and the page switches to it.
@@ -365,8 +384,10 @@ const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "a
    them. */
 const modelButton = el("button", { id: "model-approve", class: "btn primary approve doc-approve", hidden: true });
 const prButton = el("button", { id: "pr-create", class: "btn primary approve doc-approve", hidden: true });
+const movesButton = el("button", { id: "readmes-write", class: "btn primary approve doc-approve", hidden: true,
+                                   title: "The doc pass resumes: the document-feature agent writes the folder models of every README of the doc set, the restructured ones from the move plans and your comments on them" });
 const docsButton = el("button", { id: "docs-write", class: "btn primary approve doc-approve", hidden: true,
-                                  title: "The doc pass: the implementer refreshes the doc set and rewrites the docs from the model" });
+                                  title: "The doc pass: the documenter refreshes the doc set, write-readme agents write the README's skeleton of each README, then a document-feature agent writes the folder models" });
 const docsPrButton = el("button", { id: "docs-write-pr", class: "btn approve doc-approve", hidden: true,
                                     title: "The doc pass, the reviewer's run on the doc items and stale passages, then the PR, with no pause" });
 // Once the agent opened the PR (plan.json's `pr`), the page links it in the top bar and at
@@ -407,10 +428,13 @@ const APPROVALS = {
                       ready: "model ready · waiting for your approval", sent: "model approved · the agent is implementing" },
   "awaiting-docs": { action: "write-docs", label: "Write docs", toast: "Docs requested", button: docsButton,
                      ready: "code carries the model · waiting for you to write the docs",
-                     sent: "docs requested · the implementer is writing them",
+                     sent: "docs requested · the doc pass is writing them",
                      // The second button: the same action, the PR chained after the doc pass.
                      also: { button: docsPrButton, label: "Write docs and create PR", toast: "Docs and PR requested",
-                             extra: { then_pr: true }, sent: "docs and PR requested · the implementer is writing the docs" } },
+                             extra: { then_pr: true }, sent: "docs and PR requested · the doc pass is writing the docs" } },
+  "awaiting-moves": { action: "write-readmes", label: "Write READMEs", toast: "READMEs requested", button: movesButton,
+                      ready: "move plan ready · waiting for you to read it",
+                      sent: "READMEs requested · the doc pass is writing them" },
   "awaiting-pr": { action: "create-pr", label: "Create PR", toast: "PR requested", button: prButton,
                    ready: "refactoring written · waiting for you to create the PR",
                    sent: "PR requested · the agent is opening it" },
@@ -435,7 +459,8 @@ function approvalPending() {
 const BATCH_WHAT = { answer: "answered", "go-on": "going on", "approve-plan": "plan approved",
                      "approve-model": "model approved", "write-docs": "docs requested", "create-pr": "PR requested", plan: "scoping ended",
                      grill: "grill", "stop-grill": "grill stopped",
-                     "rewrite-readme": "README rewrite requested", "write-lexicon": "repo lexicon requested" };
+                     "rewrite-readme": "README rewrite requested", "write-lexicon": "repo lexicon requested",
+                     "write-readmes": "READMEs requested" };
 const BATCH_STAGE = { sent: "in the inbox", received: "the agent has it" };
 
 function batchProgress() {
@@ -537,7 +562,7 @@ function renderStatus() {
   p.className = `phase ${b.active ? "active" : ""} ${b.ask ? "ask" : ""}`;
   p.textContent = [b.text, b.active && !b.ask ? quietNotice() : ""].filter(Boolean).join(" · ");
 
-  $("#approve").hidden = modelButton.hidden = prButton.hidden = docsButton.hidden = docsPrButton.hidden = true;
+  $("#approve").hidden = modelButton.hidden = prButton.hidden = docsButton.hidden = docsPrButton.hidden = movesButton.hidden = true;
   if (!approval) return;
   const n = drafts.filter(ready).length;
   const withDrafts = (label) => (n ? `${label} + send ${n} comment${n > 1 ? "s" : ""}` : label);
@@ -550,7 +575,7 @@ function renderStatus() {
   }
 }
 
-for (const b of [$("#approve"), modelButton, prButton, docsButton]) b.addEventListener("click", () => {
+for (const b of [$("#approve"), modelButton, prButton, docsButton, movesButton]) b.addEventListener("click", () => {
   const approval = APPROVALS[state.status.phase];
   if (approval) send(approval.action);
 });
@@ -925,7 +950,9 @@ function sectionBlock(s, { bare = false } = {}) {
    Two marks: the green bar and words of the change highlights (markUpdates), and the base
    mark, a bar in the right margin of every block whose text is not among the blocks of the
    doc at the merge base (`base_html`), every block for a doc created on the branch (`new`),
-   and in a doc the base had, a blue background on the words it added (markBase). Stale passages get a wavy underline whose
+   and in a doc the base had, a blue background on the words it added (markBase). A doc
+   the code moved with its folder (`from`, its old path, shown « moved from » in the doc
+   set list) is compared with the old doc at its old path. Stale passages get a wavy underline whose
    hover shows the note (applyHighlights, "stale passages"). Lexicon terms are underlined,
    none as its definition: the model's lexicon, or in a docs review the reference model's
    (annotateDocTerms). Relative images and links load from the worktree,
@@ -946,12 +973,25 @@ function sectionBlock(s, { bare = false } = {}) {
    review list, set back. A README with a failure indicator (`failing`) shows « n/total
    failing » in the list; when more than REWRITE_HINT of its passages fail, or its
    structure fails, its rewrite button is put forward (accent).
-   A README rewritten in full lists its missing facts under its text (`state.docs.facts`):
-   each fact with the agent's proposal, its reason and its state. A fact is commented
-   like a passage of the doc: its comment is anchored to "doc:<path>", quotes the fact and
-   carries its id (`fact`); a passage selected in a fact anchors the same way. A fact new
+   A README lists its missing facts under its text (`state.docs.facts`), what its old text
+   said and no README written says any more, after a full rewrite, a restructuring or a
+   folder model rewritten in full: each fact with the agent's proposal, its reason and its
+   state. A fact is commented like a passage of the doc: its comment is anchored to
+   "doc:<path>", quotes the fact and carries its id (`fact`); a passage selected in a fact
+   anchors the same way. A fact new
    or changed since the baseline "facts:<path>" gets the green bar, and « mark read » on
-   the README marks its facts read too. */
+   the README marks its facts read too.
+   The concept triage (`state.docs.triage`), when the agent wrote one, is a table above the
+   doc set list: one row per concept of the model, the reason (who ignores it gets what
+   wrong) and whether it enters the docs. Each row has « + comment » and « ask », anchored
+   to "triage:<id>" with the concept as quote; a row new or changed since the baseline
+   "triage:" gets the green bar, and « mark read » on the table moves the baseline.
+   Under it, the move plan of each restructured README (`state.docs.moves`), one table per
+   README: each passage of its folder model (the README's skeleton is never in a plan), the
+   README it goes to and what it becomes there. Its rows are commented like the triage's, on
+   "moves:<id>" with the passage as quote, against the baseline "moves:<path>". While the
+   doc pass waits on the plans ("awaiting-moves", document-feature's folder models held),
+   « Write READMEs » sits under them. */
 
 let shownDoc = null; // path of the doc shown in the Doc tab
 const REPO_LEXICON = ".agents/lexicon.md"; // store.py's REPO_LEXICON
@@ -965,12 +1005,12 @@ function renderDocTab(ending) {
   // In a docs review the scope block (its agent questions) sits at the top of the Doc tab.
   const top = isDocsReview() ? [$("#scope")] : [];
   if (!docs.set.length) {
-    view.replaceChildren(...top, isDocsReview() ? el("p", { class: "dim empty", text: "Waiting for the doc set…" }) : "", ...ending);
+    view.replaceChildren(...top, triageBlock(docs), ...moveBlocks(docs), movesButton, isDocsReview() ? el("p", { class: "dim empty", text: "Waiting for the doc set…" }) : "", ...ending);
     return;
   }
   if (!docs.set.some((d) => d.path === shownDoc)) shownDoc = reviewOrder(docs)[0].path;
   const entry = docs.set.find((d) => d.path === shownDoc);
-  view.replaceChildren(...top, docSetBlock(docs), docBar(docs), docRewrite(shownDoc, entry),
+  view.replaceChildren(...top, triageBlock(docs), ...moveBlocks(docs), movesButton, docSetBlock(docs), docBar(docs), docRewrite(shownDoc, entry),
     docBlock(shownDoc, docs.views[shownDoc] || {}), ...ending);
 }
 
@@ -992,7 +1032,7 @@ const failingBadge = (d) => {
   if (!f) return null;
   return el("span", { class: `badge ${rewriteHinted(d) ? "tone-warn" : ""}`,
                       text: `${f.fail}/${f.total} failing${f.structure ? " · structure fails" : ""}`,
-                      title: "The passages that failed write-readme's checks before its edit, out of all" });
+                      title: "The passages of the README's skeleton that failed write-readme's checks before its edit, out of all of them" });
 };
 const rewriteHinted = (d) => !!(d && d.failing && (d.failing.structure || d.failing.fail > REWRITE_HINT * d.failing.total));
 // The missing facts of README `path`, [] for a doc without.
@@ -1020,10 +1060,65 @@ function docHeading(id, label, updated, what, edit = null) {
     edit);
 }
 
+// A commentable row of a Doc tab table: `anchor` its comment anchor, `quote` what a
+// comment on it quotes, `what` how its buttons name it.
+function rowButtons(anchor, quote, what) {
+  const target = (e) => ({ section: anchor, quote, prefix: "", rect: e.currentTarget.getBoundingClientRect() });
+  return el("td", { class: "row-actions" },
+    el("button", { class: "sec-comment", text: "+ comment", title: `Comment on this ${what}`, onclick: (e) => openComposer(target(e)) }),
+    el("button", { class: "sec-comment ask", text: "ask", title: `Open a side thread about this ${what}`, onclick: (e) => openComposer(target(e), "ask") }));
+}
+
+// The heading of a Doc tab table: its title, then « mark read » while a row is updated
+// (the baseline `key` moves to `text`).
+function tableHeading(title, tip, key, text, updated) {
+  return el("h2", { title: tip }, title,
+    updated
+      ? el("button", { class: "badge new", text: "updated · mark read", title: "Mark this table as read: its highlights go away",
+                       onclick: (e) => { e.stopPropagation(); markRead({ [key]: text }); } })
+      : null);
+}
+
+function triageBlock(docs) {
+  const { list, text } = docs.triage;
+  if (!list.length) return "";
+  const row = (r) => el("tr", { id: `sec-${TRIAGE_PREFIX}${r.id}`, class: r.updated ? "updated" : "", "data-anchor": TRIAGE_PREFIX + r.id },
+    el("td", { class: "row-quote", text: r.concept }),
+    el("td", { text: r.reason }),
+    el("td", {}, el("span", { class: `badge ${r.enters ? "tone-ok" : ""}`, text: r.enters ? "yes" : "no" })),
+    rowButtons(TRIAGE_PREFIX + r.id, r.concept, "concept"));
+  return el("section", { class: "sec doc-table-sec", id: "sec-triage" },
+    tableHeading("concept triage", "Whether each concept of the model enters the docs: who uses what its folder gives out or exposes, and ignores it, gets something wrong",
+                 TRIAGE_PREFIX, text, list.some((r) => r.updated)),
+    el("div", { class: "body" }, el("table", { class: "doc-table" },
+      el("thead", {}, el("tr", {}, ...["concept", "who ignores it gets it wrong?", "enters the docs", ""].map((h) => el("th", { text: h })))),
+      el("tbody", {}, ...list.map(row)))));
+}
+
+function moveBlocks(docs) {
+  return Object.entries(docs.moves).map(([path, { list, text }]) => {
+    const row = (r) => el("tr", { id: `sec-${MOVES_PREFIX}${r.id}`, class: r.updated ? "updated" : "", "data-anchor": MOVES_PREFIX + r.id },
+      el("td", { class: "row-quote", text: r.passage }, r.note ? el("div", { class: "dim row-note", text: r.note }) : null),
+      el("td", {}, r.to ? el("code", { text: r.to }) : el("span", { class: "dim", text: "—" })),
+      el("td", {}, el("span", { class: `badge ${r.becomes === "nowhere" ? "tone-flag" : ""}`, text: r.becomes })),
+      rowButtons(MOVES_PREFIX + r.id, r.passage, "passage"));
+    return el("section", { class: "sec doc-table-sec", id: `sec-moves-${path}` },
+      tableHeading(el("span", {}, "move plan · ", el("code", { text: path })), "Where each passage of this README's folder model goes: the doc pass writes the folder models from this plan",
+                   MOVES_PREFIX + path, text, list.some((r) => r.updated)),
+      el("div", { class: "body" }, el("table", { class: "doc-table" },
+        el("thead", {}, el("tr", {}, ...["passage", "goes to", "becomes", ""].map((h) => el("th", { text: h })))),
+        el("tbody", {}, ...list.map(row)))));
+  });
+}
+
+// The old path of a doc the code moved with its folder: its base mark reads the doc there.
+const movedFrom = (d) => (d.from ? el("span", { class: "dim doc-moved", text: ` · moved from ${d.from}`,
+                                                 title: "The code moved this doc: its blue bar compares it with the old doc at its old path" }) : null);
+
 function docSetBlock(docs) {
   const item = (d) => el("li", {},
     el("button", { class: "doc-open", text: d.path, title: "Show this doc", onclick: () => openDoc(d.path) }),
-    d.reason ? ` — ${d.reason}` : "",
+    d.reason ? ` — ${d.reason}` : "", movedFrom(d),
     d.minor && !isFolded(docs, d) ? el("span", { class: "badge", text: `minor · ${diffText(d)}`, title: `Minor: ${d.minor}. ${liftedBy(docs, d).replace(/^./, (c) => c.toUpperCase())} brought it back to the review list` }) : null,
     staleBadge(staleCount(docs, d)), failingBadge(d), factsBadge(d), missingBadge(docs.views[d.path] || {}),
     lexiconButton(d.path, docs.views[d.path] || {}));
@@ -1034,7 +1129,7 @@ function docSetBlock(docs) {
         el("summary", { text: `${minor.length} minor doc${minor.length > 1 ? "s" : ""}` }),
         el("ul", { class: "doc-set" }, ...minor.map((d) => el("li", {},
           el("button", { class: "doc-open", text: d.path, title: "Show this doc", onclick: () => openDoc(d.path) }),
-          ` — minor: ${d.minor}`, el("span", { class: "doc-diff", text: diffText(d), title: "Its diff size: lines added and removed" }),
+          ` — minor: ${d.minor}`, movedFrom(d), el("span", { class: "doc-diff", text: diffText(d), title: "Its diff size: lines added and removed" }),
           failingBadge(d), factsBadge(d), missingBadge(docs.views[d.path] || {})))))
     : null;
   return el("section", { class: "sec doc-set-sec", id: `sec-${DOC_SET}`, "data-id": DOC_SET },
@@ -1076,9 +1171,10 @@ function docRewrite(path, entry) {
 }
 const failingWhy = (f) => (f.structure ? "its structure fails" : `${f.fail} of its ${f.total} passages fail`);
 
-/* The missing facts of a README rewritten in full, under its text: each fact with its old
-   passage, the agent's proposal and reason, and its state; « + comment » and « ask » open
-   the composer on the fact, as on a passage of the doc. */
+/* The missing facts of a README, under its text (after a full rewrite, a restructuring or
+   a folder model rewritten in full): each fact with its old passage, the agent's proposal
+   and reason, and its state; « + comment » and « ask » open the composer on the fact, as
+   on a passage of the doc. */
 const FACT_STATE = { pending: "waits on you", kept: "kept", left: "left" };
 const FACT_PROPOSAL = { keep: "keep", leave: "leave" };
 function docFacts(path) {
@@ -1088,7 +1184,7 @@ function docFacts(path) {
   const target = (f) => ({ section: id, quote: f.fact, prefix: "", fact: f.id });
   return el("div", { class: "doc-facts", "data-doc": path },
     el("h3", { text: `${facts.length} missing fact${facts.length > 1 ? "s" : ""}`,
-               title: "What the old README said and its full rewrite no longer says; a fact you do not comment on is not taken back" }),
+               title: "What the old README said and no README written says any more, after a full rewrite, a restructuring or a folder model rewritten in full; a fact you do not comment on is not taken back" }),
     el("ul", {}, ...facts.map((f) => el("li", { class: `doc-fact state-${f.state} ${f.updated ? "updated" : ""}`, "data-fact": f.id },
       el("span", { class: "fact-text", text: f.fact }),
       f.passage ? el("span", { class: "dim", text: ` (passage ${f.passage})` }) : null,
@@ -1868,9 +1964,11 @@ function textIndex(root) {
 }
 
 /* The range of a quote in section `sectionId`. A quote on a missing fact (`fact`, its id)
-   is looked for in that fact; one not found in a doc's text, in the doc's missing facts. */
+   is looked for in that fact; one not found in a doc's text, in the doc's missing facts;
+   one on a row of a Doc tab table (`rowOf`), in that row. */
 function findQuote(sectionId, quote, prefix, fact = "") {
   const sec = `#sec-${CSS.escape(sectionId)}`;
+  if (rowOf(sectionId)) return findIn(document.querySelector(`[data-anchor="${CSS.escape(sectionId)}"]`), quote, "");
   if (fact) return findIn(document.querySelector(`${sec} .doc-facts [data-fact="${CSS.escape(fact)}"]`), quote, "");
   return findIn(document.querySelector(`${sec} .body`), quote, prefix)
     || findIn(document.querySelector(`${sec} .doc-facts`), quote, prefix);
@@ -2123,8 +2221,13 @@ async function markSeen(ids) {
     const facts = (docsOf().facts || {})[docPathOf(id)];
     if (facts) read.push([FACTS_PREFIX + docPathOf(id), facts.text]);
   }
+  await markRead(Object.fromEntries(read));
+}
+
+// Move highlight baselines: {key: text}.
+async function markRead(sections) {
   try {
-    await postJSON(`/api/s/${SLUG}/seen`, { sections: Object.fromEntries(read) });
+    await postJSON(`/api/s/${SLUG}/seen`, { sections });
   } catch (e) { toast(`Could not mark as read: ${e.message}`); return; }
   await load();
 }
@@ -2171,6 +2274,10 @@ function currentSelection() {
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;
+  // A passage of a row of a Doc tab table: anchored to the row.
+  const row = start.closest("[data-anchor]");
+  if (row) return { section: row.dataset.anchor, quote, prefix: "", rect: range.getBoundingClientRect() };
+  if (!sec.dataset.id) return null; // a table's heading: only its rows are commented
   // A passage of a missing fact: anchored to the doc, carrying the fact's id.
   const fact = start.closest("[data-fact]");
   if (fact) return { section: sec.dataset.id, quote, prefix: "", fact: fact.dataset.fact, rect: range.getBoundingClientRect() };
@@ -2283,6 +2390,7 @@ function openComposer(target, mode = "comment") {
   c._mode = mode;
   $(".composer-quote", c).textContent = target.question ? `agent question ${target.question}`
     : target.fact ? `missing fact ${target.fact} « ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
+    : rowOf(target.section) ? `${rowLabel(target.section)} « ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
     : target.quote ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
     : target.section === DOC_SET ? "the doc set"
     : docPathOf(target.section) !== null ? `whole doc ${docPathOf(target.section)}`
@@ -2575,9 +2683,14 @@ $(".review").addEventListener("scroll", (e) => {
   reviewAtEnd = p.scrollHeight - p.scrollTop - p.clientHeight < 24;
 }, { passive: true });
 
-// Where a comment sits: its section's number, « doc set », or the file name of its doc.
+// How a row anchor reads in the page: « triage k1 ».
+const rowLabel = (id) => `${rowOf(id).kind} ${rowOf(id).id}`;
+
+// Where a comment sits: its section's number, « doc set », the file name of its doc, or
+// the row of a Doc tab table.
 function whereOf(id) {
   if (id === DOC_SET) return "doc set";
+  if (rowOf(id)) return rowLabel(id);
   const p = docPathOf(id);
   return p !== null ? p.slice(p.lastIndexOf("/") + 1) : `§${numberOf(id)}`;
 }

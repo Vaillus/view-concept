@@ -36,7 +36,7 @@ The concepts a branch introduces or changes, with their rules, written out in th
 The list of the repo's docs a review concerns, each with the reason it is listed, shown in the Doc tab.
 
 **Doc pass**:
-The implementer's run, started by « Write docs », that rewrites the docs of the doc set from the model.
+The phase of a feature, started by « Write docs », that carries the model into the docs of the doc set through agents of its own, never the implementer: the documenter, then a write-readme agent per README for its skeleton, a document-feature agent for the folder models, and the documenter again, which in any other doc corrects only the sentences the code contradicts.
 
 **Structural change**:
 A folder, or a file its README lists, that the branch adds, removes, renames or moves.
@@ -60,22 +60,28 @@ The docs of the doc set the Doc tab asks you to read, the minor docs left out.
 A passage of a doc of the doc set that the model contradicts, flagged by the reviewer after the doc pass.
 
 **Passage**:
-A paragraph, a list, a table or a code block of a doc; write-readme checks those of a README one by one.
+A paragraph, a list, a table or a code block of a doc; write-readme checks those of a README's skeleton one by one.
+
+**README's skeleton**:
+The passages of a README that write-readme alone holds: the first sentence and the status line at the top, the file map under `## Files`, the usage under `## Usage`, and a section the repo's conventions impose (such as a study header).
+
+**Folder model**:
+Every passage of a README outside the README's skeleton: the rules to know to use the folder without a mistake, held by document-feature.
 
 **Draft**:
-The outcome of write-readme for a folder with no README: written from the code.
+The outcome of write-readme for a folder with no README: the README's skeleton written from the code.
 
 **Edit**:
-The outcome of write-readme on an existing README, unless a rewrite was asked for: only the passages that fail a check change.
+The outcome of write-readme on an existing README, unless a rewrite was asked for: only the passages of its skeleton that fail a check change; the folder model stays word for word.
 
 **Failure indicator**:
-The share of an existing README's passages that fail write-readme's checks, counted before the edit, with a mention of a failing structure.
+The share of the passages of an existing README's skeleton that fail write-readme's checks, counted before the edit, with a mention of a failing structure.
 
 **Full rewrite**:
-The outcome of write-readme that writes an existing README again from the code alone, without reading the old one, on your request only.
+The outcome of write-readme that writes an existing README's skeleton again from the code alone, without reading the old one, and copies the folder model after it, on your request only.
 
 **Rewrite request**:
-What you send to have a README written again from scratch: the Doc tab's button, a comment, or `/write-readme <folder> rewrite`.
+What you send to have a README's skeleton written again from the code, its folder model copied after it word for word: the Doc tab's button, a comment, or `/write-readme <folder> rewrite`.
 
 **Missing fact**:
-A fact the old README said that its full rewrite says neither in words nor by a link; the agent proposes to keep it or leave it, and you decide.
+A fact the old README said that its full rewrite, a rewrite of its folder model or a restructuring says neither in words nor by a link; the agent proposes to keep it or leave it, and you decide.

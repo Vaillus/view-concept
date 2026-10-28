@@ -26,10 +26,10 @@
     ["report", "a-report"], ["other", "a-other"]];
   const actClass = (a) => (ACTS.find(([n]) => n === a) || ACTS[ACTS.length - 1])[1];
   const LANES = ["coordinator", "planner", "writer", "writer helpers", "implementer", "implementer helpers",
-    "reviewer", "reviewer helpers"];
+    "documenter", "documenter helpers", "reviewer", "reviewer helpers"];
   const QUALITY = [["comments", "comments"], ["rewrites", "rewrites"], ["unclear", "unclear answers"],
     ["changes_after_approval", "changes after approval"], ["findings", "findings"]];
-  const ROLES = ["planner", "writer", "implementer", "reviewer"];
+  const ROLES = ["planner", "writer", "implementer", "documenter", "reviewer"];
 
   let data = null;        // last payload, null before the first fetch or on a 404
   let missing = "";       // why there is no payload

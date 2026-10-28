@@ -23,10 +23,14 @@ from .render import md
 from .store import (
     DOC_KEY,
     FACTS_KEY,
+    MOVES_KEY,
+    TRIAGE_KEY,
     DocConflict,
     Session,
     SessionError,
     format_fact,
+    format_move,
+    format_triage,
     list_sessions,
 )
 
@@ -267,7 +271,7 @@ def state(slug: str) -> dict[str, Any]:
         grilling = s.is_grilling()
         docs = s.read_docs()
         doc_texts = {DOC_KEY + p: t for p, t in docs.items() if t is not None}
-        seen = s.read_seen({**sections, **doc_texts, **s.fact_texts()})
+        seen = s.read_seen({**sections, **doc_texts, **s.baseline_texts()})
         published = published_view(s)
         doc_tab = docs_view(s, docs, seen)
     except SessionError as e:
@@ -308,17 +312,19 @@ def state(slug: str) -> dict[str, Any]:
 def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> dict[str, Any]:
     """The Doc tab as the page reads it: {set: [{path, reason, stale (how many of its
     stale passages are shown), minor? and diff? (a minor doc), failing? (a README's failure
-    indicator), facts (how many missing facts it has), pending (how many of them wait for the
-    user's decision)}] in the write order, removed,
-    views: {path: view}, stale (the stale passages shown), facts: {path: {text, list}},
-    reference (the reference model, or None)}. A doc's view is its section view (the file
-    rendered as Markdown, `updated` against its highlight baseline `doc:<path>`) with
-    `exists` and the base mark's input: `base_html`, the doc at the merge base rendered
-    (None when it was not there, or when git cannot tell), and `new`, whether the branch
-    created it. A doc missing from the worktree is `{exists: false}` only. A README's
-    missing facts are `list`, each fact with `updated` (its line is not in the baseline
-    `facts:<path>`: a new fact, or a changed state), and `text`, what « mark read »
-    records."""
+    indicator), from? (the old path of a doc the code moved), facts (how many missing facts
+    it has), pending (how many of them wait for the user's decision)}] in the write order,
+    removed, views: {path: view}, stale (the stale passages shown), facts: {path: {text,
+    list}}, triage, moves, reference (the reference model, or None)}. A doc's view is its
+    section view (the file rendered as Markdown, `updated` against its highlight baseline
+    `doc:<path>`) with `exists` and the base mark's input: `base_html`, the doc at the merge
+    base rendered, read at its old path for a doc the code moved (None when it was not
+    there, or when git cannot tell), and `new`, whether the branch created it. A doc
+    missing from the worktree is `{exists: false}` only. A README's missing facts are
+    `list`, each fact with `updated` (its line is not in the baseline `facts:<path>`: a new
+    fact, or a changed state), and `text`, what « mark read » records. The concept triage,
+    `triage`, is {text, list} the same way, against the baseline `triage:`, and so is each
+    README's move plan, `moves`: {path: {text, list}}, against `moves:<path>`."""
     data = s.read_doc_set()
     listed = {d["path"] for d in data["docs"]}
     facts: dict[str, dict[str, Any]] = {}
@@ -331,13 +337,30 @@ def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> 
             "text": text,
             "list": [{**f, "updated": format_fact(f) not in old} for f in entries],
         }
+    rows = s.read_triage()
+    text = "\n".join(map(format_triage, rows))
+    old = set(seen.get(TRIAGE_KEY, text).splitlines())
+    triage = {
+        "text": text,
+        "list": [{**r, "updated": format_triage(r) not in old} for r in rows],
+    }
+    moves: dict[str, dict[str, Any]] = {}
+    for path, entries in s.read_moves().items():
+        if path not in listed:
+            continue
+        text = "\n".join(map(format_move, entries))
+        old = set(seen.get(MOVES_KEY + path, text).splitlines())
+        moves[path] = {
+            "text": text,
+            "list": [{**r, "updated": format_move(r) not in old} for r in entries],
+        }
     commit = s.merge_base() if any(t is not None for t in docs.values()) else ""
     views: dict[str, dict[str, Any]] = {}
     for path, text in docs.items():
         if text is None:
             views[path] = {"exists": False}
             continue
-        base = s.base_text(path, commit) if commit else None
+        base = s.base_text(s.base_path(path), commit) if commit else None
         views[path] = {
             "exists": True,
             **section_view(text, seen.get(DOC_KEY + path, text)),
@@ -354,7 +377,7 @@ def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> 
                 "path": d["path"],
                 "reason": d.get("reason", ""),
                 "stale": sum(f["doc"] == d["path"] for f in stale),
-                **{k: d[k] for k in ("minor", "diff", "failing") if d.get(k)},
+                **{k: d[k] for k in ("minor", "diff", "failing", "from") if d.get(k)},
                 "facts": len(facts.get(d["path"], {}).get("list", [])),
                 "pending": sum(
                     f["state"] == "pending" for f in facts.get(d["path"], {}).get("list", [])
@@ -366,6 +389,8 @@ def docs_view(s: Session, docs: dict[str, str | None], seen: dict[str, str]) -> 
         "views": views,
         "stale": stale,
         "facts": facts,
+        "triage": triage,
+        "moves": moves,
         "reference": reference_view(s),
     }
 

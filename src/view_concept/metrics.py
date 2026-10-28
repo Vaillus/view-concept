@@ -54,7 +54,7 @@ STALL = 600.0  # seconds: a run stretch longer than this is stalled
 CHAIN = 2.0  # seconds: a turn started this soon after a pass's end continues it
 BREAK = 60.0  # seconds: user time longer than this is drawn as a break
 SLOW = 3.0  # a run whose wall time passes this many times its role's median is slow
-ROLES = ("planner", "writer", "implementer", "reviewer")
+ROLES = ("planner", "writer", "implementer", "documenter", "reviewer")
 ACTIVITIES = (
     "loading context",
     "exploring code",
@@ -70,6 +70,7 @@ WAITING_PHASES = {
     "awaiting-answer",
     "awaiting-model",
     "awaiting-docs",
+    "awaiting-moves",
     "awaiting-pr",
     "awaiting-approval",
     "scoping",

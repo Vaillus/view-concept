@@ -18,10 +18,12 @@ from pathlib import Path
 from .agents import AGENTS, detect
 from .context import ROLES, build
 from .store import (
+    FACT_PARTS,
     FACT_PROPOSALS,
     HEARTBEAT_EVERY,
     HOME,
     KINDS,
+    MOVE_FATES,
     PHASES,
     WORKFLOWS,
     Session,
@@ -30,8 +32,10 @@ from .store import (
     format_changes,
     format_doc,
     format_fact,
+    format_move,
     format_precedence,
     format_section_problem,
+    format_triage,
     list_sessions,
     slugify,
 )
@@ -177,7 +181,7 @@ def _batches(s: Session, slug: str):
                     cursor += len(raw)
                     if raw.strip():
                         batch = json.loads(raw)
-                        text = format_batch(slug, batch, outline, questions)
+                        text = format_batch(slug, batch, outline, questions, s.move_readmes())
                         yield text, cursor, str(batch.get("id", ""))
                     else:
                         s.cursor_path.write_text(str(cursor))
@@ -350,8 +354,10 @@ def cmd_doc_set(a: argparse.Namespace) -> None:
     args = a.args
     if a.op != "minor" and (a.added is not None or a.removed is not None):
         raise SessionError("--added and --removed go with minor only")
-    if a.op != "failing" and (a.structure or a.clear):
-        raise SessionError("--structure and --clear go with failing only")
+    if a.op != "failing" and a.structure:
+        raise SessionError("--structure goes with failing only")
+    if a.op not in ("failing", "moved") and a.clear:
+        raise SessionError("--clear goes with failing or moved only")
     if a.user and a.op not in ("add", "remove"):
         raise SessionError("--user goes with add or remove only")
     if a.op == "add":
@@ -389,12 +395,22 @@ def cmd_doc_set(a: argparse.Namespace) -> None:
         fail, total = _int_arg(args[1], "fail"), _int_arg(args[2], "total")
         print(format_doc(s.set_failing(args[0], fail, total, a.structure)))
         return
+    if a.op == "moved":
+        if a.clear:
+            if len(args) != 1:
+                raise SessionError("doc-set moved <path> --clear takes the path alone")
+            print(format_doc(s.set_moved(args[0], None)))
+            return
+        if len(args) != 2:
+            raise SessionError("doc-set moved takes the doc's path and its old path")
+        print(format_doc(s.set_moved(args[0], args[1])))
+        return
     if a.op == "order":
         if not args:
             raise SessionError("doc-set order takes every doc of the doc set, in the write order")
         s.order_docs(args)
     elif args:
-        raise SessionError("give an operation: add, remove, minor, major, failing or order")
+        raise SessionError("give an operation: add, remove, minor, major, failing, moved or order")
     data = s.read_doc_set()
     for d in data["docs"]:
         print(format_doc(d))
@@ -428,19 +444,25 @@ def cmd_stale(a: argparse.Namespace) -> None:
 
 
 def cmd_facts(a: argparse.Namespace) -> None:
-    """Record a missing fact of a README rewritten in full, mark the user's decision on
-    one, drop a README's list, or, with no operation, print them by README."""
+    """Record a missing fact of a README (what its old text said and no README written
+    says any more, after a full rewrite, a restructuring or a rewritten folder model),
+    mark the user's decision on one, drop a README's list, or, with no operation, print
+    them by README."""
     s = _existing(a.slug)
     args = a.args
     if a.op != "add" and (a.propose or a.reason or a.passage is not None):
         raise SessionError("--propose, --reason and --passage go with add only")
+    if a.op not in ("add", "clear") and a.part:
+        raise SessionError("--part goes with add and clear only")
     if a.op == "add":
-        if len(args) != 2 or not a.propose or not a.reason:
+        if len(args) != 2 or not a.propose or not a.reason or not a.part:
             raise SessionError(
-                "facts add takes a README, the fact, its proposal and reason: add <path> "
-                '"<fact>" --propose keep|leave --reason "<one line>" [--passage N]'
+                "facts add takes a README, the fact, its part, proposal and reason: add <path> "
+                '"<fact>" --part readme|model --propose keep|leave --reason "<one line>" '
+                "[--passage N]"
             )
-        print(s.add_missing_fact(args[0], args[1], a.propose, a.reason, a.passage)["id"])
+        f = s.add_missing_fact(args[0], args[1], a.propose, a.reason, a.passage, a.part)
+        print(f["id"])
         return
     if a.op == "mark":
         if len(args) != 2:
@@ -449,9 +471,13 @@ def cmd_facts(a: argparse.Namespace) -> None:
         print(f"{f['id']} {f['state']}")
         return
     if a.op == "clear":
-        if len(args) != 1:
-            raise SessionError("facts clear takes one README path")
-        print(f"cleared {s.clear_missing_facts(args[0])} missing facts of {args[0]}")
+        if len(args) != 1 or not a.part:
+            raise SessionError(
+                "facts clear takes one README path and the part whose facts it drops: "
+                "clear <path> --part readme|model"
+            )
+        n = s.clear_missing_facts(args[0], a.part)
+        print(f"cleared {n} missing facts of {args[0]} from part {a.part}")
         return
     if args:
         raise SessionError("give an operation: add, mark or clear")
@@ -462,6 +488,67 @@ def cmd_facts(a: argparse.Namespace) -> None:
             print(f"  {format_fact(f)}")
     if not data:
         print("(no missing fact)")
+
+
+def cmd_triage(a: argparse.Namespace) -> None:
+    """Set a concept's row of the concept triage, remove one, or, with no operation,
+    print the triage."""
+    s = _existing(a.slug)
+    args = a.args
+    if a.op == "set":
+        if len(args) != 3 or args[1] not in ("enters", "out"):
+            raise SessionError(
+                "triage set takes a concept, enters or out, and the reason: "
+                'set "<concept>" enters|out "<reason>"'
+            )
+        print(format_triage(s.set_triage(args[0], args[1] == "enters", args[2])))
+        return
+    if a.op == "remove":
+        if len(args) != 1:
+            raise SessionError("triage remove takes one row id")
+        s.remove_triage(args[0])
+        print(f"removed {args[0]}")
+        return
+    if args:
+        raise SessionError("give an operation: set or remove")
+    rows = s.read_triage()
+    for r in rows:
+        print(format_triage(r))
+    if not rows:
+        print("(no concept triage yet)")
+
+
+def cmd_moves(a: argparse.Namespace) -> None:
+    """Add a row to a README's move plan, clear a plan, or, with no operation, print the
+    plans by README."""
+    s = _existing(a.slug)
+    args = a.args
+    if a.op != "add" and (a.becomes or a.to or a.note):
+        raise SessionError("--becomes, --to and --note go with add only")
+    if a.op == "add":
+        if len(args) != 2 or not a.becomes:
+            raise SessionError(
+                'moves add takes a README and the passage: add <readme> "<passage>" '
+                "--becomes as-is|rewritten|nowhere [--to <readme>] "
+                '[--note "<one line>"]'
+            )
+        row = s.add_move(args[0], args[1], a.becomes, a.to or "", a.note or "")
+        print(format_move(row))
+        return
+    if a.op == "clear":
+        if len(args) != 1:
+            raise SessionError("moves clear takes one README path")
+        print(f"cleared {s.clear_moves(args[0])} rows of the move plan of {args[0]}")
+        return
+    if args:
+        raise SessionError("give an operation: add or clear")
+    data = s.read_moves()
+    for path, rows in data.items():
+        print(f"{path} · {len(rows)} passages")
+        for r in rows:
+            print(f"  {format_move(r)}")
+    if not data:
+        print("(no move plan)")
 
 
 def cmd_reference(a: argparse.Namespace) -> None:
@@ -554,11 +641,11 @@ def cmd_check(a: argparse.Namespace) -> None:
 
 def cmd_pending(a: argparse.Namespace) -> None:
     s = Session(a.slug)
-    outline = s.read_plan()["outline"]
+    outline, moves = s.read_plan()["outline"], s.move_readmes()
     for b in s.read_comments()["batches"]:
         open_ = [c for c in b["comments"] if c["status"] == "sent"]
         if open_:
-            print(format_batch(a.slug, {**b, "comments": open_}, outline))
+            print(format_batch(a.slug, {**b, "comments": open_}, outline, moves=moves))
             print()
 
 
@@ -766,23 +853,31 @@ def main() -> None:
     q = sub.add_parser(
         "doc-set",
         help="print the doc set, or change it: add or remove a doc, class one minor or "
-        "major, record a README's failure indicator, put the docs in the write order",
+        "major, record a README's failure indicator or the old path of a moved doc, put the "
+        "docs in the write order",
     )
     q.add_argument("slug")
-    q.add_argument("op", nargs="?", choices=("add", "remove", "minor", "major", "failing", "order"))
+    q.add_argument(
+        "op", nargs="?", choices=("add", "remove", "minor", "major", "failing", "moved", "order")
+    )
     q.add_argument(
         "args",
         nargs="*",
         help="add <path> <reason> · remove <path> · minor <path> <reason> · major <path> · "
-        "failing <path> <fail> <total> · order <path> <path>… (every doc, in the write "
-        "order); a path is relative to the repo root",
+        "failing <path> <fail> <total> · moved <path> <old path> (the code moved the doc "
+        "from its old path) · order <path> <path>… (every doc, in the write order); a path "
+        "is relative to the repo root",
     )
     q.add_argument("--added", type=int, help="with minor: the lines the doc's diff adds")
     q.add_argument("--removed", type=int, help="with minor: the lines the doc's diff removes")
     q.add_argument(
         "--structure", action="store_true", help="with failing: the README's structure fails"
     )
-    q.add_argument("--clear", action="store_true", help="with failing: remove the indicator")
+    q.add_argument(
+        "--clear",
+        action="store_true",
+        help="with failing: remove the indicator; with moved: remove the old path",
+    )
     q.add_argument(
         "--user",
         action="store_true",
@@ -804,21 +899,61 @@ def main() -> None:
 
     q = sub.add_parser(
         "facts",
-        help="record the missing facts of a README rewritten in full, mark the user's "
-        "decision on one, or print them",
+        help="record the missing facts of a README (what its old text said and no README "
+        "written says any more, after a full rewrite, a restructuring or a rewritten "
+        "folder model), mark the user's decision on one, or print them",
     )
     q.add_argument("slug")
     q.add_argument("op", nargs="?", choices=("add", "mark", "clear"))
     q.add_argument(
         "args",
         nargs="*",
-        help="add <path> <fact> · mark <id> kept|left|pending · clear <path> (a new full "
-        "rewrite replaces the README's list)",
+        help="add <path> <fact> · mark <id> kept|left|pending · clear <path> (a new rewrite "
+        "by one skill replaces the README's facts of that skill's part)",
+    )
+    q.add_argument(
+        "--part",
+        choices=FACT_PARTS,
+        help="with add and clear: the part of the old README the fact came from, readme "
+        "(the README's skeleton, write-readme's) or model (the folder model, document-feature's)",
     )
     q.add_argument("--propose", choices=FACT_PROPOSALS, help="with add: keep or leave the fact")
     q.add_argument("--reason", help="with add: one line, why that proposal")
     q.add_argument("--passage", type=int, help="with add: the number of the old README's passage")
     q.set_defaults(fn=cmd_facts)
+
+    q = sub.add_parser(
+        "triage",
+        help="print the concept triage (whether each concept of the model enters the docs), "
+        "or set or remove a row",
+    )
+    q.add_argument("slug")
+    q.add_argument("op", nargs="?", choices=("set", "remove"))
+    q.add_argument(
+        "args",
+        nargs="*",
+        help="set <concept> enters|out <reason> (a concept already listed keeps its row and "
+        "id) · remove <id>",
+    )
+    q.set_defaults(fn=cmd_triage)
+
+    q = sub.add_parser(
+        "moves",
+        help="print the move plans of the restructured READMEs, add a row to one, or clear one",
+    )
+    q.add_argument("slug")
+    q.add_argument("op", nargs="?", choices=("add", "clear"))
+    q.add_argument(
+        "args",
+        nargs="*",
+        help="add <readme> <passage> (a README of the doc set; a passage of its folder model "
+        "in one line) · "
+        "clear <readme>",
+    )
+    q.add_argument("--becomes", choices=MOVE_FATES, help="with add: what it becomes")
+    q.add_argument("--to", help="with add: the README it goes to (none with --becomes nowhere)")
+    q.add_argument("--note", help="with add: one optional line")
+    q.set_defaults(fn=cmd_moves)
 
     q = sub.add_parser(
         "reference",

@@ -606,7 +606,7 @@ def test_state_carries_the_missing_facts_highlighted_until_read(client, doc_revi
     assert docs["set"][2]["facts"] == 1 and docs["set"][0]["facts"] == 0
     assert facts["list"] == [{"id": "f1", "fact": "Run serve.", "passage": 4,
                               "proposal": "leave", "reason": "the code says open",
-                              "state": "pending", "updated": False}]  # fmt: skip
+                              "state": "pending", "part": "readme", "updated": False}]  # fmt: skip
     doc_review.add_missing_fact("README.md", "Offline, TeX.", "keep", "a link")
     doc_review.mark_missing_fact("f1", "left")
     facts = client.get("/api/s/doc-tab").json()["docs"]["facts"]["README.md"]
@@ -687,3 +687,58 @@ def test_the_reference_model_is_read_from_another_session(client, doc_review):
     doc_review.plan_path.write_text(json.dumps(plan))  # re-read as it is now
     ref = client.get("/api/s/install-docs").json()["docs"]["reference"]
     assert ref["lexicon"][0]["tip_html"] == "the docs"
+
+
+def test_state_carries_the_concept_triage_highlighted_until_read(client, doc_review):
+    doc_review.set_triage("pooled WER", True, "a wrong WER")
+    triage = client.get("/api/s/doc-tab").json()["docs"]["triage"]  # the baseline
+    assert triage["list"] == [{"id": "k1", "concept": "pooled WER", "enters": True,
+                               "reason": "a wrong WER", "updated": False}]  # fmt: skip
+    doc_review.set_triage("pooled WER", False, "nobody reads it")
+    triage = client.get("/api/s/doc-tab").json()["docs"]["triage"]
+    assert triage["list"][0]["updated"] is True
+    r = client.post("/api/s/doc-tab/seen", json={"sections": {"triage:": triage["text"]}})
+    assert r.status_code == 200
+    assert client.get("/api/s/doc-tab").json()["docs"]["triage"]["list"][0]["updated"] is False
+    body = {"comments": [{"section": "triage:k1", "quote": "pooled WER", "text": "it enters"}]}
+    assert client.post("/api/s/doc-tab/batch", json=body).status_code == 200
+    body = {"comments": [{"section": "triage:", "text": "x"}]}
+    assert client.post("/api/s/doc-tab/batch", json=body).status_code == 400
+
+
+def test_state_carries_the_move_plans_highlighted_until_read(client, doc_review):
+    doc_review.add_doc("README.md", "the install")
+    doc_review.add_move("README.md", "the WER rules", "rewritten", to="core/README.md")
+    moves = client.get("/api/s/doc-tab").json()["docs"]["moves"]  # the baseline
+    assert moves["README.md"]["list"] == [{"id": "p1", "passage": "the WER rules",
+                                           "to": "core/README.md",
+                                           "becomes": "rewritten", "note": "",
+                                           "updated": False}]  # fmt: skip
+    doc_review.add_move("README.md", "old results", "nowhere")
+    plan = client.get("/api/s/doc-tab").json()["docs"]["moves"]["README.md"]
+    assert [r["updated"] for r in plan["list"]] == [False, True]
+    seen = {"sections": {"moves:README.md": plan["text"]}}
+    assert client.post("/api/s/doc-tab/seen", json=seen).status_code == 200
+    plan = client.get("/api/s/doc-tab").json()["docs"]["moves"]["README.md"]
+    assert [r["updated"] for r in plan["list"]] == [False, False]
+    body = {
+        "action": "write-readmes",
+        "comments": [{"section": "moves:p2", "quote": "old results", "text": "keep"}],
+    }
+    b = client.post("/api/s/doc-tab/batch", json=body).json()
+    assert b["action"] == "write-readmes" and b["comments"][0]["section"] == "moves:p2"
+
+
+def test_the_base_mark_reads_a_moved_doc_at_its_old_path(client, doc_review):
+    repo = doc_review.repo_dir()
+    _git(repo, "init", "-b", "main")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "base")
+    _git(repo, "switch", "-c", "feat")
+    _git(repo, "mv", "docs/reference.md", "docs/missing.md")
+    doc_review.set_moved("docs/missing.md", "docs/reference.md")
+    docs = client.get("/api/s/doc-tab").json()["docs"]
+    view = docs["views"]["docs/missing.md"]
+    assert view["base_html"] == "<h1>Reference</h1>\n<p>The keys 1 to 4.</p>\n"
+    assert view["new"] is False
+    assert docs["set"][1]["from"] == "docs/reference.md" and "from" not in docs["set"][0]

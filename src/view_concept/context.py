@@ -14,9 +14,9 @@ The context names the folder, so an agent that needs an older entry opens the fi
 
 The request part is the initial request (the user's first message), or, when the review
 follows a conversation (request.md, the request transcript), that whole conversation for
-the planner and the writer, the roles that shape the model; the implementer, the reviewer
-and a side thread get the initial request and the transcript's path, and open it when a
-comment needs the user's reasons.
+the planner and the writer, the roles that shape the model; the implementer, the
+documenter, the reviewer and a side thread get the initial request and the transcript's
+path, and open it when a comment needs the user's reasons.
 
 Roles:
 
@@ -24,8 +24,13 @@ Roles:
 - `writer`: owns the modeling part (its sections), the to-do list (the section `todo`,
   in the refactoring part) and, from « Write model » on, the outline and the lexicon.
   Gets every section.
-- `implementer`: owns the code, from « Approve model » on. Gets the modeling part, the
-  to-do list, and the sections its trigger names (the reviewer's items it must act on).
+- `implementer`: owns the code, from « Approve model » on, and never touches the docs.
+  Gets the modeling part, the to-do list, and the sections its trigger names (the
+  reviewer's items it must act on).
+- `documenter`: owns the doc set and the docs, from « Write docs » on: the doc pass's
+  role that prepares it (the doc set, the lexicons, the write order) and ends it (the docs
+  that are not READMEs, the reports of the skill agents, the commit). Gets the modeling
+  part, the to-do list, and the sections its trigger names.
 - `reviewer`: owns the rest of the refactoring part, which checks the code against the
   model. Gets every section.
 - `thread`: a side thread, read-only. Gets the section its passage belongs to; it reads
@@ -37,14 +42,20 @@ source; its heading names its file, for an agent that needs the source.
 
 In a code session every role also gets the code map (code-map.md): which modules carry
 the feature and where each concept lives, as the planner wrote it and the implementer
-keeps it, so a run does not explore the same code again. The writer, the implementer and
+keeps it, so a run does not explore the same code again. The writer, the documenter and
 the reviewer also get the doc set (doc-set.json: each doc's path and reason in the write
 order, its minor class, a README's failure indicator, the docs the user removed) and the
-stale passages still shown: the writer writes the first doc set, the implementer
-refreshes it and rewrites the docs at the doc pass, the reviewer flags the stale
-passages. The implementer also gets the missing facts of each README rewritten in full
-(missing-facts.json), with the state of the user's decision on each: it applies the
-comments on them. A side thread on a doc gets that doc's missing facts with its text.
+stale passages still shown: the writer writes the first doc set, the documenter
+refreshes it at the doc pass, the reviewer flags the stale passages. The documenter also
+gets the missing facts of each README (missing-facts.json: what its old text said and no
+README written says any more, after a full rewrite, a restructuring or a rewritten folder
+model), with the state of the user's decision on each: it applies the comments on them.
+The documenter and the reviewer also get the concept triage (concept-triage.json: whether
+each concept of the model enters the docs): the doc pass follows it, the reviewer checks
+the docs against it; and the move plans (moves.json: where each passage of the folder
+model of a restructured README goes). The implementer gets none of these: it writes the
+code only. A side thread on a doc gets that doc's missing facts with its text; one on a
+row of the concept triage gets the triage, one on a row of a move plan the move plans.
 The docs themselves are files of the repository, read there.
 
 Once the model is approved, every role also sees which changes of the model the code does
@@ -60,22 +71,29 @@ from typing import Any
 from .store import (
     DOC_KEY,
     DOC_SET_ANCHOR,
+    MOVES_KEY,
+    TRIAGE_KEY,
     Session,
     SessionError,
     format_batch,
     format_comment,
     format_doc,
     format_fact,
+    format_move,
+    format_triage,
 )
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
-ROLES = ("planner", "writer", "implementer", "reviewer", "thread")
+ROLES = ("planner", "writer", "implementer", "documenter", "reviewer", "thread")
 TRANSCRIPT_ROLES = ("planner", "writer")  # the roles that read the request transcript whole
 # The roles that keep the doc set or work on its docs: the writer writes the first one,
-# the implementer refreshes it and rewrites the docs, the reviewer flags stale passages.
-DOC_SET_ROLES = ("writer", "implementer", "reviewer")
-# The roles that get the missing facts: the implementer applies the user's decisions.
-FACT_ROLES = ("implementer",)
+# the documenter refreshes it at the doc pass, the reviewer flags stale passages.
+DOC_SET_ROLES = ("writer", "documenter", "reviewer")
+# The roles that get the missing facts: the documenter applies the user's decisions.
+FACT_ROLES = ("documenter",)
+# The roles that get the concept triage and the move plans: the doc pass follows them, the
+# reviewer checks the docs against them.
+TRIAGE_ROLES = ("documenter", "reviewer")
 
 QUESTION_ID = re.compile(r"^q\d+$")
 COMMENT_ID = re.compile(r"^c\d+$")
@@ -120,7 +138,7 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     sections = {**s.read_sections(), **{k: v for k, v in s.read_prose().items() if k in html}}
     if role in ("writer", "reviewer"):
         out += ["", "## Sections", *_sections(outline, sections, None, html=html)]
-    elif role == "implementer":
+    elif role in ("implementer", "documenter"):
         named = set(trigger or [])
         # The to-do list is part of the model, though it sits in the refactoring part.
         named.add("todo")
@@ -131,6 +149,10 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     elif role == "thread" and section:
         if section.startswith(DOC_KEY):  # a doc, or the doc set (DOC_SET_ANCHOR)
             out += ["", *doc_passage(s, section)]
+        elif section.startswith(TRIAGE_KEY):  # a row of the concept triage
+            out += ["", *_triage(s)]
+        elif section.startswith(MOVES_KEY):  # a row of a move plan
+            out += ["", *_moves(s)]
         else:
             sec = _sections(outline, sections, section, html=html)
             out += ["", "## Section of the passage", *sec]
@@ -156,7 +178,7 @@ def doc_passage(s: Session, anchor: str) -> list[str]:
 
 def _doc_tab(s: Session, role: str) -> list[str]:
     """The doc set and the stale passages still shown, for the roles that work on them;
-    the missing facts too for the implementer, who applies the user's decisions on them."""
+    the missing facts too for the documenter, who applies the user's decisions on them."""
     lines = [
         "## Doc set",
         "The repo docs the Doc tab shows, in the write order. Each one is a file of the"
@@ -174,12 +196,40 @@ def _doc_tab(s: Session, role: str) -> list[str]:
         lines.append(f"- {f['id']} {f['doc']} « {quote} »{section}: {f['note']}")
     if role in FACT_ROLES:
         lines += ["", *_missing_facts(s)]
+    if role in TRIAGE_ROLES:
+        lines += ["", *_triage(s), "", *_moves(s)]
     return lines
 
 
+def _moves(s: Session) -> list[str]:
+    """The move plan of each restructured README of the doc set, one line per passage."""
+    listed = {d["path"] for d in s.read_doc_set()["docs"]}
+    plans = {p: rows for p, rows in s.read_moves().items() if p in listed}
+    lines = [
+        "## Move plans (each passage of a restructured README's folder model: the README it"
+        " goes to, what it becomes there)"
+    ]
+    if not plans:
+        return [*lines, "(none)"]
+    for p, rows in plans.items():
+        lines += [f"{p}:", *(f"- {format_move(r)}" for r in rows)]
+    return lines
+
+
+def _triage(s: Session) -> list[str]:
+    """The concept triage, one line per concept of the model."""
+    rows = s.read_triage()
+    return [
+        "## Concept triage (whether each concept of the model enters the docs: who ignores"
+        " it would get what wrong?)",
+        *([f"- {format_triage(r)}" for r in rows] or ["(none written yet)"]),
+    ]
+
+
 def _missing_facts(s: Session, path: str = "") -> list[str]:
-    """The missing facts of each README of the doc set rewritten in full (or of `path`
-    alone), each with its proposal and the state of the user's decision."""
+    """The missing facts of each README of the doc set (or of `path` alone): what its old
+    text said and no README written says any more, after a full rewrite, a restructuring or
+    a rewritten folder model, each with its proposal and the state of the user's decision."""
     listed = {d["path"] for d in s.read_doc_set()["docs"]}
     facts = {p: f for p, f in s.read_missing_facts().items() if p in listed}
     if path:
@@ -187,8 +237,9 @@ def _missing_facts(s: Session, path: str = "") -> list[str]:
         if not facts:
             return []
     lines = [
-        "## Missing facts (what a README's old text said and its full rewrite no longer says;"
-        " the README takes back only those the user keeps)"
+        "## Missing facts (what a README's old text said and no README written says any more,"
+        " after a full rewrite, a restructuring or a rewritten folder model; the README takes"
+        " back only those the user keeps)"
     ]
     if not facts:
         return [*lines, "(none)"]
@@ -256,12 +307,12 @@ def _trigger(
         if QUESTION_ID.match(event) and event in by_question:
             lines.append(_question_line(by_question[event], full=True))
         elif COMMENT_ID.match(event) and event in comments:
-            lines.append(format_comment(comments[event], _number(outline)))
+            lines.append(format_comment(comments[event], _number(outline), s.move_readmes()))
         elif BATCH_ID.match(event):
             batch = next((b for b in batches if b["id"] == event), None)
             if batch is None:
                 raise SessionError(f"no batch {event!r}")
-            lines.append(format_batch(s.slug, batch, outline, questions))
+            lines.append(format_batch(s.slug, batch, outline, questions, s.move_readmes()))
         elif MESSAGE_ID.match(event) and event in messages:
             lines.append(_message_line(messages[event]))
         elif CHANGE_ID.match(event) and event in changes:

@@ -12,6 +12,7 @@ from view_concept.store import (
     SessionError,
     format_batch,
     format_changes,
+    format_doc,
     list_sessions,
     project_of,
 )
@@ -1095,7 +1096,7 @@ def test_a_readme_rewritten_in_full_keeps_its_missing_facts(docs_review):
                             passage=4)  # fmt: skip
     f2 = s.add_missing_fact("./README.md", "Offline, maths shows as TeX.", "keep", "a link")
     assert f1 == {"id": "f1", "fact": "Run serve --port 8000.", "passage": 4, "proposal": "leave",
-                  "reason": "the code says open", "state": "pending"}  # fmt: skip
+                  "reason": "the code says open", "state": "pending", "part": "readme"}  # fmt: skip
     assert f2["id"] == "f2" and f2["passage"] is None
     assert s.mark_missing_fact("f2", "kept")["state"] == "kept"
     assert [f["state"] for f in s.read_missing_facts()["README.md"]] == ["pending", "kept"]
@@ -1109,9 +1110,32 @@ def test_a_readme_rewritten_in_full_keeps_its_missing_facts(docs_review):
         s.mark_missing_fact("f1", "done")
     with pytest.raises(SessionError, match="no missing fact"):
         s.mark_missing_fact("f9", "left")
+    with pytest.raises(SessionError, match="part is one of"):
+        s.add_missing_fact("README.md", "x", "keep", "y", part="usage")
     # A new full rewrite replaces the list.
-    assert s.clear_missing_facts("README.md") == 2
+    assert s.clear_missing_facts("README.md", "readme") == 2
     assert s.read_missing_facts() == {}
+
+
+def test_each_skill_clears_only_the_missing_facts_of_its_own_part(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_missing_fact("README.md", "Results before September differ.", "keep", "a", part="model")
+    s.add_missing_fact("README.md", "The map cited legacy_eval.py.", "leave", "gone")
+    # A fact recorded without a part, as before parts existed, is write-readme's.
+    data = s.read_missing_facts()
+    del data["README.md"][1]["part"]
+    s.missing_facts_path.write_text(json.dumps(data))
+    # document-feature rewrites the folder model again: write-readme's fact stays.
+    assert s.clear_missing_facts("README.md", "model") == 1
+    s.add_missing_fact("README.md", "Old results counted all clips.", "keep", "b", part="model")
+    assert [f["id"] for f in s.read_missing_facts()["README.md"]] == ["f2", "f3"]
+    # A rewrite request: write-readme's facts go, document-feature's stay.
+    assert s.clear_missing_facts("README.md", "readme") == 1
+    assert [f["id"] for f in s.read_missing_facts()["README.md"]] == ["f3"]
+    assert s.clear_missing_facts("README.md", "readme") == 0
+    with pytest.raises(SessionError, match="part is one of"):
+        s.clear_missing_facts("README.md", "all")
 
 
 def test_a_readme_out_of_the_doc_set_loses_its_missing_facts(docs_review):
@@ -1141,7 +1165,7 @@ def test_a_comment_on_a_missing_fact_names_the_fact(docs_review):
     # A comment with no fact keeps no field for it.
     assert "fact" not in s.add_batch([{"section": "doc:README.md", "text": "x"}])["comments"][0]
     # Ids go on past a cleared list: the sent comment still names f1.
-    s.clear_missing_facts("README.md")
+    s.clear_missing_facts("README.md", "readme")
     assert s.add_missing_fact("README.md", "x", "keep", "y")["id"] == "f2"
 
 
@@ -1161,7 +1185,7 @@ def test_a_fact_id_named_by_a_draft_never_serves_again(docs_review):
     s.add_missing_fact("README.md", "Offline.", "keep", "a link")
     s.save_draft({"id": "d1", "section": "doc:README.md", "quote": "Offline.", "text": "a",
                   "fact": "f2"})  # fmt: skip
-    s.clear_missing_facts("README.md")
+    s.clear_missing_facts("README.md", "readme")
     assert s.add_missing_fact("README.md", "x", "keep", "y")["id"] == "f3"
     # A side thread on a fact counts the same.
     s.new_thread("doc:README.md", "x", fact="f7")
@@ -1291,7 +1315,7 @@ def test_write_docs_carries_then_pr_only_when_true(session):
     assert (
         format_batch("kv-cache", b, [])
         .splitlines()[1]
-        .startswith("action: write-docs (the user asked for the doc pass: refresh the doc set")
+        .startswith("action: write-docs (the user asked for the doc pass: the documenter refreshes")
     )
     b = session.add_batch([], action="write-docs", then_pr=True)
     assert b["then_pr"] is True
@@ -1439,3 +1463,130 @@ def test_docs_stay_out_of_the_publish_fingerprint_and_the_check(docs_review):
     (s.repo_dir() / "README.md").write_text("Rewritten <div>\n\nblock</div>\n")
     assert s.fingerprint() == before
     assert s.published_sections() == [] and s.check_sections() == []
+
+
+def test_the_concept_triage_keeps_one_row_per_concept(docs_review):
+    s = docs_review
+    assert s.read_triage() == [] and s.triage_text() == {}
+    k1 = s.set_triage("the  pooled WER", True, "compares it to another WER")
+    s.set_triage("offline mode", False, "no study imports it")
+    assert k1 == {"id": "k1", "concept": "the pooled WER", "enters": True,
+                  "reason": "compares it to another WER"}  # fmt: skip
+    # The same concept changes its row, and keeps its id and place.
+    assert s.set_triage("the pooled WER", False, "nobody reads it")["id"] == "k1"
+    assert [(r["id"], r["enters"]) for r in s.read_triage()] == [("k1", False), ("k2", False)]
+    assert s.triage_text() == {
+        "triage:": "k1 [stays out] the pooled WER — nobody reads it\n"
+        "k2 [stays out] offline mode — no study imports it"
+    }
+    with pytest.raises(SessionError, match="concept and its reason"):
+        s.set_triage("x", True, " ")
+    s.remove_triage("k2")
+    with pytest.raises(SessionError, match="no triage row"):
+        s.remove_triage("k2")
+    # An id a sent comment names never serves again.
+    b = s.add_batch([{"section": "triage:k1", "quote": "the pooled WER", "text": "it enters"}])
+    assert "[c1] (triage k1) « the pooled WER »" in format_batch("doc-tab", b, [])
+    s.remove_triage("k1")
+    assert s.set_triage("clips A to D", False, "in no output")["id"] == "k2"
+    with pytest.raises(SessionError, match="triage:<id>"):
+        s.add_batch([{"section": "triage:x", "text": "x"}])
+    with pytest.raises(SessionError, match="may not start with"):
+        s.write_plan(outline=[{"id": "triage:k1", "title": "X"}])
+
+
+def test_a_batch_moves_the_concept_triage_baseline(docs_review):
+    s = docs_review
+    s.set_triage("the pooled WER", True, "compares it to another WER")
+    s.read_seen(s.baseline_texts())
+    s.set_triage("offline mode", False, "no study imports it")
+    assert json.loads(s.seen_path.read_text())["triage:"].count("\n") == 0
+    s.add_batch([], note="read")
+    assert json.loads(s.seen_path.read_text())["triage:"] == s.triage_text()["triage:"]
+
+
+def test_a_restructured_readme_keeps_its_move_plan(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_doc("docs/reference.md", "the tabs")
+    assert s.read_moves() == {} and s.move_texts() == {}
+    p1 = s.add_move("README.md", "the  WER rules", "rewritten", to="core/README.md",
+                    note="as a link")  # fmt: skip
+    s.add_move("./README.md", "the old results", "nowhere")
+    assert p1 == {"id": "p1", "passage": "the WER rules",
+                  "to": "core/README.md", "becomes": "rewritten", "note": "as a link"}  # fmt: skip
+    assert s.move_texts() == {
+        "moves:README.md": "p1 the WER rules → core/README.md, rewritten · as a link\n"
+        "p2 the old results → nowhere"
+    }
+    assert s.move_readmes() == {"p1": "README.md", "p2": "README.md"}
+    with pytest.raises(SessionError, match="not a README.md"):
+        s.add_move("docs/reference.md", "x", "as-is", to="README.md")
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.add_move("src/README.md", "x", "as-is", to="README.md")
+    with pytest.raises(SessionError, match="becomes is one of"):
+        s.add_move("README.md", "x", "moved", to="README.md")
+    with pytest.raises(SessionError, match="goes nowhere"):
+        s.add_move("README.md", "x", "as-is")
+    with pytest.raises(SessionError, match="goes nowhere"):
+        s.add_move("README.md", "x", "nowhere", to="README.md")
+    with pytest.raises(SessionError, match="goes to a README"):
+        s.add_move("README.md", "x", "as-is", to="docs/reference.md")
+    # A comment on a row names its README in the batch; ids go on past a cleared plan.
+    b = s.add_batch([{"section": "moves:p2", "quote": "the old results", "text": "keep it"}])
+    text = format_batch("doc-tab", b, [], moves=s.move_readmes())
+    assert "[c1] (moves README.md · passage p2) « the old results »" in text
+    assert s.clear_moves("README.md") == 2
+    assert s.add_move("README.md", "x", "as-is", to="README.md")["id"] == "p3"
+    with pytest.raises(SessionError, match="moves:<id>"):
+        s.add_batch([{"section": "moves:README.md", "text": "x"}])
+    with pytest.raises(SessionError, match="may not start with"):
+        s.write_plan(outline=[{"id": "moves:p1", "title": "X"}])
+    # The plan goes with its README out of the doc set.
+    s.remove_doc("README.md")
+    assert s.read_moves() == {}
+
+
+def test_a_legacy_move_row_with_a_part_still_reads(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    row = {"id": "p1", "passage": "the WER rules", "part": "model", "to": "core/README.md",
+           "becomes": "rewritten", "note": ""}  # fmt: skip
+    s.moves_path.write_text(json.dumps({"README.md": [row]}))
+    assert s.read_moves() == {"README.md": [row]}
+    assert s.move_texts() == {"moves:README.md": "p1 the WER rules → core/README.md, rewritten"}
+    assert s.add_move("README.md", "x", "nowhere")["id"] == "p2"
+
+
+def test_write_readmes_ends_the_stop_on_the_move_plans(docs_review):
+    s = docs_review
+    assert s.write_status("awaiting-moves")["phase"] == "awaiting-moves"
+    b = s.add_batch([], action="write-readmes")
+    assert "action: write-readmes (the user read the move plans" in format_batch("doc-tab", b, [])
+
+
+def test_a_moved_readme_is_compared_at_its_old_path(branch_docs):
+    s = branch_docs
+    repo = s.repo_dir()
+    # The code moved README.md to lib/README.md; nothing stays at the old path.
+    (repo / "README.md").rename(repo / "lib.md")
+    (repo / "lib").mkdir()
+    (repo / "lib.md").rename(repo / "lib" / "README.md")
+    s.add_batch([], action="write-docs")
+    assert s.base_path("lib/README.md") == "lib/README.md"
+    assert s.created_by_doc_pass("lib/README.md")
+    entry = s.set_moved("./lib/README.md", "README.md")
+    assert entry["from"] == "README.md"
+    assert s.base_path("lib/README.md") == "README.md"
+    assert not s.created_by_doc_pass("lib/README.md")  # the old README was there
+    assert s.base_text(s.base_path("lib/README.md"), s.merge_base()) == "# Tool\n"
+    s.add_doc("lib/README.md", "the folder model")  # a refresh keeps it
+    assert s.read_doc_set()["docs"][2]["from"] == "README.md"
+    assert format_doc(s.read_doc_set()["docs"][2]) == (
+        "lib/README.md — the folder model · moved from README.md"
+    )
+    with pytest.raises(SessionError, match="its old path is its path"):
+        s.set_moved("lib/README.md", "lib/README.md")
+    with pytest.raises(SessionError, match="not in the doc set"):
+        s.set_moved("docs/README.md", "README.md")
+    assert "from" not in s.set_moved("lib/README.md", None)

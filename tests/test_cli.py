@@ -329,6 +329,8 @@ def test_variant_names_the_setup_and_a_model_per_role(tmp_path):
     assert r.returncode == 0 and "writer=sonnet" in r.stdout
     plan = json.loads((tmp_path / "sessions" / "speed" / "plan.json").read_text())
     assert plan["variant"] == {"name": "writer on sonnet", "models": {"writer": "sonnet"}}
+    r = view_concept(tmp_path, "variant", "speed", "docs", "--model", "documenter=haiku")
+    assert r.returncode == 0 and "documenter=haiku" in r.stdout
     r = view_concept(tmp_path, "variant", "speed", "odd", "--model", "helper=haiku")
     assert r.returncode == 1 and "unknown role helper" in r.stderr
     r = view_concept(tmp_path, "variant", "speed", "odd", "--model", "writer")
@@ -388,18 +390,29 @@ def test_facts_records_marks_prints_and_clears_missing_facts(tmp_path):
     assert view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "why").returncode == 0
     assert view_concept(tmp_path, "facts", "gate").stdout.strip() == "(no missing fact)"
     add = ("add", "README.md", "Run serve.", "--propose", "leave", "--reason", "the code")
-    r = view_concept(tmp_path, "facts", "gate", *add, "--passage", "4")
+    r = view_concept(tmp_path, "facts", "gate", *add, "--passage", "4", "--part", "readme")
     assert r.returncode == 0 and r.stdout.strip() == "f1", r.stderr
+    r = view_concept(tmp_path, "facts", "gate", *add[:2], "Old rule.", *add[3:], "--part", "model")
+    assert r.returncode == 0 and r.stdout.strip() == "f2", r.stderr
     r = view_concept(tmp_path, "facts", "gate", "mark", "f1", "left")
     assert r.returncode == 0 and r.stdout.strip() == "f1 left", r.stderr
     assert view_concept(tmp_path, "facts", "gate").stdout.splitlines() == [
-        "README.md · 1 missing facts",
-        "  f1 [left] « Run serve. » (passage 4) · propose leave: the code",
+        "README.md · 2 missing facts",
+        "  f1 [left] « Run serve. » (passage 4) · from the README's skeleton · propose leave: "
+        "the code",
+        "  f2 [pending] « Old rule. » · from the folder model · propose leave: the code",
     ]
+    r = view_concept(tmp_path, "facts", "gate", *add)
+    assert r.returncode == 1 and "--part readme|model" in r.stderr
     r = view_concept(tmp_path, "facts", "gate", "add", "README.md", "x", "--propose", "keep")
     assert r.returncode == 1 and "--propose keep|leave" in r.stderr
     r = view_concept(tmp_path, "facts", "gate", "clear", "README.md")
-    assert r.stdout.strip() == "cleared 1 missing facts of README.md"
+    assert r.returncode == 1 and "clear <path> --part readme|model" in r.stderr
+    r = view_concept(tmp_path, "facts", "gate", "mark", "f1", "left", "--part", "model")
+    assert r.returncode == 1 and "--part goes with add and clear only" in r.stderr
+    r = view_concept(tmp_path, "facts", "gate", "clear", "README.md", "--part", "model")
+    assert r.stdout.strip() == "cleared 1 missing facts of README.md from part model"
+    assert "f1 [left]" in view_concept(tmp_path, "facts", "gate").stdout
 
 
 def test_stale_flags_prints_and_drops_passages(tmp_path):
@@ -437,3 +450,65 @@ def test_reference_sets_prints_and_clears_the_reference_model(tmp_path):
     assert r.returncode == 1 and "no other session" in r.stderr
     r = view_concept(tmp_path, "reference", "docs", "gate", "--clear")
     assert r.returncode == 1 and "one at a time" in r.stderr
+
+
+def test_triage_sets_prints_and_removes_rows(tmp_path):
+    r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "triage", "gate").stdout.strip() == "(no concept triage yet)"
+    r = view_concept(tmp_path, "triage", "gate", "set", "pooled WER", "enters", "a wrong WER")
+    assert r.returncode == 0 and r.stdout.strip() == "k1 [enters] pooled WER — a wrong WER"
+    r = view_concept(tmp_path, "triage", "gate", "set", "offline mode", "out", "no study")
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "triage", "gate").stdout.splitlines() == [
+        "k1 [enters] pooled WER — a wrong WER",
+        "k2 [stays out] offline mode — no study",
+    ]
+    r = view_concept(tmp_path, "triage", "gate", "set", "pooled WER", "maybe", "x")
+    assert r.returncode == 1 and "enters|out" in r.stderr
+    r = view_concept(tmp_path, "triage", "gate", "remove", "k2")
+    assert r.returncode == 0 and r.stdout.strip() == "removed k2"
+
+
+def test_moves_adds_prints_and_clears_a_move_plan(tmp_path):
+    r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "why").returncode == 0
+    assert view_concept(tmp_path, "moves", "gate").stdout.strip() == "(no move plan)"
+    add = ("add", "README.md", "the WER rules", "--becomes", "rewritten")
+    r = view_concept(tmp_path, "moves", "gate", *add, "--to", "core/README.md")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "p1 the WER rules → core/README.md, rewritten"
+    r = view_concept(tmp_path, "moves", "gate", "add", "README.md", "old results",
+                     "--becomes", "nowhere", "--note", "dated")  # fmt: skip
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "moves", "gate").stdout.splitlines() == [
+        "README.md · 2 passages",
+        "  p1 the WER rules → core/README.md, rewritten",
+        "  p2 old results → nowhere · dated",
+    ]
+    r = view_concept(tmp_path, "moves", "gate", "add", "README.md", "x")
+    assert r.returncode == 1 and "--becomes as-is|rewritten|nowhere" in r.stderr
+    assert "--part" not in r.stderr
+    r = view_concept(tmp_path, "moves", "gate", "clear", "README.md", "--note", "x")
+    assert r.returncode == 1 and "go with add only" in r.stderr
+    # A move plan lists only folder-model passages: a row has no part.
+    r = view_concept(tmp_path, "moves", "gate", *add, "--to", "a/README.md", "--part", "model")
+    assert r.returncode == 2 and "unrecognized arguments: --part model" in r.stderr
+    r = view_concept(tmp_path, "moves", "gate", "clear", "README.md")
+    assert r.stdout.strip() == "cleared 2 rows of the move plan of README.md"
+
+
+def test_doc_set_records_the_old_path_of_a_moved_readme(tmp_path):
+    r = view_concept(tmp_path, "new", "Gate", "--kind", "code", "--repo", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert view_concept(tmp_path, "doc-set", "gate", "add", "core/README.md", "why").returncode == 0
+    r = view_concept(tmp_path, "doc-set", "gate", "moved", "core/README.md", "old/README.md")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "core/README.md — why · moved from old/README.md"
+    r = view_concept(tmp_path, "doc-set", "gate", "moved", "core/README.md")
+    assert r.returncode == 1 and "its old path" in r.stderr
+    r = view_concept(tmp_path, "doc-set", "gate", "moved", "core/README.md", "--clear")
+    assert r.returncode == 0 and r.stdout.strip() == "core/README.md — why"
+    r = view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "why", "--clear")
+    assert r.returncode == 1 and "--clear goes with failing or moved" in r.stderr
