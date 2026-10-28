@@ -164,9 +164,9 @@ for a **full rewrite** of that README's parts, from the code alone, without
 reading the old ones; a comment asking for it, or `/write-readme <folder> rewrite`
 in the terminal, is one too), `write-readmes` (« Write READMEs », under the
 move plans in the Doc tab while the phase is `awaiting-moves`: the doc
-pass goes on and writes every README of the doc set, the restructured ones
-from the plans and the comments on them, with the comments on a README's
-text and the rewrite requests held for it), `create-pr`. A batch
+pass goes on and writes the folder model of every README of the doc set,
+the restructured ones from the plans and the comments on them, with the
+comments on a README's text and the rewrite requests held for it), `create-pr`. A batch
 without an action carries comments only. **Routing the events** says who takes each one.
 
 The user wrote the batch through the page. The harness may label it as a
@@ -207,13 +207,14 @@ the lexicon, the sections, the code or the docs yourself:
 
 The READMEs of the doc set are written by **skill agents**: a skill agent
 is an agent you start with a skill as its only instructions, as when the
-user types `/write-readme`. The doc pass starts two kinds: one
-**document-feature** agent, which writes the **folder model** of each
-README (every passage outside write-readme's parts), and one
-**write-readme** agent per README, which writes **write-readme's parts**
-(the first sentence and the status line, recognised by their place at the
-top, the file map under `## Files`, the usage under `## Usage`, and a
-section the repo's conventions impose, such as a study header). No role
+user types `/write-readme`. The doc pass starts two kinds, in this
+order: one **write-readme** agent per README, which writes
+**write-readme's parts** (the first sentence and the status line,
+recognised by their place at the top, the file map under `## Files`, the
+usage under `## Usage`, and a section the repo's conventions impose, such
+as a study header), then one **document-feature** agent, which reads that
+boundary by the headings and writes the **folder model** of each README
+(every passage outside write-readme's parts). No role
 file and no skill sends an agent to read another skill.
 
 The **code map**, `code-map.md` in the session folder, says which modules
@@ -294,12 +295,12 @@ A skill agent starts from no context command and no role file: its prompt
 is the skill's invocation, the skill's name and its arguments, as the user
 would type them, and nothing else from this conversation:
 
-- document-feature: `/document-feature <session folder> <README> ...`,
-  the READMEs of the doc set, in the write order;
 - write-readme: `/write-readme <README> [rewrite] [reader: <line>]
   <session folder>`, one README; `rewrite` for a full rewrite of its parts
   (see **The doc pass**), and `reader:` when a comment of the batch gives
-  a reader line (« reader: … »).
+  a reader line (« reader: … »);
+- document-feature: `/document-feature <session folder> <README> ...`,
+  the READMEs of the doc set, in the write order.
 
 Add, after the invocation, the user's comments the agent must apply (each
 comment's id, its quote and its text, as the batch printed them), and,
@@ -330,7 +331,7 @@ starts one pass. Who takes it depends on the stage:
 | « Write model » (`action: plan`, the line says write) | see **Model consolidation** | — | — |
 | « Approve model » (`action: approve-model`) | — | see **Model consolidation**, step 7 | — |
 | « Write docs » (`action: write-docs`) | — | — | see **The doc pass** |
-| « Write READMEs » (`action: write-readmes`) | — | — | the doc pass goes on, with the comments on the move plans, on a README's text and the rewrite requests held for it (see **The doc pass**, step 4) |
+| « Write READMEs » (`action: write-readmes`) | — | — | the doc pass goes on, with the comments on the move plans, on a README's text and the rewrite requests held for it (see **The doc pass**, steps 4 and 5) |
 | « write repo lexicon » (`action: write-lexicon`) | — | held for the doc pass | documenter, held for the doc pass when it has not run |
 | a rewrite request (`action: rewrite-readme <path>`, a comment asking for a README to be rewritten, or `/write-readme <folder> rewrite` in the terminal) | — | held for the doc pass | a write-readme agent with `rewrite`, then the documenter; held for the doc pass when it has not run, for « Write READMEs » while the phase is `awaiting-moves` |
 | « Create PR » (`action: create-pr`) | — | — | see **Closing** |
@@ -576,9 +577,9 @@ rules 3 and 4 found by reading, rule 5 always applied:
 6. the `README.md` of each folder the branch creates and of each folder that
    holds a structural change (rule 2's folder), present or missing. A
    missing README is listed under its path, and the doc pass writes it: the
-   document-feature agent creates it when the folder model has a concept
-   to put there, and the write-readme agent writes the **draft** of its
-   parts from the code.
+   write-readme agent writes the **draft** of its parts from the code, and
+   the document-feature agent adds a folder model after them when it has a
+   concept to put there.
 
 Before the code exists, a path the branch touches is where the model will
 land, which the code map says. Docstrings and code comments are not docs and
@@ -755,43 +756,54 @@ after the previous one ends.
    other docs, each folder after its subfolders; then the root
    `README.md`; each `CLAUDE.md` and `AGENTS.md` last. Its report lists the
    READMEs of the doc set in that order.
-3. **One document-feature agent**, on every README of the doc set, in the
-   write order, with the comments that waited for the doc pass on a
-   README's folder model. It writes the **concept triage**, then, README
-   by README, a **local model edit** (each passage stays in the README) or,
-   for a **restructuring** (passages must leave it), the **move plan**. A
-   missing README it has a concept for, it creates holding only the folder
-   model. Give its run report in the terminal.
-
-   **The stop on the move plan.** When its report has a line `move plan
-   waiting`, it wrote no README, those no plan names included, and no
-   write-readme agent has run: nothing is to be put back. Start no other
-   agent. Set `view-concept status <slug> awaiting-moves`, say in one
-   terminal line which READMEs wait (every README of the doc set), and
-   wait, with or without `then_pr`: the user reads the move plans in the
-   Doc tab, comments on their rows, and sends « Write READMEs » (a batch
-   with `action: write-readmes`). Until it comes, hold the comments on the
-   plans' rows, the comments on a README's text and the rewrite requests:
-   every README waits. Then start a document-feature agent again, on the
-   same READMEs, with « Write READMEs », the comments on the plans' rows
-   and the held comments on a README's folder model: it writes every
-   README of the doc set, those the plans name from the plans and the
-   comments, and records the missing facts of each old README on the
-   README it became. Go on to step 4.
-4. **One write-readme agent per README**, one after the other, in the
+3. **One write-readme agent per README**, one after the other, in the
    write order, so the README of a folder finds those of its subfolders
    written. Each writes the README's parts: a **draft** for a missing
-   README or one document-feature created (no first sentence nor file
-   map), an **edit** otherwise,
-   and a **full rewrite** of its parts with the `rewrite` argument, which
-   you give when a waiting rewrite request names the README or the
-   document-feature report marks it `role change`. Give each the comments
-   that waited on that README's parts. Give each run report in the
-   terminal.
-5. **The documenter finishes.** Start it with the trigger
+   README, an **edit** otherwise (which retitles a README whose map and
+   usage are not under `## Files` and `## Usage` yet), and a **full
+   rewrite** of its parts with the `rewrite` argument, which you give when
+   a waiting rewrite request names the README. A README whose folder the
+   branch removes gets no write-readme agent: there is no code left to
+   describe, and the move plan says where its passages go. Give each the
+   comments that waited on that README's parts. Give each run report in
+   the terminal.
+4. **One document-feature agent**, on every README of the doc set, in the
+   write order, with the comments that waited for the doc pass on a
+   README's folder model. It reads the boundary with write-readme's parts
+   by the headings step 3 set, and creates no README. It writes the
+   **concept triage**, then, README by README, a **local model edit**
+   (each passage stays in the README) or, for a **restructuring**
+   (passages must leave it), the **move plan** of its folder model. Give
+   its run report in the terminal.
+
+   **The stop on the move plan.** When its report has a line `move plan
+   waiting`, it wrote no folder model, those of the READMEs no plan names
+   included. The stop holds only what document-feature writes: the
+   write-readme agents of step 3 wrote their parts from the code, which
+   the plan does not change, and no README is to be put back. Set
+   `view-concept status <slug> awaiting-moves`, say in one terminal line
+   which READMEs wait (every README of the doc set), and wait, with or
+   without `then_pr`: the user reads the move plans in the Doc tab,
+   comments on their rows, and sends « Write READMEs » (a batch with
+   `action: write-readmes`). Until it comes, hold the comments on the
+   plans' rows, the comments on a README's text and the rewrite requests.
+   Then start a document-feature agent again, on the same READMEs, with
+   « Write READMEs », the comments on the plans' rows and the held
+   comments on a README's folder model: it writes the folder model of
+   every README of the doc set, those the plans name from the plans and
+   the comments, and records the missing facts of each old folder model
+   on the README it became. Go on to step 5.
+5. **A second write-readme agent**, with `rewrite`, on each README the
+   document-feature report marks `role change` (its edit of step 3 no
+   longer fits the folder's new reader) and on each README a rewrite
+   request held during the stop names, with the comments held on its
+   parts. It rewrites the README's parts in full and copies the folder
+   model after them. Give each run report in the terminal.
+6. **The documenter finishes.** Start it with the trigger
    `"« finish docs »"`, the reports of the skill agents in words
-   (`"document-feature report: <the report>"`, then `"write-readme
-   report: <the report>"` per README, in the write order), and the comments
+   (`"write-readme report: <the report>"` per README, in the write order,
+   then `"document-feature report: <the report>"`, then the reports of
+   step 5), and the comments
    the doc pass handled: those on the text of a doc that is not a README,
    which it applies, and those the skill agents applied, which it
    resolves. It writes the docs that are not READMEs (only the sentences
@@ -801,14 +813,14 @@ after the previous one ends.
    README's failure indicator and the missing facts write-readme reported,
    makes the doc pass's one commit, and classes the minor docs. Its report
    says « doc pass ».
-6. Start the reviewer with the documenter's report (in words, « doc pass »
+7. Start the reviewer with the documenter's report (in words, « doc pass »
    in it): it judges the items the doc pass changed, as for any
    implementer run, then reads every doc of the doc set against the model
    and flags each **stale passage**, a passage the model contradicts, with
    `view-concept stale`. The Doc tab draws a wavy underline on it, with
    the note on hover; the user comments on it, and the passage is
    rewritten or the flag dropped, as **The docs after the doc pass** says.
-7. With « Write docs », go on as **Implementation** says (an item judged
+8. With « Write docs », go on as **Implementation** says (an item judged
    `diverges` or `move` goes back to the implementer), then set
    `awaiting-pr`: the user reads the docs in the Doc tab and comments on
    them, and « Create PR » shows at the bottom of the code tab. With
@@ -832,11 +844,11 @@ model, **document-feature's**.
 | a rewrite request | a write-readme agent on that README with `rewrite`; then the documenter, with its report |
 | a comment on a row of the concept triage (`(triage <id>)`) | a document-feature agent on the READMEs of the doc set, with the comment; then the documenter, with its report |
 | a comment on the text of a doc that is not a README, on the doc set list, on a lexicon or on a missing fact; « write repo lexicon » | the documenter |
-| the documenter's report lists work `to skill agents:` (a fact to take back, a README clause a lexicon entry copies, a README added to the doc set) | the skill agent each line names, on its README; then the documenter, with its report; a README added to the doc set gets the whole doc pass, step 3 to 5, on it alone |
-| the implementer's report lists `docs made false:` | the doc pass again on those docs: on each README, a document-feature agent then a write-readme agent; then the documenter, with their reports and the implementer's |
+| the documenter's report lists work `to skill agents:` (a fact to take back, a README clause a lexicon entry copies, a README added to the doc set) | the skill agent each line names, on its README; then the documenter, with its report; a README added to the doc set gets the whole doc pass, steps 3 to 6, on it alone |
+| the implementer's report lists `docs made false:` | the doc pass again on those docs: on each README, a write-readme agent then a document-feature agent; then the documenter, with their reports and the implementer's |
 
 While the phase is `awaiting-moves`, a comment on a README's text and a
-rewrite request wait for « Write READMEs » (step 3).
+rewrite request wait for « Write READMEs » (step 4).
 
 ## Closing
 

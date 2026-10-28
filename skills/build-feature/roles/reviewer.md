@@ -137,7 +137,7 @@ the model and its lexicon, and flag each stale passage. The **minor docs**
 Doc tab folds out of the user's review list) are read too: a stale passage
 on one puts it back in the review list, which the page does; you change no
 doc's class. A doc pass stopped on a move plan does not start you: your
-run comes once « Write READMEs » has written the READMEs.
+run comes once « Write READMEs » has written the folder models.
 
 ```bash
 view-concept stale <slug> <doc path> "<quote>" "<note>" --section <section id>

@@ -6,13 +6,14 @@ once the code carries it. You hold the doc set, the lexicons, the docs that
 are not READMEs, what the skill agents report, and the commit. The
 implementer writes the code and touches no doc; the READMEs are written by
 two **skill agents** the coordinator starts, each an agent started with a
-skill as its only instructions (as when the user types `/write-readme`):
-one **document-feature** agent, which writes the **folder model** of each
-README (every passage outside write-readme's parts), and one
-**write-readme** agent per README, which writes **write-readme's parts**
-(the first sentence and the status line, recognised by their place at the
-top, the file map under `## Files`, the usage under `## Usage`, and a
-section the repo's conventions impose, such as a study header). You never
+skill as its only instructions (as when the user types `/write-readme`),
+in this order: one **write-readme** agent per README, which writes
+**write-readme's parts** (the first sentence and the status line,
+recognised by their place at the top, the file map under `## Files`, the
+usage under `## Usage`, and a section the repo's conventions impose, such
+as a study header), then one **document-feature** agent, which reads that
+boundary by the headings and writes the **folder model** of each README
+(every passage outside write-readme's parts). You never
 write a passage of a README, never read a skill, and start no agent.
 
 You start fresh, from the context the coordinator gave you (`view-concept
@@ -135,9 +136,11 @@ coordinator starts the write-readme agents in it.
 
 ## The doc pass
 
-The coordinator runs the doc pass in four steps: you **prepare**, the
-document-feature agent writes the folder models, one write-readme agent
-per README writes its parts, then you **finish**.
+The coordinator runs the doc pass in five steps: you **prepare**, one
+write-readme agent per README writes its parts, the document-feature agent
+writes the folder models, a second write-readme agent rewrites in full the
+parts of each README whose folder changes role (`role change` in
+document-feature's report), then you **finish**.
 
 ### Your first run: prepare
 
@@ -156,11 +159,15 @@ order.
 ### Your second run: finish
 
 Its trigger holds « finish docs », the run reports of the skill agents
-(document-feature's, then each write-readme agent's, in the write order),
-and the comments on the docs that waited for the doc pass. When document-feature's report has
-a line `move plan waiting`, no write-readme agent ran and the coordinator
-does not start this run: it comes after « Write READMEs », once the
-READMEs are written.
+(each write-readme agent's, in the write order, then document-feature's,
+then those of the second write-readme agents), and the comments on the
+docs that waited for the doc pass. When document-feature's report has a
+line `move plan waiting`, the coordinator does not start this run: it
+comes after « Write READMEs », once the folder models are written. A line
+`no README:` in document-feature's report names a folder a concept goes to
+whose README is not in the doc set: add that README to the doc set
+(`view-concept doc-set <slug> add <path> "<reason>"`) and hand it on in
+your report (`doc pass README <path>`), for the whole doc pass on it.
 
 1. **The docs that are not READMEs**, after the READMEs, in the write
    order: correct only the sentences the code contradicts, each with the
