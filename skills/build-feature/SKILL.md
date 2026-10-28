@@ -798,7 +798,10 @@ after the previous one ends.
    longer fits the folder's new reader) and on each README a rewrite
    request held during the stop names, with the comments held on its
    parts. It rewrites the README's parts in full and copies the folder
-   model after them. Give each run report in the terminal.
+   model after them. On each other README that has comments held during
+   the stop on its parts (write-readme's passages: the top, `## Files`,
+   `## Usage`), start a write-readme agent without `rewrite`, an edit,
+   with those comments. Give each run report in the terminal.
 6. **The documenter finishes.** Start it with the trigger
    `"« finish docs »"`, the reports of the skill agents in words
    (`"write-readme report: <the report>"` per README, in the write order,
@@ -812,7 +815,11 @@ after the previous one ends.
    without the sentence, an agent would act otherwise), records each
    README's failure indicator and the missing facts write-readme reported,
    makes the doc pass's one commit, and classes the minor docs. Its report
-   says « doc pass ».
+   says « doc pass ». When its `to skill agents:` block has `doc pass
+   README <path>` lines (a README a `no README:` line of document-feature
+   added to the doc set), run steps 3 to 6 on those READMEs alone before
+   step 7, so that neither the reviewer nor a PR opened with `then_pr`
+   comes before their doc pass.
 7. Start the reviewer with the documenter's report (in words, « doc pass »
    in it): it judges the items the doc pass changed, as for any
    implementer run, then reads every doc of the doc set against the model
