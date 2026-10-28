@@ -16,7 +16,7 @@ description: >-
   README cleaned up, shortened or rewritten, notably one written by an LLM —
   "write the README of X", "rewrite this README", "clean up X/README.md",
   "this README is bloated", invokes /write-readme.
-argument-hint: "[the folder, or its README.md] [rewrite] [reader: <reader line>]"
+argument-hint: "[the folder, or its README.md] [rewrite] [reader: <reader line>] [a review's session folder]"
 ---
 
 # /write-readme
@@ -31,7 +31,11 @@ lexicon when the repo has none) and never commits.
 
 A run has one of three outcomes:
 
-- **draft**: the folder has no `README.md`; write its parts from the code;
+- **draft**: the folder has no `README.md`, or its README holds only the
+  folder model (a title and passages under headings that are none of its
+  parts, as the document-feature skill creates it); write its parts from
+  the code, and in the second case copy the folder model after them, word
+  for word;
 - **edit** (always, when it has one and no full rewrite was asked for): keep
   the structure, headings and wording of its parts, change only the
   passages of its parts that fail a check, count the **failure indicator**
@@ -47,10 +51,17 @@ The run never chooses a full rewrite on its own, however much of its parts
 fails: the failure indicator tells the user, who decides.
 
 A run is **in a review** when its request names a review's session folder
-(`~/.view-concept/sessions/<slug>/`): the agent of a feature or of a
-docs review ran it, and the review's page shows what the run leaves to the
-user. Any other run, a `rewrite` argument typed in a terminal included, is
-outside a review.
+(`~/.view-concept/sessions/<slug>/`): a feature's doc pass or a docs review
+started it as an agent of its own, on one README, and the review's page
+shows what the run leaves to the user. Any other run, a `rewrite` argument
+typed in a terminal included, is outside a review.
+
+In a review, the request may also carry the user's comments on the
+README's parts, each with its id, its quote and its text: apply each in its
+parts, under this skill's rules, and leave it open (the review resolves
+it). A comment on a passage of the folder model is not this skill's: name
+it in the run report. The request may carry a missing fact the user keeps
+(see **The missing facts**): add it to its parts.
 
 Never ask the user anything, except the one question of **The repo
 lexicon** below: the reader line says who reads, the goal is always that the
@@ -196,8 +207,9 @@ Before writing, read the rules the repo sets for READMEs, in the root
 `CLAUDE.md` (or `AGENTS.md`) and the READMEs from the root down to the
 folder (a study header, a required section). They win over this skill.
 
-An edit keeps the old README's language; a draft and a full rewrite take
-the language of the repo's other docs.
+An edit keeps the old README's language, and so does a draft of a README
+that holds only the folder model; a draft of a missing README and a full
+rewrite take the language of the repo's other docs.
 
 ## Checking an existing README
 
@@ -255,8 +267,9 @@ The proposal drops nothing: the new README stays as written, and the user
 decides which facts come back. A fact the user keeps is added to the
 README's parts under this skill's rules, so the inclusion test can make it
 a link. Outside a review, the user reads the list in the run report and
-names the facts to keep in a later message; in a review, the review's agent
-records them in the session and the user decides in the page. An edit has
+names the facts to keep in a later message; in a review, the run report
+lists them the same way, the review records them in the session, and the
+user decides in the page. An edit has
 no missing facts: the passages it changes are named in the report's
 `changed` line.
 
@@ -284,8 +297,9 @@ A draft or a full rewrite writes its parts in this order, unless the repo's
 conventions set another shape: the untitled top (a study header the
 conventions impose, the first sentence, the status line), then `## Files`,
 then `## Usage`. A full rewrite then copies the folder model's passages
-word for word, headings included, in their old order. A draft has no
-folder model: document-feature adds one when a feature gives it rules.
+word for word, headings included, in their old order, and so does a draft
+of a README that holds only the folder model. A draft of a missing README
+has no folder model.
 
 - **Depth.** A README covers its folder at the level of its direct
   children, and says nothing about what lies inside a subfolder: that
@@ -356,8 +370,8 @@ clause, or a cut. A finding you cannot fix is reported as « left ».
 
 ## The run report
 
-The run's last message (in a review, the agent that ran it carries it in
-its own report):
+The run's last message (in a review, the review reads it and records what
+it gives: the failure indicator and the missing facts):
 
 ```
 write-readme · benchmark/README.md · edit: 2 of 9 passages fail; structure fails
@@ -371,7 +385,7 @@ audit: 2 fixed · 0 left
 ```
 
 The first line is `write-readme · <path> · ` then the outcome: `draft` for
-a missing README, `edit: <n> of <total> passages fail` (the failure
+a missing README or one holding only the folder model, `edit: <n> of <total> passages fail` (the failure
 indicator, over the passages of its parts, followed by `; structure fails`
 when the structure of its parts fails; `edit: 0 of <total> passages fail`
 when all pass), or `full rewrite` when it was asked for. `retitled`, in the
@@ -380,9 +394,9 @@ heading set; `changed`, in an edit only, names each old passage edited,
 shrunk or dropped with the check it failed; `code findings` each with its
 file.
 
-A full rewrite has no `changed` line and adds a `missing facts:` line.
-Outside a review, it lists each missing fact with its old passage, its
-proposal and its reason:
+A full rewrite has no `changed` line and adds a `missing facts:` line,
+which lists each missing fact with its old passage, its proposal and its
+reason, in a review too:
 
 ```
 write-readme · README.md · full rewrite
@@ -392,8 +406,7 @@ missing facts: 3
   3. `view-concept open --no-browser` starts the server without opening a browser (passage 5) · keep: as a sentence of the usage
 ```
 
-In a review, the line gives only their number (`missing facts: 3`): the
-review's agent records each one in the session. A run that read a model
+A run that read a model
 adds `model:` (the facts of the model its parts use that the code does not
 show, and those the code contradicted). Add a line when the run wrote the
 repo lexicon.
