@@ -295,10 +295,11 @@ A **restructuring** is a change after which passages must leave the
 README. Cases: a folder split in two; two folders merged; a concept that
 changes folder, when another folder starts writing it; a concept split
 between two folders; a folder removed. In benchmark-package, the WER rules
-go to `core/transcript/`: `experiments/benchmark/README.md` is
-restructured. A README whose folder the branch removes gets no write-readme
-run: there is no code left to describe, and its move plan says where the
-passages of its folder model go.
+go to `core/transcript/`: the README of `experiments/benchmark/`, which
+the code moved to `benchmark/README.md`, is restructured. A README whose
+folder the branch removes gets no write-readme run: there is no code left
+to describe, and its move plan says where the passages of its folder
+model go.
 
 A restructuring takes two runs, with a stop between them:
 
@@ -319,8 +320,10 @@ A restructuring takes two runs, with a stop between them:
    ```
 
    `<passage>` describes the passage in one line; `--to` is required unless
-   `nowhere`, and names a README of the doc set. Part of the plan for
-   `experiments/benchmark/README.md`:
+   `nowhere`, and names a README of the doc set. A README the code moved
+   with its folder takes its plan at its new path, the one the doc set
+   lists. Part of the plan for `benchmark/README.md`, which the code moved
+   from `experiments/benchmark/`:
 
    | passage of the folder model | goes to | becomes |
    |---|---|---|
@@ -424,7 +427,7 @@ first run of benchmark-package, which stops on the plan:
 
 ```
 document-feature · triage: 5 enter · 4 stay out
-experiments/benchmark/README.md · restructuring: move plan waiting (12 passages) · holds core/transcript/README.md, benchmark/README.md, experiments/stt_benchmark_ft2/README.md, experiments/finetuning/gign/README.md
+benchmark/README.md · moved from experiments/benchmark/README.md · restructuring: move plan waiting (12 passages) · holds core/transcript/README.md, experiments/stt_benchmark_ft2/README.md, experiments/finetuning/gign/README.md
 candidates: subset (benchmark/, experiments/)
 code: none
 ```
