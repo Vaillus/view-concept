@@ -155,9 +155,9 @@ order.
 
 ### Your second run: finish
 
-Its trigger holds the run reports of the skill agents (document-feature's,
-then each write-readme agent's, in the write order), and the comments on
-the docs that waited for the doc pass. When document-feature's report has
+Its trigger holds « finish docs », the run reports of the skill agents
+(document-feature's, then each write-readme agent's, in the write order),
+and the comments on the docs that waited for the doc pass. When document-feature's report has
 a line `move plan waiting`, no write-readme agent ran and the coordinator
 does not start this run: it comes after « Write READMEs », once the
 READMEs are written.
