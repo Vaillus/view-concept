@@ -550,7 +550,10 @@ Then, for every batch, in the same turn:
    its flag (`view-concept stale <slug> --drop <id>`). A comment correcting
    a lexicon entry also rewrites the clause of each README that copies the
    entry (the README's definition of the term, in the entry's old words),
-   and adds that README to the doc set; a comment taking a **candidate** (a
+   and adds that README to the doc set: you rewrite a clause in the folder
+   model, and a clause in the README's parts (its first sentence or its
+   usage) goes to a write-readme agent on that README, as a comment on its
+   parts does (see **Running write-readme**); a comment taking a **candidate** (a
    repo term several folders use that no lexicon on their path defines)
    adds its entry; a comment asking for a folder lexicon creates it, with
    the entries it names. A doc that enters the doc set takes its place in
