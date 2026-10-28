@@ -360,12 +360,13 @@ say so). The proposal drops nothing: you take none back on your own, the
 user decides.
 
 Record them on the README the old file became (its new path, in the doc
-set), clearing its old list first; write-readme runs after you, and the
-missing facts of its parts are recorded after yours:
+set), with the part they come from, `model`. Clear first the README's
+facts of that part alone, those of an earlier run of yours: the facts of
+write-readme's parts, `readme`, stay, whichever skill ran last.
 
 ```
-view-concept facts <slug> clear <path>
-view-concept facts <slug> add <path> "<fact>" --propose keep|leave --reason "<one line>" [--passage N]
+view-concept facts <slug> clear <path> --part model
+view-concept facts <slug> add <path> "<fact>" --part model --propose keep|leave --reason "<one line>" [--passage N]
 ```
 
 `--passage N` is the number of the old passage that held it, counted from

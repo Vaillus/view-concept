@@ -444,12 +444,13 @@ the batch's turn, for that README alone:
 1. Start a write-readme agent on it with the `rewrite` argument, as
    **Running write-readme** says, and record its failure indicator.
 2. Record the **missing facts** its report lists in the session, replacing
-   the README's previous list. The proposal drops nothing: the user
-   decides.
+   the README's previous facts of write-readme's parts (`--part readme`;
+   the facts a feature's document-feature recorded on the folder model,
+   `model`, stay). The proposal drops nothing: the user decides.
 
    ```bash
-   view-concept facts <slug> clear <path>
-   view-concept facts <slug> add <path> "<fact>" --propose keep|leave --reason "<one line>" [--passage N]
+   view-concept facts <slug> clear <path> --part readme
+   view-concept facts <slug> add <path> "<fact>" --part readme --propose keep|leave --reason "<one line>" [--passage N]
    view-concept facts <slug>                    # lists them, with ids, proposals, reasons and states
    ```
 
@@ -467,7 +468,8 @@ batch) is applied in the turn of the batch that carries it:
 | a question | answer it in the terminal; the fact stays `pending` |
 
 A fact the user does not comment on is not added, whatever its proposal.
-A later full rewrite of the same README replaces its list.
+A later full rewrite of the same README replaces its facts of
+write-readme's parts.
 
 The rewrite is committed with the review's other changes, as **Create PR**
 says.

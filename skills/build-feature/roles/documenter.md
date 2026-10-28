@@ -194,12 +194,13 @@ READMEs are written.
    report: each fact the old parts said that the new README does not say,
    with its proposal and reason. document-feature recorded its own (those
    of a folder model it rewrote whole or of a restructuring) in its run:
-   its report gives their number on the README's line. Clear the README's
-   old list first, `view-concept facts <slug> clear <path>`, unless
-   document-feature's report gives missing facts on that README in this
-   pass, then one call per fact, `view-concept facts <slug> add <path>
-   "<fact>" --propose keep|leave --reason "<one line>"`, with `--passage N`
-   for the old passage it came from. The Doc tab lists them under the
+   its report gives their number on the README's line. Each fact keeps
+   the part it comes from, and each skill's facts replace only its own:
+   clear the README's facts of write-readme's parts first, `view-concept
+   facts <slug> clear <path> --part readme`, which leaves
+   document-feature's, then one call per fact, `view-concept facts <slug>
+   add <path> "<fact>" --part readme --propose keep|leave --reason "<one
+   line>"`, with `--passage N` for the old passage it came from. The Doc tab lists them under the
    README, for the user to comment on. You take none back on your own.
 4. **One commit** for the doc pass: every doc it wrote, the READMEs the
    skill agents wrote and the lexicons of your first run included, its
