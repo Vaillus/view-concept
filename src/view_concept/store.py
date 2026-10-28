@@ -237,8 +237,10 @@ quote the concept (a batch prints it `(triage <id>)`). No section id may start w
 `triage:` alone, the triage as one line per row (`triage_text`), and moves with every
 batch and with « mark read » on the table: a new or changed row shows highlighted.
 
-A restructuring is a change after which passages must leave a README. Before writing
-such a README, the doc pass writes its move plan and stops on it. moves.json keeps the
+A restructuring is a change after which passages must leave a README. In the doc pass,
+the write-readme agents write their parts of each README first; then, before writing the
+folder model of such a README, the document-feature agent writes its move plan and stops
+on it. moves.json keeps the
 plans by README (a README.md of the doc set): {path: [{id (p1…, unique in the session,
 going on past a cleared plan), passage (a one-line description of a passage of its
 folder model: write-readme's parts are never in a plan), to (the README it goes to, ""
@@ -250,10 +252,13 @@ row is anchored to `moves:<id>`, its quote the passage (a batch prints it `(move
 <readme> · passage <id>)`). No section id may start with `moves:`. A plan's highlight
 baseline is kept in seen.json under `moves:<path>`, one line per row (`move_texts`), and
 moves like the triage's. The stop on the plan is the phase "awaiting-moves" (set by the
-build-feature skill when the doc pass reports a move plan waiting): the page shows
-« Write READMEs » under the plans, which sends a batch whose action is "write-readmes",
-and the doc pass writes every README of the doc set, those no plan names included, the
-restructured ones from the plans and the comments on them.
+build-feature skill when the doc pass reports a move plan waiting): it holds only
+document-feature's writing, the folder models of every README of the doc set;
+write-readme's parts, already written from the code, stay, and no README is put back.
+The page shows « Write READMEs » under the plans, which sends a batch whose action is
+"write-readmes", and the document-feature agent writes the folder model of every README
+of the doc set, those no plan names included, the restructured ones from the plans and
+the comments on them.
 
 A stale passage is a passage of a doc of the doc set that the model contradicts: {id: s1…,
 doc (its path), quote (the passage's exact text in the file), section (the model section
@@ -314,8 +319,9 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 # by the build-feature skill once the code carries the model) « Write docs » and « Write docs
 # and create PR », and "awaiting-pr" (set by the build-feature skill once the docs are
 # written, by the review-docs skill whenever it waits once the doc set exists) « Create PR ».
-# "awaiting-moves" (set by the build-feature skill when the doc pass stops on a move plan)
-# shows « Write READMEs » under the move plans of the Doc tab.
+# "awaiting-moves" (set by the build-feature skill when the doc pass stops on a move plan,
+# holding the folder models document-feature writes) shows « Write READMEs » under the move
+# plans of the Doc tab.
 # "awaiting-answer" (set by `question`, outside scoping) waits on an agent question shown in
 # the scope block at the top of the Plan tab.
 PHASES = (
@@ -2314,7 +2320,7 @@ class Session:
         doc set named README.md, in the worktree or not yet) to be written again with
         write-readme, "write-lexicon" that they asked for the repo lexicon
         (REPO_LEXICON), refused once the file exists, and "write-readmes" that they read
-        the move plans and asked the doc pass to write the READMEs it held. `path`
+        the move plans and asked the doc pass to write the folder models it held. `path`
         goes with "rewrite-readme" only, which needs it."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
@@ -2872,9 +2878,9 @@ def format_batch(
     elif batch.get("action") == "write-docs":
         lines.append(
             "action: write-docs (the user asked for the doc pass: the documenter refreshes the "
-            "doc set and the lexicons, a document-feature agent writes the concept triage and "
-            "each README's folder model, a write-readme agent per README writes its parts, then "
-            "the documenter corrects the other docs and commits; the reviewer judges the doc "
+            "doc set and the lexicons, a write-readme agent per README writes its parts, a "
+            "document-feature agent writes the concept triage and each README's folder model, "
+            "then the documenter corrects the other docs and commits; the reviewer judges the doc "
             "items and flags stale passages; « Create PR » follows)"
         )
     if batch.get("action") == "rewrite-readme":
@@ -2889,8 +2895,9 @@ def format_batch(
         )
     if batch.get("action") == "write-readmes":
         lines.append(
-            "action: write-readmes (the user read the move plans: write every README of "
-            "the doc set, the restructured ones from the plans and the comments on them)"
+            "action: write-readmes (the user read the move plans: write the folder model of "
+            "every README of the doc set, the restructured ones from the plans and the "
+            "comments on them; write-readme's parts, already written, stay)"
         )
     if batch.get("action") == "create-pr":
         lines.append("action: create-pr (the user asked to open the PR from the page)")
