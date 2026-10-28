@@ -411,10 +411,9 @@ comments on the README's parts the batch carries (each comment's id, its
 quote and its text) or a missing fact to take back, and nothing else from
 this conversation. `rewrite` asks for a full rewrite of its parts (see
 **The rewrite request**); `reader:` passes a reader line a comment of the
-batch gives (« reader: … »). A harness that loads a skill only from its
-file gives the agent write-readme's `SKILL.md`, in
-`~/Documents/code/view-concept/skills/write-readme/`, as its
-instructions, with the same invocation. One agent per README, one after
+batch gives (« reader: … »). There is no fallback: a harness that cannot
+start an agent on a skill by its name cannot write a README's parts, and
+you say so to the user instead. One agent per README, one after
 the other, in the write order. For each:
 
 1. When the repo lexicon is missing, write it first (see **The repo

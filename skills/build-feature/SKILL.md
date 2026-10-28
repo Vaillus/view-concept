@@ -303,10 +303,9 @@ would type them, and nothing else from this conversation:
 
 Add, after the invocation, the user's comments the agent must apply (each
 comment's id, its quote and its text, as the batch printed them), and,
-for a fact to take back, the fact and its README. A harness that loads a
-skill only from its file gives the agent the skill's `SKILL.md`, in
-`~/Documents/code/view-concept/skills/<skill>/`, as its instructions,
-with the same invocation. A skill agent writes the README and the session
+for a fact to take back, the fact and its README. There is no fallback:
+a harness that cannot start an agent on a skill by its name cannot run the
+doc pass, and you say so to the user instead. A skill agent writes the README and the session
 files its skill names, and never commits: the documenter commits its work.
 Give its run report, the last message it prints, in the terminal as it
 printed it, and keep it for the documenter's trigger.
