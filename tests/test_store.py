@@ -1292,7 +1292,7 @@ def test_write_docs_carries_then_pr_only_when_true(session):
     assert (
         format_batch("kv-cache", b, [])
         .splitlines()[1]
-        .startswith("action: write-docs (the user asked for the doc pass: refresh the doc set")
+        .startswith("action: write-docs (the user asked for the doc pass: the documenter refreshes")
     )
     b = session.add_batch([], action="write-docs", then_pr=True)
     assert b["then_pr"] is True

@@ -2849,9 +2849,11 @@ def format_batch(
         )
     elif batch.get("action") == "write-docs":
         lines.append(
-            "action: write-docs (the user asked for the doc pass: refresh the doc set, rewrite "
-            "the docs from the model, then the reviewer judges the doc items and flags stale "
-            "passages; « Create PR » follows)"
+            "action: write-docs (the user asked for the doc pass: the documenter refreshes the "
+            "doc set and the lexicons, a document-feature agent writes the concept triage and "
+            "each README's folder model, a write-readme agent per README writes its parts, then "
+            "the documenter corrects the other docs and commits; the reviewer judges the doc "
+            "items and flags stale passages; « Create PR » follows)"
         )
     if batch.get("action") == "rewrite-readme":
         lines.append(
