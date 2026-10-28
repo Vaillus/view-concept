@@ -18,6 +18,7 @@ from pathlib import Path
 from .agents import AGENTS, detect
 from .context import ROLES, build
 from .store import (
+    FACT_PARTS,
     FACT_PROPOSALS,
     HEARTBEAT_EVERY,
     HOME,
@@ -452,13 +453,17 @@ def cmd_facts(a: argparse.Namespace) -> None:
     args = a.args
     if a.op != "add" and (a.propose or a.reason or a.passage is not None):
         raise SessionError("--propose, --reason and --passage go with add only")
+    if a.op not in ("add", "clear") and a.part:
+        raise SessionError("--part goes with add and clear only")
     if a.op == "add":
-        if len(args) != 2 or not a.propose or not a.reason:
+        if len(args) != 2 or not a.propose or not a.reason or not a.part:
             raise SessionError(
-                "facts add takes a README, the fact, its proposal and reason: add <path> "
-                '"<fact>" --propose keep|leave --reason "<one line>" [--passage N]'
+                "facts add takes a README, the fact, its part, proposal and reason: add <path> "
+                '"<fact>" --part readme|model --propose keep|leave --reason "<one line>" '
+                "[--passage N]"
             )
-        print(s.add_missing_fact(args[0], args[1], a.propose, a.reason, a.passage)["id"])
+        f = s.add_missing_fact(args[0], args[1], a.propose, a.reason, a.passage, a.part)
+        print(f["id"])
         return
     if a.op == "mark":
         if len(args) != 2:
@@ -467,9 +472,13 @@ def cmd_facts(a: argparse.Namespace) -> None:
         print(f"{f['id']} {f['state']}")
         return
     if a.op == "clear":
-        if len(args) != 1:
-            raise SessionError("facts clear takes one README path")
-        print(f"cleared {s.clear_missing_facts(args[0])} missing facts of {args[0]}")
+        if len(args) != 1 or not a.part:
+            raise SessionError(
+                "facts clear takes one README path and the part whose facts it drops: "
+                "clear <path> --part readme|model"
+            )
+        n = s.clear_missing_facts(args[0], a.part)
+        print(f"cleared {n} missing facts of {args[0]} from part {a.part}")
         return
     if args:
         raise SessionError("give an operation: add, mark or clear")
@@ -900,8 +909,14 @@ def main() -> None:
     q.add_argument(
         "args",
         nargs="*",
-        help="add <path> <fact> · mark <id> kept|left|pending · clear <path> (a new full "
-        "rewrite replaces the README's list)",
+        help="add <path> <fact> · mark <id> kept|left|pending · clear <path> (a new rewrite "
+        "by one skill replaces the README's facts of that skill's part)",
+    )
+    q.add_argument(
+        "--part",
+        choices=FACT_PARTS,
+        help="with add and clear: the part of the old README the fact came from, readme "
+        "(write-readme's parts) or model (the folder model, document-feature's)",
     )
     q.add_argument("--propose", choices=FACT_PROPOSALS, help="with add: keep or leave the fact")
     q.add_argument("--reason", help="with add: one line, why that proposal")

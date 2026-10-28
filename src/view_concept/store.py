@@ -210,8 +210,11 @@ recorded on the README the old file became (its new path when the code moved it)
 passage number counted in the old README. missing-facts.json keeps them by README:
 {path: [{id (f1…, unique in the session), fact, passage (the number of the old README's
 passage it came from, or null), proposal ("keep" or "leave": what the agent proposes),
-reason (one line), state ("pending", "kept" or "left")}]} (written by `facts`; a new
-rewrite of a README replaces its list, and `remove_doc` drops it). A fact
+reason (one line), state ("pending", "kept" or "left"), part ("readme": it came from
+write-readme's parts; "model": from the folder model, document-feature's; a fact recorded
+without one is "readme")}]} (written by `facts`; a new rewrite by one skill replaces the
+README's facts of that skill's part alone, the other's kept, and `remove_doc` drops them
+all). A fact
 the user does not comment on stays out of the README, whatever the proposal. The Doc tab
 lists them under their README; a comment, a draft or a side thread on one is anchored to
 `doc:<path>` with the fact's text as its quote, and also carries the fact's id, `fact`
@@ -385,6 +388,10 @@ FACTS_KEY = "facts:"
 FACT_PROPOSALS = ("keep", "leave")
 FACT_STATES = ("pending", "kept", "left")
 FACT_ID_RE = re.compile(r"^f[0-9]{1,6}$")
+# The part of the old README a missing fact came from, which says which skill replaces it:
+# "readme" (write-readme's parts) or "model" (the folder model, document-feature's). Each
+# skill clears only the facts of its own part before recording new ones.
+FACT_PARTS = ("readme", "model")
 # The concept triage: a comment, a draft or a side thread on a row is anchored to
 # `triage:<id>`, and its highlight baseline in seen.json is kept under `triage:` alone. No
 # section id may start with it (write_plan refuses it).
@@ -1597,13 +1604,20 @@ class Session:
         return {str(p): list(facts) for p, facts in data.items() if facts}
 
     def add_missing_fact(
-        self, path: str, fact: str, proposal: str, reason: str, passage: int | None = None
+        self,
+        path: str,
+        fact: str,
+        proposal: str,
+        reason: str,
+        passage: int | None = None,
+        part: str = "readme",
     ) -> dict[str, Any]:
         """Record a missing fact of README `path`, a README.md of the doc set whose old text a full
         rewrite, a restructuring or a rewritten folder model lost: `fact` in one
         sentence, `proposal` "keep" or "leave" with its one-line `reason`, `passage` the
-        number of the old README's passage it came from. It waits on the user's
-        decision: state "pending"."""
+        number of the old README's passage it came from, `part` the part of the old README
+        it came from ("readme" or "model"). It waits on the user's decision: state
+        "pending"."""
         path = doc_path(path)
         if PurePosixPath(path).name != "README.md":
             raise SessionError(f"{path} is not a README.md: only a README has missing facts")
@@ -1615,6 +1629,8 @@ class Session:
             raise SessionError("a missing fact needs its text and the reason of its proposal")
         if passage is not None and passage < 1:
             raise SessionError("a passage number counts from 1")
+        if part not in FACT_PARTS:
+            raise SessionError(f"a missing fact's part is one of {', '.join(FACT_PARTS)}")
         data = self.read_missing_facts()
         # The ids go on past a cleared list: a sent comment, an open draft or a side
         # thread may still name an old one.
@@ -1631,6 +1647,7 @@ class Session:
             "proposal": proposal,
             "reason": " ".join(reason.split()),
             "state": "pending",
+            "part": part,
         }
         data.setdefault(path, []).append(entry)
         _write_json(self.missing_facts_path, data)
@@ -1665,14 +1682,20 @@ class Session:
         README's missing facts, the concept triage and each README's move plan."""
         return {**self.fact_texts(), **self.triage_text(), **self.move_texts()}
 
-    def clear_missing_facts(self, path: str) -> int:
-        """Drop the missing facts of README `path` (a new rewrite replaces them).
-        Returns how many were dropped."""
+    def clear_missing_facts(self, path: str, part: str) -> int:
+        """Drop the missing facts of README `path` that came from `part` ("readme" or
+        "model"): a new rewrite by the skill holding that part replaces them, and the
+        other part's facts stay. Returns how many were dropped."""
+        if part not in FACT_PARTS:
+            raise SessionError(f"a missing fact's part is one of {', '.join(FACT_PARTS)}")
         path = doc_path(path)
         data = self.read_missing_facts()
-        dropped = len(data.pop(path, []))
+        facts = data.pop(path, [])
+        kept = [f for f in facts if fact_part(f) != part]
+        if kept:
+            data[path] = kept
         _write_json(self.missing_facts_path, data)
-        return dropped
+        return len(facts) - len(kept)
 
     # ---- concept triage ----
     def read_triage(self) -> list[dict[str, Any]]:
@@ -2958,12 +2981,20 @@ def format_doc(d: dict[str, Any]) -> str:
     return line
 
 
+def fact_part(f: dict[str, Any]) -> str:
+    """The part of the old README a missing fact came from: "readme" or "model"; a fact
+    recorded without one is "readme"."""
+    return "model" if f.get("part") == "model" else "readme"
+
+
 def format_fact(f: dict[str, Any]) -> str:
-    """One missing fact on one line: its id, state, text, old passage and the proposal."""
+    """One missing fact on one line: its id, state, text, old passage, the part it came
+    from and the proposal."""
     passage = f" (passage {f['passage']})" if f.get("passage") else ""
+    part = "the folder model" if fact_part(f) == "model" else "write-readme's parts"
     return (
         f"{f.get('id', '')} [{f.get('state', 'pending')}] « {f.get('fact', '')} »{passage}"
-        f" · propose {f.get('proposal', '')}: {f.get('reason', '')}"
+        f" · from {part} · propose {f.get('proposal', '')}: {f.get('reason', '')}"
     )
 
 

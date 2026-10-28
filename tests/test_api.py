@@ -606,7 +606,7 @@ def test_state_carries_the_missing_facts_highlighted_until_read(client, doc_revi
     assert docs["set"][2]["facts"] == 1 and docs["set"][0]["facts"] == 0
     assert facts["list"] == [{"id": "f1", "fact": "Run serve.", "passage": 4,
                               "proposal": "leave", "reason": "the code says open",
-                              "state": "pending", "updated": False}]  # fmt: skip
+                              "state": "pending", "part": "readme", "updated": False}]  # fmt: skip
     doc_review.add_missing_fact("README.md", "Offline, TeX.", "keep", "a link")
     doc_review.mark_missing_fact("f1", "left")
     facts = client.get("/api/s/doc-tab").json()["docs"]["facts"]["README.md"]

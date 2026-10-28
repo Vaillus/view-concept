@@ -237,8 +237,11 @@ def test_the_documenter_gets_the_missing_facts_and_their_state(review, tmp_path)
     review.mark_missing_fact("f2", "kept")
     text = build(review, "documenter")
     assert "## Missing facts" in text
-    assert "README.md:\n- f1 [pending] « Run serve. » (passage 4) · propose leave: the code" in text
-    assert "- f2 [kept] « Offline, TeX. » · propose keep: a link" in text
+    assert (
+        "README.md:\n- f1 [pending] « Run serve. » (passage 4) · from write-readme's parts"
+        " · propose leave: the code" in text
+    )
+    assert "- f2 [kept] « Offline, TeX. » · from write-readme's parts · propose keep: a" in text
     for role in ("writer", "implementer", "reviewer"):
         assert "## Missing facts" not in build(review, role)
     # A side thread on the README gets them with its text.

@@ -1096,7 +1096,7 @@ def test_a_readme_rewritten_in_full_keeps_its_missing_facts(docs_review):
                             passage=4)  # fmt: skip
     f2 = s.add_missing_fact("./README.md", "Offline, maths shows as TeX.", "keep", "a link")
     assert f1 == {"id": "f1", "fact": "Run serve --port 8000.", "passage": 4, "proposal": "leave",
-                  "reason": "the code says open", "state": "pending"}  # fmt: skip
+                  "reason": "the code says open", "state": "pending", "part": "readme"}  # fmt: skip
     assert f2["id"] == "f2" and f2["passage"] is None
     assert s.mark_missing_fact("f2", "kept")["state"] == "kept"
     assert [f["state"] for f in s.read_missing_facts()["README.md"]] == ["pending", "kept"]
@@ -1110,9 +1110,32 @@ def test_a_readme_rewritten_in_full_keeps_its_missing_facts(docs_review):
         s.mark_missing_fact("f1", "done")
     with pytest.raises(SessionError, match="no missing fact"):
         s.mark_missing_fact("f9", "left")
+    with pytest.raises(SessionError, match="part is one of"):
+        s.add_missing_fact("README.md", "x", "keep", "y", part="usage")
     # A new full rewrite replaces the list.
-    assert s.clear_missing_facts("README.md") == 2
+    assert s.clear_missing_facts("README.md", "readme") == 2
     assert s.read_missing_facts() == {}
+
+
+def test_each_skill_clears_only_the_missing_facts_of_its_own_part(docs_review):
+    s = docs_review
+    s.add_doc("README.md", "the install")
+    s.add_missing_fact("README.md", "Results before September differ.", "keep", "a", part="model")
+    s.add_missing_fact("README.md", "The map cited legacy_eval.py.", "leave", "gone")
+    # A fact recorded without a part, as before parts existed, is write-readme's.
+    data = s.read_missing_facts()
+    del data["README.md"][1]["part"]
+    s.missing_facts_path.write_text(json.dumps(data))
+    # document-feature rewrites the folder model again: write-readme's fact stays.
+    assert s.clear_missing_facts("README.md", "model") == 1
+    s.add_missing_fact("README.md", "Old results counted all clips.", "keep", "b", part="model")
+    assert [f["id"] for f in s.read_missing_facts()["README.md"]] == ["f2", "f3"]
+    # A rewrite request: write-readme's facts go, document-feature's stay.
+    assert s.clear_missing_facts("README.md", "readme") == 1
+    assert [f["id"] for f in s.read_missing_facts()["README.md"]] == ["f3"]
+    assert s.clear_missing_facts("README.md", "readme") == 0
+    with pytest.raises(SessionError, match="part is one of"):
+        s.clear_missing_facts("README.md", "all")
 
 
 def test_a_readme_out_of_the_doc_set_loses_its_missing_facts(docs_review):
@@ -1142,7 +1165,7 @@ def test_a_comment_on_a_missing_fact_names_the_fact(docs_review):
     # A comment with no fact keeps no field for it.
     assert "fact" not in s.add_batch([{"section": "doc:README.md", "text": "x"}])["comments"][0]
     # Ids go on past a cleared list: the sent comment still names f1.
-    s.clear_missing_facts("README.md")
+    s.clear_missing_facts("README.md", "readme")
     assert s.add_missing_fact("README.md", "x", "keep", "y")["id"] == "f2"
 
 
@@ -1162,7 +1185,7 @@ def test_a_fact_id_named_by_a_draft_never_serves_again(docs_review):
     s.add_missing_fact("README.md", "Offline.", "keep", "a link")
     s.save_draft({"id": "d1", "section": "doc:README.md", "quote": "Offline.", "text": "a",
                   "fact": "f2"})  # fmt: skip
-    s.clear_missing_facts("README.md")
+    s.clear_missing_facts("README.md", "readme")
     assert s.add_missing_fact("README.md", "x", "keep", "y")["id"] == "f3"
     # A side thread on a fact counts the same.
     s.new_thread("doc:README.md", "x", fact="f7")
