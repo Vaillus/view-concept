@@ -295,9 +295,10 @@ A skill agent starts from no context command and no role file: its prompt
 is the skill's invocation, the skill's name and its arguments, as the user
 would type them, and nothing else from this conversation:
 
-- write-readme: `/write-readme <README> [rewrite] [reader: <line>]
-  <session folder>`, one README; `rewrite` for a full rewrite of its parts
-  (see **The doc pass**), and `reader:` when a comment of the batch gives
+- write-readme: `/write-readme <README> [rewrite | removed] [reader:
+  <line>] <session folder>`, one README; `rewrite` for a full rewrite of
+  its parts, `removed` for the README of a folder the branch removes (see
+  **The doc pass**), and `reader:` when a comment of the batch gives
   a reader line (« reader: … »);
 - document-feature: `/document-feature <session folder> <README> ...`,
   the READMEs of the doc set, in the write order.
@@ -762,9 +763,12 @@ after the previous one ends.
    README, an **edit** otherwise (which retitles a README whose map and
    usage are not under `## Files` and `## Usage` yet), and a **full
    rewrite** of its parts with the `rewrite` argument, which you give when
-   a waiting rewrite request names the README. A README whose folder the
-   branch removes gets no write-readme agent: there is no code left to
-   describe, and the move plan says where its passages go. Give each the
+   a waiting rewrite request names the README. The README of a folder the
+   branch removes gets a write-readme agent with the `removed` argument,
+   which only retitles it (`## Files`, `## Usage`) and checks and writes
+   nothing from the code, since none is left: document-feature reads the
+   boundary by those headings for its move plan, then deletes the file
+   once all its passages have moved. Give each the
    comments that waited on that README's parts. Give each run report in
    the terminal.
 4. **One document-feature agent**, on every README of the doc set, in the

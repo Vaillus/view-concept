@@ -16,20 +16,22 @@ description: >-
   README cleaned up, shortened or rewritten, notably one written by an LLM —
   "write the README of X", "rewrite this README", "clean up X/README.md",
   "this README is bloated", invokes /write-readme.
-argument-hint: "[the folder, or its README.md] [rewrite] [reader: <reader line>] [a review's session folder]"
+argument-hint: "[the folder, or its README.md] [rewrite | removed] [reader: <reader line>] [a review's session folder]"
 ---
 
 # /write-readme
 
 Writes the `README.md` of one folder: the folder, or its `README.md`, is
 whatever the user typed after the command name, followed by `rewrite` when
-the user asks for a full rewrite (`/write-readme <folder> rewrite`). The run
+the user asks for a full rewrite (`/write-readme <folder> rewrite`), or by
+`removed` when a review's doc pass names the README of a folder its branch
+removes. The run
 reads the repo's lexicon files, the folder's code and the old README if
 there is one, writes its parts of the README (see **Its parts**), and ends
 by printing its **run report**. It writes no other file (except the repo
 lexicon when the repo has none) and never commits.
 
-A run has one of three outcomes:
+A run has one of four outcomes:
 
 - **draft**: the folder has no `README.md`; write its parts from the code;
 - **edit** (always, when it has one and no full rewrite was asked for): keep
@@ -41,7 +43,14 @@ A run has one of three outcomes:
   a review's request to write a README again from scratch; write its parts
   again from the code alone, without reading the old ones, as for a draft,
   copy every other passage after them word for word, then list the
-  **missing facts** of its parts (see **The missing facts**).
+  **missing facts** of its parts (see **The missing facts**);
+- **retitle only**: only with the `removed` argument, on the README of a
+  folder the branch removes; retitle it (see **Its parts**) and do nothing
+  else: there is no code left to describe, so check no passage, write
+  nothing from the code, count no failure indicator and list no missing
+  fact. The document-feature skill then reads the boundary by these
+  headings for its move plan, and deletes the file once every passage of
+  its folder model has moved.
 
 The run never chooses a full rewrite on its own, however much of its parts
 fails: the failure indicator tells the user, who decides.
@@ -102,7 +111,8 @@ conventions impose other headings for the map or the usage, they replace
 **The retitling.** An existing README whose map and usage are not under
 these headings (one this skill never ran on since it titles them) is
 retitled once, by the first edit that finds it so, in a review the first
-doc pass whose doc set holds it. That edit judges the role of each passage:
+doc pass whose doc set holds it, or by a retitle-only run (the README of a
+folder the branch removes, with `removed`). That run judges the role of each passage:
 the map goes under `## Files`, the usage sections are gathered under
 `## Usage`, each with its own title as a subheading, and a mixed section is
 split, its map table going under `## Files` while the rest (a data format,
@@ -386,8 +396,11 @@ The first line is `write-readme · <path> · ` then the outcome: `draft` for
 a missing README, `edit: <n> of <total> passages fail` (the failure
 indicator, over the passages of its parts, followed by `; structure fails`
 when the structure of its parts fails; `edit: 0 of <total> passages fail`
-when all pass), or `full rewrite` when it was asked for. `retitled`, in the
-edit that retitles the README only, names each passage moved and each
+when all pass), `full rewrite` when it was asked for, or `retitle only`
+with `removed`, whose report has its first line and its `retitled:` line
+alone (`retitled: none` when the README already had its headings).
+`retitled`, in the edit or the retitle-only run that retitles the README,
+names each passage moved and each
 heading set; `changed`, in an edit only, names each old passage edited,
 shrunk or dropped with the check it failed; `code findings` each with its
 file.

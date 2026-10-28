@@ -192,6 +192,7 @@ your report (`doc pass README <path>`), for the whole doc pass on it.
    |---|---|
    | `edit: <n> of <total> passages fail` | `view-concept doc-set <slug> failing <path> <n> <total>`, with `--structure` when the line adds `; structure fails` |
    | `draft` | nothing: a draft has no indicator |
+   | `retitle only` | nothing: the README of a folder the branch removes, which document-feature deletes |
    | `full rewrite` | `view-concept doc-set <slug> failing <path> --clear`, then `view-concept doc-set <slug> major <path>`: a full rewrite takes a minor README back into the review list |
 
    The Doc tab shows « n/total failing » beside the README and, past half
