@@ -7,9 +7,10 @@ description: >-
   model of the README whose folder writes it, beside write-readme's parts),
   and HOW the README changes (a local model edit, or a restructuring whose
   move plan the user corrects before any README is written). The code is
-  the source of truth. Use when a feature's doc pass writes the folder
-  models of its READMEs — "document the feature", "carry the model into
-  the READMEs", invokes /document-feature.
+  the source of truth. Runs before write-readme, which writes its own
+  parts of each README after it. Use when a feature's doc pass writes the
+  folder models of its READMEs — "document the feature", "carry the model
+  into the READMEs", invokes /document-feature.
 argument-hint: "[the session folder or slug] [the READMEs: default, every README of the doc set]"
 ---
 
@@ -22,6 +23,14 @@ session) into the repo's `README.md` files. The request names the session
 on; by default, every `README.md` of the session's doc set (`view-concept
 doc-set <slug>`). With no session named, stop: the skill has no model to
 carry.
+
+In a feature's doc pass, the skill runs once on the READMEs of the doc set,
+before write-readme, which then writes its own parts of each README (see
+**Sharing a README with write-readme**). The request may also carry the
+user's comments to apply, each with its id, its quote and its text: on a
+README's folder model (`(doc <path>)`), on a row of the concept triage
+(`(triage <id>)`) or on a row of a move plan (`(moves <readme> · passage
+<id>)`), or a missing fact to take back (see **Comments**).
 
 **Input**: the session's model (its `sections/`, the outline and the
 `lexicon` of its `plan.json`, `change-history.json`, `code-map.md`) and the
@@ -164,8 +173,10 @@ it), not of the folders that call it:
   again; the module that computes it links there from its docstring. The
   README that defines it does not name its callers: their list changes
   while its folder does not;
-- a folder with no README gets its draft from write-readme first (the doc
-  pass runs it); then you add the folder model to it.
+- a folder with no README gets one from you: create its `README.md`
+  holding only a `# <folder path>` title and the folder model. write-readme,
+  which runs after you, then writes the draft of its parts around it, from
+  the code.
 
 **Whole** means the objects the concept defines, the rules they follow,
 their relations and what follows from them, what the code does not check
@@ -228,9 +239,10 @@ paragraph, a list, a table or a code block):
   is yours.
 
 Neither skill touches the other's passages. You edit or write the folder
-model only; a wrong path in the usage is write-readme's to correct (its
-edit mode, which the doc pass runs): list it in the run report, do not fix
-it. Write the folder model after write-readme's parts. A passage of the
+model only; a wrong path in the usage is write-readme's to correct
+(write-readme runs on each README after you): list it in the run report, do
+not fix it. Write the folder model after write-readme's parts, or, in a
+README that holds none yet, right under its title. A passage of the
 folder model that names nothing the branch changes stays word for word,
 even history or an open discussion.
 
@@ -260,8 +272,8 @@ shape:
 A folder that changes role (a study that becomes a package others import)
 also changes reader: its whole README is re-read for the new reader, and
 write-readme's parts need a full rewrite by write-readme. You do not write
-them: say it in the run report (`role change`), and the doc pass asks
-write-readme for it.
+them: say it in the run report (`role change`), and the caller has
+write-readme rewrite them in full, in its one run on that README.
 
 ### A restructuring
 
@@ -305,8 +317,10 @@ A restructuring takes two runs, with a stop between them:
    run: neither the restructured README nor any README a row sends a
    passage to (its `--to`), nor a README whose change is a local model
    edit, even for a concept the triage puts there. Each README's outcome
-   is decided (step 1), none is written. Say in the run report that the
-   move plan waits, with the READMEs it holds: every README of the run.
+   is decided (step 1), none is written. Since you run before write-readme,
+   no README of the run has been touched yet: nothing is to be put back.
+   Say in the run report that the move plan waits, with the READMEs it
+   holds: every README of the run.
    The caller then
    puts the session in its waiting phase: a wrong destination is corrected
    on one row of the plan, before three READMEs carry it. The user comments
@@ -319,15 +333,10 @@ A restructuring takes two runs, with a stop between them:
    there: its concepts, its local model edit), and the other READMEs by
    their local model edit. You write the folder model passages, each where its row
    sends it; a passage of write-readme's parts is put in its destination's
-   parts as the row says, and write-readme checks it there (list those
-   READMEs in the run report). A README the code moved with its folder is
-   written at its new place, and no file stays at the old path; record the
-   move on its doc set entry, so the Doc tab compares it with the old
-   README at its old path:
-
-   ```
-   view-concept doc-set <slug> moved <path> <old path>
-   ```
+   parts as the row says, and write-readme, which runs after you, checks it
+   there (list those READMEs in the run report). A README the code moved
+   with its folder is listed in the doc set at its new path: write it
+   there, and leave no file at the old path.
 
 4. **The missing facts**, below, of the old README.
 
@@ -345,9 +354,8 @@ say so). The proposal drops nothing: you take none back on your own, the
 user decides.
 
 Record them on the README the old file became (its new path, in the doc
-set), clearing its old list first, unless the caller recorded write-readme's
-missing facts on that README in this run (they are about its other parts,
-and stay):
+set), clearing its old list first; write-readme runs after you, and the
+missing facts of its parts are recorded after yours:
 
 ```
 view-concept facts <slug> clear <path>
@@ -357,6 +365,23 @@ view-concept facts <slug> add <path> "<fact>" --propose keep|leave --reason "<on
 `--passage N` is the number of the old passage that held it, counted from
 the top. From benchmark-package: « Results from before 30 September do not
 compare with the new ones: the models' names and decoding changed. »
+
+## Comments
+
+The request may carry the user's comments, each with its id, its quote and
+its text. Apply each one, and leave it open: the caller resolves it once
+your work is committed.
+
+- a comment on a passage of a README's folder model: rewrite that passage
+  as the comment asks, under this skill's rules; a comment on a passage of
+  write-readme's parts is not yours: name it in the run report;
+- a comment on a row of the concept triage: as **The concept triage**
+  says;
+- a comment on a row of a move plan: it comes with « Write READMEs », as
+  **A restructuring** says;
+- a missing fact to take back (the user answered « reprends-le » on it):
+  add it to the folder model of its README, in words or as a link to the
+  doc that already says it, under the inclusion test.
 
 ## Writing
 
@@ -391,7 +416,7 @@ The run after « Write READMEs »:
 
 ```
 document-feature · Write READMEs
-core/transcript/README.md · folder model written · 3 passages received
+core/transcript/README.md · created: folder model only · 3 passages received
 benchmark/README.md · moved from experiments/benchmark/README.md · role change · missing facts: 2
 experiments/stt_benchmark_ft2/README.md · 1 passage received
 experiments/finetuning/gign/README.md · local model edit: 1 passage edited
