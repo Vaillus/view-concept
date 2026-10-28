@@ -14,9 +14,9 @@ The context names the folder, so an agent that needs an older entry opens the fi
 
 The request part is the initial request (the user's first message), or, when the review
 follows a conversation (request.md, the request transcript), that whole conversation for
-the planner and the writer, the roles that shape the model; the implementer, the reviewer
-and a side thread get the initial request and the transcript's path, and open it when a
-comment needs the user's reasons.
+the planner and the writer, the roles that shape the model; the implementer, the
+documenter, the reviewer and a side thread get the initial request and the transcript's
+path, and open it when a comment needs the user's reasons.
 
 Roles:
 
@@ -24,8 +24,13 @@ Roles:
 - `writer`: owns the modeling part (its sections), the to-do list (the section `todo`,
   in the refactoring part) and, from « Write model » on, the outline and the lexicon.
   Gets every section.
-- `implementer`: owns the code, from « Approve model » on. Gets the modeling part, the
-  to-do list, and the sections its trigger names (the reviewer's items it must act on).
+- `implementer`: owns the code, from « Approve model » on, and never touches the docs.
+  Gets the modeling part, the to-do list, and the sections its trigger names (the
+  reviewer's items it must act on).
+- `documenter`: owns the doc set and the docs, from « Write docs » on: the doc pass's
+  role that prepares it (the doc set, the lexicons, the write order) and ends it (the docs
+  that are not READMEs, the reports of the skill agents, the commit). Gets the modeling
+  part, the to-do list, and the sections its trigger names.
 - `reviewer`: owns the rest of the refactoring part, which checks the code against the
   model. Gets every section.
 - `thread`: a side thread, read-only. Gets the section its passage belongs to; it reads
@@ -37,20 +42,20 @@ source; its heading names its file, for an agent that needs the source.
 
 In a code session every role also gets the code map (code-map.md): which modules carry
 the feature and where each concept lives, as the planner wrote it and the implementer
-keeps it, so a run does not explore the same code again. The writer, the implementer and
+keeps it, so a run does not explore the same code again. The writer, the documenter and
 the reviewer also get the doc set (doc-set.json: each doc's path and reason in the write
 order, its minor class, a README's failure indicator, the docs the user removed) and the
-stale passages still shown: the writer writes the first doc set, the implementer
-refreshes it and rewrites the docs at the doc pass, the reviewer flags the stale
-passages. The implementer also gets the missing facts of each README (missing-facts.json:
-what its old text said and no README written says any more, after a full rewrite, a
-restructuring or a rewritten folder model), with the state of the user's decision on
-each: it applies the comments on them. The implementer and the reviewer also get the concept triage
-(concept-triage.json: whether each concept of the model enters the docs): the doc pass
-follows it, the reviewer checks the docs against it; and the move plans (moves.json: where
-each passage of a restructured README goes). A side thread on a doc gets that doc's
-missing facts with its text; one on a row of the concept triage gets the triage, one on a
-row of a move plan the move plans.
+stale passages still shown: the writer writes the first doc set, the documenter
+refreshes it at the doc pass, the reviewer flags the stale passages. The documenter also
+gets the missing facts of each README (missing-facts.json: what its old text said and no
+README written says any more, after a full rewrite, a restructuring or a rewritten folder
+model), with the state of the user's decision on each: it applies the comments on them.
+The documenter and the reviewer also get the concept triage (concept-triage.json: whether
+each concept of the model enters the docs): the doc pass follows it, the reviewer checks
+the docs against it; and the move plans (moves.json: where each passage of a restructured
+README goes). The implementer gets none of these: it writes the code only. A side thread
+on a doc gets that doc's missing facts with its text; one on a row of the concept triage
+gets the triage, one on a row of a move plan the move plans.
 The docs themselves are files of the repository, read there.
 
 Once the model is approved, every role also sees which changes of the model the code does
@@ -79,16 +84,16 @@ from .store import (
 )
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
-ROLES = ("planner", "writer", "implementer", "reviewer", "thread")
+ROLES = ("planner", "writer", "implementer", "documenter", "reviewer", "thread")
 TRANSCRIPT_ROLES = ("planner", "writer")  # the roles that read the request transcript whole
 # The roles that keep the doc set or work on its docs: the writer writes the first one,
-# the implementer refreshes it and rewrites the docs, the reviewer flags stale passages.
-DOC_SET_ROLES = ("writer", "implementer", "reviewer")
-# The roles that get the missing facts: the implementer applies the user's decisions.
-FACT_ROLES = ("implementer",)
+# the documenter refreshes it at the doc pass, the reviewer flags stale passages.
+DOC_SET_ROLES = ("writer", "documenter", "reviewer")
+# The roles that get the missing facts: the documenter applies the user's decisions.
+FACT_ROLES = ("documenter",)
 # The roles that get the concept triage and the move plans: the doc pass follows them, the
 # reviewer checks the docs against them.
-TRIAGE_ROLES = ("implementer", "reviewer")
+TRIAGE_ROLES = ("documenter", "reviewer")
 
 QUESTION_ID = re.compile(r"^q\d+$")
 COMMENT_ID = re.compile(r"^c\d+$")
@@ -133,7 +138,7 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     sections = {**s.read_sections(), **{k: v for k, v in s.read_prose().items() if k in html}}
     if role in ("writer", "reviewer"):
         out += ["", "## Sections", *_sections(outline, sections, None, html=html)]
-    elif role == "implementer":
+    elif role in ("implementer", "documenter"):
         named = set(trigger or [])
         # The to-do list is part of the model, though it sits in the refactoring part.
         named.add("todo")
@@ -173,7 +178,7 @@ def doc_passage(s: Session, anchor: str) -> list[str]:
 
 def _doc_tab(s: Session, role: str) -> list[str]:
     """The doc set and the stale passages still shown, for the roles that work on them;
-    the missing facts too for the implementer, who applies the user's decisions on them."""
+    the missing facts too for the documenter, who applies the user's decisions on them."""
     lines = [
         "## Doc set",
         "The repo docs the Doc tab shows, in the write order. Each one is a file of the"
