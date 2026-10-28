@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-- Each skill in `skills/` is self-contained: it carries every rule it follows and never sends the agent to read another skill, so a rule shared by two skills is written in both. The exception is a README: build-feature's implementer reads two other skills for it, `skills/write-readme/SKILL.md` for write-readme's parts and `skills/document-feature/SKILL.md` for the rest, while review-docs reads only write-readme.
+- Each skill in `skills/` is self-contained: it carries every rule it follows and never sends the agent to read another skill, so a rule shared by two skills is written in both.
 - The skills write the session files and call the `view-concept` commands: a change to a session file's format, a command, a phase or a batch action is a change to every skill that uses it (`grep` the name in `skills/`). The layout of a session folder is in `store.py`'s module docstring. The formats of `agent.json`, `threads/`, `watch.json`, `seen.json`, `drafts.json` and `published.json` belong to this repo alone: no skill describes them.
 - `static/reader.js` (the published page's script) mirrors functions of `static/app.js` (term underlining, maths, Mermaid, the tooltip): change them together.
 - Styling uses the omarchy-terminal-skin tokens only (`themes.css` and `terminal.css` are copies from the skill; don't edit them here).
