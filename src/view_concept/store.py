@@ -361,7 +361,7 @@ RENAMED_WORKFLOWS = {
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "build-feature"}
 # The role agents a feature's coordinator starts; a variant sets a model per role.
-AGENT_ROLES = ("planner", "writer", "implementer", "reviewer")
+AGENT_ROLES = ("planner", "writer", "implementer", "documenter", "reviewer")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 # A draft's id: the page makes it (a UUID). Its fields, as a batch comment takes them.
 DRAFT_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")

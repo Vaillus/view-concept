@@ -329,6 +329,8 @@ def test_variant_names_the_setup_and_a_model_per_role(tmp_path):
     assert r.returncode == 0 and "writer=sonnet" in r.stdout
     plan = json.loads((tmp_path / "sessions" / "speed" / "plan.json").read_text())
     assert plan["variant"] == {"name": "writer on sonnet", "models": {"writer": "sonnet"}}
+    r = view_concept(tmp_path, "variant", "speed", "docs", "--model", "documenter=haiku")
+    assert r.returncode == 0 and "documenter=haiku" in r.stdout
     r = view_concept(tmp_path, "variant", "speed", "odd", "--model", "helper=haiku")
     assert r.returncode == 1 and "unknown role helper" in r.stderr
     r = view_concept(tmp_path, "variant", "speed", "odd", "--model", "writer")
