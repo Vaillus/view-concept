@@ -2,6 +2,8 @@
 
 The feature skill: `SKILL.md` is what the main session, the coordinator, follows, and `roles/` holds the instructions of the agents it starts, each a fresh agent that owns one part of the session.
 
+## Files
+
 ```
 SKILL.md                  # the coordinator: the flow of a feature, which role each event goes to
 roles/planner.md          # the outline and the lexicon during scoping, and the first code map
