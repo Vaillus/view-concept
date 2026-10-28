@@ -384,9 +384,9 @@ const QUESTION_LABELS = { ready: "question · waiting for your answer", sent: "a
 const modelButton = el("button", { id: "model-approve", class: "btn primary approve doc-approve", hidden: true });
 const prButton = el("button", { id: "pr-create", class: "btn primary approve doc-approve", hidden: true });
 const movesButton = el("button", { id: "readmes-write", class: "btn primary approve doc-approve", hidden: true,
-                                   title: "The doc pass writes every README of the doc set, the restructured ones from the move plans and your comments on them" });
+                                   title: "The doc pass resumes: the document-feature agent writes every README of the doc set, the restructured ones from the move plans and your comments on them, then write-readme agents write their parts" });
 const docsButton = el("button", { id: "docs-write", class: "btn primary approve doc-approve", hidden: true,
-                                  title: "The doc pass: the implementer refreshes the doc set and rewrites the docs from the model" });
+                                  title: "The doc pass: the documenter refreshes the doc set, then document-feature and write-readme agents write the READMEs" });
 const docsPrButton = el("button", { id: "docs-write-pr", class: "btn approve doc-approve", hidden: true,
                                     title: "The doc pass, the reviewer's run on the doc items and stale passages, then the PR, with no pause" });
 // Once the agent opened the PR (plan.json's `pr`), the page links it in the top bar and at
@@ -427,13 +427,13 @@ const APPROVALS = {
                       ready: "model ready · waiting for your approval", sent: "model approved · the agent is implementing" },
   "awaiting-docs": { action: "write-docs", label: "Write docs", toast: "Docs requested", button: docsButton,
                      ready: "code carries the model · waiting for you to write the docs",
-                     sent: "docs requested · the implementer is writing them",
+                     sent: "docs requested · the doc pass is writing them",
                      // The second button: the same action, the PR chained after the doc pass.
                      also: { button: docsPrButton, label: "Write docs and create PR", toast: "Docs and PR requested",
-                             extra: { then_pr: true }, sent: "docs and PR requested · the implementer is writing the docs" } },
+                             extra: { then_pr: true }, sent: "docs and PR requested · the doc pass is writing the docs" } },
   "awaiting-moves": { action: "write-readmes", label: "Write READMEs", toast: "READMEs requested", button: movesButton,
                       ready: "move plan ready · waiting for you to read it",
-                      sent: "READMEs requested · the implementer is writing them" },
+                      sent: "READMEs requested · the doc pass is writing them" },
   "awaiting-pr": { action: "create-pr", label: "Create PR", toast: "PR requested", button: prButton,
                    ready: "refactoring written · waiting for you to create the PR",
                    sent: "PR requested · the agent is opening it" },
