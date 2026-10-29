@@ -1078,9 +1078,10 @@ function revealElement(id, element, holes, line) {
    element the frame marks (the hole click) opens the hole window beside it, under it or
    above it when the room runs out below, as a side thread opens on its passage. The window
    holds one hole box per open hole record on that element, in the order asked, and
-   nothing of a closed hole. Escape, its ×, a click elsewhere in the drawing or outside the
-   window closes it; a click in the composer, the selection buttons or a side thread does
-   not. It closes by itself once the scoper has closed all its holes, and docks across the
+   nothing of a closed hole. Escape (in the page, or passed on by the frame that holds the
+   focus), its ×, a click elsewhere in the drawing or outside the window closes it; a
+   click in the composer, a draft of the review, the selection buttons or a side thread
+   does not. It closes by itself once the scoper has closed all its holes, and docks across the
    bottom in the narrow layout, as the thread popover does.
    A hole box says in one sentence what is not known: dashed orange for a hole, its
    sentence after a « ? »; dashed blue for a supposition, its statement alone; grey for a
@@ -1213,7 +1214,7 @@ function frameHoleClick(id, f, d) {
 document.querySelectorAll(".view").forEach((v) => v.addEventListener("scroll", positionHolePop, { passive: true }));
 addEventListener("resize", positionHolePop);
 document.addEventListener("mousedown", (e) => {
-  if (holePop && !e.target.closest("#hole-pop, #composer, #thread-pop, #sel-actions, .hole-line")) closeHolePop();
+  if (holePop && !e.target.closest("#hole-pop, #composer, #drafts, #thread-pop, #sel-actions, .hole-line")) closeHolePop();
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && holePop && !e.target.closest("#composer")) closeHolePop();
@@ -2075,6 +2076,7 @@ window.addEventListener("message", (e) => {
   else if (d.viewConcept === "placed") framePlaced(f, d);
   else if (d.viewConcept === "thread-click") frameThreadClick(id, f, d);
   else if (d.viewConcept === "hole-click") frameHoleClick(id, f, d);
+  else if (d.viewConcept === "escape") { if (holePop) closeHolePop(); }
   else if (d.viewConcept === "term-hover") frameTermHover(f, d);
   else if (d.viewConcept === "tap") tapElsewhere(f);
 });

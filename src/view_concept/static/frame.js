@@ -54,10 +54,12 @@
      redraws its text. Unlike the paint of passages, this changes attributes of the
      section's elements; its scripts never read them.
    - The hole click (frame -> page): a click, with nothing selected and off a side
-     thread's passage, in a frame that holds holes: the hole ids of the innermost marked
-     element it falls in and where that element sits, so the page opens their hole window
-     on it (a marked element inside another opens only its own holes); no hole when it
-     falls in none, so the page closes the window.
+     thread's passage: the hole ids of the innermost marked element it falls in and where
+     that element sits, so the page opens their hole window on it (a marked element inside
+     another opens only its own holes); no hole when it falls in none, even in a frame
+     with no mark, so the page closes the window.
+   - The escape (frame -> page): Escape pressed in the frame, which holds the focus after
+     a click in it, so the page closes its hole window as on its own Escape.
    - The element reveal (page -> frame), answered by "revealed" (frame -> page): the
      element of a hole to show. The frame opens its holders (and selects it when it is a
      tab of the kit), then answers with where it sits, as for a passage.
@@ -445,16 +447,24 @@
     return null;
   }
 
-  /* ---- the thread click and the hole click ---- */
+  /* ---- the thread click and the hole click ----
+     A click outside every marked element posts an empty hole click even when the frame
+     bears no mark: the page closes a hole window opened from its index line. */
   function clickAt(target, x, y) {
     var h = hit(threadRanges, x, y);
     if (h) { post({ viewConcept: "thread-click", thread: h[0].thread, rect: rectOf(h[1]) }); return; }
-    if (!holes.length) return;
     var n = target && target.closest ? target.closest("[data-vc-hole]") : null;
     post(n ? { viewConcept: "hole-click", holes: n.getAttribute("data-vc-hole").split(" "),
                rect: rectOf(n.getBoundingClientRect()) }
            : { viewConcept: "hole-click", holes: [] });
   }
+
+  /* ---- Escape ----
+     A click in the frame gives it the focus, so the page never sees the key: the frame
+     passes Escape on, and the page closes its hole window as on its own Escape. */
+  addEventListener("keydown", function (e) {
+    if (e.key === "Escape") post({ viewConcept: "escape" });
+  });
 
   /* ---- the term hover ---- */
   var hovered = null;
