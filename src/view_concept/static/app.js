@@ -2956,17 +2956,30 @@ $("#grill").addEventListener("click", (e) => send(state.grilling ? "stop-grill" 
 $("#scope-plan").addEventListener("click", (e) => send("plan", e.currentTarget));
 $("#scope-go-on").addEventListener("click", (e) => send("go-on", e.currentTarget));
 
-/* The review pane keeps one line for the open agent questions: it opens the Plan tab
-   at the scope block. */
+/* The review pane keeps one line for what waits for the user: the open agent questions,
+   and on a drawing during scoping the open holes not waiting for the scoper (holesForYou),
+   « N holes waiting ». A click opens the first question's place (its section, or the Plan
+   tab at the scope block), or, with no question open, the hole index at the end of the
+   scoping tab. */
+const holesWaiting = () => (drawingScoping() ? holesForYou().length : 0);
+const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
+
 function renderWaiting() {
   const n = openQuestions().length;
+  const h = holesWaiting();
   const line = $("#questions-waiting");
-  line.hidden = !n;
-  line.textContent = `${n} question${n > 1 ? "s" : ""} waiting →`;
+  line.hidden = !(n || h);
+  line.textContent = `${[n && plural(n, "question"), h && plural(h, "hole")].filter(Boolean).join(" · ")} waiting →`;
 }
 
 $("#questions-waiting").addEventListener("click", () => {
   const q = openQuestions()[0];
+  if (!q && holesWaiting()) {
+    setTab(tabOf(holeSection()));
+    const index = document.querySelector(".hole-index");
+    if (index) pageScroll(index.closest(".view"), () => index.scrollIntoView({ block: "center", behavior: "smooth" }));
+    return;
+  }
   if (q && atSection(q)) { setTab(tabOf(q.section)); scrollToSection(q.section); return; }
   setTab("plan");
   $("#scope").scrollIntoView({ block: "start", behavior: "smooth" });
@@ -2975,7 +2988,8 @@ $("#questions-waiting").addEventListener("click", () => {
 /* ---------------- review pane ----------------
    The pane reads like a conversation, oldest at the top: the sent batches in time order
    (a batch answering an agent question shows the question, then the answer or « skipped »),
-   then a line counting the open agent questions (they live in the scope block), then the
+   then a line counting the open agent questions (they live in the scope block) and, on a
+   drawing during scoping, the open holes waiting for the user, then the
    drafts, the note and « Send » at the bottom. It stays
    scrolled to the bottom as content arrives, unless the user scrolled up. */
 
