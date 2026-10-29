@@ -383,10 +383,6 @@ ACTIONS = (
 # The part of a scoping section: the drawing of the problem a feature's scoper builds with
 # the user before any model is written, shown in the page's scoping tab.
 SCOPING_PART = "scoping"
-# The kind of a hole record (holes.json): a hole (something of the drawing only the user
-# can settle) or a supposition (a hole the agent already answered from the code, which the
-# user approves or corrects). Only the colour the page draws it in depends on it.
-HOLE_KINDS = ("hole", "supposition")
 HOLE_ID_RE = re.compile(r"^h[0-9]{1,6}$")
 # A comment, a draft or a side thread on a hole box is anchored to `hole:<id>`. No section
 # id may start with it (write_plan refuses it).
@@ -1200,12 +1196,7 @@ class Session:
         if not text.strip():
             raise SessionError("empty question")
         if section:
-            self._check_section(section)
-        if section in self.scoping_sections():
-            raise SessionError(
-                f"{section} is a scoping section: a hole of the drawing is opened with "
-                "`view-concept hole`"
-            )
+            self._check_question_section(section)
         questions = self.read_questions()
         q = {
             "id": self._next_question_id(questions),
@@ -1226,6 +1217,16 @@ class Session:
         if self.read_status().get("phase") != "scoping":
             self.write_status("awaiting-answer")
         return q
+
+    def _check_question_section(self, section: str) -> None:
+        """Refuse an unknown section, and a scoping section: a question is never asked on
+        the drawing, a hole of the drawing is a hole record."""
+        self._check_section(section)
+        if section in self.scoping_sections():
+            raise SessionError(
+                f"{section} is a scoping section: a hole of the drawing is opened with "
+                "`view-concept hole`"
+            )
 
     def scoping_sections(self) -> list[str]:
         """The ids of the outline's scoping sections (`"part": "scoping"`), in outline order."""
@@ -1423,12 +1424,12 @@ class Session:
 
     def anchor_question(self, qid: str, section: str) -> dict[str, Any]:
         """Set the anchor section of an open or deferred agent question: the section after
-        which it is asked. Returns the question."""
+        which it is asked; never a scoping section. Returns the question."""
         questions = self.read_questions()
         q = self._question(questions, qid)
         if q["status"] not in ("open", "deferred"):
             raise SessionError(f"{qid} is already {q['status']}")
-        self._check_section(section)
+        self._check_question_section(section)
         q["section"] = section
         _write_json(self.questions_path, questions)
         return q

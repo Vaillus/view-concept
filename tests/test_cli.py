@@ -107,6 +107,9 @@ def test_hole_opens_and_close_hole_closes_a_hole_record(tmp_path):
     assert all(h["note"] == "per token" for h in json.loads((d / "holes.json").read_text()))
     r = view_concept(tmp_path, "question", "ask", "Unit?", "--section", "scoping")
     assert r.returncode != 0 and "view-concept hole" in r.stderr
+    assert view_concept(tmp_path, "question", "ask", "Unit?").returncode == 0
+    r = view_concept(tmp_path, "anchor", "ask", "q1", "scoping")
+    assert r.returncode != 0 and "view-concept hole" in r.stderr
 
 
 def test_answered_marks_a_question_answered_in_the_terminal(tmp_path):
