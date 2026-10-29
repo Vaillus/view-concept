@@ -269,6 +269,7 @@ def state(slug: str) -> dict[str, Any]:
         unimplemented = [d["id"] for d in s.unimplemented_changes()]
         questions = s.read_questions()
         holes = s.read_holes()
+        hole_tones = s.hole_tones()
         grilling = s.is_grilling()
         docs = s.read_docs()
         doc_texts = {DOC_KEY + p: t for p, t in docs.items() if t is not None}
@@ -304,6 +305,8 @@ def state(slug: str) -> dict[str, Any]:
         "questions": questions,
         # The hole file: every hole record of the drawing, open and closed.
         "holes": holes,
+        # The colour of each open hole's box and index line, and of each marked element.
+        "hole_tones": hole_tones,
         "grilling": grilling,
         "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),
         "published": published,

@@ -1002,26 +1002,24 @@ function sectionBlock(s, { bare = false } = {}) {
    A hole is waiting (« en attente ») while a comment of a sent batch, not yet resolved, is
    attached to it: anchored to "hole:<its id>" (a comment or a side thread in its box), or
    carrying `element` equal to its element (a comment on a selection in the drawing inside
-   its marked element). Nothing is stored for it: the page reads it from the sent comments,
-   and draws it grey (its box, its index line, and the mark once all the element's open
-   holes wait) until the scoper resolves the comment: the hole is then closed, or back to
-   its colour. A waiting hole stays open: « End scoping » still counts it. */
+   its marked element). Nothing is stored for it: the server reads it from the sent
+   comments and sends the colours it implies (`state.hole_tones`: {holes: {id: tone},
+   elements: {element: tone}}, tone "hole" orange, "supposition" blue, "waiting" grey).
+   A waiting hole is grey (its box, its index line, and the mark once all the element's
+   open holes wait) until the scoper resolves the comment: the hole is then closed, or
+   back to its colour. A waiting hole stays open: « End scoping » still counts it. */
 const holeRecords = () => (state ? state.holes || [] : []);
 const openHoles = () => holeRecords().filter((h) => h.status === "open");
 const holeSection = () => (state.plan.outline.find(isScopingSection) || {}).id;
-const sentComments = () => state.comments.batches.flatMap((b) => b.comments).filter((c) => c.status === "sent");
-const isWaiting = (h) => sentComments().some((c) => c.section === HOLE_PREFIX + h.id || (!!h.element && c.element === h.element));
-// The open holes waiting for the user, not for the scoper.
-const holesForYou = () => openHoles().filter((h) => !isWaiting(h));
+const holeTones = () => (state && state.hole_tones) || { holes: {}, elements: {} };
 // The colour of a hole's box and index line: "waiting" (grey), else its kind ("hole"
 // orange, "supposition" blue).
-const holeTone = (h) => (isWaiting(h) ? "waiting" : h.kind === "supposition" ? "supposition" : "hole");
+const holeTone = (h) => holeTones().holes[h.id] || (h.kind === "supposition" ? "supposition" : "hole");
+// The open holes waiting for the user, not for the scoper.
+const holesForYou = () => openHoles().filter((h) => holeTone(h) !== "waiting");
 // The colour of an element's mark, from its open holes: among those not waiting, orange
 // when one is a hole, else blue (only suppositions); grey when all of them wait.
-function elementTone(list) {
-  const live = list.filter((h) => !isWaiting(h));
-  return !live.length ? "waiting" : live.some((h) => h.kind !== "supposition") ? "hole" : "supposition";
-}
+const elementTone = (element) => holeTones().elements[element] || "hole";
 
 /* The scoping's two buttons, under the hole index at the end of the scoping tab, while scoping
    runs on a drawing: « What's missing? » (a batch whose action is "missing": the scoper
@@ -1056,7 +1054,7 @@ function postHoles(id, f = frames.get(id)) {
   if (!f || !f.contentWindow || !state || !inScoping(id)) return;
   const on = new Map();
   if (id === holeSection()) for (const h of openHoles()) if (h.element) on.set(h.element, [...(on.get(h.element) || []), h]);
-  const holes = [...on].map(([element, list]) => ({ element, holes: list.map((h) => h.id), tone: elementTone(list) }));
+  const holes = [...on].map(([element, list]) => ({ element, holes: list.map((h) => h.id), tone: elementTone(element) }));
   f.contentWindow.postMessage({ viewConcept: "holes", holes }, "*");
 }
 

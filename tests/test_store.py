@@ -587,6 +587,35 @@ def test_a_hole_waits_while_a_comment_attached_to_it_is_not_resolved(session):
     assert session.waiting_holes() == set()
 
 
+def test_hole_tones_colour_each_open_hole_and_each_marked_element(session):
+    _with_scoping(session)
+    session.add_hole("What the unit is.", element="e1")
+    session.add_hole("Per layer.", supposition=True, element="e1")
+    session.add_hole("Kept beside.", supposition=True, element="e2")
+    assert session.hole_tones() == {
+        "holes": {"h1": "hole", "h2": "supposition", "h3": "supposition"},
+        "elements": {"e1": "hole", "e2": "supposition"},
+    }
+    b = session.add_batch(
+        [
+            {"section": "hole:h1", "quote": "", "text": "per token"},
+            {"section": "hole:h3", "quote": "", "text": "yes"},
+        ]
+    )
+    assert session.hole_tones() == {
+        "holes": {"h1": "waiting", "h2": "supposition", "h3": "waiting"},
+        "elements": {"e1": "supposition", "e2": "waiting"},
+    }
+    session.resolve([c["id"] for c in b["comments"]])  # handled, neither hole closed
+    assert session.hole_tones()["holes"] == {"h1": "hole", "h2": "supposition", "h3": "supposition"}
+    assert session.hole_tones()["elements"] == {"e1": "hole", "e2": "supposition"}
+    session.close_holes(["h1", "h3"])
+    assert session.hole_tones() == {
+        "holes": {"h2": "supposition"},
+        "elements": {"e1": "supposition"},
+    }
+
+
 def test_a_hole_box_anchor_names_a_hole(session):
     _with_scoping(session)
     with pytest.raises(SessionError, match="hole:<id>"):

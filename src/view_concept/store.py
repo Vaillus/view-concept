@@ -149,7 +149,8 @@ the element on a click, and lists it at the end of the scoping tab while it is o
 user answers by a comment, anchored to the box (`hole:<id>`) or carrying the marked
 element a selection in the drawing falls in (`element`), or by a side thread on the box;
 the scoper closes it (`close_holes`) when it redraws. An open hole with a sent comment not
-resolved yet is waiting (`waiting_holes`): nothing stores it. A feature with a scoping
+resolved yet is waiting (`waiting_holes`): nothing stores it; `hole_tones` gives the
+colour of each open hole and of each marked element, which the page draws. A feature with a scoping
 section ends its scoping with « End scoping »: a batch whose action is "end-scoping",
 refused while a hole record is open (`open_holes`); « What's missing? » sends one whose
 action is "missing", asking the scoper to read the drawing again. A hole opened after
@@ -1299,6 +1300,27 @@ class Session:
             for h in self.open_holes()
             if HOLE_KEY + h["id"] in anchors or (h.get("element") and h["element"] in elements)
         }
+
+    def hole_tones(self) -> dict[str, dict[str, str]]:
+        """The colour the page draws each open hole record in: {"holes": {hole id: tone},
+        "elements": {element id: tone}}. A hole's tone is "waiting" (grey) while it waits
+        for the scoper, else its kind ("hole" orange, "supposition" blue): its box and its
+        line of the hole index. An element's tone, its mark, comes from its open holes:
+        among those not waiting, "hole" when one is a hole, else "supposition"; "waiting"
+        when all of them wait."""
+        waiting = self.waiting_holes()
+        holes: dict[str, str] = {}
+        on: dict[str, list[str]] = {}
+        for h in self.open_holes():
+            tone = "waiting" if h["id"] in waiting else h["kind"]
+            holes[h["id"]] = tone
+            if h.get("element"):
+                on.setdefault(h["element"], []).append(tone)
+        elements = {
+            e: "hole" if "hole" in tones else "supposition" if "supposition" in tones else "waiting"
+            for e, tones in on.items()
+        }
+        return {"holes": holes, "elements": elements}
 
     def _migrate_holes(self) -> None:
         """Move an old session's holes, the questions anchored on a scoping section in
