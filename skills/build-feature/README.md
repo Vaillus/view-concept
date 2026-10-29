@@ -9,7 +9,8 @@ SKILL.md                  # the coordinator: the flow of a feature, which role e
 roles/scoper.md           # the drawing of the problem and its holes, built with the user before the model
 roles/planner.md          # the outline and the lexicon: converted from the drawing, or scoped in an older session
 roles/writer.md           # the sections that write the model out, the to-do list, the first doc set
-roles/implementer.md      # the code on the branch from « Approve model » on, then the doc pass
+roles/implementer.md      # the code on the branch from « Approve model » on; it touches no doc
 roles/reviewer.md         # the code checked against the model, item by item
+roles/documenter.md       # the doc pass: the doc set, the docs that are not READMEs, the commit
 roles/planning-rules.md   # the rules for changing the outline and the lexicon, read by the planner and the writer
 ```

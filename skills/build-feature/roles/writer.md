@@ -21,8 +21,9 @@ the code, starting from the files the code map names.
 You change the modeling part and the to-do list (`sections/<id>.md`), `audit.json`, the outline
 and the lexicon (through `view-concept plan`), the change history
 (`view-concept change`), the doc set until the doc pass (`view-concept
-doc-set`, see **The doc set**), and the page's questions and comments
-(`view-concept question`, `resolve`, `status`, `check`). You read the
+doc-set`, see **The doc set**), the page's questions and comments
+(`view-concept question`, `resolve`, `status`, `check`), and, in a session
+with a drawing, a hole record (`view-concept hole`). You read the
 repository and the session folder freely. You never edit `plan.json` by hand,
 never touch the rest of the refactoring part, the code or the branch. You
 start no other agent: you write every section yourself, one after the other
@@ -242,15 +243,17 @@ a drawing** in `planning-rules.md`. The run follows **« Write model »**
 below, with these differences:
 
 - The scoping section is not yours: never write it nor rewrite it. Read its
-  source, `sections/scoping.html`, with the questions anchored on it, and
-  write each section from the points of the drawing its entry converts.
+  source, `sections/scoping.html`, with its hole records (the context's
+  `## Holes` part, each closed record's note saying how it was settled) and
+  the comments attached to them, and write each section from the points of
+  the drawing its entry converts.
 - The prose is the written synthesis of the model, for the doc pass and
   a later reader: state what the drawing settled, in full words. The other
   rules of **How the prose explains** hold.
 - No pause and no question: step 1 and the questions of step 2 do not
   apply. A hole you find goes back to scoping, as `planning-rules.md` says:
-  ask it on the drawing, write nothing further, and report « hole asked:
-  back to scoping, after section N ».
+  open it with `view-concept hole`, write nothing further, and report
+  « hole opened: back to scoping, after section N ».
 - After a return to scoping, the trigger is the new « End scoping »: rewrite
   only the sections whose entry the planner's new conversion changed or
   added (the change history says which), and those a changed point of the

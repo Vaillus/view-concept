@@ -20,6 +20,18 @@ The comments and answers you send from the page to the agent at once, with « Se
 **Side thread**:
 A separate, read-only conversation forked from the session to discuss a passage; the session never sees it.
 
+**Hole**:
+Something of the drawing only you can settle, recorded open on one element of the drawing until the scoper closes it.
+
+**Supposition**:
+A hole the scoper already answered from the code: its statement, in one sentence, in blue, for you to approve or correct.
+
+**Hole record**:
+What the page stores for a hole: hole or supposition, its sentence, its element, open or closed.
+
+**Hole file**:
+`holes.json` in the session folder: every hole record of the session, open and closed.
+
 **Feature**:
 A `/build-feature` session: a feature designed concepts first, from its model to its implementation, its docs and its PR.
 

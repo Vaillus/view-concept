@@ -28,15 +28,30 @@ def test_the_scoper_and_the_planner_get_the_scoping_sections(session):
     plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
     session.plan_path.write_text(json.dumps(plan))
     (session.sections_dir / "scoping.html").write_text('<p id="e1">the drawing</p>')
-    session.add_question("Which unit?", section="scoping", element="e1")
-    session.add_question("Approve this.", section="scoping", supposition=True)
+    session.add_hole("Which unit.", element="e1")
+    session.add_hole("Approve this.", supposition=True)
+    session.add_hole("Settled.", element="e1")
+    session.close_holes(["h3"], note="per token")
+    session.add_batch([{"section": "hole:h2", "text": "yes"}])
     for role in ("scoper", "planner"):
         text = build(session, role)
         assert "## Scoping (the drawing; its source is the HTML file)" in text
         assert "the drawing" in text and "L'attention." not in text
     text = build(session, "scoper")
-    assert "- q1 [open] Which unit? (anchor section: scoping) (element: e1)" in text
-    assert "(supposition: approve, or the user's correction)" in text
+    holes = text.split("## Holes\n")[1].split("\n\n")[0]
+    assert holes == (
+        "Open:\n"
+        "- h1 [hole · open] (element: e1) Which unit.\n"
+        "- h2 [supposition · open, waiting for the scoper] (no element) Approve this.\n"
+        "Closed:\n"
+        "- h3 [hole · closed] (element: e1) Settled. → per token"
+    )
+    assert "## Holes" in build(session, "writer") and "## Holes" not in build(session, "reviewer")
+    trigger = build(session, "scoper", ["h1", "c1"]).split("## Trigger\n")[1].split("\n\n")[0]
+    assert "- h1 [hole · open] (element: e1) Which unit." in trigger
+    assert "[c1] (hole h2 « Approve this. »)" in trigger
+    thread = build(session, "thread", section="hole:h2")
+    assert "## The hole\n- h2 [supposition" in thread and "the drawing" in thread
 
 
 def test_writer_gets_every_section_and_thread_only_its_own(session):

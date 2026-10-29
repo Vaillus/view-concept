@@ -180,9 +180,17 @@ the restructured ones from the plans and the comments on them, with the
 comments on a README's text and the rewrite requests held for it), `create-pr`,
 `missing` (« What's missing? », under the drawing in the scoping tab: the
 scoper reads the drawing again) and `end-scoping` (« End scoping », next to
-it, which the page sends only once no hole is open: the planner converts the
-drawing, then the writer writes the model). A batch
-without an action carries comments only. **Routing the events** says who takes each one.
+it, which the page and the server refuse while a hole record, hole or
+supposition, is open: the planner converts the drawing, then the writer
+writes the model). A batch without an action carries comments only.
+**Routing the events** says who takes each one.
+
+During scoping, the user answers a hole of the drawing, or approves or
+corrects a supposition, by a comment: a hole has no box to validate and is
+never skipped. A comment in a hole's box reads `[c3] (hole h2 « <its
+sentence> ») « quote »`; one on a marked element of the drawing reads
+`[c4] §1 (scoping) · element e4 (open holes h1, h2) « quote »`. The
+conclusion of a side thread on a hole arrives as a comment too.
 
 The user wrote the batch through the page. The harness may label it as a
 background event rather than a user message: treat it as the user's feedback
@@ -337,12 +345,11 @@ starts one pass. Who takes it depends on the stage:
 
 | Event | During scoping | After « End scoping » or « Write model » | After « Approve model » |
 |---|---|---|---|
-| an answer (`action: answer`) | scoper | writer | the agent that asked it |
-| a skip | the scoper (a hole left to its default) | the writer, when it answers a pause; nothing otherwise | nothing |
-| an unclear answer | scoper | writer | the agent that asked it |
+| an answer (`action: answer`) | planner, in a session with no drawing (a hole is answered by comment) | writer | the agent that asked it |
+| an unclear answer | planner, in a session with no drawing (a hole is answered by comment) | writer | the agent that asked it |
 | comments with no action | scoper | writer; a comment on a doc's text waits for the doc pass | by section: the modeling part and the to-do list to the writer, the rest of the refactoring part to the reviewer; the doc set list to the writer before the doc pass, to the documenter after; the text of a doc that is not a README, or a missing fact, to the documenter; a README's text to the skill agent holding the passage, then to the documenter (see **The docs after the doc pass**); a row of the concept triage to a document-feature agent, then to the documenter; a doc's text waits for the doc pass when it has not run; a row of a move plan or a README's text is held for « Write READMEs » while the phase is `awaiting-moves` |
 | a terminal message about the feature | record it, then scoper | record it, then writer | record it, then the writer if it is about the model, the implementer if it asks for a code change |
-| an answer to a page question typed in the terminal | `view-concept answered`, then scoper | the same, then writer | the same, then the agent that asked it |
+| an answer to a page question typed in the terminal | `view-concept answered`, then planner, in a session with no drawing (a hole is answered by comment) | the same, then writer | the same, then the agent that asked it |
 | « Rewrite model » (`action: plan`, the line says rewrite) | — | writer | writer |
 | « Go on » (`action: go-on`) | — | writer | — |
 | « Grill me » (`action: grill`) | — (« What's missing? » takes its place) | writer | writer |
@@ -404,9 +411,9 @@ pass has run (the page shows « Write docs » and « Write docs and create PR »
 `awaiting-moves` when the doc pass stopped on a move plan (the
 document-feature agent's report says `move plan waiting`; the page shows
 « Write READMEs » under the move plans), `awaiting-pr` after it (the page shows « Create PR »). The agents set the rest
-themselves: the scoper `scoping --done` when it leaves no hole open (the
-planner, in a session without a drawing), a hole asked after scoping sets
-`scoping` again (`view-concept question` does it), and
+themselves: the scoper `scoping --done` when it leaves no hole record open
+(the planner, in a session without a drawing), a hole opened after scoping
+sets `scoping` again (`view-concept hole` does it), and
 the writer or the reviewer `writing` once at the start of each run of
 sections, naming them (`--section <id>`, repeated) unless it writes every
 section with no file yet. The page reads from the section files which
@@ -688,16 +695,18 @@ names is not taken back.
 2. **First scoper run**, no trigger: it reads the docs and the code, writes
    the code map, draws the problem the request states in
    `sections/scoping.html` (the scoping tab, the only tab the page shows
-   while scoping runs), and asks the first holes and suppositions on it.
+   while scoping runs), and opens the first holes and suppositions on it
+   (`view-concept hole`).
 3. **The scoping loop.** Each event goes to the scoper, as **Routing the
-   events** says: one redraw per batch. When a run asks nothing and no hole is
-   open, say in one terminal line that the scoper has nothing left to ask, and
-   wait.
+   events** says: one redraw per batch, which closes the holes the comments
+   settled (`view-concept close-hole`). When a run opens nothing and no hole
+   record is open, say in one terminal line that the scoper has nothing left
+   to ask, and wait.
 4. **« End scoping ».** Scoping ends when the user ends it, never when an
    agent judges it has enough: a batch with `action: end-scoping` (the page
-   and the server refuse it while a hole is open), or « end scoping » in the
-   terminal once no hole is open. Let the scoper run first if events are
-   still queued. Then set `status <slug> planning`, start the **planner** with
+   and the server refuse it while a hole record, hole or supposition, is
+   open), or « end scoping » in the terminal once none is open. Let the
+   scoper run first if events are still queued. Then set `status <slug> planning`, start the **planner** with
    the trigger `"« End scoping »"` and the batch id: it converts the drawing
    into the outline and the lexicon, and asks nothing. Then start the
    **writer** with the same trigger: it writes the model from the drawing,
@@ -705,10 +714,12 @@ names is not taken back.
    from here it owns the outline and the lexicon. Go on at step 6.
 
    **The return to scoping.** When the planner or the writer finds a hole,
-   it asks it on the drawing and stops: its report says « hole asked: back
-   to scoping », and `view-concept question` has set the phase `scoping`.
-   Start the scoper with the question's id as its trigger, and go back to
-   step 3; the next « End scoping » runs the planner and the writer again,
+   it opens it (`view-concept hole`) and stops: its report says « hole
+   opened: back to scoping », and the command has set the phase `scoping`.
+   Start the scoper with that report as its trigger (`"<planner or writer>
+   report: <the line>"`; the context's `## Holes` part shows the hole open; a hole
+   with no element gets one on the same record, `view-concept hole-element`), and go
+   back to step 3; the next « End scoping » runs the planner and the writer again,
    which keep what the drawing did not change.
 
    A session started before the scoper (no scoping section) runs the steps

@@ -490,34 +490,73 @@ def _with_scoping(session):
     return session
 
 
-def test_a_hole_names_the_element_of_the_drawing_it_bears_on(session):
+def test_a_hole_is_a_record_of_the_hole_file(session):
     _with_scoping(session)
     session.write_status("scoping")
-    q = session.add_question("Which unit?", section="scoping", element=" e1 ")
-    assert q["element"] == "e1" and "kind" not in q
+    h = session.add_hole("What  the unit is.", element=" e1 ")
+    assert h == {
+        "id": "h1",
+        "kind": "hole",
+        "text": "What the unit is.",
+        "element": "e1",
+        "status": "open",
+        "asked": h["asked"],
+    }
+    s = session.add_hole("The cache is per layer.", supposition=True)
+    assert s["id"] == "h2" and s["kind"] == "supposition" and "element" not in s
+    assert json.loads(session.holes_path.read_text()) == [h, s]
     assert session.read_status()["phase"] == "scoping"
-    assert [h["id"] for h in session.open_holes()] == ["q1"]
-    session.add_question("Elsewhere?", section="s1")
-    assert [h["id"] for h in session.open_holes()] == ["q1"]
-    with pytest.raises(SessionError, match="give --section"):
-        session.add_question("Which?", element="e1")
+    assert session.read_questions() == []
+    assert [h["id"] for h in session.open_holes()] == ["h1", "h2"]
+    with pytest.raises(SessionError, match="empty hole"):
+        session.add_hole("  ")
 
 
-def test_a_supposition_is_a_hole_the_user_approves_or_corrects(session):
+def test_a_hole_needs_a_drawing(session):
+    with pytest.raises(SessionError, match="no scoping section"):
+        session.add_hole("What the unit is.")
+
+
+def test_a_question_is_not_asked_on_the_drawing(session):
     _with_scoping(session)
-    q = session.add_question("Born at conversion.", section="scoping", supposition=True)
-    assert q["kind"] == "supposition" and q["options"] == ["approve"]
-    assert q["recommended"] == "approve" and q["multi"] is False
-    session.answer_question("q1", ["approve"])
-    assert session.read_questions()[0]["answer"]["choices"] == ["approve"]
-    with pytest.raises(SessionError, match="takes no options"):
-        session.add_question("Hm.", ["a", "b"], section="scoping", supposition=True)
+    with pytest.raises(SessionError, match="view-concept hole"):
+        session.add_question("Which unit?", section="scoping")
+    session.add_question("Elsewhere?", section="s1")
+    assert session.open_holes() == []
 
 
-def test_a_hole_asked_after_scoping_sends_the_session_back_to_scoping(session):
+def test_the_scoper_closes_a_hole_with_a_note(session):
+    _with_scoping(session)
+    session.add_hole("What the unit is.", element="e1")
+    session.add_hole("Per layer.", supposition=True)
+    (closed,) = session.close_holes(["h2"], note="approved")
+    assert closed["status"] == "closed" and closed["note"] == "approved" and closed["closed"]
+    assert [h["id"] for h in session.open_holes()] == ["h1"]
+    with pytest.raises(SessionError, match="already closed: h2"):
+        session.close_holes(["h2"])
+    with pytest.raises(SessionError, match="no hole h9"):
+        session.close_holes(["h9"])
+
+
+def test_the_scoper_gives_a_hole_its_element_on_the_same_record(session):
+    _with_scoping(session)
+    session.add_hole("What the unit is.")
+    h = session.set_hole_element("h1", " e1 ")
+    assert h["id"] == "h1" and h["element"] == "e1"
+    assert [(h["id"], h["element"]) for h in session.open_holes()] == [("h1", "e1")]
+    with pytest.raises(SessionError, match="empty element"):
+        session.set_hole_element("h1", " ")
+    with pytest.raises(SessionError, match="no hole h9"):
+        session.set_hole_element("h9", "e1")
+    session.close_holes(["h1"])
+    with pytest.raises(SessionError, match="already closed: h1"):
+        session.set_hole_element("h1", "e2")
+
+
+def test_a_hole_opened_after_scoping_sends_the_session_back_to_scoping(session):
     _with_scoping(session)
     session.write_status("writing", "s1")
-    session.add_question("Which unit?", section="scoping", element="e1")
+    session.add_hole("What the unit is.", element="e1")
     assert session.read_status()["phase"] == "scoping"
     session.write_status("writing", "s1")
     session.add_question("PR or merge?", section="s1")
@@ -526,16 +565,160 @@ def test_a_hole_asked_after_scoping_sends_the_session_back_to_scoping(session):
 
 def test_end_scoping_waits_until_no_hole_is_open(session):
     _with_scoping(session)
-    session.add_question("Which unit?", section="scoping")
-    with pytest.raises(SessionError, match="holes still open in the scoping: q1"):
+    session.add_hole("What the unit is.")
+    session.add_hole("Per layer.", supposition=True)
+    with pytest.raises(SessionError, match="holes still open in the scoping: h1, h2"):
         session.add_batch([], action="end-scoping")
-    session.answer_question("q1", [], "per recording")
+    session.close_holes(["h1"], note="per recording")
+    with pytest.raises(SessionError, match="holes still open in the scoping: h2"):
+        session.add_batch([], action="end-scoping")
+    session.close_holes(["h2"])
     b = session.add_batch([], action="end-scoping")
     text = format_batch("kv-cache", b, session.read_plan()["outline"])
     assert "action: end-scoping (the user ended the scoping, no hole left:" in text
     missing = session.add_batch([], action="missing")
     text = format_batch("kv-cache", missing, session.read_plan()["outline"])
     assert "action: missing (the user asked what the drawing still misses:" in text
+
+
+def test_a_hole_waits_while_a_comment_attached_to_it_is_not_resolved(session):
+    _with_scoping(session)
+    session.add_hole("What the unit is.", element="e1")
+    session.add_hole("Per layer.", supposition=True)
+    session.add_hole("Where it goes.", element="e2")
+    assert session.waiting_holes() == set()
+    b = session.add_batch(
+        [
+            {"section": "hole:h2", "quote": "", "text": "yes"},
+            {"section": "scoping", "quote": "a point", "text": "per token", "element": "e1"},
+        ]
+    )
+    assert b["comments"][0]["section"] == "hole:h2" and "element" not in b["comments"][0]
+    assert b["comments"][1]["element"] == "e1"
+    assert session.waiting_holes() == {"h1", "h2"}
+    session.resolve([b["comments"][1]["id"]])
+    assert session.waiting_holes() == {"h2"}
+    session.close_holes(["h2"])
+    assert session.waiting_holes() == set()
+
+
+def test_hole_tones_colour_each_open_hole_and_each_marked_element(session):
+    _with_scoping(session)
+    session.add_hole("What the unit is.", element="e1")
+    session.add_hole("Per layer.", supposition=True, element="e1")
+    session.add_hole("Kept beside.", supposition=True, element="e2")
+    assert session.hole_tones() == {
+        "holes": {"h1": "hole", "h2": "supposition", "h3": "supposition"},
+        "elements": {"e1": "hole", "e2": "supposition"},
+    }
+    b = session.add_batch(
+        [
+            {"section": "hole:h1", "quote": "", "text": "per token"},
+            {"section": "hole:h3", "quote": "", "text": "yes"},
+        ]
+    )
+    assert session.hole_tones() == {
+        "holes": {"h1": "waiting", "h2": "supposition", "h3": "waiting"},
+        "elements": {"e1": "supposition", "e2": "waiting"},
+    }
+    session.resolve([c["id"] for c in b["comments"]])  # handled, neither hole closed
+    assert session.hole_tones()["holes"] == {"h1": "hole", "h2": "supposition", "h3": "supposition"}
+    assert session.hole_tones()["elements"] == {"e1": "hole", "e2": "supposition"}
+    session.close_holes(["h1", "h3"])
+    assert session.hole_tones() == {
+        "holes": {"h2": "supposition"},
+        "elements": {"e1": "supposition"},
+    }
+
+
+def test_a_hole_box_anchor_names_a_hole(session):
+    _with_scoping(session)
+    with pytest.raises(SessionError, match="hole:<id>"):
+        session.add_batch([{"section": "hole:x", "text": "hm"}])
+    t = session.new_thread("hole:h1", "", "")
+    assert t["section"] == "hole:h1"
+
+
+def test_a_comment_attached_to_a_hole_names_it_in_the_batch(session):
+    _with_scoping(session)
+    session.add_hole("What the unit is.", element="e1")
+    session.add_hole("Per layer.", element="e1", supposition=True)
+    b = session.add_batch(
+        [
+            {"section": "hole:h1", "quote": "the unit", "text": "per token"},
+            {"section": "scoping", "quote": "a point", "text": "yes", "element": "e1"},
+        ]
+    )
+    text = format_batch("kv-cache", b, session.read_plan()["outline"], holes=session.read_holes())
+    assert "[c1] (hole h1 « What the unit is. ») « the unit »\n    per token" in text
+    assert "[c2] §1 (scoping) · element e1 (open holes h1, h2) « a point »" in text
+
+
+def test_no_outline_id_starts_with_a_hole_box_anchor(session):
+    with pytest.raises(SessionError, match="may not start with"):
+        session.write_plan(outline=[{"id": "hole:h1", "title": "x"}])
+
+
+def test_an_old_session_s_holes_move_to_the_hole_file(session):
+    _with_scoping(session)
+    old = [
+        {
+            "id": "q1",
+            "text": "Which  unit?",
+            "options": [],
+            "multi": False,
+            "status": "answered",
+            "asked": "2026-10-29T10:00:00+00:00",
+            "section": "scoping",
+            "element": "e1",
+            "answer": {"choices": [], "text": "per token", "at": "2026-10-29T10:05:00+00:00"},
+        },
+        {
+            "id": "q2",
+            "text": "PR or merge?",
+            "options": ["PR"],
+            "multi": False,
+            "status": "open",
+            "asked": "2026-10-29T10:01:00+00:00",
+            "section": "s1",
+        },
+        {
+            "id": "q3",
+            "text": "Per layer.",
+            "options": ["approve"],
+            "multi": False,
+            "status": "open",
+            "asked": "2026-10-29T10:02:00+00:00",
+            "section": "scoping",
+            "kind": "supposition",
+            "recommended": "approve",
+        },
+    ]
+    session.questions_path.write_text(json.dumps(old))
+    assert [q["id"] for q in session.read_questions()] == ["q2"]
+    assert session.read_holes() == [
+        {
+            "id": "h1",
+            "kind": "hole",
+            "text": "Which unit?",
+            "element": "e1",
+            "status": "closed",
+            "asked": "2026-10-29T10:00:00+00:00",
+            "closed": "2026-10-29T10:05:00+00:00",
+            "note": "per token",
+            "question": "q1",
+        },
+        {
+            "id": "h2",
+            "kind": "supposition",
+            "text": "Per layer.",
+            "status": "open",
+            "asked": "2026-10-29T10:02:00+00:00",
+            "question": "q3",
+        },
+    ]
+    # A new question never takes the id of a question that became a hole.
+    assert session.add_question("Squash?")["id"] == "q4"
 
 
 def test_format_batch_says_an_unclear_answer(session):

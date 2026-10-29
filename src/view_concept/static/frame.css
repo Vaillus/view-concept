@@ -193,10 +193,18 @@
   display: none !important;
 }
 
-/* A hole of the drawing (frame.js, the holes message): the element an open question of the
-   scoping bears on, outlined. Under :where(), as every base rule, so a rule of the section
-   on the same element wins. */
+/* The mark (frame.js, the holes message): the element of the drawing an open hole
+   record bears on, outlined dashed in its tone: orange for a hole, blue when only
+   suppositions are open on it, grey when all its open holes wait for the scoper. Under
+   :where(), as every base rule, so a rule of the section on the same element wins. */
 :where([data-vc-hole]) {
   outline: 1px dashed var(--warn);
   outline-offset: 2px;
+  cursor: pointer;
+}
+:where([data-vc-hole][data-vc-tone="supposition"]) { outline-color: var(--info); }
+:where([data-vc-hole][data-vc-tone="waiting"]) { outline-color: var(--muted); }
+/* A click on it opens its hole window (the hole click): hovering says so. */
+:where([data-vc-hole]:hover) {
+  outline-style: solid;
 }

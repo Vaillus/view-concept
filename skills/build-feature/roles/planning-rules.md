@@ -48,9 +48,11 @@ for the branch still are not.
 
 When the outline holds a **scoping section** (`"part": "scoping"`, shown in
 the page's scoping tab), the user and the scoper drew the problem first: the
-**drawing**, with its answered **holes** (questions anchored on it) and its
-approved **suppositions**, is the source of the model, settled with the
-user. Four rules of this file change for it:
+**drawing**, with its answered **holes** and its approved
+**suppositions** (the **hole records** of `holes.json`, in the `## Holes`
+part of `view-concept context`: the open ones, then the closed ones with
+the note that says how each was settled, and the comments attached to
+them), is the source of the model, settled with the user. Four rules of this file change for it:
 
 - **The reader.** The sections are the written synthesis of the model as
   the drawing defines it: the material the doc pass turns into READMEs and
@@ -68,9 +70,12 @@ user. Four rules of this file change for it:
   stays beside the drawing, which it does not replace.
 - **Questions.** No question to the user and no listed default: what the
   drawing leaves open and only the user can answer is a hole, and goes back
-  to scoping: `view-concept question <slug> "<the hole>" --section scoping
-  [--element <id>]` (the session's phase returns to scoping by itself).
-  Then stop the run, and report « hole asked: back to scoping ». What you
+  to scoping: `view-concept hole <slug> "<one sentence: what is not
+  known>" [--element <id>]`, with the element of the drawing it bears on
+  when there is one (the session's phase returns to scoping by itself;
+  without one, the scoper draws the element and gives it to the same
+  record).
+  Then stop the run, and report « hole opened: back to scoping ». What you
   settle from the code is a decision made for the user: write it as such.
 - **The lexicon** is born at the conversion: the planner writes it from the
   words of the drawing, then it is kept as below.
