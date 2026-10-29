@@ -268,6 +268,7 @@ def state(slug: str) -> dict[str, Any]:
         implemented = s.implemented_through()
         unimplemented = [d["id"] for d in s.unimplemented_changes()]
         questions = s.read_questions()
+        holes = s.read_holes()
         grilling = s.is_grilling()
         docs = s.read_docs()
         doc_texts = {DOC_KEY + p: t for p, t in docs.items() if t is not None}
@@ -301,6 +302,8 @@ def state(slug: str) -> dict[str, Any]:
         "implemented": implemented,
         "unimplemented": unimplemented,
         "questions": questions,
+        # The hole file: every hole record of the drawing, open and closed.
+        "holes": holes,
         "grilling": grilling,
         "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),
         "published": published,
@@ -547,6 +550,8 @@ class CommentIn(BaseModel):
     thread: str = ""
     # A comment on a missing fact of a README: the fact's id.
     fact: str = ""
+    # A comment on a selection in the drawing inside a marked element: the element's id.
+    element: str = ""
 
 
 class BatchIn(BaseModel):
@@ -583,6 +588,7 @@ class DraftIn(BaseModel):
     text: str = ""
     thread: str = ""
     fact: str = ""
+    element: str = ""
 
 
 class NoteIn(BaseModel):

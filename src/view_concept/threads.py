@@ -14,7 +14,9 @@ other session files. `agents.py` holds what differs between agents.
 
 A thread opened on a doc of the Doc tab (section `doc:<path>`) gets that doc's text, read
 from the worktree, in place of a section; one on the doc set list (`doc:` alone) gets the doc
-set.
+set. One opened on a hole box (section `hole:<id>`) is told the hole's kind and sentence,
+and gets the scoping section; its conclusion, sent with « → batch », reaches the scoper as
+a comment attached to that hole.
 
 A thread opened on an agent question (`question`) helps the user understand it before
 answering it from its box. Its « use as answer » turn (`draft`) asks for the answer, which
@@ -44,6 +46,7 @@ from .context import build, doc_passage
 from .store import (
     DOC_KEY,
     DOC_SET_ANCHOR,
+    HOLE_KEY,
     MOVES_KEY,
     TRIAGE_KEY,
     Session,
@@ -299,6 +302,12 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
             where = f"the doc {sec.removeprefix(DOC_KEY)} (a file of the repository)"
         elif sec.startswith(TRIAGE_KEY):
             where = f"row {sec.removeprefix(TRIAGE_KEY)} of the concept triage (the Doc tab)"
+        elif sec.startswith(HOLE_KEY):
+            hid = sec.removeprefix(HOLE_KEY)
+            hole = next((h for h in s.read_holes() if h["id"] == hid), None)
+            kind = hole["kind"] if hole else "hole"
+            said = f" « {hole['text']} »" if hole else ""
+            where = f"the {kind} {hid}{said}, an open point of the drawing (the scoping section)"
         elif sec.startswith(MOVES_KEY):
             row = sec.removeprefix(MOVES_KEY)
             readme = s.move_readmes().get(row, "a README")
