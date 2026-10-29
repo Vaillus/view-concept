@@ -404,9 +404,9 @@ pass has run (the page shows « Write docs » and « Write docs and create PR »
 `awaiting-moves` when the doc pass stopped on a move plan (the
 document-feature agent's report says `move plan waiting`; the page shows
 « Write READMEs » under the move plans), `awaiting-pr` after it (the page shows « Create PR »). The agents set the rest
-themselves: the scoper `scoping --done` when it leaves no hole open (the
-planner, in a session without a drawing), a hole asked after scoping sets
-`scoping` again (`view-concept question` does it), and
+themselves: the scoper `scoping --done` when it leaves no hole record open
+(the planner, in a session without a drawing), a hole opened after scoping
+sets `scoping` again (`view-concept hole` does it), and
 the writer or the reviewer `writing` once at the start of each run of
 sections, naming them (`--section <id>`, repeated) unless it writes every
 section with no file yet. The page reads from the section files which
@@ -705,10 +705,11 @@ names is not taken back.
    from here it owns the outline and the lexicon. Go on at step 6.
 
    **The return to scoping.** When the planner or the writer finds a hole,
-   it asks it on the drawing and stops: its report says « hole asked: back
-   to scoping », and `view-concept question` has set the phase `scoping`.
-   Start the scoper with the question's id as its trigger, and go back to
-   step 3; the next « End scoping » runs the planner and the writer again,
+   it opens it (`view-concept hole`) and stops: its report says « hole
+   opened: back to scoping », and the command has set the phase `scoping`.
+   Start the scoper with that report as its trigger (`"planner report:
+   <the line>"`; the context's `## Holes` part shows the hole open), and go
+   back to step 3; the next « End scoping » runs the planner and the writer again,
    which keep what the drawing did not change.
 
    A session started before the scoper (no scoping section) runs the steps

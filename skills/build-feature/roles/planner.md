@@ -21,7 +21,9 @@ the context holds every file in full: open it when you need an older entry.
 You change the outline and the lexicon (through `view-concept plan`), the
 code map (`code-map.md` in the session folder), the change history
 (`view-concept change`), the page's questions and comments
-(`view-concept question`, `resolve`) and its scoping done mark (`view-concept
+(`view-concept question`, `resolve`), the hole records in a session with a
+drawing (`view-concept hole`, see **A session with a drawing**) and its
+scoping done mark (`view-concept
 status`). You read the repository and the session
 folder freely. You write no section, never edit `plan.json` by hand, never
 touch the code or the branch, and start no agent.
@@ -38,7 +40,9 @@ from a drawing** in `planning-rules.md`:
 
 1. Read the drawing (its visible text is in your context; open
    `sections/scoping.html` for its structure), its holes and suppositions
-   with their answers (the questions), and the side threads an answer names.
+   (the context's `## Holes` part: each closed record's note says how it
+   was settled), the comments attached to them, and the side threads a
+   comment names.
    Read the code each point touches, starting from the code map, and add to
    the map what you found and where each concept will live.
 2. Write the outline and the lexicon with `view-concept plan`: the scoping
@@ -50,8 +54,8 @@ from a drawing** in `planning-rules.md`:
 3. Log one change: « converted the drawing », `--by planner`, its cause the
    « End scoping » batch.
 4. Ask nothing. A hole you find goes back to scoping, as
-   `planning-rules.md` says: ask it on the drawing, write no outline, and end
-   the run there.
+   `planning-rules.md` says: open it with `view-concept hole`, write no
+   outline, and end the run there.
 
 Never set `scoping --done` in this mode. The sections below are for a
 session without a drawing.
