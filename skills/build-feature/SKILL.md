@@ -345,11 +345,11 @@ starts one pass. Who takes it depends on the stage:
 
 | Event | During scoping | After « End scoping » or « Write model » | After « Approve model » |
 |---|---|---|---|
-| an answer (`action: answer`) | scoper | writer | the agent that asked it |
-| an unclear answer | scoper | writer | the agent that asked it |
+| an answer (`action: answer`) | planner, in a session with no drawing (a hole is answered by comment) | writer | the agent that asked it |
+| an unclear answer | planner, in a session with no drawing (a hole is answered by comment) | writer | the agent that asked it |
 | comments with no action | scoper | writer; a comment on a doc's text waits for the doc pass | by section: the modeling part and the to-do list to the writer, the rest of the refactoring part to the reviewer; the doc set list to the writer before the doc pass, to the documenter after; the text of a doc that is not a README, or a missing fact, to the documenter; a README's text to the skill agent holding the passage, then to the documenter (see **The docs after the doc pass**); a row of the concept triage to a document-feature agent, then to the documenter; a doc's text waits for the doc pass when it has not run; a row of a move plan or a README's text is held for « Write READMEs » while the phase is `awaiting-moves` |
 | a terminal message about the feature | record it, then scoper | record it, then writer | record it, then the writer if it is about the model, the implementer if it asks for a code change |
-| an answer to a page question typed in the terminal | `view-concept answered`, then scoper | the same, then writer | the same, then the agent that asked it |
+| an answer to a page question typed in the terminal | `view-concept answered`, then planner, in a session with no drawing (a hole is answered by comment) | the same, then writer | the same, then the agent that asked it |
 | « Rewrite model » (`action: plan`, the line says rewrite) | — | writer | writer |
 | « Go on » (`action: go-on`) | — | writer | — |
 | « Grill me » (`action: grill`) | — (« What's missing? » takes its place) | writer | writer |
@@ -716,8 +716,8 @@ names is not taken back.
    **The return to scoping.** When the planner or the writer finds a hole,
    it opens it (`view-concept hole`) and stops: its report says « hole
    opened: back to scoping », and the command has set the phase `scoping`.
-   Start the scoper with that report as its trigger (`"planner report:
-   <the line>"`; the context's `## Holes` part shows the hole open), and go
+   Start the scoper with that report as its trigger (`"<planner or writer>
+   report: <the line>"`; the context's `## Holes` part shows the hole open), and go
    back to step 3; the next « End scoping » runs the planner and the writer again,
    which keep what the drawing did not change.
 
