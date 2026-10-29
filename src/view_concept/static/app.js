@@ -2087,14 +2087,17 @@ function pageRect(f, r) {
 }
 
 /* The selection message: a passage selected in an HTML section gets the box a passage of
-   a Markdown section gets, anchored the same way (section id, quote, prefix). */
+   a Markdown section gets, anchored the same way (section id, quote, prefix). A passage
+   inside a marked element of the drawing also carries that element's id (`element`): the
+   comment on it is read with the element's holes (see "hole records"). */
 function frameSelection(id, f, d) {
   if (!d.quote || !d.rect) {
     if (pendingSelection && pendingSelection.section === id) showSelection(null);
     return;
   }
   const rect = pageRect(f, d.rect);
-  showSelection({ section: id, quote: collapse(String(d.quote)), prefix: collapse(String(d.prefix || "")), rect });
+  showSelection({ section: id, quote: collapse(String(d.quote)), prefix: collapse(String(d.prefix || "")), rect,
+                  ...(d.element ? { element: String(d.element) } : {}) });
 }
 
 /* The anchors message: the passages the drafts, the sent comments and the side threads
@@ -2686,7 +2689,7 @@ function openComposer(target, mode = "comment") {
   $(".composer-quote", c).textContent = target.question ? `agent question ${target.question}`
     : target.fact ? `missing fact ${target.fact} « ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
     : rowOf(target.section) ? `${rowLabel(target.section)} « ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
-    : target.quote ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
+    : target.quote ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »${target.element ? ` · element ${target.element}` : ""}`
     : target.section === DOC_SET ? "the doc set"
     : docPathOf(target.section) !== null ? `whole doc ${docPathOf(target.section)}`
     : target.section ? `whole section §${numberOf(target.section)} ${titleOf(target.section)}`
@@ -2732,8 +2735,8 @@ function addDraft() {
   const c = $("#composer");
   const text = $("textarea", c).value.trim();
   if (!text) return;
-  const { section, quote, prefix, fact } = c._target;
-  const d = { id: crypto.randomUUID(), section, quote, prefix, text, ...(fact ? { fact } : {}) };
+  const { section, quote, prefix, fact, element } = c._target;
+  const d = { id: crypto.randomUUID(), section, quote, prefix, text, ...(fact ? { fact } : {}), ...(element ? { element } : {}) };
   drafts.push(d);
   saveDraft(d);
   closeComposer();
@@ -2995,9 +2998,10 @@ function whereOf(id) {
 
 function quoteLine(c) {
   if (c.question) return el("div", { class: "c-quote" }, el("span", { class: "num", text: "?" }), ` agent question ${c.question}`);
-  const where = (c.section ? whereOf(c.section) : "·") + (c.fact ? ` · fact ${c.fact}` : "");
+  const where = (c.section ? whereOf(c.section) : "·") + (c.fact ? ` · fact ${c.fact}` : "")
+    + (c.element ? ` · element ${c.element}` : "");
   const q = c.quote ? `« ${c.quote.length > 90 ? c.quote.slice(0, 90) + "…" : c.quote} »`
-          : c.section ? "whole section" : "general";
+          : holeOf(c.section) ? "whole hole" : c.section ? "whole section" : "general";
   const open = () => {
     revealQuote(c);
     if (c.thread && threadsState.threads.some((t) => t.id === c.thread)) openPopover(c.thread);
@@ -3091,7 +3095,9 @@ const deletedHere = new Set(); // ids of drafts deleted from this page
 const draftNodes = new Map(); // draft id -> its box in the review, built once
 let noteTimer = null;
 
-const draftBody = ({ section, quote, prefix, text, thread, fact }) => ({ section, quote, prefix, text, thread: thread || "", fact: fact || "" });
+// A draft on a passage inside a marked element of the drawing carries the element (`element`).
+const draftBody = ({ section, quote, prefix, text, thread, fact, element }) =>
+  ({ section, quote, prefix, text, thread: thread || "", fact: fact || "", ...(element ? { element } : {}) });
 
 async function saveDraft(d, now = true) {
   clearTimeout(saveTimers.get(d.id));
@@ -3221,7 +3227,8 @@ async function send(action = "", button = null, extra = {}) {
       ...(extra.then_pr ? { then_pr: true } : {}),
       ...(extra.path ? { path: extra.path } : {}),
       note: $("#note").value,
-      comments: drafts.map(({ section, quote, prefix, text, thread, fact }) => ({ section, quote, prefix, text, thread, fact: fact || "" })),
+      comments: drafts.map(({ section, quote, prefix, text, thread, fact, element }) =>
+        ({ section, quote, prefix, text, thread, fact: fact || "", ...(element ? { element } : {}) })),
       drafts: drafts.map((d) => d.id),
     }),
   });

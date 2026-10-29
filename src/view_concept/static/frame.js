@@ -14,8 +14,9 @@
    - The selection (frame -> page): each time the reader's selection in the section
      changes (a finger's handles, as a mouse's drag), the quoted text and the few
      characters before it (the anchor a passage of a Markdown section gets), with where
-     the selection sits in the frame; an empty quote when the selection is gone. The page
-     opens the same box to comment or to ask on it.
+     the selection sits in the frame, and the id of the nearest marked element (see the
+     holes) holding the whole selection, if any (`element`); an empty quote when the
+     selection is gone. The page opens the same box to comment or to ask on it.
    - The anchors (page -> frame), answered by "placed" (frame -> page): the passages the
      page's drafts, sent comments and side threads quote in this section. Each is
      highlighted, and highlighted again when a script of the section redraws its text.
@@ -226,19 +227,23 @@
     var index = textIndex(), k = 0;
     while (k < index.pos.length && range.comparePoint(index.pos[k][0], index.pos[k][1]) < 0) k++;
     var r = range.getBoundingClientRect();
+    var common = range.commonAncestorContainer;
+    if (common.nodeType !== 1) common = common.parentElement;
+    var marked = common && common.closest ? common.closest("[data-vc-hole]") : null;
     return { quote: quote, prefix: collapse(index.text.slice(0, k)).slice(-32),
-             rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom } };
+             rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom },
+             element: marked ? marked.id : "" };
   }
   // Posted on every change of the selection: a finger releases no mouse button.
   var lastQuote = null;
   function postSelection() {
     var s = selection();
     if (!s && !selected) return null;
-    var key = s ? s.prefix + "\n" + s.quote + "\n" + s.rect.top + "," + s.rect.left : "";
+    var key = s ? s.prefix + "\n" + s.quote + "\n" + s.rect.top + "," + s.rect.left + "\n" + s.element : "";
     if (key === lastQuote) return s;
     lastQuote = key;
     selected = !!s;
-    post(s ? { viewConcept: "selection", quote: s.quote, prefix: s.prefix, rect: s.rect }
+    post(s ? { viewConcept: "selection", quote: s.quote, prefix: s.prefix, rect: s.rect, element: s.element }
            : { viewConcept: "selection", quote: "" });
     return s;
   }
