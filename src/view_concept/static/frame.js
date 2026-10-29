@@ -47,10 +47,14 @@
      a term tapped again is posted again, since the page may have hidden its tip.
    - The holes (page -> frame): the open holes of a scoping section that name an element
      of the drawing, each {element (an id in the section), question (its id)}. The frame
-     sets `data-vc-hole` (the question's id) on each element, which frame.css marks, and
-     sets it again when a script of the section redraws its text. Unlike the paint of
-     passages, this changes an attribute of the section's element; its scripts never read
-     it.
+     sets `data-vc-hole` (the ids of the questions on it, space-separated) on each
+     element, which frame.css marks, and sets it again when a script of the section
+     redraws its text. Unlike the paint of passages, this changes an attribute of the
+     section's element; its scripts never read it.
+   - The hole click (frame -> page): a click, with nothing selected and off a side
+     thread's passage, in a frame that holds holes: the questions of the hole element it
+     falls in and where that element sits, so the page opens their boxes on it; no
+     question when it falls in none, so the page closes them.
    - The element reveal (page -> frame), answered by "revealed" (frame -> page): the
      element of a hole to show. The frame opens its holders (and selects it when it is a
      tab of the kit), then answers with where it sits, as for a passage.
@@ -244,7 +248,7 @@
   addEventListener("mouseup", function (e) {
     setTimeout(function () {
       var s = postSelection();
-      if (!s && !touch) threadClick(e.clientX, e.clientY);
+      if (!s && !touch) clickAt(e.target, e.clientX, e.clientY);
     }, 0);
   });
 
@@ -402,7 +406,9 @@
     for (var i = 0; i < marked.length; i++) marked[i].removeAttribute("data-vc-hole");
     holes.forEach(function (h) {
       var n = h.element && document.getElementById(h.element);
-      if (n) n.setAttribute("data-vc-hole", h.question);
+      if (!n) return;
+      var on = n.getAttribute("data-vc-hole");
+      n.setAttribute("data-vc-hole", on ? on + " " + h.question : h.question);
     });
   }
   function revealElement(id) {
@@ -416,7 +422,8 @@
       if (k >= 0) selectTab(tabs, k);
     }
     var b = n.getBoundingClientRect();
-    post({ viewConcept: "revealed", found: true, top: b.top + scrollY, bottom: b.bottom + scrollY });
+    post({ viewConcept: "revealed", found: true, top: b.top + scrollY, bottom: b.bottom + scrollY,
+           left: b.left, right: b.right });
   }
 
   function rectOf(r) { return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; }
@@ -431,10 +438,15 @@
     return null;
   }
 
-  /* ---- the thread click ---- */
-  function threadClick(x, y) {
+  /* ---- the thread click and the hole click ---- */
+  function clickAt(target, x, y) {
     var h = hit(threadRanges, x, y);
-    if (h) post({ viewConcept: "thread-click", thread: h[0].thread, rect: rectOf(h[1]) });
+    if (h) { post({ viewConcept: "thread-click", thread: h[0].thread, rect: rectOf(h[1]) }); return; }
+    if (!holes.length) return;
+    var n = target && target.closest ? target.closest("[data-vc-hole]") : null;
+    post(n ? { viewConcept: "hole-click", questions: n.getAttribute("data-vc-hole").split(" "),
+               rect: rectOf(n.getBoundingClientRect()) }
+           : { viewConcept: "hole-click", questions: [] });
   }
 
   /* ---- the term hover ---- */
@@ -468,7 +480,7 @@
     paintChanges(e.target);
     var h = hit(termRanges, e.clientX, e.clientY);
     hover(h && h[0], h && h[1], true);
-    if (!h) threadClick(e.clientX, e.clientY);
+    if (!h) clickAt(e.target, e.clientX, e.clientY);
   });
   addEventListener("scroll", function () { hover(null); });
 

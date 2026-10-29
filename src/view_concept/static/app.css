@@ -340,6 +340,13 @@ a.cite code { color: var(--info); background: var(--infobg); }
 /* The scoping tab: the scoping's two buttons under the holes, and a hole's element chip. */
 .scoping-actions { display: flex; gap: 8px; justify-content: flex-end; margin: 14px 0 24px; }
 .q-element { font-family: inherit; cursor: pointer; }
+/* The hole index at the end of the scoping section, and the hole popover (app.js). */
+.hole-index { gap: 4px; }
+.hole-line { display: flex; align-items: baseline; gap: 6px; text-align: left; font: inherit; color: var(--ink);
+             background: none; border: 1px dashed var(--warn); padding: 4px 8px; cursor: pointer; }
+.hole-line:hover, .hole-line.open { border-style: solid; }
+.hole-line .hole-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hole-pop { max-height: 70vh; overflow: auto; }
 #scope-questions .questions-waiting { width: 100%; }
 #scope-answered { margin-top: 8px; }
 #scope-answered summary { cursor: pointer; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; padding: 4px 0; }

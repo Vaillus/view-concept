@@ -123,8 +123,9 @@ const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
 /* The scoping tab (id "scoping"): a feature's scoping section ("part": "scoping"), the
    drawing of the problem the scoper builds with the user before any model, shown first,
-   with its holes (the open questions anchored on it) at its end and the scoping's two
-   buttons under them (see scopingActions). While scoping runs on a drawing
+   with its holes (the open questions anchored on it) on the elements they bear on and
+   indexed at its end (see "the hole popover"), and the scoping's two buttons under the
+   index (see scopingActions). While scoping runs on a drawing
    (drawingScoping), it is the only tab shown: the others appear at « End scoping », and
    hide again when a later agent's hole sends the session back to scoping. */
 const isScopingSection = (s) => s.part === "scoping";
@@ -541,7 +542,7 @@ function banner() {
   const scopingDone = phase === "scoping" && !asking && !planPending() && !!state.status.scoping_done;
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Write plan » ends it.
-    // On a drawing, the questions are holes at the end of the scoping tab, and « End scoping » ends it.
+    // On a drawing, the questions are holes on its elements, and « End scoping » ends it.
     scoping: drawingScoping() ? (sentSince("end-scoping") ? "scoping ended · the planner is converting the drawing"
            : asking ? "scoping · holes waiting for you"
            : state.status.scoping_done ? "scoping done · End scoping when ready"
@@ -945,6 +946,7 @@ function renderSections() {
   applyHighlights();
   renderThreadChips();
   positionPopover();
+  renderHolePop();
 }
 
 /* A bare block leaves out the number and the title (the description of an item: its
@@ -970,11 +972,12 @@ function sectionBlock(s, { bare = false } = {}) {
                      onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }, "ask") })),
     body,
     ...(written && sectionQuestions(s.id).length
-      ? [el("div", { class: "sec-questions" }, ...sectionQuestions(s.id).map(questionCard),
-            ...(paused() ? [goOnButton()] : []))] : []));
+      ? [isScopingSection(s) ? holeIndex(s.id)
+        : el("div", { class: "sec-questions" }, ...sectionQuestions(s.id).map(questionCard),
+             ...(paused() ? [goOnButton()] : []))] : []));
 }
 
-/* The scoping's two buttons, under the holes at the end of the scoping tab, while scoping
+/* The scoping's two buttons, under the hole index at the end of the scoping tab, while scoping
    runs on a drawing: « What's missing? » (a batch whose action is "missing": the scoper
    reads the drawing again, and opens holes or suppositions, or says nothing is left) and
    « End scoping » (action "end-scoping": the planner converts the drawing into the outline
@@ -1010,13 +1013,116 @@ function postHoles(id, f = frames.get(id)) {
     .map((q) => ({ element: q.element, question: q.id }));
   f.contentWindow.postMessage({ viewConcept: "holes", holes }, "*");
 }
-function revealElement(id, element) {
+// `holes`: the questions whose boxes open on the element once it is shown (a line of the
+// hole index), or none (a box's element chip).
+function revealElement(id, element, holes = null) {
   setTab(tabOf(id));
   const f = frames.get(id);
-  if (!f || !f.contentWindow) { scrollToSection(id); return; }
-  revealing.set(id, { element });
+  if (!f || !f.contentWindow) {
+    scrollToSection(id);
+    if (holes) openHolePop(id, holes, { line: holes[0] });
+    return;
+  }
+  revealing.set(id, { element, holes });
   f.contentWindow.postMessage({ viewConcept: "reveal-element", element }, "*");
 }
+
+/* ---------------- the hole popover ----------------
+   A hole's box opens on the element of the drawing it bears on, not in a list: a click on
+   an element the frame marks (the hole click) opens the boxes of the open questions on
+   that element in a popover beside it, as a side thread opens on its passage, and a click
+   elsewhere in the drawing, outside the popover or Escape closes it. The end of the
+   scoping section keeps an index, one line per open hole (its id, its element, the start
+   of its text): a click on a line shows the element and opens the popover there, so a
+   hole whose element the drawing no longer has still opens, on its line. A question on
+   the scoping section that names no element keeps its box in the index. The popover
+   closes once none of its questions is open; it docks across the bottom in the narrow
+   layout, as the thread popover does. */
+let holePop = null; // { section, questions: [ids], anchor: { f, rect } (in the frame's viewport) | { line: question id } }
+
+function holeIndex(id) {
+  const line = (q) => {
+    const on = openQuestions().filter((o) => o.section === id && o.element === q.element).map((o) => o.id);
+    return el("button", {
+      class: `hole-line ${holePop && holePop.questions.includes(q.id) ? "open" : ""}`, "data-question": q.id,
+      title: "Show this hole in the drawing and answer it there",
+      onclick: (e) => { e.stopPropagation(); revealElement(id, q.element, on); } },
+      el("span", { class: "num", text: q.id }),
+      q.kind === "supposition" ? el("span", { class: "badge tone-info", text: "supposition" }) : null,
+      el("span", { class: "badge accent", text: q.element }),
+      el("span", { class: "hole-text", text: q.text }));
+  };
+  return el("div", { class: "sec-questions hole-index" },
+    ...sectionQuestions(id).map((q) => (q.element ? line(q) : questionCard(q))));
+}
+
+function openHolePop(section, questions, anchor) {
+  holePop = { section, questions, anchor };
+  renderHolePop();
+  document.querySelectorAll(".hole-line").forEach((b) => b.classList.toggle("open", questions.includes(b.dataset.question)));
+}
+
+function closeHolePop() {
+  holePop = null;
+  $("#hole-pop").hidden = true;
+  document.querySelectorAll(".hole-line.open").forEach((b) => b.classList.remove("open"));
+}
+
+function renderHolePop() {
+  const pop = $("#hole-pop");
+  if (!holePop) return;
+  const open = openQuestions().filter((q) => holePop.questions.includes(q.id));
+  if (!open.length) { closeHolePop(); return; }
+  const head = el("div", { class: "t-title" },
+    el("span", { class: "dim", text: `hole${open.length > 1 ? "s" : ""} · ${open[0].element || ""}` }),
+    el("button", { class: "t-close", text: "×", title: "Close (Esc)", onclick: closeHolePop }));
+  const cards = open.map(questionCard);
+  // Re-attaching a box would blur its text field: only when the boxes changed.
+  const same = cards.length === pop.children.length - 1 && cards.every((c, i) => pop.children[i + 1] === c);
+  if (!same) pop.replaceChildren(head, ...cards);
+  pop.hidden = false;
+  positionHolePop();
+}
+
+function holeAnchorRect() {
+  // A frame drawn again (the scoper redrew) loses the element's place: the line holds it.
+  const a = holePop.anchor;
+  if (a.f && a.f.isConnected) return pageRect(a.f, a.rect);
+  const line = document.querySelector(`.hole-line[data-question="${CSS.escape(a.line || holePop.questions[0])}"]`);
+  return line ? line.getBoundingClientRect() : null;
+}
+
+function positionHolePop() {
+  const pop = $("#hole-pop");
+  if (!holePop || pop.hidden || isNarrow()) return;
+  const r = holeAnchorRect();
+  const visible = r && r.bottom > 0 && r.top < innerHeight;
+  pop.style.visibility = visible ? "visible" : "hidden";
+  if (!visible) return;
+  const h = pop.offsetHeight;
+  const w = pop.offsetWidth;
+  const below = r.bottom + 6;
+  const top = below + h <= innerHeight - 8 || r.top - h - 6 < 8 ? below : r.top - h - 6;
+  pop.style.top = `${Math.max(8, Math.min(top, innerHeight - h - 8))}px`;
+  pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
+}
+
+/* The hole click message: the questions of the hole element clicked and where it sits, or
+   none for a click elsewhere in the drawing. */
+function frameHoleClick(id, f, d) {
+  const questions = Array.isArray(d.questions) ? d.questions.map(String) : [];
+  if (!questions.length || !d.rect) { closeHolePop(); return; }
+  openHolePop(id, questions, { f, rect: d.rect });
+}
+
+document.querySelectorAll(".view").forEach((v) => v.addEventListener("scroll", positionHolePop, { passive: true }));
+addEventListener("resize", positionHolePop);
+document.addEventListener("mousedown", (e) => {
+  if (holePop && !e.target.closest("#hole-pop, #composer, #thread-pop, .hole-line")) closeHolePop();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && holePop && !e.target.closest("#composer")) closeHolePop();
+});
 
 /* ---------------- the Doc tab ----------------
    The repo docs the branch concerns (`state.docs`, from the server): the doc set, the list
@@ -1873,6 +1979,7 @@ window.addEventListener("message", (e) => {
   else if (d.viewConcept === "revealed") frameRevealed(id, f, d);
   else if (d.viewConcept === "placed") framePlaced(f, d);
   else if (d.viewConcept === "thread-click") frameThreadClick(id, f, d);
+  else if (d.viewConcept === "hole-click") frameHoleClick(id, f, d);
   else if (d.viewConcept === "term-hover") frameTermHover(f, d);
   else if (d.viewConcept === "tap") tapElsewhere(f);
 });
@@ -2010,7 +2117,13 @@ function frameTermHover(f, d) {
 /* The reveal message: the frame finds the passage and answers where it sits; the frame
    takes the height of its content, so the page does the scrolling. */
 function frameRevealed(id, f, d) {
+  const asked = revealing.get(id);
   if (!revealing.delete(id)) return;
+  // A line of the hole index: the boxes open on the element, or on the line without one.
+  if (asked.holes) {
+    openHolePop(id, asked.holes, d.found
+      ? { f, rect: { left: d.left ?? 0, right: d.right ?? 0, top: d.top, bottom: d.bottom } } : { line: asked.holes[0] });
+  }
   if (!d.found) { scrollToSection(id); return; }
   const r = pageRect(f, { left: 0, right: 0, top: d.top, bottom: d.bottom });
   const view = f.closest(".view");
@@ -2550,8 +2663,9 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    preselected; any other is pre-filled in the text field; either is marked « suggested ».
    A question may carry a background (the mechanism as it is today, each option's
    trade-offs), shown folded under its text. A hole (a question anchored on a scoping
-   section) may name the element of the drawing it bears on (`element`): a chip in its
-   text reveals it, and the frame marks it (postHoles); a supposition (`kind:
+   section) may name the element of the drawing it bears on (`element`): the frame marks
+   it (postHoles), a click on it opens the box there (see "the hole popover"), and a chip
+   in the box's text reveals it; a supposition (`kind:
    "supposition"`) is a hole the agent already answered, its one option « approve »
    preselected, the text field for a correction. A question with an anchor section (`section`)
    whose section is written is shown at the end of that section in the Model tab instead,

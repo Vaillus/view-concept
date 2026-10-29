@@ -65,11 +65,14 @@ where they form a sequence (a timeline of « today » next to one of
 
   A question bears on an element the drawing already shows: give that
   element an `id` (`e1`, `e2`… in the order you draw them, never reused) and
-  name it with `--element`. The page marks it in the drawing and lists the
-  hole at the end of the scoping tab, so do not draw the hole's text
-  yourself. A hole whose element sits in a hidden panel or a closed fold is
-  revealed from its box, which opens the holder; an element that is a `.tab`
-  of the kit is selected.
+  name it with `--element`. The page marks it in the drawing, opens the
+  hole's box on the element when the user clicks it, and indexes the hole
+  at the end of the scoping tab, so do not draw the hole's text yourself.
+  A hole whose element sits in a hidden panel or a closed fold is revealed
+  from its line in the index, which opens the holder; an element that is a
+  `.tab` of the kit is selected. Give a hole an element the user can click
+  on its own: an element nested in another hole's element opens only the
+  inner one's.
 - **Ask from the problem, not from your process.** Open a hole because the
   problem needs it, never because you just filled one, nor to have something
   to ask; and never declare scoping done because you were just corrected.

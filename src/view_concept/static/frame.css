@@ -199,4 +199,9 @@
 :where([data-vc-hole]) {
   outline: 1px dashed var(--warn);
   outline-offset: 2px;
+  cursor: pointer;
+}
+/* A click on it opens its questions (the hole click): hovering says so. */
+:where([data-vc-hole]:hover) {
+  outline-style: solid;
 }
