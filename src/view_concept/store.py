@@ -24,7 +24,7 @@ reach the agent session through the inbox.
                         one `## User` or `## Agent` heading per message  (written by `request`)
         questions.json  agent questions put to the user, with their answers  (`question`, server)
         holes.json      the hole file: every hole record of the drawing, open and closed
-                                                          (`hole`, `close-hole`)
+                                          (`hole`, `hole-element`, `close-hole`)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
@@ -155,7 +155,9 @@ section ends its scoping with « End scoping »: a batch whose action is "end-sc
 refused while a hole record is open (`open_holes`); « What's missing? » sends one whose
 action is "missing", asking the scoper to read the drawing again. A hole opened after
 scoping ended (by an agent that found one while converting or writing the model) sends the
-session back to scoping: the phase becomes "scoping". A scoping section takes no agent
+session back to scoping: the phase becomes "scoping"; when it has no element, the scoper
+draws one and gives it to the record (`set_hole_element`), which keeps its id. A scoping
+section takes no agent
 question. An old session whose questions.json still holds questions anchored on a scoping
 section sees them moved to the hole file at first read (`_migrate_holes`).
 
@@ -1282,6 +1284,24 @@ class Session:
                 by_id[i]["note"] = note.strip()
         _write_json(self.holes_path, holes)
         return [by_id[i] for i in ids]
+
+    def set_hole_element(self, hid: str, element: str) -> dict[str, Any]:
+        """Give an open hole record its element: the scoper drew the element of the drawing
+        a hole bears on (one the planner or the writer opened with none, or whose element a
+        redraw removed). The record keeps its id, so the comments attached to it stay on it.
+        Returns the record."""
+        element = element.strip()
+        if not element:
+            raise SessionError("empty element")
+        holes = self.read_holes()
+        h = next((h for h in holes if h["id"] == hid), None)
+        if h is None:
+            raise SessionError(f"no hole {hid}")
+        if h["status"] != "open":
+            raise SessionError(f"already closed: {hid}")
+        h["element"] = element
+        _write_json(self.holes_path, holes)
+        return h
 
     def open_holes(self) -> list[dict[str, Any]]:
         """The open hole records, holes and suppositions: what « End scoping » waits on."""

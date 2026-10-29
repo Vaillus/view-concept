@@ -271,6 +271,14 @@ def cmd_hole(a: argparse.Namespace) -> None:
         )
 
 
+def cmd_hole_element(a: argparse.Namespace) -> None:
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    h = s.set_hole_element(a.hid, a.element)
+    print(f"{h['id']} on {h['element']}")
+
+
 def cmd_close_hole(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
@@ -812,6 +820,15 @@ def main() -> None:
         "corrects it",
     )
     q.set_defaults(fn=cmd_hole)
+
+    q = sub.add_parser(
+        "hole-element",
+        help="give an open hole record its element of the drawing; the hole keeps its id",
+    )
+    q.add_argument("slug")
+    q.add_argument("hid", help="the hole id, e.g. h1")
+    q.add_argument("element", help="the id of the element of the drawing it marks")
+    q.set_defaults(fn=cmd_hole_element)
 
     q = sub.add_parser("close-hole", help="close open hole records once the drawing settles them")
     q.add_argument("slug")

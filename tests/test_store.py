@@ -538,6 +538,21 @@ def test_the_scoper_closes_a_hole_with_a_note(session):
         session.close_holes(["h9"])
 
 
+def test_the_scoper_gives_a_hole_its_element_on_the_same_record(session):
+    _with_scoping(session)
+    session.add_hole("What the unit is.")
+    h = session.set_hole_element("h1", " e1 ")
+    assert h["id"] == "h1" and h["element"] == "e1"
+    assert [(h["id"], h["element"]) for h in session.open_holes()] == [("h1", "e1")]
+    with pytest.raises(SessionError, match="empty element"):
+        session.set_hole_element("h1", " ")
+    with pytest.raises(SessionError, match="no hole h9"):
+        session.set_hole_element("h9", "e1")
+    session.close_holes(["h1"])
+    with pytest.raises(SessionError, match="already closed: h1"):
+        session.set_hole_element("h1", "e2")
+
+
 def test_a_hole_opened_after_scoping_sends_the_session_back_to_scoping(session):
     _with_scoping(session)
     session.write_status("writing", "s1")

@@ -102,6 +102,9 @@ def test_hole_opens_and_close_hole_closes_a_hole_record(tmp_path):
     assert r.returncode == 0 and r.stdout.strip() == "h2", r.stderr
     hole, supposition = json.loads((d / "holes.json").read_text())
     assert hole["element"] == "e3" and supposition["kind"] == "supposition"
+    r = view_concept(tmp_path, "hole-element", "ask", "h2", "e5")
+    assert r.returncode == 0 and r.stdout.strip() == "h2 on e5", r.stderr
+    assert json.loads((d / "holes.json").read_text())[1]["element"] == "e5"
     r = view_concept(tmp_path, "close-hole", "ask", "h1", "h2", "--note", "per token")
     assert r.returncode == 0 and r.stdout.split() == ["h1", "closed", "h2", "closed"]
     assert all(h["note"] == "per token" for h in json.loads((d / "holes.json").read_text()))
