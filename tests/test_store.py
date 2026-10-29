@@ -482,6 +482,62 @@ def test_a_question_may_carry_a_background_and_an_anchor_section(session):
         session.add_question("Which?", section="s9")
 
 
+def _with_scoping(session):
+    plan = session.read_plan()
+    plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
+    session.plan_path.write_text(json.dumps(plan))
+    (session.sections_dir / "scoping.html").write_text('<p id="e1">a point</p>')
+    return session
+
+
+def test_a_hole_names_the_element_of_the_drawing_it_bears_on(session):
+    _with_scoping(session)
+    session.write_status("scoping")
+    q = session.add_question("Which unit?", section="scoping", element=" e1 ")
+    assert q["element"] == "e1" and "kind" not in q
+    assert session.read_status()["phase"] == "scoping"
+    assert [h["id"] for h in session.open_holes()] == ["q1"]
+    session.add_question("Elsewhere?", section="s1")
+    assert [h["id"] for h in session.open_holes()] == ["q1"]
+    with pytest.raises(SessionError, match="give --section"):
+        session.add_question("Which?", element="e1")
+
+
+def test_a_supposition_is_a_hole_the_user_approves_or_corrects(session):
+    _with_scoping(session)
+    q = session.add_question("Born at conversion.", section="scoping", supposition=True)
+    assert q["kind"] == "supposition" and q["options"] == ["approve"]
+    assert q["recommended"] == "approve" and q["multi"] is False
+    session.answer_question("q1", ["approve"])
+    assert session.read_questions()[0]["answer"]["choices"] == ["approve"]
+    with pytest.raises(SessionError, match="takes no options"):
+        session.add_question("Hm.", ["a", "b"], section="scoping", supposition=True)
+
+
+def test_a_hole_asked_after_scoping_sends_the_session_back_to_scoping(session):
+    _with_scoping(session)
+    session.write_status("writing", "s1")
+    session.add_question("Which unit?", section="scoping", element="e1")
+    assert session.read_status()["phase"] == "scoping"
+    session.write_status("writing", "s1")
+    session.add_question("PR or merge?", section="s1")
+    assert session.read_status()["phase"] == "awaiting-answer"
+
+
+def test_end_scoping_waits_until_no_hole_is_open(session):
+    _with_scoping(session)
+    session.add_question("Which unit?", section="scoping")
+    with pytest.raises(SessionError, match="holes still open in the scoping: q1"):
+        session.add_batch([], action="end-scoping")
+    session.answer_question("q1", [], "per recording")
+    b = session.add_batch([], action="end-scoping")
+    text = format_batch("kv-cache", b, session.read_plan()["outline"])
+    assert "action: end-scoping (the user ended the scoping, no hole left:" in text
+    missing = session.add_batch([], action="missing")
+    text = format_batch("kv-cache", missing, session.read_plan()["outline"])
+    assert "action: missing (the user asked what the drawing still misses:" in text
+
+
 def test_format_batch_says_an_unclear_answer(session):
     session.add_question("PR or merge?")
     b = session.unclear_question("q1", "what is a merge?")

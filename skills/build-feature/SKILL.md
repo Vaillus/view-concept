@@ -15,7 +15,8 @@ argument-hint: "[the branch or PR number]"
 # /build-feature
 
 Builds a feature in the view-concept page (the `view-concept` command): a
-model of what the feature introduces, written and corrected with the user,
+drawing of the problem, built with the user one batch at a time (the
+**scoping**), then a model of what the feature introduces, written from it,
 agents that change the code on its branch to match it, a check of the code
 against the model, then the docs and the PR.
 
@@ -56,6 +57,16 @@ it touches, never a list on the model sheet, and never stated in the
 prose too. A section stays in the model only when it holds a decision the user makes or must make, or a consequence
 they will notice; anything else is one line of the to-do list, which the
 implementer carries and the reviewer checks.
+
+In a session with a **drawing** (the scoping section the scoper builds with
+the user, shown first in the scoping tab), the drawing is where the user
+settles the model: its answered **holes** are their decisions, its approved
+**suppositions** facts. The model is then its written synthesis, for the doc
+pass and a later reader, rather than an argument for the user's choices: it
+states what the drawing holds in full words, an entry per point, and the
+model sheet stays beside the drawing. The roles' **A model written from a
+drawing** says how; the rules of this paragraph's first lines hold for what
+the drawing does not hold.
 
 In the page, the model is the outline and the lexicon of `plan.json` (one
 entry per term that is not plain language, `kind` + `definition` + `tip`: a
@@ -99,7 +110,7 @@ yours, word for word and in order, from the first message about the feature
 (leave out earlier messages on another subject), each under a `## User` or
 `## Agent` heading, messages only (no tool call, no tool output). The
 command writes it to `request.md` in the session folder, and replaces it
-when run again. The planner and the writer read it whole; the implementer,
+when run again. The scoper, the planner and the writer read it whole; the implementer,
 the reviewer and a side thread get its path and open it when a comment needs
 the user's reasons. A review started with a single message has no
 transcript: that message is its whole request.
@@ -166,7 +177,11 @@ in the terminal, is one too), `write-readmes` (« Write READMEs », under the
 move plans in the Doc tab while the phase is `awaiting-moves`: the doc
 pass goes on and writes the folder model of every README of the doc set,
 the restructured ones from the plans and the comments on them, with the
-comments on a README's text and the rewrite requests held for it), `create-pr`. A batch
+comments on a README's text and the rewrite requests held for it), `create-pr`,
+`missing` (« What's missing? », under the drawing in the scoping tab: the
+scoper reads the drawing again) and `end-scoping` (« End scoping », next to
+it, which the page sends only once no hole is open: the planner converts the
+drawing, then the writer writes the model). A batch
 without an action carries comments only. **Routing the events** says who takes each one.
 
 The user wrote the batch through the page. The harness may label it as a
@@ -199,7 +214,8 @@ the lexicon, the sections, the code or the docs yourself:
 
 | Agent | Owns | Role file |
 |---|---|---|
-| **planner** | the outline and the lexicon, during scoping, and the first code map | `roles/planner.md` |
+| **scoper** | the drawing (`sections/scoping.html`, the scoping section) and its holes, from Setup to « End scoping », and the first code map | `roles/scoper.md` |
+| **planner** | the outline and the lexicon it converts from the drawing at « End scoping » (in a session started before the scoper: during scoping, and the first code map) | `roles/planner.md` |
 | **writer** | the modeling part (its sections), the to-do list, the first doc set, and the outline and the lexicon from « Write model » on | `roles/writer.md` |
 | **implementer** | the code on the branch and the code map, from « Approve model » on; never a doc | `roles/implementer.md` |
 | **reviewer** | the refactoring part but the to-do list: the code checked against the model, item by item | `roles/reviewer.md` |
@@ -219,8 +235,9 @@ file and no skill sends an agent to read another skill.
 
 The **code map**, `code-map.md` in the session folder, says which modules
 carry the feature and where each concept lives, so a fresh agent does not
-explore the same code again: the planner writes it on its first run, the
-implementer updates it when it moves code, and every context loads it.
+explore the same code again: the scoper writes it on its first run (the
+planner, in a session without a drawing), the implementer updates it when it
+moves code, and every context loads it.
 
 The role files are in `~/Documents/code/view-concept/skills/build-feature/`.
 The planner and the writer also read `roles/planning-rules.md` there. A side
@@ -232,11 +249,11 @@ server starts itself from the same folder.
 Each run starts from the output of
 
 ```bash
-view-concept context <slug> --role <planner|writer|implementer|reviewer|documenter> --trigger <ids or words>
+view-concept context <slug> --role <scoper|planner|writer|implementer|reviewer|documenter> --trigger <ids or words>
 ```
 
 It prints the **base context** (the initial request, or the request
-transcript for the planner and the writer, the outline, the
+transcript for the scoper, the planner and the writer, the outline, the
 lexicon, the code map, the recent change history, the questions, the recent
 terminal messages, and the sections the role needs) and the **trigger**: the events
 that started this run, in full. Once the model is approved, it also says up
@@ -273,7 +290,7 @@ when and how:
 | reviewer | one item, or a few small items grouped |
 | implementer | a set of files no other part touches, in its own git worktree, when at least two such sets are each more than a small fix |
 
-The planner and the writer start none: the writer writes its sections one
+The scoper, the planner and the writer start none: the writer writes its sections one
 after the other, each from the text of the sections before it. A helper
 never starts one itself. Every helper
 obeys the **owner rule**: it writes only its own section file (or, for the
@@ -318,18 +335,20 @@ The user's **events** are what reaches you: a batch from the page (an answer,
 a skip, comments, a button), or a message typed in the terminal. Each event
 starts one pass. Who takes it depends on the stage:
 
-| Event | During scoping | After « Write model » | After « Approve model » |
+| Event | During scoping | After « End scoping » or « Write model » | After « Approve model » |
 |---|---|---|---|
-| an answer (`action: answer`) | planner | writer | the agent that asked it |
-| a skip | nothing: the outline already used the default | the writer, when it answers a pause; nothing otherwise | nothing |
-| an unclear answer | planner | writer | the agent that asked it |
-| comments with no action | planner | writer; a comment on a doc's text waits for the doc pass | by section: the modeling part and the to-do list to the writer, the rest of the refactoring part to the reviewer; the doc set list to the writer before the doc pass, to the documenter after; the text of a doc that is not a README, or a missing fact, to the documenter; a README's text to the skill agent holding the passage, then to the documenter (see **The docs after the doc pass**); a row of the concept triage to a document-feature agent, then to the documenter; a doc's text waits for the doc pass when it has not run; a row of a move plan or a README's text is held for « Write READMEs » while the phase is `awaiting-moves` |
-| a terminal message about the feature | record it, then planner | record it, then writer | record it, then the writer if it is about the model, the implementer if it asks for a code change |
-| an answer to a page question typed in the terminal | `view-concept answered`, then planner | the same, then writer | the same, then the agent that asked it |
+| an answer (`action: answer`) | scoper | writer | the agent that asked it |
+| a skip | the scoper (a hole left to its default) | the writer, when it answers a pause; nothing otherwise | nothing |
+| an unclear answer | scoper | writer | the agent that asked it |
+| comments with no action | scoper | writer; a comment on a doc's text waits for the doc pass | by section: the modeling part and the to-do list to the writer, the rest of the refactoring part to the reviewer; the doc set list to the writer before the doc pass, to the documenter after; the text of a doc that is not a README, or a missing fact, to the documenter; a README's text to the skill agent holding the passage, then to the documenter (see **The docs after the doc pass**); a row of the concept triage to a document-feature agent, then to the documenter; a doc's text waits for the doc pass when it has not run; a row of a move plan or a README's text is held for « Write READMEs » while the phase is `awaiting-moves` |
+| a terminal message about the feature | record it, then scoper | record it, then writer | record it, then the writer if it is about the model, the implementer if it asks for a code change |
+| an answer to a page question typed in the terminal | `view-concept answered`, then scoper | the same, then writer | the same, then the agent that asked it |
 | « Rewrite model » (`action: plan`, the line says rewrite) | — | writer | writer |
 | « Go on » (`action: go-on`) | — | writer | — |
-| « Grill me » (`action: grill`) | planner | writer | writer |
-| « Write model » (`action: plan`, the line says write) | see **Model consolidation** | — | — |
+| « Grill me » (`action: grill`) | — (« What's missing? » takes its place) | writer | writer |
+| « What's missing? » (`action: missing`) | scoper | — | — |
+| « End scoping » (`action: end-scoping`) | see **Model consolidation** | — | — |
+| « Write model » (`action: plan`, the line says write) | only in a session started before the scoper: see **Model consolidation** | — | — |
 | « Approve model » (`action: approve-model`) | — | see **Model consolidation**, step 7 | — |
 | « Write docs » (`action: write-docs`) | — | — | see **The doc pass** |
 | « Write READMEs » (`action: write-readmes`) | — | — | the doc pass goes on, with the comments on the move plans, on a README's text and the rewrite requests held for it (see **The doc pass**, steps 4 and 5) |
@@ -338,7 +357,10 @@ starts one pass. Who takes it depends on the stage:
 | « Create PR » (`action: create-pr`) | — | — | see **Closing** |
 
 The agent that asked a question is the one whose report counted it; when you
-cannot tell, give it to the writer.
+cannot tell, give it to the writer. A session started before the scoper
+existed has no drawing: its column « During scoping » says planner wherever
+this one says scoper, « Grill me » goes to the planner, and its scoping ends
+with « Write model ».
 
 Record a terminal message about the feature with
 `view-concept message <slug> "<the message, as the user wrote it>"` before
@@ -359,7 +381,8 @@ see a grill in their context.
 ### Status
 
 Keep the page's status true: `view-concept status <slug> scoping` from Setup
-to « Write model », and after each writer run `view-concept status <slug>
+to « End scoping » (« Write model » in a session without a drawing), `status
+<slug> planning` while the planner converts the drawing, and after each writer run `view-concept status <slug>
 awaiting-model` when no question it asked is open, every section of the
 modeling part and the to-do list are written, and `audit.json` holds no entry with `"issue":
 "undefined"`. A writer paused on its questions sets the phase
@@ -381,7 +404,9 @@ pass has run (the page shows « Write docs » and « Write docs and create PR »
 `awaiting-moves` when the doc pass stopped on a move plan (the
 document-feature agent's report says `move plan waiting`; the page shows
 « Write READMEs » under the move plans), `awaiting-pr` after it (the page shows « Create PR »). The agents set the rest
-themselves: the planner `scoping --done` when it leaves no question open, and
+themselves: the scoper `scoping --done` when it leaves no hole open (the
+planner, in a session without a drawing), a hole asked after scoping sets
+`scoping` again (`view-concept question` does it), and
 the writer or the reviewer `writing` once at the start of each run of
 sections, naming them (`--section <id>`, repeated) unless it writes every
 section with no file yet. The page reads from the section files which
@@ -660,20 +685,51 @@ names is not taken back.
 
 1. **Setup.** Run **Setup**, arm the comment channel, and set `status <slug>
    scoping`.
-2. **First planner run**, no trigger: it reads the docs and the code, drafts
-   the outline and the lexicon, and asks the first questions in the page.
-3. **The scoping loop.** Each event goes to the planner, as **Routing the
-   events** says. When a run asks nothing and no question is open, say in one
-   terminal line that the planner has no question left, and wait.
-4. **« Write model ».** Scoping ends when the user ends it, never when an
-   agent judges it has enough: a batch with `action: plan` while no section
-   is written, or « go ahead » in the terminal. The open questions are marked
-   skipped, except the section questions, which stay open until their section
-   is written; the deferred ones stay deferred, to be asked again after their
-   anchor section. Let the planner run first if events are still queued, then start
-   the writer with the trigger `"« Write model »"` and the batch id. From here
-   the writer owns the outline and the lexicon too.
-5. **The pauses.** The writer writes the model one section at a time, in
+2. **First scoper run**, no trigger: it reads the docs and the code, writes
+   the code map, draws the problem the request states in
+   `sections/scoping.html` (the scoping tab, the only tab the page shows
+   while scoping runs), and asks the first holes and suppositions on it.
+3. **The scoping loop.** Each event goes to the scoper, as **Routing the
+   events** says: one redraw per batch. When a run asks nothing and no hole is
+   open, say in one terminal line that the scoper has nothing left to ask, and
+   wait.
+4. **« End scoping ».** Scoping ends when the user ends it, never when an
+   agent judges it has enough: a batch with `action: end-scoping` (the page
+   and the server refuse it while a hole is open), or « end scoping » in the
+   terminal once no hole is open. Let the scoper run first if events are
+   still queued. Then set `status <slug> planning`, start the **planner** with
+   the trigger `"« End scoping »"` and the batch id: it converts the drawing
+   into the outline and the lexicon, and asks nothing. Then start the
+   **writer** with the same trigger: it writes the model from the drawing,
+   with no pause, as its role file says (**A model written from a drawing**);
+   from here it owns the outline and the lexicon. Go on at step 6.
+
+   **The return to scoping.** When the planner or the writer finds a hole,
+   it asks it on the drawing and stops: its report says « hole asked: back
+   to scoping », and `view-concept question` has set the phase `scoping`.
+   Start the scoper with the question's id as its trigger, and go back to
+   step 3; the next « End scoping » runs the planner and the writer again,
+   which keep what the drawing did not change.
+
+   A session started before the scoper (no scoping section) runs the steps
+   2' to 4' below in place of 2 to 4: the planner scopes, then « Write model ».
+   - **2'. First planner run**, no trigger: it reads the docs and the code,
+     drafts the outline and the lexicon, and asks the first questions in the
+     page.
+   - **3'. The scoping loop.** Each event goes to the planner. When a run asks
+     nothing and no question is open, say in one terminal line that the
+     planner has no question left, and wait.
+   - **4'. « Write model ».** Scoping ends when the user ends it, never when
+     an agent judges it has enough: a batch with `action: plan` while no
+     section is written, or « go ahead » in the terminal. The open questions
+     are marked skipped, except the section questions, which stay open until
+     their section is written; the deferred ones stay deferred, to be asked
+     again after their anchor section. Let the planner run first if events
+     are still queued, then start the writer with the trigger
+     `"« Write model »"` and the batch id. From here the writer owns the
+     outline and the lexicon too.
+5. **The pauses** (a session without a drawing: a writer from a drawing
+   asks no question, so it never pauses). The writer writes the model one section at a time, in
    outline order, and stops after a section that has questions to ask (a
    deferred question anchored to it, a decision it makes answerable, or a
    section question still open and anchored to it): its report says

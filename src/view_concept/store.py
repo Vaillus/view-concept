@@ -65,7 +65,10 @@ in the explanation amends a section or adds one at its place in the outline; a `
 "question"` left by an older session is ignored, and the section reads as any other. A
 refactor section, marked `part: "refactoring"`, belongs to the refactoring part of a
 feature or a triage and is shown in the code tab; every other section is an
-explanation section, shown in the Explanation tab. A refactor section about one item of
+explanation section, shown in the Explanation tab. A scoping section, marked `part:
+"scoping"`, is the drawing of the problem a feature's scoper builds with the user before
+any model is written (an HTML section, sections/scoping.html by convention): the page
+shows it in a tab of its own, the scoping tab, first. A refactor section about one item of
 the diff carries its item fields under `item`: {files, verdict (one of the keys of the
 session workflow's list in verdicts.yaml, next to this module), batch? (a short label or
 number), implements, note, relations: [{to, kind, from?}]}, where the optional `from`
@@ -92,7 +95,7 @@ message, kept verbatim in plan.json. When the review follows a conversation abou
 feature, request.md, the request transcript, holds all of it: every message from the
 first one about the feature, the user's and the agent's, verbatim and in order, under a
 `## User` or `## Agent` heading each; messages only, no tool call or tool output. The
-change history logs every change of the model: {id: m1…, at, by (planner or writer),
+change history logs every change of the model: {id: m1…, at, by (scoper, planner or writer),
 change (a few words), cause (the ids of the questions, comments or terminal messages
 that led to it, or "own judgment")}. A session written before it has changes.json
 instead, read as its change history. The terminal messages are the user's later messages
@@ -131,6 +134,17 @@ becomes "deferred", the agent anchors it to the section that will explain what i
 user answers in the terminal instead, the agent runs `answered`: the question is marked
 answered with `from: "terminal"`, empty choices and the user's words as text, and no
 batch is sent, since the agent already has the answer; the phase is left to the agent.
+
+A question anchored on a scoping section is a hole: something of the drawing only the
+user can answer. It may carry `element`, the id of the element of the HTML section it bears
+on, which the page marks in the drawing, and `kind: "supposition"`: a hole the agent
+already answered, whose one option is APPROVE, recommended; the user approves it or
+corrects it in the text. A feature with a scoping section ends its scoping with « End
+scoping »: a batch whose action is "end-scoping", refused while a hole is open
+(`open_holes`); « What's missing? » sends one whose action is "missing", asking the scoper
+to read the drawing again. A hole asked after scoping ended (by an agent that found one
+while converting or writing the model) sends the session back to scoping: the phase
+becomes "scoping".
 
 Scoping ends when the user clicks « Write plan » (« Write model » in a feature or
 a triage): a batch whose action is "plan", after which
@@ -351,7 +365,14 @@ ACTIONS = (
     "rewrite-readme",
     "write-lexicon",
     "write-readmes",
+    "missing",
+    "end-scoping",
 )
+# The part of a scoping section: the drawing of the problem a feature's scoper builds with
+# the user before any model is written, shown in the page's scoping tab.
+SCOPING_PART = "scoping"
+# The one option of a supposition: the user approves the answer the agent already wrote.
+APPROVE = "approve"
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
@@ -370,7 +391,7 @@ RENAMED_WORKFLOWS = {
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "build-feature"}
 # The role agents a feature's coordinator starts; a variant sets a model per role.
-AGENT_ROLES = ("planner", "writer", "implementer", "documenter", "reviewer")
+AGENT_ROLES = ("scoper", "planner", "writer", "implementer", "documenter", "reviewer")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 # A draft's id: the page makes it (a UUID). Its fields, as a batch comment takes them.
 DRAFT_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
@@ -1137,15 +1158,27 @@ class Session:
         recommended: str = "",
         background: str = "",
         section: str = "",
+        element: str = "",
+        supposition: bool = False,
     ) -> dict[str, Any]:
         """Put an agent question to the user, and wait for the answer: the phase becomes
         "awaiting-answer". During scoping nothing waits: the phase stays "scoping".
         `recommended` is the answer the agent suggests, `background` what the user needs to
-        know to answer, `section` the anchor section the page shows it after."""
+        know to answer, `section` the anchor section the page shows it after.
+
+        On a scoping section, a question is a hole: `element` is the id of the element of
+        the drawing it bears on, and a `supposition` is a hole the agent already answered,
+        which the user approves (its one option, recommended) or corrects in the text.
+        Asked after scoping ended, a hole sends the session back to scoping: the phase
+        becomes "scoping" (`scoping_sections`)."""
         if not text.strip():
             raise SessionError("empty question")
         if section:
             self._check_section(section)
+        if element and not section:
+            raise SessionError("an element is an element of the anchor section: give --section")
+        if supposition and options:
+            raise SessionError("a supposition takes no options: the user approves or corrects it")
         questions = self.read_questions()
         q = {
             "id": f"q{len(questions) + 1}",
@@ -1155,17 +1188,38 @@ class Session:
             "status": "open",
             "asked": now_iso(),
         }
+        if supposition:
+            q["kind"] = "supposition"
+            q["options"] = [APPROVE]
+            q["multi"] = False
+            recommended = APPROVE
         if recommended.strip():
             q["recommended"] = recommended.strip()
         if background.strip():
             q["background"] = background.strip()
         if section:
             q["section"] = section
+        if element.strip():
+            q["element"] = element.strip()
         questions.append(q)
         _write_json(self.questions_path, questions)
-        if self.read_status().get("phase") != "scoping":
+        phase = self.read_status().get("phase")
+        if section in self.scoping_sections():
+            if phase != "scoping":
+                self.write_status("scoping")
+        elif phase != "scoping":
             self.write_status("awaiting-answer")
         return q
+
+    def scoping_sections(self) -> list[str]:
+        """The ids of the outline's scoping sections (`"part": "scoping"`), in outline order."""
+        return [s["id"] for s in self.read_plan()["outline"] if s.get("part") == SCOPING_PART]
+
+    def open_holes(self) -> list[dict[str, Any]]:
+        """The open questions anchored on a scoping section: the holes left in the drawing."""
+        scoping = set(self.scoping_sections())
+        questions = self.read_questions()
+        return [q for q in questions if q["status"] == "open" and q.get("section") in scoping]
 
     def _question(self, questions: list[dict[str, Any]], qid: str) -> dict[str, Any]:
         """The agent question `qid` of `questions`."""
@@ -2318,8 +2372,10 @@ class Session:
         open, and "rewrite-readme" that they asked for the README at `path` (a doc of the
         doc set named README.md, in the worktree or not yet) to be written again with
         write-readme, "write-lexicon" that they asked for the repo lexicon
-        (REPO_LEXICON), refused once the file exists, and "write-readmes" that they read
-        the move plans and asked the doc pass to write the folder models it held. `path`
+        (REPO_LEXICON), refused once the file exists, "write-readmes" that they read
+        the move plans and asked the doc pass to write the folder models it held, "missing"
+        that they asked the scoper what the drawing still misses, and "end-scoping" that
+        they ended a feature's scoping (refused while a hole is open, `open_holes`). `path`
         goes with "rewrite-readme" only, which needs it."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
@@ -2333,6 +2389,9 @@ class Session:
             path = self._readme_to_rewrite(path)
         if action == "write-lexicon" and (lex := self.doc_file(REPO_LEXICON)) and lex.is_file():
             raise SessionError(f"{REPO_LEXICON} exists: correct it in the Doc tab")
+        if action == "end-scoping" and (holes := self.open_holes()):
+            ids = ", ".join(q["id"] for q in holes)
+            raise SessionError(f"holes still open in the scoping: {ids}")
         note = note.strip()
         # A comment from a side thread may have no text: the thread's conclusion is the comment.
         comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
@@ -2924,6 +2983,16 @@ def format_batch(
         lines.append(
             "action: go-on (the user asked to go on past the pause: write the next sections; "
             "the pause's questions stay open)"
+        )
+    if batch.get("action") == "missing":
+        lines.append(
+            "action: missing (the user asked what the drawing still misses: read it again, "
+            "and open holes or suppositions, or say nothing is left)"
+        )
+    if batch.get("action") == "end-scoping":
+        lines.append(
+            "action: end-scoping (the user ended the scoping, no hole left: convert the "
+            "drawing into the outline and the lexicon, then write the model)"
         )
     if batch.get("action") == "answer":
         asked = {q["id"]: q["text"] for q in questions or []}

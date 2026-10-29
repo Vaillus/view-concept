@@ -237,7 +237,14 @@ def cmd_question(a: argparse.Namespace) -> None:
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
     q = s.add_question(
-        a.text, a.option, a.multi, a.recommended or "", a.background or "", a.section or ""
+        a.text,
+        a.option,
+        a.multi,
+        a.recommended or "",
+        a.background or "",
+        a.section or "",
+        a.element or "",
+        a.supposition,
     )
     print(q["id"])
     # The answer only reaches the agent through a watch or a wait: say so while none runs.
@@ -761,6 +768,15 @@ def main() -> None:
         help="what the user needs to know to answer: the mechanism today, each option's trade-offs",
     )
     q.add_argument("--section", help="the anchor section: the page shows the question after it")
+    q.add_argument(
+        "--element",
+        help="on a scoping section: the id of the element of the drawing the hole bears on",
+    )
+    q.add_argument(
+        "--supposition",
+        action="store_true",
+        help="a hole you already answered (the text): the user approves or corrects it",
+    )
     q.set_defaults(fn=cmd_question)
 
     q = sub.add_parser(
@@ -791,7 +807,7 @@ def main() -> None:
     q = sub.add_parser("change", help="append a change of the model to the change history")
     q.add_argument("slug")
     q.add_argument("change", help="what changed in the model, in a few words")
-    q.add_argument("--by", help="who made it: planner or writer")
+    q.add_argument("--by", help="who made it: scoper, planner or writer")
     q.add_argument(
         "--cause",
         nargs="*",

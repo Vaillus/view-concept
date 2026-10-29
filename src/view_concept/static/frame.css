@@ -192,3 +192,11 @@
 :where(.tab-panel[hidden]) {
   display: none !important;
 }
+
+/* A hole of the drawing (frame.js, the holes message): the element an open question of the
+   scoping bears on, outlined. Under :where(), as every base rule, so a rule of the section
+   on the same element wins. */
+:where([data-vc-hole]) {
+  outline: 1px dashed var(--warn);
+  outline-offset: 2px;
+}
