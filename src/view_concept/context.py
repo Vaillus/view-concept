@@ -490,7 +490,7 @@ def _questions(questions: list[dict[str, Any]]) -> list[str]:
 def _hole_line(h: dict[str, Any], waiting: set[str]) -> str:
     """One hole record: its id, kind, state, element and sentence; once closed, the note
     that says how it was settled."""
-    state = "open, waiting for you" if h["id"] in waiting else h["status"]
+    state = "open, waiting for the scoper" if h["id"] in waiting else h["status"]
     element = f" (element: {h['element']})" if h.get("element") else " (no element)"
     line = f"- {h['id']} [{h['kind']} · {state}]{element} {h['text']}"
     if h.get("question"):

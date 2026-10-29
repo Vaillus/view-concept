@@ -42,7 +42,7 @@ def test_the_scoper_and_the_planner_get_the_scoping_sections(session):
     assert holes == (
         "Open:\n"
         "- h1 [hole · open] (element: e1) Which unit.\n"
-        "- h2 [supposition · open, waiting for you] (no element) Approve this.\n"
+        "- h2 [supposition · open, waiting for the scoper] (no element) Approve this.\n"
         "Closed:\n"
         "- h3 [hole · closed] (element: e1) Settled. → per token"
     )
