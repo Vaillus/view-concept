@@ -45,16 +45,18 @@
      it sits, or nothing once the pointer leaves it, so the page shows that term's tip.
      Under touch controls, the word tapped, or nothing on a tap elsewhere or a scroll;
      a term tapped again is posted again, since the page may have hidden its tip.
-   - The holes (page -> frame): the open holes of a scoping section that name an element
-     of the drawing, each {element (an id in the section), question (its id)}. The frame
-     sets `data-vc-hole` (the ids of the questions on it, space-separated) on each
-     element, which frame.css marks, and sets it again when a script of the section
-     redraws its text. Unlike the paint of passages, this changes an attribute of the
-     section's element; its scripts never read it.
+   - The holes (page -> frame): one entry per element of the drawing bearing open hole
+     records, {element (an id in the section), holes (their ids), tone ("hole",
+     "supposition" or "waiting")}. The frame sets `data-vc-hole` (the hole ids,
+     space-separated) and `data-vc-tone` (the tone) on each element, which frame.css draws
+     as the mark (orange, blue or grey), and sets them again when a script of the section
+     redraws its text. Unlike the paint of passages, this changes attributes of the
+     section's elements; its scripts never read them.
    - The hole click (frame -> page): a click, with nothing selected and off a side
-     thread's passage, in a frame that holds holes: the questions of the hole element it
-     falls in and where that element sits, so the page opens their boxes on it; no
-     question when it falls in none, so the page closes them.
+     thread's passage, in a frame that holds holes: the hole ids of the innermost marked
+     element it falls in and where that element sits, so the page opens their hole window
+     on it (a marked element inside another opens only its own holes); no hole when it
+     falls in none, so the page closes the window.
    - The element reveal (page -> frame), answered by "revealed" (frame -> page): the
      element of a hole to show. The frame opens its holders (and selects it when it is a
      tab of the kit), then answers with where it sits, as for a passage.
@@ -257,7 +259,7 @@
   var changes = []; // { quote, prefix }
   var terms = [];   // { term, kind: term | def | audit, key }
   var focus = null; // { quote, prefix } of the passage being revealed
-  var holes = [];   // { element, question }: the open holes of a scoping section
+  var holes = [];   // { element, holes: [hole ids], tone }: the marked elements of the drawing
   var threadRanges = [], termRanges = []; // [anchor, range], [term, range] as last painted
   var changeRanges = []; // [blocks holding the change's start and end, range] as last found
   var pointer = null;    // { x, y } of the pointer over the frame, null once it left
@@ -403,12 +405,12 @@
   /* ---- the holes ---- */
   function markHoles() {
     var marked = document.querySelectorAll("[data-vc-hole]");
-    for (var i = 0; i < marked.length; i++) marked[i].removeAttribute("data-vc-hole");
+    for (var i = 0; i < marked.length; i++) { marked[i].removeAttribute("data-vc-hole"); marked[i].removeAttribute("data-vc-tone"); }
     holes.forEach(function (h) {
       var n = h.element && document.getElementById(h.element);
-      if (!n) return;
-      var on = n.getAttribute("data-vc-hole");
-      n.setAttribute("data-vc-hole", on ? on + " " + h.question : h.question);
+      if (!n || !Array.isArray(h.holes) || !h.holes.length) return;
+      n.setAttribute("data-vc-hole", h.holes.join(" "));
+      n.setAttribute("data-vc-tone", h.tone || "hole");
     });
   }
   function revealElement(id) {
@@ -444,9 +446,9 @@
     if (h) { post({ viewConcept: "thread-click", thread: h[0].thread, rect: rectOf(h[1]) }); return; }
     if (!holes.length) return;
     var n = target && target.closest ? target.closest("[data-vc-hole]") : null;
-    post(n ? { viewConcept: "hole-click", questions: n.getAttribute("data-vc-hole").split(" "),
+    post(n ? { viewConcept: "hole-click", holes: n.getAttribute("data-vc-hole").split(" "),
                rect: rectOf(n.getBoundingClientRect()) }
-           : { viewConcept: "hole-click", questions: [] });
+           : { viewConcept: "hole-click", holes: [] });
   }
 
   /* ---- the term hover ---- */

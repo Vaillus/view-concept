@@ -1,7 +1,7 @@
 /* view-concept — the session page.
 
    Tabs share the main space: in a feature whose scoper draws the problem, the scoping tab
-   (the drawing and its holes, see "the scoping tab"), the plan (the scope block with the agent questions, outline,
+   (the drawing and its hole records, see "the scoping tab"), the plan (the scope block with the agent questions, outline,
    lexicon, change history), the explanation (one block per explanation section; the Model
    tab of a feature), in a feature that has reached the refactoring step the
    code tab (the refactor sections, the refactoring part), and once a doc set exists the
@@ -123,16 +123,18 @@ const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
 /* The scoping tab (id "scoping"): a feature's scoping section ("part": "scoping"), the
    drawing of the problem the scoper builds with the user before any model, shown first,
-   with its holes (the open questions anchored on it) on the elements they bear on and
-   indexed at its end (see "the hole popover"), and the scoping's two buttons under the
-   index (see scopingActions). While scoping runs on a drawing
-   (drawingScoping), it is the only tab shown: the others appear at « End scoping », and
-   hide again when a later agent's hole sends the session back to scoping. */
+   with its holes (the open hole records of `state.holes`, see "hole records") marked on
+   the elements they bear on and indexed at its end (see "the hole window"), and the
+   scoping's two buttons under the index (see scopingActions). While scoping runs on a
+   drawing (drawingScoping), it is the only tab shown: the others appear at « End
+   scoping », and hide again when a later agent's hole sends the session back to scoping
+   (the return to scoping: the server sets the phase back to "scoping"). */
 const isScopingSection = (s) => s.part === "scoping";
 const inScoping = (id) => isScopingSection(state.plan.outline.find((s) => s.id === id) || {});
 const hasScopingTab = () => state.plan.outline.some(isScopingSection);
 const drawingScoping = () => hasScopingTab() && state.status.phase === "scoping";
-const tabOf = (id) => (isDocAnchor(id) || rowOf(id) ? "doc" : inScoping(id) ? "scoping"
+const tabOf = (id) => (String(id || "").startsWith(HOLE_PREFIX) || inScoping(id) ? "scoping"
+  : isDocAnchor(id) || rowOf(id) ? "doc"
   : inRefactoringPart(id) ? "refactor" : "model");
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
 /* The narrow layout: the page in one column whenever its window is under 700px wide
@@ -176,15 +178,23 @@ const isDocAnchor = (id) => String(id || "").startsWith(DOC_PREFIX);
 /* A row of a Doc tab table is commented on its own anchor: "triage:<id>" for a row of the
    concept triage (store.py's TRIAGE_KEY), "moves:<id>" for a row of a README's move plan
    (MOVES_KEY). The triage's highlight baseline is kept under "triage:" alone, a move
-   plan's under "moves:<path>". No section id starts with either. `rowOf` gives the kind
-   and id of a row anchor, null for any other id. */
+   plan's under "moves:<path>". A hole box of the hole window is commented the same way, on
+   "hole:<hole id>" (see "hole records"); it sits in the scoping tab. No section id starts
+   with any of them. `rowOf` gives the kind and id of a row anchor, null for any other id;
+   `holeOf` the hole record of a hole anchor (a closed stand-in for one the page no longer
+   has), null for any other id. */
 const TRIAGE_PREFIX = "triage:";
 const MOVES_PREFIX = "moves:";
-const ROW_KINDS = { [TRIAGE_PREFIX]: "triage", [MOVES_PREFIX]: "passage" };
+const HOLE_PREFIX = "hole:";
+const ROW_KINDS = { [TRIAGE_PREFIX]: "triage", [MOVES_PREFIX]: "passage", [HOLE_PREFIX]: "hole" };
 const rowOf = (id) => {
   const s = String(id || "");
   const prefix = Object.keys(ROW_KINDS).find((p) => s.startsWith(p) && s.length > p.length);
   return prefix ? { kind: ROW_KINDS[prefix], id: s.slice(prefix.length) } : null;
+};
+const holeOf = (id) => {
+  const r = rowOf(id);
+  return r && r.kind === "hole" ? holeRecords().find((h) => h.id === r.id) || { id: r.id, status: "closed" } : null;
 };
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
@@ -192,10 +202,10 @@ const isUpdated = (id) => !!(state.sections[id] || {}).updated;
 
 function render() {
   const { plan } = state;
-  // A mark in the tab title while an agent question waits, and the progress of a writing
+  // A mark in the tab title while an agent question or a hole waits for you, and the progress of a writing
   // run, to be seen from another window.
   const run = writingRun();
-  document.title = `${openQuestions().length ? "● " : ""}${run ? `${run.k}/${run.set.length} · ` : ""}${plan.title} · view-concept`;
+  document.title = `${openQuestions().length || holesForYou().length ? "● " : ""}${run ? `${run.k}/${run.set.length} · ` : ""}${plan.title} · view-concept`;
   $("#title").textContent = plan.title;
   renderListening();
   renderPublish();
@@ -533,7 +543,9 @@ function banner() {
     return { text, active: true, ask: false };
   }
   const approval = APPROVALS[phase];
-  const asking = ["scoping", "awaiting-answer"].includes(phase) && openQuestions().length > 0 && !goOnPending();
+  // On a drawing, the open holes not waiting for the scoper ask too (see "hole records").
+  const asking = ["scoping", "awaiting-answer"].includes(phase) && !goOnPending()
+    && openQuestions().length + (drawingScoping() ? holesForYou().length : 0) > 0;
   // The PR recorded after the last « Create PR »: the agent opened (or updated) it.
   const prReady = phase === "awaiting-pr" && approvalPending() && !!state.plan.pr &&
                   state.plan.pr.at >= lastBatchOf("create-pr").sent;
@@ -542,7 +554,7 @@ function banner() {
   const scopingDone = phase === "scoping" && !asking && !planPending() && !!state.status.scoping_done;
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Write plan » ends it.
-    // On a drawing, the questions are holes on its elements, and « End scoping » ends it.
+    // On a drawing, the holes of its elements ask, and « End scoping » ends it.
     scoping: drawingScoping() ? (sentSince("end-scoping") ? "scoping ended · the planner is converting the drawing"
            : asking ? "scoping · holes waiting for you"
            : state.status.scoping_done ? "scoping done · End scoping when ready"
@@ -581,7 +593,8 @@ const approvalReady = (approval) =>
   (approval.action === "create-pr" && isDocsReview() ? "docs written · waiting for you to create the PR" : approval.ready);
 
 function repliedInScoping() {
-  const asked = (state.questions || []).flatMap((q) => [q.asked, q.reasked]).filter(Boolean);
+  const asked = [...(state.questions || []).flatMap((q) => [q.asked, q.reasked]), ...holeRecords().map((h) => h.asked)]
+    .filter(Boolean);
   const since = [...asked, state.status.since || ""].reduce((a, b) => (b > a ? b : a), "");
   return state.comments.batches.some((b) => b.sent >= since);
 }
@@ -971,10 +984,43 @@ function sectionBlock(s, { bare = false } = {}) {
       el("button", { class: "sec-comment ask", text: "ask", title: "Open a side thread about this section",
                      onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }, "ask") })),
     body,
-    ...(written && sectionQuestions(s.id).length
-      ? [isScopingSection(s) ? holeIndex(s.id)
-        : el("div", { class: "sec-questions" }, ...sectionQuestions(s.id).map(questionCard),
-             ...(paused() ? [goOnButton()] : []))] : []));
+    ...(written && isScopingSection(s) ? [holeIndex(s.id)]
+      : written && sectionQuestions(s.id).length
+        ? [el("div", { class: "sec-questions" }, ...sectionQuestions(s.id).map(questionCard),
+              ...(paused() ? [goOnButton()] : []))] : []));
+}
+
+/* ---------------- hole records ----------------
+   A hole is something of the drawing only the user can settle; the server keeps each one
+   as a hole record of holes.json (`state.holes`, oldest first): {id (h1…), kind "hole" |
+   "supposition", text (one sentence), element (optional: the id of the element of the
+   drawing it marks), status "open" | "closed"}. A supposition is a hole the scoper already
+   answered from the code, for the user to approve or correct. Hole records live on the
+   hole section, the first scoping section of the outline. The page draws a hole from its
+   record only: the mark on its element (postHoles), its box in the hole window and its
+   line in the hole index (see "the hole window"); a closed hole has none of them.
+   A hole is waiting (« en attente ») while a comment of a sent batch, not yet resolved, is
+   attached to it: anchored to "hole:<its id>" (a comment or a side thread in its box), or
+   carrying `element` equal to its element (a comment on a selection in the drawing inside
+   its marked element). Nothing is stored for it: the page reads it from the sent comments,
+   and draws it grey (its box, its index line, and the mark once all the element's open
+   holes wait) until the scoper resolves the comment: the hole is then closed, or back to
+   its colour. A waiting hole stays open: « End scoping » still counts it. */
+const holeRecords = () => (state ? state.holes || [] : []);
+const openHoles = () => holeRecords().filter((h) => h.status === "open");
+const holeSection = () => (state.plan.outline.find(isScopingSection) || {}).id;
+const sentComments = () => state.comments.batches.flatMap((b) => b.comments).filter((c) => c.status === "sent");
+const isWaiting = (h) => sentComments().some((c) => c.section === HOLE_PREFIX + h.id || (!!h.element && c.element === h.element));
+// The open holes waiting for the user, not for the scoper.
+const holesForYou = () => openHoles().filter((h) => !isWaiting(h));
+// The colour of a hole's box and index line: "waiting" (grey), else its kind ("hole"
+// orange, "supposition" blue).
+const holeTone = (h) => (isWaiting(h) ? "waiting" : h.kind === "supposition" ? "supposition" : "hole");
+// The colour of an element's mark, from its open holes: among those not waiting, orange
+// when one is a hole, else blue (only suppositions); grey when all of them wait.
+function elementTone(list) {
+  const live = list.filter((h) => !isWaiting(h));
+  return !live.length ? "waiting" : live.some((h) => h.kind !== "supposition") ? "hole" : "supposition";
 }
 
 /* The scoping's two buttons, under the hole index at the end of the scoping tab, while scoping
@@ -982,14 +1028,13 @@ function sectionBlock(s, { bare = false } = {}) {
    reads the drawing again, and opens holes or suppositions, or says nothing is left) and
    « End scoping » (action "end-scoping": the planner converts the drawing into the outline
    and the lexicon, then the writer writes the model). « End scoping » waits until no hole
-   is open; the server refuses it otherwise. Both take the draft comments with them, and
-   hide once « End scoping » is sent, until the status moves. */
+   record is open, hole or supposition, waiting or not; the server refuses it otherwise.
+   Both take the draft comments with them, and hide once « End scoping » is sent, until
+   the status moves. */
 const sentSince = (action) => {
   const b = lastBatchOf(action);
   return !!b.sent && b.sent >= (state.status.since || "");
 };
-const openHoles = () => openQuestions().filter((q) => q.section && inScoping(q.section));
-
 function scopingActions() {
   if (!drawingScoping() || sentSince("end-scoping")) return null;
   const n = openHoles().length;
@@ -998,68 +1043,93 @@ function scopingActions() {
                    title: "The scoper reads the drawing again: it opens holes or suppositions, or says nothing is left",
                    onclick: (e) => send("missing", e.currentTarget) }),
     el("button", { class: "btn primary", text: "End scoping", disabled: n > 0,
-                   title: n ? `${n} hole${n > 1 ? "s" : ""} still open: answer ${n > 1 ? "them" : "it"} first`
+                   title: n ? `${n} hole${n > 1 ? "s or suppositions" : " or supposition"} still open: answer ${n > 1 ? "them" : "it"} first`
                      : "The planner converts the drawing into the outline and the lexicon, then the writer writes the model",
                    onclick: (e) => send("end-scoping", e.currentTarget) }));
 }
 
-/* The holes message (page -> frame): the open holes of a scoping section that name an
-   element of the drawing (`element`, an id in the HTML), which the frame marks. A hole's
-   element chip reveals the element (« reveal-element »), the frame answering « revealed »
-   as for a passage. */
+/* The holes message (page -> frame), to the frame of the hole section: one entry per
+   element of the drawing (`element`, an id in the HTML) bearing open hole records, with
+   their ids (`holes`, in the order asked) and the tone of its mark (elementTone), which the
+   frame draws. A closed hole leaves no mark. */
 function postHoles(id, f = frames.get(id)) {
   if (!f || !f.contentWindow || !state || !inScoping(id)) return;
-  const holes = openQuestions().filter((q) => q.section === id && q.element)
-    .map((q) => ({ element: q.element, question: q.id }));
+  const on = new Map();
+  if (id === holeSection()) for (const h of openHoles()) if (h.element) on.set(h.element, [...(on.get(h.element) || []), h]);
+  const holes = [...on].map(([element, list]) => ({ element, holes: list.map((h) => h.id), tone: elementTone(list) }));
   f.contentWindow.postMessage({ viewConcept: "holes", holes }, "*");
 }
-// `holes`: the questions whose boxes open on the element once it is shown (a line of the
-// hole index), or none (a box's element chip).
-function revealElement(id, element, holes = null) {
+
+/* Show an element of the drawing and open the hole window `holes` (hole ids) on it: the
+   page shows the scoping tab, the frame opens the element's holders (a hidden tab or a
+   closed fold of the drawing) and answers « revealed » with where it sits (frameRevealed).
+   When the drawing no longer has the element, the window opens on the index line of hole
+   `line` instead. */
+function revealElement(id, element, holes, line) {
   setTab(tabOf(id));
   const f = frames.get(id);
-  if (!f || !f.contentWindow) {
-    scrollToSection(id);
-    if (holes) openHolePop(id, holes, { line: holes[0] });
-    return;
-  }
-  revealing.set(id, { element, holes });
+  if (!f || !f.contentWindow) { openHoleOnLine(id, holes, line); return; }
+  revealing.set(id, { element, holes, line });
   f.contentWindow.postMessage({ viewConcept: "reveal-element", element }, "*");
 }
 
-/* ---------------- the hole popover ----------------
-   A hole's box opens on the element of the drawing it bears on, not in a list: a click on
-   an element the frame marks (the hole click) opens the boxes of the open questions on
-   that element in a popover beside it, as a side thread opens on its passage, and a click
-   elsewhere in the drawing, outside the popover or Escape closes it. The end of the
-   scoping section keeps an index, one line per open hole (its id, its element, the start
-   of its text): a click on a line shows the element and opens the popover there, so a
-   hole whose element the drawing no longer has still opens, on its line. A question on
-   the scoping section that names no element keeps its box in the index. The popover
-   closes once none of its questions is open; it docks across the bottom in the narrow
-   layout, as the thread popover does. */
-let holePop = null; // { section, questions: [ids], anchor: { f, rect } (in the frame's viewport) | { line: question id } }
+/* ---------------- the hole window ----------------
+   A hole is read on the element of the drawing it bears on, not in a list: a click on an
+   element the frame marks (the hole click) opens the hole window beside it, under it or
+   above it when the room runs out below, as a side thread opens on its passage. The window
+   holds one hole box per open hole record on that element, in the order asked, and
+   nothing of a closed hole. Escape, its ×, a click elsewhere in the drawing or outside the
+   window closes it; a click in the composer, the selection buttons or a side thread does
+   not. It closes by itself once the scoper has closed all its holes, and docks across the
+   bottom in the narrow layout, as the thread popover does.
+   A hole box says in one sentence what is not known: dashed orange for a hole, its
+   sentence after a « ? »; dashed blue for a supposition, its statement alone; grey for a
+   waiting hole of either kind (see "hole records"). It has no options, no text field, no
+   button to answer: the user answers by a comment on a selection of its text (anchored to
+   "hole:<id>", as a row of a Doc tab table) or by « ask », a side thread on the hole,
+   whose conclusion reaches the scoper with « → batch ».
+   The end of the hole section keeps the hole index: one line per open hole record, in its
+   tone, with its element and the start of its sentence. A click on a line shows the
+   element (revealElement) and opens its hole window there; a hole with no element, or
+   whose element the drawing no longer has, opens its window on the line itself. */
+let holePop = null; // { section, holes: [ids], element, anchor: { f, rect } (in the frame's viewport) | { line: hole id } }
+const holeBoxes = new Map(); // hole id -> its box, kept while its tone and sentence stay
+
+// The hole window of a hole: the open holes on its element, or the hole alone without one.
+const holesOn = (h) => (h.element ? openHoles().filter((x) => x.element === h.element).map((x) => x.id) : [h.id]);
 
 function holeIndex(id) {
-  const line = (q) => {
-    const on = openQuestions().filter((o) => o.section === id && o.element === q.element).map((o) => o.id);
-    return el("button", {
-      class: `hole-line ${holePop && holePop.questions.includes(q.id) ? "open" : ""}`, "data-question": q.id,
-      title: "Show this hole in the drawing and answer it there",
-      onclick: (e) => { e.stopPropagation(); revealElement(id, q.element, on); } },
-      el("span", { class: "num", text: q.id }),
-      q.kind === "supposition" ? el("span", { class: "badge tone-info", text: "supposition" }) : null,
-      el("span", { class: "badge accent", text: q.element }),
-      el("span", { class: "hole-text", text: q.text }));
-  };
-  return el("div", { class: "sec-questions hole-index" },
-    ...sectionQuestions(id).map((q) => (q.element ? line(q) : questionCard(q))));
+  if (id !== holeSection() || !openHoles().length) return null;
+  const line = (h) => el("button", {
+    class: `hole-line ${holePop && holePop.holes.includes(h.id) ? "open" : ""}`, "data-hole": h.id, "data-tone": holeTone(h),
+    title: `${h.id} · show it in the drawing, in its hole window`,
+    onclick: (e) => { e.stopPropagation(); showHole(h.id); } },
+    h.element ? el("span", { class: "badge", text: h.element }) : null,
+    el("span", { class: "hole-text" }, h.kind === "supposition" ? null : el("b", { class: "hole-q", text: "? " }), h.text));
+  return el("div", { class: "sec-questions hole-index" }, ...openHoles().map(line));
 }
 
-function openHolePop(section, questions, anchor) {
-  holePop = { section, questions, anchor };
+// Open the hole window of hole `hid`, on its element or on its index line; a hole closed
+// since (a comment on it revealed from the review pane) only shows the scoping tab.
+function showHole(hid) {
+  const h = openHoles().find((x) => x.id === hid);
+  const id = holeSection();
+  if (!h || !id) { setTab("scoping"); return; }
+  if (h.element) revealElement(id, h.element, holesOn(h), h.id);
+  else { setTab(tabOf(id)); openHoleOnLine(id, holesOn(h), h.id); }
+}
+
+function openHoleOnLine(section, holes, line) {
+  openHolePop(section, holes, { line });
+  const b = document.querySelector(`.hole-line[data-hole="${CSS.escape(line || "")}"]`);
+  if (b) pageScroll(b.closest(".view"), () => b.scrollIntoView({ block: "center", behavior: "smooth" }));
+}
+
+function openHolePop(section, holes, anchor) {
+  const first = openHoles().find((h) => holes.includes(h.id));
+  holePop = { section, holes, element: first ? first.element : undefined, anchor };
   renderHolePop();
-  document.querySelectorAll(".hole-line").forEach((b) => b.classList.toggle("open", questions.includes(b.dataset.question)));
+  document.querySelectorAll(".hole-line").forEach((b) => b.classList.toggle("open", !!holePop && holePop.holes.includes(b.dataset.hole)));
 }
 
 function closeHolePop() {
@@ -1068,27 +1138,51 @@ function closeHolePop() {
   document.querySelectorAll(".hole-line.open").forEach((b) => b.classList.remove("open"));
 }
 
+function holeBox(h) {
+  const tone = holeTone(h);
+  const kept = holeBoxes.get(h.id);
+  if (kept && kept.dataset.tone === tone && kept._text === h.text) return kept;
+  const anchor = HOLE_PREFIX + h.id;
+  const box = el("div", { class: "hole-box", "data-hole": h.id, "data-tone": tone },
+    el("div", { class: "hole-sentence", "data-anchor": anchor },
+       h.kind === "supposition" ? null : el("b", { class: "hole-q", text: "? " }), h.text),
+    el("div", { class: "hole-actions" },
+       el("span", { class: "t-chips", "data-section": anchor }),
+       el("button", { class: "btn hole-ask", text: "ask",
+                      title: "Open a side thread about this hole; « → batch » sends its conclusion to the scoper",
+                      onclick: (e) => openComposer({ section: anchor, quote: "", prefix: "",
+                                                     rect: e.currentTarget.getBoundingClientRect() }, "ask") })));
+  box._text = h.text;
+  holeBoxes.set(h.id, box);
+  return box;
+}
+
 function renderHolePop() {
   const pop = $("#hole-pop");
   if (!holePop) return;
-  const open = openQuestions().filter((q) => holePop.questions.includes(q.id));
+  const open = openHoles().filter((h) => holePop.holes.includes(h.id) || (!!holePop.element && h.element === holePop.element));
   if (!open.length) { closeHolePop(); return; }
-  const head = el("div", { class: "t-title" },
-    el("span", { class: "dim", text: `hole${open.length > 1 ? "s" : ""} · ${open[0].element || ""}` }),
-    el("button", { class: "t-close", text: "×", title: "Close (Esc)", onclick: closeHolePop }));
-  const cards = open.map(questionCard);
-  // Re-attaching a box would blur its text field: only when the boxes changed.
-  const same = cards.length === pop.children.length - 1 && cards.every((c, i) => pop.children[i + 1] === c);
-  if (!same) pop.replaceChildren(head, ...cards);
+  holePop.holes = open.map((h) => h.id);
+  const boxes = open.map(holeBox);
+  // Re-attaching a box would drop a selection in its text: only when the boxes changed.
+  const same = boxes.length === pop.children.length - 1 && boxes.every((b, i) => pop.children[i + 1] === b);
+  if (!same) {
+    const head = el("div", { class: "t-title" },
+      el("span", { class: "dim", text: holePop.element ? `element ${holePop.element}` : `hole ${open[0].id}` }),
+      el("button", { class: "t-close", text: "×", title: "Close (Esc)", onclick: closeHolePop }));
+    pop.replaceChildren(head, ...boxes);
+  }
   pop.hidden = false;
   positionHolePop();
+  // The boxes' passages under comment or side thread, found once the boxes are in place.
+  if (!same) { applyHighlights(); renderThreadChips(); }
 }
 
 function holeAnchorRect() {
   // A frame drawn again (the scoper redrew) loses the element's place: the line holds it.
   const a = holePop.anchor;
   if (a.f && a.f.isConnected) return pageRect(a.f, a.rect);
-  const line = document.querySelector(`.hole-line[data-question="${CSS.escape(a.line || holePop.questions[0])}"]`);
+  const line = document.querySelector(`.hole-line[data-hole="${CSS.escape(a.line || holePop.holes[0])}"]`);
   return line ? line.getBoundingClientRect() : null;
 }
 
@@ -1107,18 +1201,18 @@ function positionHolePop() {
   pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
 }
 
-/* The hole click message: the questions of the hole element clicked and where it sits, or
-   none for a click elsewhere in the drawing. */
+/* The hole click message: the hole ids of the marked element clicked and where it sits,
+   or none for a click elsewhere in the drawing. */
 function frameHoleClick(id, f, d) {
-  const questions = Array.isArray(d.questions) ? d.questions.map(String) : [];
-  if (!questions.length || !d.rect) { closeHolePop(); return; }
-  openHolePop(id, questions, { f, rect: d.rect });
+  const holes = Array.isArray(d.holes) ? d.holes.map(String) : [];
+  if (!holes.length || !d.rect) { closeHolePop(); return; }
+  openHolePop(id, holes, { f, rect: d.rect });
 }
 
 document.querySelectorAll(".view").forEach((v) => v.addEventListener("scroll", positionHolePop, { passive: true }));
 addEventListener("resize", positionHolePop);
 document.addEventListener("mousedown", (e) => {
-  if (holePop && !e.target.closest("#hole-pop, #composer, #thread-pop, .hole-line")) closeHolePop();
+  if (holePop && !e.target.closest("#hole-pop, #composer, #thread-pop, #sel-actions, .hole-line")) closeHolePop();
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && holePop && !e.target.closest("#composer")) closeHolePop();
@@ -2119,10 +2213,11 @@ function frameTermHover(f, d) {
 function frameRevealed(id, f, d) {
   const asked = revealing.get(id);
   if (!revealing.delete(id)) return;
-  // A line of the hole index: the boxes open on the element, or on the line without one.
+  // A line of the hole index: the hole window opens on the element, or on the line when
+  // the drawing no longer has it.
   if (asked.holes) {
-    openHolePop(id, asked.holes, d.found
-      ? { f, rect: { left: d.left ?? 0, right: d.right ?? 0, top: d.top, bottom: d.bottom } } : { line: asked.holes[0] });
+    if (!d.found) { openHoleOnLine(id, asked.holes, asked.line); return; }
+    openHolePop(id, asked.holes, { f, rect: { left: d.left ?? 0, right: d.right ?? 0, top: d.top, bottom: d.bottom } });
   }
   if (!d.found) { scrollToSection(id); return; }
   const r = pageRect(f, { left: 0, right: 0, top: d.top, bottom: d.bottom });
@@ -2427,6 +2522,8 @@ async function markRead(sections) {
 function revealQuote(c) {
   if (!c.section) return;
   if (c.quote.startsWith("plan · ")) { setTab("plan"); return; }
+  // A comment on a hole box: the box is shown in its hole window.
+  if (holeOf(c.section)) { showHole(holeOf(c.section).id); return; }
   openSection(c.section);
   openItemOf(c.section);
   const f = c.quote && (state.sections[c.section] || {}).kind === "html" && frames.get(c.section);
@@ -2461,6 +2558,12 @@ function currentSelection() {
   if (!sel.rangeCount || sel.isCollapsed) return null;
   const range = sel.getRangeAt(0);
   const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+  // A passage of a hole box in the hole window: anchored to its hole.
+  const box = start.closest("#hole-pop [data-anchor]");
+  if (box) {
+    const quote = collapse(sel.toString());
+    return quote ? { section: box.dataset.anchor, quote, prefix: "", rect: range.getBoundingClientRect() } : null;
+  }
   const sec = start.closest(".sec");
   if (!sec || !sec.closest("#model, #refactor, #doc")) return null;
   const body = $(".body", sec);
@@ -2662,12 +2765,9 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    the user's choice or text. A recommended answer that is one of the options is
    preselected; any other is pre-filled in the text field; either is marked « suggested ».
    A question may carry a background (the mechanism as it is today, each option's
-   trade-offs), shown folded under its text. A hole (a question anchored on a scoping
-   section) may name the element of the drawing it bears on (`element`): the frame marks
-   it (postHoles), a click on it opens the box there (see "the hole popover"), and a chip
-   in the box's text reveals it; a supposition (`kind:
-   "supposition"`) is a hole the agent already answered, its one option « approve »
-   preselected, the text field for a correction. A question with an anchor section (`section`)
+   trade-offs), shown folded under its text. The holes of a drawing are not questions:
+   they are hole records, read in the hole window (see "hole records"). A question with
+   an anchor section (`section`)
    whose section is written is shown at the end of that section in the Model tab instead,
    and the scope block keeps a line pointing to it (see sectionQuestions).
    « ask » opens a side thread on the question, to understand it before answering; the
@@ -2734,15 +2834,8 @@ function questionCard(q) {
   button.addEventListener("click", () => { if (!button.disabled) exit("answer", { choices: choices(), text: ta.value }, "Answered"); });
   skip.addEventListener("click", () => { if (!skip.disabled) exit("skip", {}, "Skipped"); });
   unclear.addEventListener("click", () => { if (!unclear.disabled) exit("unclear", { note: ta.value }, "Deferred"); });
-  // A hole of the drawing names the element it bears on: its chip shows it there.
-  const element = q.element ? el("button", { class: "badge accent q-element", text: q.element,
-                                             title: "Show this element in the drawing",
-                                             onclick: () => revealElement(q.section, q.element) }) : null;
-  const supposition = q.kind === "supposition"
-    ? el("span", { class: "badge tone-info", text: "supposition", title: "The agent's answer: approve it, or correct it in the text" }) : null;
   const card = el("div", { class: "question", "data-question": q.id },
-    el("div", { class: "q-text" }, el("span", { class: "num", text: q.id }), " ", supposition, supposition ? " " : null,
-       element, element ? " " : null, q.text),
+    el("div", { class: "q-text" }, el("span", { class: "num", text: q.id }), " ", q.text),
     q.background ? el("details", { class: "q-background" }, el("summary", { text: "background" }),
                       el("div", { class: "q-text", text: q.background })) : null,
     q.options.length ? options : null,
@@ -2892,7 +2985,7 @@ $(".review").addEventListener("scroll", (e) => {
 const rowLabel = (id) => `${rowOf(id).kind} ${rowOf(id).id}`;
 
 // Where a comment sits: its section's number, « doc set », the file name of its doc, or
-// the row of a Doc tab table.
+// the row of a Doc tab table or the hole box (« hole h2 ») it is anchored to.
 function whereOf(id) {
   if (id === DOC_SET) return "doc set";
   if (rowOf(id)) return rowLabel(id);
