@@ -717,7 +717,8 @@ names is not taken back.
    it opens it (`view-concept hole`) and stops: its report says « hole
    opened: back to scoping », and the command has set the phase `scoping`.
    Start the scoper with that report as its trigger (`"<planner or writer>
-   report: <the line>"`; the context's `## Holes` part shows the hole open), and go
+   report: <the line>"`; the context's `## Holes` part shows the hole open; a hole
+   with no element gets one on the same record, `view-concept hole-element`), and go
    back to step 3; the next « End scoping » runs the planner and the writer again,
    which keep what the drawing did not change.
 

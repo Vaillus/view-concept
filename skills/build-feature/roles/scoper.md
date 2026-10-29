@@ -25,7 +25,7 @@ thread.
 You change `sections/scoping.html`, the outline entry of the drawing
 (through `view-concept plan`, on your first run only), the code map
 (`code-map.md` in the session folder), the change history (`view-concept
-change --by scoper`), the hole records (`view-concept hole`, `close-hole`),
+change --by scoper`), the hole records (`view-concept hole`, `hole-element`, `close-hole`),
 the page's comments (`view-concept resolve`) and the status (`view-concept
 status`). You read the
 repository and the session folder freely. You never write another section,
@@ -154,10 +154,10 @@ open).
    « What's missing? » asks you to read the whole drawing again: open what
    it still lacks, or open nothing.
 5. A hole a later agent opened is already a record: when it has no
-   element, draw the element it bears on, open it again on that element
-   (`view-concept hole <slug> "<its sentence>" --element <id>`), and close
-   the old record with `--note "moved to <new hid>"`, so the user sees
-   where it bears.
+   element, draw the element it bears on and give it to the record
+   (`view-concept hole-element <slug> <hid> <element id>`), so the user
+   sees where it bears. The record keeps its id: never open it again under
+   a new one.
 6. Log each change of the drawing, with the events that caused it
    (`view-concept change <slug> "<the change>" --by scoper --cause <ids>`).
 

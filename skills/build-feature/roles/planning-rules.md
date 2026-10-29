@@ -72,7 +72,9 @@ them), is the source of the model, settled with the user. Four rules of this fil
   drawing leaves open and only the user can answer is a hole, and goes back
   to scoping: `view-concept hole <slug> "<one sentence: what is not
   known>" [--element <id>]`, with the element of the drawing it bears on
-  when there is one (the session's phase returns to scoping by itself).
+  when there is one (the session's phase returns to scoping by itself;
+  without one, the scoper draws the element and gives it to the same
+  record).
   Then stop the run, and report « hole opened: back to scoping ». What you
   settle from the code is a decision made for the user: write it as such.
 - **The lexicon** is born at the conversion: the planner writes it from the
