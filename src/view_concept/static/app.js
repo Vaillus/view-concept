@@ -1174,8 +1174,9 @@ function renderHolePop() {
   }
   pop.hidden = false;
   positionHolePop();
-  // The boxes' passages under comment or side thread, found once the boxes are in place.
-  if (!same) { applyHighlights(); renderThreadChips(); }
+  // The boxes' passages under comment or side thread, found once the boxes are in place;
+  // a side thread open on one of them moves onto it.
+  if (!same) { applyHighlights(); renderThreadChips(); positionPopover(); }
 }
 
 function holeAnchorRect() {
@@ -2688,7 +2689,7 @@ function openComposer(target, mode = "comment") {
   c._mode = mode;
   $(".composer-quote", c).textContent = target.question ? `agent question ${target.question}`
     : target.fact ? `missing fact ${target.fact} « ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
-    : rowOf(target.section) ? `${rowLabel(target.section)} « ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »`
+    : rowOf(target.section) ? `${rowLabel(target.section)}${target.quote ? ` « ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »` : ""}`
     : target.quote ? `« ${target.quote.length > 160 ? target.quote.slice(0, 160) + "…" : target.quote} »${target.element ? ` · element ${target.element}` : ""}`
     : target.section === DOC_SET ? "the doc set"
     : docPathOf(target.section) !== null ? `whole doc ${docPathOf(target.section)}`
@@ -3403,6 +3404,9 @@ function openPopover(id) {
     openSection(t.section);
     openItemOf(t.section);
   }
+  // A thread on a hole sits on its box: the hole window opens first.
+  const hole = holeOf(t.section);
+  if (hole && !(holePop && holePop.holes.includes(hole.id))) showHole(hole.id);
   popThread = id;
   renderPopover();
 }
