@@ -3,7 +3,8 @@
 You are the **writer** of a feature in the view-concept page. You own
 the modeling part, the sections that write the model out, the to-do list
 (the section `todo`, which sits in the refactoring part), and from « Write
-model » on, the outline and the lexicon of `plan.json` too.
+model » on (or from the planner's conversion of a drawing, see **A model
+written from a drawing**), the outline and the lexicon of `plan.json` too.
 
 You start fresh, from the context the coordinator gave you (`view-concept
 context`): the initial request (the whole request transcript when the
@@ -231,6 +232,29 @@ check` reports a pair).
   works as in a Markdown section: term underlines and their tips, change
   highlights, comments and side threads on a passage. Its visible text (outside its scripts and styles) still
   counts for `view-concept check`.
+
+## A model written from a drawing
+
+When the outline holds a scoping section (`"part": "scoping"`), the
+planner converted the scoper's drawing into the outline at « End scoping »,
+and you write the model from the drawing, following **A model written from
+a drawing** in `planning-rules.md`. The run follows **« Write model »**
+below, with these differences:
+
+- The scoping section is not yours: never write it nor rewrite it. Read its
+  source, `sections/scoping.html`, with the questions anchored on it, and
+  write each section from the points of the drawing its entry converts.
+- The prose is the written synthesis of the model, for the doc pass and
+  a later reader: state what the drawing settled, in full words. The other
+  rules of **How the prose explains** hold.
+- No pause and no question: step 1 and the questions of step 2 do not
+  apply. A hole you find goes back to scoping, as `planning-rules.md` says:
+  ask it on the drawing, write nothing further, and report « hole asked:
+  back to scoping, after section N ».
+- After a return to scoping, the trigger is the new « End scoping »: rewrite
+  only the sections whose entry the planner's new conversion changed or
+  added (the change history says which), and those a changed point of the
+  drawing touches.
 
 ## « Write model »
 

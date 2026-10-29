@@ -1,6 +1,7 @@
 /* view-concept — the session page.
 
-   Tabs share the main space: the plan (the scope block with the agent questions, outline,
+   Tabs share the main space: in a feature whose scoper draws the problem, the scoping tab
+   (the drawing and its holes, see "the scoping tab"), the plan (the scope block with the agent questions, outline,
    lexicon, change history), the explanation (one block per explanation section; the Model
    tab of a feature), in a feature that has reached the refactoring step the
    code tab (the refactor sections, the refactoring part), and once a doc set exists the
@@ -31,7 +32,7 @@ let state = null;        // last payload from /api/s/<slug>
 let planChanged = false;
 let drafts = [];          // the drafts file's drafts (see "drafts"), the box being typed in kept as typed
 let pendingSelection = null;
-let tab = null;          // "plan" | "model" | "refactor" | "doc" | "metrics" | "review" (narrow layout)
+let tab = null;          // "scoping" | "plan" | "model" | "refactor" | "doc" | "metrics" | "review" (narrow layout)
 let lastPhase = null;
 let threadsState = { forkable: true, threads: [] };
 let popThread = null;          // id of the thread shown in the popover
@@ -120,7 +121,18 @@ const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).titl
    the same section blocks. Sessions written before the rename mark them "part": 2. */
 const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
-const tabOf = (id) => (isDocAnchor(id) || rowOf(id) ? "doc" : inRefactoringPart(id) ? "refactor" : "model");
+/* The scoping tab (id "scoping"): a feature's scoping section ("part": "scoping"), the
+   drawing of the problem the scoper builds with the user before any model, shown first,
+   with its holes (the open questions anchored on it) at its end and the scoping's two
+   buttons under them (see scopingActions). While scoping runs on a drawing
+   (drawingScoping), it is the only tab shown: the others appear at « End scoping », and
+   hide again when a later agent's hole sends the session back to scoping. */
+const isScopingSection = (s) => s.part === "scoping";
+const inScoping = (id) => isScopingSection(state.plan.outline.find((s) => s.id === id) || {});
+const hasScopingTab = () => state.plan.outline.some(isScopingSection);
+const drawingScoping = () => hasScopingTab() && state.status.phase === "scoping";
+const tabOf = (id) => (isDocAnchor(id) || rowOf(id) ? "doc" : inScoping(id) ? "scoping"
+  : inRefactoringPart(id) ? "refactor" : "model");
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
 /* The narrow layout: the page in one column whenever its window is under 700px wide
    (app.css holds the same threshold), whatever the device. The metrics tab is gone from
@@ -138,7 +150,7 @@ const TOUCH = matchMedia("(hover: none)");
 const isTouch = () => TOUCH.matches;
 // The Metrics tab (metrics.js) draws a feature's runs: other workflows have no role agents.
 const hasMetricsTab = () => state.workflow === "build-feature" && !isNarrow();
-const docViews = () => [$("#model"), $("#refactor"), $("#doc")];
+const docViews = () => [$("#scoping"), $("#model"), $("#refactor"), $("#doc")];
 /* The Doc tab (id "doc"): the repo docs the branch concerns, from `state.docs` (see "the
    Doc tab"). It shows once the doc set is written; a docs review (workflow review-docs)
    shows it alone, from the start. A server that sends no `docs` counts as no doc set. */
@@ -147,8 +159,9 @@ const docsOf = () => ({ ...NO_DOCS, ...((state && state.docs) || {}) });
 const isDocsReview = () => !!state && state.workflow === "review-docs";
 const hasDocTab = () => isDocsReview() || docsOf().set.length > 0 || docsOf().triage.list.length > 0
   || Object.keys(docsOf().moves).length > 0;
-// The tab a missing tab gives way to: the Doc tab in a docs review, the model tab otherwise.
-const homeTab = () => (isDocsReview() ? "doc" : "model");
+// The tab a missing tab gives way to: the Doc tab in a docs review, the scoping tab while
+// scoping runs on a drawing, the model tab otherwise.
+const homeTab = () => (isDocsReview() ? "doc" : drawingScoping() ? "scoping" : "model");
 // A comment, a draft or a side thread on a doc's text is anchored on the section id
 // "doc:<path>"; one on the doc set list on DOC_SET, "doc:" alone. No section id starts
 // with "doc:" (the server refuses it), so neither anchor names a section.
@@ -207,13 +220,17 @@ function render() {
    « Approve model » sits at the end of the explanation, where the model is read, and
    « Create PR » at the end of the code tab. A feature also has the Metrics tab,
    which fetches its numbers when shown and again on each state update while shown.
-   Tab ids and keys: 1 "plan", 2 "model" (the explanation, named « model » in a branch
+   While scoping runs on a drawing, the scoping tab is the only one, and the tab follows
+   it there in place of the Plan tab.
+   Tab ids and keys: 0 "scoping", 1 "plan", 2 "model" (the explanation, named « model » in a branch
    review), 3 "refactor" (code), 4 "doc", 5 "metrics". In the narrow layout the Doc tab
    comes after code, before review. */
 
 function setTab(name) {
   // A tab id this page has no view for (a position saved by an older page): the model tab.
   if (name !== "review" && !$(`.view[data-view="${CSS.escape(String(name))}"]`)) name = "model";
+  if (name === "scoping" && !hasScopingTab()) name = homeTab();
+  if (drawingScoping() && name !== "review") name = "scoping"; // the scoping tab alone
   if (name === "refactor" && !hasRefactorTab()) name = homeTab();
   if (name === "doc" && !hasDocTab()) name = homeTab();
   if (name === "metrics" && !hasMetricsTab()) name = homeTab();
@@ -239,14 +256,17 @@ function followSession() {
   const phase = shownPhase();
   const onPlan = ["scoping", "awaiting-approval"].includes(phase);
   if (tab === null) {
-    if (!restorePosition()) setTab(isDocsReview() ? "doc" : Object.keys(state.sections).length && !onPlan ? "model" : "plan");
+    if (!restorePosition()) setTab(isDocsReview() ? "doc" : drawingScoping() ? "scoping"
+      : Object.keys(state.sections).length && !onPlan ? "model" : "plan");
     positionReady = true;
   } else if (phase !== lastPhase && !isDocsReview()) {
-    if (onPlan) setTab("plan");
+    if (onPlan) setTab(drawingScoping() ? "scoping" : "plan");
     // A run opens on the tab of the set's first section not written yet.
     if (phase === "writing") setTab(tabOf(writingId() || (writingRun() || { set: [""] }).set[0]));
   }
   lastPhase = phase;
+  $('.tab[data-tab="scoping"]').hidden = !hasScopingTab();
+  if (tab === "scoping" && !hasScopingTab()) setTab(homeTab());
   $('.tab[data-tab="refactor"]').hidden = !hasRefactorTab();
   if (tab === "refactor" && !hasRefactorTab()) setTab(homeTab());
   $('.tab[data-tab="doc"]').hidden = !hasDocTab();
@@ -255,10 +275,15 @@ function followSession() {
   if (tab === "metrics" && !hasMetricsTab()) setTab(homeTab());
   for (const name of ["plan", "model"]) $(`.tab[data-tab="${name}"]`).hidden = isDocsReview();
   if (isDocsReview() && tab !== "doc" && tab !== "review") setTab("doc");
+  // While scoping runs on a drawing, the scoping tab is the only one.
+  if (drawingScoping()) {
+    for (const name of ["plan", "model", "refactor", "doc", "metrics"]) $(`.tab[data-tab="${name}"]`).hidden = true;
+    if (tab !== "scoping" && tab !== "review") setTab("scoping");
+  }
   // In a feature, the explanation is the modeling part, so its tab is named after the model.
   const modelLabel = state.workflow === "build-feature" ? "model" : "explanation";
   $('.tab[data-tab="model"]').title = `${modelLabel[0].toUpperCase()}${modelLabel.slice(1)} (2)`;
-  for (const [name, label] of [["model", modelLabel], ["refactor", "code"]]) {
+  for (const [name, label] of [["scoping", "scoping"], ["model", modelLabel], ["refactor", "code"]]) {
     const n = Object.keys(state.sections).filter((id) => isUpdated(id) && tabOf(id) === name).length;
     const writing = !!writingId() && tabOf(writingId()) === name;
     $(`.tab[data-tab="${name}"]`).replaceChildren(...[label,
@@ -301,6 +326,7 @@ document.addEventListener("click", (e) => {
 });
 document.addEventListener("keydown", (e) => {
   if (!state || e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "0" && hasScopingTab()) setTab("scoping");
   if (e.key === "1") setTab("plan");
   if (e.key === "2") setTab("model");
   if (e.key === "3" && hasRefactorTab()) setTab("refactor");
@@ -460,7 +486,7 @@ const BATCH_WHAT = { answer: "answered", "go-on": "going on", "approve-plan": "p
                      "approve-model": "model approved", "write-docs": "docs requested", "create-pr": "PR requested", plan: "scoping ended",
                      grill: "grill", "stop-grill": "grill stopped",
                      "rewrite-readme": "README rewrite requested", "write-lexicon": "repo lexicon requested",
-                     "write-readmes": "READMEs requested" };
+                     "write-readmes": "READMEs requested", missing: "asked what's missing", "end-scoping": "scoping ended" };
 const BATCH_STAGE = { sent: "in the inbox", received: "the agent has it" };
 
 function batchProgress() {
@@ -515,7 +541,13 @@ function banner() {
   const scopingDone = phase === "scoping" && !asking && !planPending() && !!state.status.scoping_done;
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Write plan » ends it.
-    scoping: asking ? "scoping · questions waiting for you"
+    // On a drawing, the questions are holes at the end of the scoping tab, and « End scoping » ends it.
+    scoping: drawingScoping() ? (sentSince("end-scoping") ? "scoping ended · the planner is converting the drawing"
+           : asking ? "scoping · holes waiting for you"
+           : state.status.scoping_done ? "scoping done · End scoping when ready"
+           : repliedInScoping() ? "reading your reply"
+           : "drawing the problem")
+           : asking ? "scoping · questions waiting for you"
            : planPending() ? `scoping ended · the agent is ${rewriting() ? "revising" : "writing"} the ${scopingProduct()}`
            : scopingDone ? "scoping done · Write plan when ready"
            : repliedInScoping() ? "reading your reply"
@@ -877,8 +909,11 @@ function renderSections() {
   const prEnding = [prButton, prEnd];
   if (!sections.length) {
     model.replaceChildren(el("p", { class: "dim empty", text: "Waiting for the plan…" }));
+    $("#scoping").replaceChildren();
     $("#refactor").replaceChildren();
   } else {
+    $("#scoping").replaceChildren(...sections.filter((s) => tabOf(s.id) === "scoping").map((s) => sectionBlock(s)),
+      ...[scopingActions()].filter(Boolean));
     model.replaceChildren(...sections.filter((s) => tabOf(s.id) === "model").map((s) => sectionBlock(s)), modelButton);
     $("#refactor").replaceChildren(...[lagLine()].filter(Boolean),
       ...refactorTab(sections.filter((s) => tabOf(s.id) === "refactor")), docsButton, docsPrButton,
@@ -906,7 +941,7 @@ function renderSections() {
   }
   anchorWatch.disconnect();
   for (const view of docViews()) for (const child of view.children) anchorWatch.observe(child);
-  frames.forEach((f, id) => postTerms(id, f));
+  frames.forEach((f, id) => { postTerms(id, f); postHoles(id, f); });
   applyHighlights();
   renderThreadChips();
   positionPopover();
@@ -937,6 +972,50 @@ function sectionBlock(s, { bare = false } = {}) {
     ...(written && sectionQuestions(s.id).length
       ? [el("div", { class: "sec-questions" }, ...sectionQuestions(s.id).map(questionCard),
             ...(paused() ? [goOnButton()] : []))] : []));
+}
+
+/* The scoping's two buttons, under the holes at the end of the scoping tab, while scoping
+   runs on a drawing: « What's missing? » (a batch whose action is "missing": the scoper
+   reads the drawing again, and opens holes or suppositions, or says nothing is left) and
+   « End scoping » (action "end-scoping": the planner converts the drawing into the outline
+   and the lexicon, then the writer writes the model). « End scoping » waits until no hole
+   is open; the server refuses it otherwise. Both take the draft comments with them, and
+   hide once « End scoping » is sent, until the status moves. */
+const sentSince = (action) => {
+  const b = lastBatchOf(action);
+  return !!b.sent && b.sent >= (state.status.since || "");
+};
+const openHoles = () => openQuestions().filter((q) => q.section && inScoping(q.section));
+
+function scopingActions() {
+  if (!drawingScoping() || sentSince("end-scoping")) return null;
+  const n = openHoles().length;
+  return el("div", { class: "scoping-actions" },
+    el("button", { class: "btn", text: "What's missing?",
+                   title: "The scoper reads the drawing again: it opens holes or suppositions, or says nothing is left",
+                   onclick: (e) => send("missing", e.currentTarget) }),
+    el("button", { class: "btn primary", text: "End scoping", disabled: n > 0,
+                   title: n ? `${n} hole${n > 1 ? "s" : ""} still open: answer ${n > 1 ? "them" : "it"} first`
+                     : "The planner converts the drawing into the outline and the lexicon, then the writer writes the model",
+                   onclick: (e) => send("end-scoping", e.currentTarget) }));
+}
+
+/* The holes message (page -> frame): the open holes of a scoping section that name an
+   element of the drawing (`element`, an id in the HTML), which the frame marks. A hole's
+   element chip reveals the element (« reveal-element »), the frame answering « revealed »
+   as for a passage. */
+function postHoles(id, f = frames.get(id)) {
+  if (!f || !f.contentWindow || !state || !inScoping(id)) return;
+  const holes = openQuestions().filter((q) => q.section === id && q.element)
+    .map((q) => ({ element: q.element, question: q.id }));
+  f.contentWindow.postMessage({ viewConcept: "holes", holes }, "*");
+}
+function revealElement(id, element) {
+  setTab(tabOf(id));
+  const f = frames.get(id);
+  if (!f || !f.contentWindow) { scrollToSection(id); return; }
+  revealing.set(id, { element });
+  f.contentWindow.postMessage({ viewConcept: "reveal-element", element }, "*");
 }
 
 /* ---------------- the Doc tab ----------------
@@ -1761,7 +1840,7 @@ function placeFrames() {
       if (f) f.remove();
       f = el("iframe", { class: "frame", sandbox: SANDBOX, allow: "fullscreen", title: titleOf(id),
                          "data-version": version, src: `/s/${SLUG}/sections/${encodeURIComponent(id)}.html?v=${version}` });
-      f.addEventListener("load", () => { postTheme(f); postAnchors(id, f); postChanges(id, f); postTerms(id, f); });
+      f.addEventListener("load", () => { postTheme(f); postAnchors(id, f); postChanges(id, f); postTerms(id, f); postHoles(id, f); });
       frames.set(id, f);
     }
     moveInto(slot, f);
@@ -2470,7 +2549,11 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    the user's choice or text. A recommended answer that is one of the options is
    preselected; any other is pre-filled in the text field; either is marked « suggested ».
    A question may carry a background (the mechanism as it is today, each option's
-   trade-offs), shown folded under its text. A question with an anchor section (`section`)
+   trade-offs), shown folded under its text. A hole (a question anchored on a scoping
+   section) may name the element of the drawing it bears on (`element`): a chip in its
+   text reveals it, and the frame marks it (postHoles); a supposition (`kind:
+   "supposition"`) is a hole the agent already answered, its one option « approve »
+   preselected, the text field for a correction. A question with an anchor section (`section`)
    whose section is written is shown at the end of that section in the Model tab instead,
    and the scope block keeps a line pointing to it (see sectionQuestions).
    « ask » opens a side thread on the question, to understand it before answering; the
@@ -2537,8 +2620,15 @@ function questionCard(q) {
   button.addEventListener("click", () => { if (!button.disabled) exit("answer", { choices: choices(), text: ta.value }, "Answered"); });
   skip.addEventListener("click", () => { if (!skip.disabled) exit("skip", {}, "Skipped"); });
   unclear.addEventListener("click", () => { if (!unclear.disabled) exit("unclear", { note: ta.value }, "Deferred"); });
+  // A hole of the drawing names the element it bears on: its chip shows it there.
+  const element = q.element ? el("button", { class: "badge accent q-element", text: q.element,
+                                             title: "Show this element in the drawing",
+                                             onclick: () => revealElement(q.section, q.element) }) : null;
+  const supposition = q.kind === "supposition"
+    ? el("span", { class: "badge tone-info", text: "supposition", title: "The agent's answer: approve it, or correct it in the text" }) : null;
   const card = el("div", { class: "question", "data-question": q.id },
-    el("div", { class: "q-text" }, el("span", { class: "num", text: q.id }), " ", q.text),
+    el("div", { class: "q-text" }, el("span", { class: "num", text: q.id }), " ", supposition, supposition ? " " : null,
+       element, element ? " " : null, q.text),
     q.background ? el("details", { class: "q-background" }, el("summary", { text: "background" }),
                       el("div", { class: "q-text", text: q.background })) : null,
     q.options.length ? options : null,
@@ -2642,7 +2732,8 @@ function renderScope() {
   grill.textContent = state.grilling ? "Stop grill" : "Grill me";
   grill.title = state.grilling ? "Stop the interview" : "The agent asks about every open decision, each with its suggestion, until none is left";
   const plan = $("#scope-plan");
-  plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending() || paused();
+  // A feature with a scoping section ends its scoping with « End scoping », in the scoping tab.
+  plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending() || paused() || hasScopingTab();
   $("#scope-go-on").hidden = !paused();
   plan.textContent = `${rewriting() ? "Rewrite" : "Write"} ${scopingProduct()}`;
   plan.title = rewriting()
@@ -2900,7 +2991,7 @@ async function moveBrowserDrafts() {
 /* A batch from « Send », an approval button, a scope block button or a Doc tab request
    (`button`); `extra` carries then_pr or the path of a rewrite request. */
 const SCOPE_TOASTS = { plan: "Scoping ended", grill: "Grill started", "stop-grill": "Grill stopped",
-                       "go-on": "The writer goes on" };
+                       "go-on": "The writer goes on", missing: "Asked what's missing", "end-scoping": "Scoping ended" };
 // The toast of a request sent from the Doc tab, from the `extra` it was sent with.
 const DOC_TOASTS = { "rewrite-readme": (extra) => `Rewrite of ${extra.path} requested`,
                      "write-lexicon": () => "Repo lexicon requested" };

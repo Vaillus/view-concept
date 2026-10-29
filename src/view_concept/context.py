@@ -14,13 +14,18 @@ The context names the folder, so an agent that needs an older entry opens the fi
 
 The request part is the initial request (the user's first message), or, when the review
 follows a conversation (request.md, the request transcript), that whole conversation for
-the planner and the writer, the roles that shape the model; the implementer, the
+the scoper, the planner and the writer, the roles that shape the model; the implementer, the
 documenter, the reviewer and a side thread get the initial request and the transcript's
 path, and open it when a comment needs the user's reasons.
 
 Roles:
 
-- `planner`: owns the outline and the lexicon during scoping. No sections exist yet.
+- `scoper`: owns the scoping section of a feature (the drawing of the problem, an HTML
+  section with `"part": "scoping"`) and its holes, until « End scoping », and again when a
+  later agent's hole sends the session back to scoping. Gets the scoping sections.
+- `planner`: owns the outline and the lexicon during scoping, or, in a feature with a
+  scoping section, writes them at « End scoping » by converting the drawing. Gets the
+  scoping sections; no other section exists yet.
 - `writer`: owns the modeling part (its sections), the to-do list (the section `todo`,
   in the refactoring part) and, from « Write model » on, the outline and the lexicon.
   Gets every section.
@@ -72,6 +77,7 @@ from .store import (
     DOC_KEY,
     DOC_SET_ANCHOR,
     MOVES_KEY,
+    SCOPING_PART,
     TRIAGE_KEY,
     Session,
     SessionError,
@@ -84,8 +90,9 @@ from .store import (
 )
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
-ROLES = ("planner", "writer", "implementer", "documenter", "reviewer", "thread")
-TRANSCRIPT_ROLES = ("planner", "writer")  # the roles that read the request transcript whole
+ROLES = ("scoper", "planner", "writer", "implementer", "documenter", "reviewer", "thread")
+# The roles that read the request transcript whole.
+TRANSCRIPT_ROLES = ("scoper", "planner", "writer")
 # The roles that keep the doc set or work on its docs: the writer writes the first one,
 # the documenter refreshes it at the doc pass, the reviewer flags stale passages.
 DOC_SET_ROLES = ("writer", "documenter", "reviewer")
@@ -138,6 +145,10 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     sections = {**s.read_sections(), **{k: v for k, v in s.read_prose().items() if k in html}}
     if role in ("writer", "reviewer"):
         out += ["", "## Sections", *_sections(outline, sections, None, html=html)]
+    elif role in ("scoper", "planner"):
+        scoping = {sec["id"] for sec in outline if _scoping(sec)}
+        out += ["", "## Scoping (the drawing; its source is the HTML file)"]
+        out += _sections(outline, sections, None, scoping, html)
     elif role in ("implementer", "documenter"):
         named = set(trigger or [])
         # The to-do list is part of the model, though it sits in the refactoring part.
@@ -330,6 +341,10 @@ def _refactoring(sec: dict[str, Any]) -> bool:
     return sec.get("part") in ("refactoring", 2)
 
 
+def _scoping(sec: dict[str, Any]) -> bool:
+    return sec.get("part") == SCOPING_PART
+
+
 def _change_history(s: Session) -> list[str]:
     """The recent changes of the model; once it is approved, how far the code carries it,
     and every change not implemented yet, even one older than the recent ones."""
@@ -405,6 +420,10 @@ def _question_line(q: dict[str, Any], full: bool) -> str:
             line += f" (recommended: {q['recommended']})"
     if q.get("section"):
         line += f" (anchor section: {q['section']})"
+    if q.get("element"):
+        line += f" (element: {q['element']})"
+    if q.get("kind") == "supposition":
+        line += " (supposition: approve, or the user's correction)"
     if waiting or full:
         # Each « I don't understand », with what the user said was missing.
         for u in q.get("unclear", []):

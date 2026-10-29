@@ -46,6 +46,7 @@
 <main class="layout">
   <section class="workspace">
     <nav class="tabs">
+      <button class="tab" data-tab="scoping" title="Scoping (0)" hidden>scoping</button>
       <button class="tab" data-tab="plan" title="Plan (1)">plan</button>
       <button class="tab" data-tab="model" title="Explanation (2)">explanation</button>
       <button class="tab" data-tab="refactor" title="Code (3)" hidden>code</button>
@@ -77,6 +78,7 @@
         <ol id="changes" class="changes"></ol>
       </div>
     </div>
+    <article id="scoping" class="view doc scoping" data-view="scoping"></article>
     <article id="model" class="view doc" data-view="model"></article>
     <article id="refactor" class="view doc refactor" data-view="refactor"></article>
     <article id="doc" class="view doc docs" data-view="doc"></article>

@@ -337,6 +337,9 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .q-background .q-text { color: var(--ink-dim); margin-top: 4px; }
 .sec-questions { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .sec-questions .go-on { align-self: flex-start; }
+/* The scoping tab: the scoping's two buttons under the holes, and a hole's element chip. */
+.scoping-actions { display: flex; gap: 8px; justify-content: flex-end; margin: 14px 0 24px; }
+.q-element { font-family: inherit; cursor: pointer; }
 #scope-questions .questions-waiting { width: 100%; }
 #scope-answered { margin-top: 8px; }
 #scope-answered summary { cursor: pointer; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; padding: 4px 0; }

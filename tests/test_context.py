@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from view_concept.context import CONTEXT_RECENT, build
@@ -19,6 +21,22 @@ def test_planner_context_holds_the_folder_and_no_sections(session):
     assert "1. Attention (s1)" in text and "- clé | key (section 1, core): vecteur" in text
     assert "Open:\n- q1 [open] Level?" in text
     assert "## Sections" not in text and "L'attention." not in text
+
+
+def test_the_scoper_and_the_planner_get_the_scoping_sections(session):
+    plan = session.read_plan()
+    plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
+    session.plan_path.write_text(json.dumps(plan))
+    (session.sections_dir / "scoping.html").write_text('<p id="e1">the drawing</p>')
+    session.add_question("Which unit?", section="scoping", element="e1")
+    session.add_question("Approve this.", section="scoping", supposition=True)
+    for role in ("scoper", "planner"):
+        text = build(session, role)
+        assert "## Scoping (the drawing; its source is the HTML file)" in text
+        assert "the drawing" in text and "L'attention." not in text
+    text = build(session, "scoper")
+    assert "- q1 [open] Which unit? (anchor section: scoping) (element: e1)" in text
+    assert "(supposition: approve, or the user's correction)" in text
 
 
 def test_writer_gets_every_section_and_thread_only_its_own(session):
@@ -186,9 +204,9 @@ def test_without_a_transcript_every_role_gets_the_initial_request(branch):
         assert "Request transcript" not in text and "request.md" not in text
 
 
-def test_the_planner_and_the_writer_read_the_transcript_whole(branch):
+def test_the_roles_that_shape_the_model_read_the_transcript_whole(branch):
     branch.write_request(TRANSCRIPT)
-    for role in ("planner", "writer"):
+    for role in ("scoper", "planner", "writer"):
         text = build(branch, role)
         assert "## Request transcript\n" in text and TRANSCRIPT in text
         assert "## Initial request" not in text

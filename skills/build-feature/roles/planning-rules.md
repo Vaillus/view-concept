@@ -1,8 +1,9 @@
 # Planning rules
 
 The rules every agent that changes the outline or the lexicon of a branch
-review follows: the planner during scoping, the writer after « Write model ».
-Your role file says when you apply them.
+review follows: the planner during scoping (or at « End scoping », when it
+converts a drawing), the writer after « Write model » (or after the
+conversion). Your role file says when you apply them.
 
 ## The model
 
@@ -42,6 +43,37 @@ user**:
 When the request says little (« review my branch »), the branch itself is
 what is new: the concepts are, but the problems the user gave as the reason
 for the branch still are not.
+
+## A model written from a drawing
+
+When the outline holds a **scoping section** (`"part": "scoping"`, shown in
+the page's scoping tab), the user and the scoper drew the problem first: the
+**drawing**, with its answered **holes** (questions anchored on it) and its
+approved **suppositions**, is the source of the model, settled with the
+user. Four rules of this file change for it:
+
+- **The reader.** The sections are the written synthesis of the model as
+  the drawing defines it: the material the doc pass turns into READMEs and
+  the PR, and what a later reader of the repository needs. What the drawing
+  holds is written out in full words: « never explain back what is known »
+  does not apply to it. An answered hole is a decision to state, an approved
+  supposition a fact to state, without saying who settled it. What is known
+  only from comments and answers outside the drawing follows **The reader**
+  above.
+- **The outline.** Its aim is to explain the model clearly, not to guide
+  the user's design choices. Each point of the drawing becomes an entry, or
+  part of one: none is dropped because the drawing already shows it. The
+  scoping section stays the outline's first entry, unchanged (an outline
+  written without it loses the scoping tab); the model sheet follows it and
+  stays beside the drawing, which it does not replace.
+- **Questions.** No question to the user and no listed default: what the
+  drawing leaves open and only the user can answer is a hole, and goes back
+  to scoping: `view-concept question <slug> "<the hole>" --section scoping
+  [--element <id>]` (the session's phase returns to scoping by itself).
+  Then stop the run, and report « hole asked: back to scoping ». What you
+  settle from the code is a decision made for the user: write it as such.
+- **The lexicon** is born at the conversion: the planner writes it from the
+  words of the drawing, then it is kept as below.
 
 ## Writing the outline and the lexicon
 

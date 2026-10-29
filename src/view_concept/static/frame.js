@@ -45,6 +45,15 @@
      it sits, or nothing once the pointer leaves it, so the page shows that term's tip.
      Under touch controls, the word tapped, or nothing on a tap elsewhere or a scroll;
      a term tapped again is posted again, since the page may have hidden its tip.
+   - The holes (page -> frame): the open holes of a scoping section that name an element
+     of the drawing, each {element (an id in the section), question (its id)}. The frame
+     sets `data-vc-hole` (the question's id) on each element, which frame.css marks, and
+     sets it again when a script of the section redraws its text. Unlike the paint of
+     passages, this changes an attribute of the section's element; its scripts never read
+     it.
+   - The element reveal (page -> frame), answered by "revealed" (frame -> page): the
+     element of a hole to show. The frame opens its holders (and selects it when it is a
+     tab of the kit), then answers with where it sits, as for a passage.
    - The tap (frame -> page) and the tap elsewhere (page -> frame), under touch controls
      only: the frame says it was tapped, so the page clears the paint of a changed passage
      in its own text and has every other frame clear its paint; a tap on the page's own
@@ -244,6 +253,7 @@
   var changes = []; // { quote, prefix }
   var terms = [];   // { term, kind: term | def | audit, key }
   var focus = null; // { quote, prefix } of the passage being revealed
+  var holes = [];   // { element, question }: the open holes of a scoping section
   var threadRanges = [], termRanges = []; // [anchor, range], [term, range] as last painted
   var changeRanges = []; // [blocks holding the change's start and end, range] as last found
   var pointer = null;    // { x, y } of the pointer over the frame, null once it left
@@ -369,9 +379,9 @@
   // the passages and the terms again once the change is done.
   var pending = false;
   function rehighlight() {
-    if (pending || (!anchors.length && !changes.length && !terms.length && !focus)) return;
+    if (pending || (!anchors.length && !changes.length && !terms.length && !focus && !holes.length)) return;
     pending = true;
-    requestAnimationFrame(function () { pending = false; highlight(); });
+    requestAnimationFrame(function () { pending = false; highlight(); markHoles(); });
   }
   new MutationObserver(rehighlight).observe(root, { childList: true, characterData: true, subtree: true });
 
@@ -384,6 +394,29 @@
     focus = { quote: quote, prefix: prefix };
     highlight();
     setTimeout(function () { focus = null; highlight(); }, 1500);
+  }
+
+  /* ---- the holes ---- */
+  function markHoles() {
+    var marked = document.querySelectorAll("[data-vc-hole]");
+    for (var i = 0; i < marked.length; i++) marked[i].removeAttribute("data-vc-hole");
+    holes.forEach(function (h) {
+      var n = h.element && document.getElementById(h.element);
+      if (n) n.setAttribute("data-vc-hole", h.question);
+    });
+  }
+  function revealElement(id) {
+    var n = id && document.getElementById(id);
+    if (!n) { post({ viewConcept: "revealed", found: false }); return; }
+    openFrom(n);
+    // A tab of the kit is shown by selecting it.
+    var row = n.classList.contains("tab") && n.parentElement, tabs = row && row.parentElement;
+    if (tabs && row.classList.contains("tab-row") && tabs.classList.contains("tabs")) {
+      var k = tabsOf(tabs).buttons.indexOf(n);
+      if (k >= 0) selectTab(tabs, k);
+    }
+    var b = n.getBoundingClientRect();
+    post({ viewConcept: "revealed", found: true, top: b.top + scrollY, bottom: b.bottom + scrollY });
   }
 
   function rectOf(r) { return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; }
@@ -447,6 +480,8 @@
     else if (d.viewConcept === "changes" && Array.isArray(d.changes)) { changes = d.changes; highlight(); }
     else if (d.viewConcept === "terms" && Array.isArray(d.terms)) { terms = d.terms; hover(null); highlight(); }
     else if (d.viewConcept === "reveal") reveal(d.quote, d.prefix);
+    else if (d.viewConcept === "holes" && Array.isArray(d.holes)) { holes = d.holes; markHoles(); }
+    else if (d.viewConcept === "reveal-element") revealElement(d.element);
     else if (d.viewConcept === "tap-elsewhere" && touch) { pointer = null; paintChanges(null); }
   });
 })();
