@@ -23,6 +23,8 @@ reach the agent session through the inbox.
         request.md      the request transcript: the conversation that led to a review,
                         one `## User` or `## Agent` heading per message  (written by `request`)
         questions.json  agent questions put to the user, with their answers  (`question`, server)
+        holes.json      the hole file: every hole record of the drawing, open and closed
+                                                          (`hole`, `close-hole`)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
@@ -135,16 +137,26 @@ user answers in the terminal instead, the agent runs `answered`: the question is
 answered with `from: "terminal"`, empty choices and the user's words as text, and no
 batch is sent, since the agent already has the answer; the phase is left to the agent.
 
-A question anchored on a scoping section is a hole: something of the drawing only the
-user can answer. It may carry `element`, the id of the element of the HTML section it bears
-on, which the page marks in the drawing, and `kind: "supposition"`: a hole the agent
-already answered, whose one option is APPROVE, recommended; the user approves it or
-corrects it in the text. A feature with a scoping section ends its scoping with « End
-scoping »: a batch whose action is "end-scoping", refused while a hole is open
-(`open_holes`); « What's missing? » sends one whose action is "missing", asking the scoper
-to read the drawing again. A hole asked after scoping ended (by an agent that found one
-while converting or writing the model) sends the session back to scoping: the phase
-becomes "scoping".
+A hole is something of the drawing (a feature's scoping section) only the user can
+settle. The page counts the open ones, so each is a record of the hole file, holes.json,
+never text written in the drawing: {id: h1…, kind: "hole" | "supposition", text (one
+sentence: what is not known; for a supposition, the statement the agent already drew from
+the code, which the user approves or corrects), element? (the id of the element of the
+drawing it marks), status: "open" | "closed", asked, closed?, note? (how it was settled),
+question? (the id of the question an old session's hole was moved from)}. Only the colour
+the page draws it in depends on its kind. The page marks its element, opens its box beside
+the element on a click, and lists it at the end of the scoping tab while it is open. The
+user answers by a comment, anchored to the box (`hole:<id>`) or carrying the marked
+element a selection in the drawing falls in (`element`), or by a side thread on the box;
+the scoper closes it (`close_holes`) when it redraws. An open hole with a sent comment not
+resolved yet is waiting (`waiting_holes`): nothing stores it. A feature with a scoping
+section ends its scoping with « End scoping »: a batch whose action is "end-scoping",
+refused while a hole record is open (`open_holes`); « What's missing? » sends one whose
+action is "missing", asking the scoper to read the drawing again. A hole opened after
+scoping ended (by an agent that found one while converting or writing the model) sends the
+session back to scoping: the phase becomes "scoping". A scoping section takes no agent
+question. An old session whose questions.json still holds questions anchored on a scoping
+section sees them moved to the hole file at first read (`_migrate_holes`).
 
 Scoping ends when the user clicks « Write plan » (« Write model » in a feature or
 a triage): a batch whose action is "plan", after which
@@ -371,8 +383,14 @@ ACTIONS = (
 # The part of a scoping section: the drawing of the problem a feature's scoper builds with
 # the user before any model is written, shown in the page's scoping tab.
 SCOPING_PART = "scoping"
-# The one option of a supposition: the user approves the answer the agent already wrote.
-APPROVE = "approve"
+# The kind of a hole record (holes.json): a hole (something of the drawing only the user
+# can settle) or a supposition (a hole the agent already answered from the code, which the
+# user approves or corrects). Only the colour the page draws it in depends on it.
+HOLE_KINDS = ("hole", "supposition")
+HOLE_ID_RE = re.compile(r"^h[0-9]{1,6}$")
+# A comment, a draft or a side thread on a hole box is anchored to `hole:<id>`. No section
+# id may start with it (write_plan refuses it).
+HOLE_KEY = "hole:"
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
@@ -395,9 +413,10 @@ AGENT_ROLES = ("scoper", "planner", "writer", "implementer", "documenter", "revi
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
 # A draft's id: the page makes it (a UUID). Its fields, as a batch comment takes them.
 DRAFT_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
-DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread", "fact")
-# The draft fields a draft leaves out when empty: a side thread's id, a missing fact's id.
-DRAFT_OPTIONAL = ("thread", "fact")
+DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread", "fact", "element")
+# The draft fields a draft leaves out when empty: a side thread's id, a missing fact's id,
+# the marked element of the drawing a selection falls in.
+DRAFT_OPTIONAL = ("thread", "fact", "element")
 # The pages of every session write the drafts file from the server's threadpool.
 _DRAFTS_LOCK = threading.Lock()
 # The key prefix of a doc's highlight baseline in seen.json, and of the anchor of a comment,
@@ -433,6 +452,8 @@ MOVE_ID_RE = re.compile(r"^p[0-9]{1,6}$")
 MOVE_FATES = ("as-is", "rewritten", "nowhere")
 # The key prefixes of the Doc tab, in seen.json and in anchors: no section id starts with one.
 DOC_TAB_KEYS = (DOC_KEY, FACTS_KEY, TRIAGE_KEY, MOVES_KEY)
+# The key prefixes no outline id may start with: the Doc tab's, and a hole box's anchor.
+RESERVED_KEYS = (*DOC_TAB_KEYS, HOLE_KEY)
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -612,6 +633,10 @@ class Session:
         return self.dir / "questions.json"
 
     @property
+    def holes_path(self) -> Path:
+        return self.dir / "holes.json"
+
+    @property
     def inbox_path(self) -> Path:
         return self.dir / "inbox.jsonl"
 
@@ -752,11 +777,11 @@ class Session:
                 raise SessionError("every outline entry needs an id and a title")
             if len(set(ids)) != len(ids):
                 raise SessionError("outline ids must be unique")
-            taken = [i for i in ids if i.startswith(DOC_TAB_KEYS)]
+            taken = [i for i in ids if i.startswith(RESERVED_KEYS)]
             if taken:
                 raise SessionError(
-                    f"outline ids may not start with {', '.join(map(repr, DOC_TAB_KEYS))}, "
-                    "the Doc tab's keys: " + ", ".join(taken)
+                    f"outline ids may not start with {', '.join(map(repr, RESERVED_KEYS))}, "
+                    "the keys of the Doc tab and of a hole box: " + ", ".join(taken)
                 )
             long = [sec["id"] for sec in outline if len(str(sec.get("earns", ""))) > EARNS_MAX]
             if long:
@@ -1148,7 +1173,15 @@ class Session:
         return d
 
     def read_questions(self) -> list[dict[str, Any]]:
+        self._migrate_holes()
         return _read_json(self.questions_path, [])
+
+    def _next_question_id(self, questions: list[dict[str, Any]]) -> str:
+        """The id of the next agent question: after every id given so far, those of the
+        questions an old session's holes were moved from included, so none is given twice."""
+        taken = [q["id"] for q in questions]
+        taken += [h["question"] for h in _read_json(self.holes_path, []) if h.get("question")]
+        return f"q{max((int(t[1:]) for t in taken), default=0) + 1}"
 
     def add_question(
         self,
@@ -1158,56 +1191,39 @@ class Session:
         recommended: str = "",
         background: str = "",
         section: str = "",
-        element: str = "",
-        supposition: bool = False,
     ) -> dict[str, Any]:
         """Put an agent question to the user, and wait for the answer: the phase becomes
         "awaiting-answer". During scoping nothing waits: the phase stays "scoping".
         `recommended` is the answer the agent suggests, `background` what the user needs to
-        know to answer, `section` the anchor section the page shows it after.
-
-        On a scoping section, a question is a hole: `element` is the id of the element of
-        the drawing it bears on, and a `supposition` is a hole the agent already answered,
-        which the user approves (its one option, recommended) or corrects in the text.
-        Asked after scoping ended, a hole sends the session back to scoping: the phase
-        becomes "scoping" (`scoping_sections`)."""
+        know to answer, `section` the anchor section the page shows it after. A scoping
+        section takes no question: a hole of the drawing is a hole record (`add_hole`)."""
         if not text.strip():
             raise SessionError("empty question")
         if section:
             self._check_section(section)
-        if element and not section:
-            raise SessionError("an element is an element of the anchor section: give --section")
-        if supposition and options:
-            raise SessionError("a supposition takes no options: the user approves or corrects it")
+        if section in self.scoping_sections():
+            raise SessionError(
+                f"{section} is a scoping section: a hole of the drawing is opened with "
+                "`view-concept hole`"
+            )
         questions = self.read_questions()
         q = {
-            "id": f"q{len(questions) + 1}",
+            "id": self._next_question_id(questions),
             "text": text.strip(),
             "options": [o.strip() for o in options or [] if o.strip()],
             "multi": multi,
             "status": "open",
             "asked": now_iso(),
         }
-        if supposition:
-            q["kind"] = "supposition"
-            q["options"] = [APPROVE]
-            q["multi"] = False
-            recommended = APPROVE
         if recommended.strip():
             q["recommended"] = recommended.strip()
         if background.strip():
             q["background"] = background.strip()
         if section:
             q["section"] = section
-        if element.strip():
-            q["element"] = element.strip()
         questions.append(q)
         _write_json(self.questions_path, questions)
-        phase = self.read_status().get("phase")
-        if section in self.scoping_sections():
-            if phase != "scoping":
-                self.write_status("scoping")
-        elif phase != "scoping":
+        if self.read_status().get("phase") != "scoping":
             self.write_status("awaiting-answer")
         return q
 
@@ -1215,11 +1231,110 @@ class Session:
         """The ids of the outline's scoping sections (`"part": "scoping"`), in outline order."""
         return [s["id"] for s in self.read_plan()["outline"] if s.get("part") == SCOPING_PART]
 
+    # ---- the hole file ----
+    def read_holes(self) -> list[dict[str, Any]]:
+        """Every hole record of the session, open and closed, oldest first."""
+        self._migrate_holes()
+        return _read_json(self.holes_path, [])
+
+    def add_hole(self, text: str, element: str = "", supposition: bool = False) -> dict[str, Any]:
+        """Open a hole record on the drawing (the feature's scoping section): `text` is the
+        one sentence that says what is not known (a supposition: the agent's statement),
+        `element` the id of the element of the drawing it marks. Opened outside the phase
+        "scoping" (by the planner or the writer, after « End scoping »), it sends the
+        session back to scoping: the phase becomes "scoping". Returns the record."""
+        if not text.strip():
+            raise SessionError("empty hole")
+        if not self.scoping_sections():
+            raise SessionError("no scoping section in the outline: a hole marks the drawing")
+        holes = self.read_holes()
+        h: dict[str, Any] = {
+            "id": f"h{max((int(h['id'][1:]) for h in holes), default=0) + 1}",
+            "kind": "supposition" if supposition else "hole",
+            "text": " ".join(text.split()),
+        }
+        if element.strip():
+            h["element"] = element.strip()
+        h |= {"status": "open", "asked": now_iso()}
+        holes.append(h)
+        _write_json(self.holes_path, holes)
+        if self.read_status().get("phase") != "scoping":
+            self.write_status("scoping")
+        return h
+
+    def close_holes(self, ids: list[str], note: str = "") -> list[dict[str, Any]]:
+        """Close open hole records: the scoper settled them from the user's comments when it
+        redrew. `note` says how. Returns the records closed."""
+        holes = self.read_holes()
+        by_id = {h["id"]: h for h in holes}
+        unknown = [i for i in ids if i not in by_id]
+        if unknown:
+            raise SessionError(f"no hole {', '.join(unknown)}")
+        shut = [i for i in ids if by_id[i]["status"] != "open"]
+        if shut:
+            raise SessionError(f"already closed: {', '.join(shut)}")
+        at = now_iso()
+        for i in ids:
+            by_id[i] |= {"status": "closed", "closed": at}
+            if note.strip():
+                by_id[i]["note"] = note.strip()
+        _write_json(self.holes_path, holes)
+        return [by_id[i] for i in ids]
+
     def open_holes(self) -> list[dict[str, Any]]:
-        """The open questions anchored on a scoping section: the holes left in the drawing."""
-        scoping = set(self.scoping_sections())
-        questions = self.read_questions()
-        return [q for q in questions if q["status"] == "open" and q.get("section") in scoping]
+        """The open hole records, holes and suppositions: what « End scoping » waits on."""
+        return [h for h in self.read_holes() if h["status"] == "open"]
+
+    def waiting_holes(self) -> set[str]:
+        """The ids of the open holes waiting for the scoper: a sent comment not resolved yet
+        is attached to the hole (`hole:<id>`) or to its element (`element`). Nothing stores
+        it: the page reads it from the comments the same way."""
+        batches = self.read_comments()["batches"]
+        pending = [c for b in batches for c in b["comments"] if c["status"] != "resolved"]
+        anchors = {c["section"] for c in pending}
+        elements = {c["element"] for c in pending if c.get("element")}
+        return {
+            h["id"]
+            for h in self.open_holes()
+            if HOLE_KEY + h["id"] in anchors or (h.get("element") and h["element"] in elements)
+        }
+
+    def _migrate_holes(self) -> None:
+        """Move an old session's holes, the questions anchored on a scoping section in
+        questions.json, to the hole file, once: open ones stay open, the others are closed,
+        their answer kept as the closing note and their question id as `question`."""
+        if self.holes_path.exists() or not self.questions_path.exists():
+            return
+        questions = _read_json(self.questions_path, [])
+        try:
+            scoping = set(self.scoping_sections())
+        except SessionError:
+            return
+        moved = [q for q in questions if q.get("section") in scoping]
+        if not moved:
+            return
+        holes = []
+        for i, q in enumerate(moved, 1):
+            h: dict[str, Any] = {
+                "id": f"h{i}",
+                "kind": "supposition" if q.get("kind") == "supposition" else "hole",
+                "text": " ".join(str(q.get("text", "")).split()),
+            }
+            if q.get("element"):
+                h["element"] = q["element"]
+            h["status"] = "open" if q["status"] == "open" else "closed"
+            h["asked"] = q.get("asked", "")
+            if h["status"] == "closed":
+                a = q.get("answer") or {}
+                h["closed"] = a.get("at") or q.get("skipped") or q.get("asked", "")
+                parts = [", ".join(a.get("choices", [])), a.get("text", "")]
+                note = " — ".join(p for p in parts if p)
+                if note:
+                    h["note"] = note
+            h["question"] = q["id"]
+            holes.append(h)
+        _write_json(self.holes_path, holes)
+        _write_json(self.questions_path, [q for q in questions if q not in moved])
 
     def _question(self, questions: list[dict[str, Any]], qid: str) -> dict[str, Any]:
         """The agent question `qid` of `questions`."""
@@ -2110,8 +2225,9 @@ class Session:
         return out
 
     def _asked_times(self) -> list[str]:
-        """When each agent question was asked or asked again."""
-        return [t for q in self.read_questions() for t in (q.get("asked"), q.get("reasked")) if t]
+        """When each agent question was asked or asked again, and each hole opened."""
+        asked = [t for q in self.read_questions() for t in (q.get("asked"), q.get("reasked")) if t]
+        return asked + [h["asked"] for h in self.read_holes() if h.get("asked")]
 
     def last_activity(self) -> str:
         """When the agent last wrote a session file, "" when never. Only what the agent
@@ -2128,6 +2244,7 @@ class Session:
             self.terminal_messages_path,
             self.code_map_path,
             self.request_path,
+            self.holes_path,
             self.doc_set_path,
             self.stale_path,
             self.missing_facts_path,
@@ -2205,6 +2322,7 @@ class Session:
             self.legacy_changes_path,
             self.implemented_path,
             self.questions_path,
+            self.holes_path,
             self.published_path,
         ]
         if self.sections_dir.is_dir():
@@ -2418,6 +2536,9 @@ class Session:
                     "thread": str(c.get("thread", "")),
                     # A comment on a missing fact carries the fact's id.
                     **({"fact": str(c["fact"])} if c.get("fact") else {}),
+                    # A comment on a selection in the drawing that falls in a marked
+                    # element carries its id: it is read with that element's holes.
+                    **({"element": str(c["element"])} if c.get("element") else {}),
                     "status": "sent",
                 }
                 for i, c in enumerate(comments)
@@ -2892,11 +3013,13 @@ def _check_fact(fact: str, section: str) -> None:
 
 def _check_row(section: str) -> None:
     """Refuse an anchor on a row of a Doc tab table (the concept triage, a move plan) that
-    names no row id."""
+    names no row id, or on a hole box that names no hole id."""
     if section.startswith(TRIAGE_KEY) and not TRIAGE_ID_RE.match(section[len(TRIAGE_KEY) :]):
         raise SessionError(f"a triage row's anchor is triage:<id>: {section!r}")
     if section.startswith(MOVES_KEY) and not MOVE_ID_RE.match(section[len(MOVES_KEY) :]):
         raise SessionError(f"a move plan row's anchor is moves:<id>: {section!r}")
+    if section.startswith(HOLE_KEY) and not HOLE_ID_RE.match(section[len(HOLE_KEY) :]):
+        raise SessionError(f"a hole box's anchor is hole:<id>: {section!r}")
 
 
 def _upgrade_thread(thread: dict[str, Any]) -> dict[str, Any]:
@@ -2913,10 +3036,12 @@ def format_batch(
     outline: list[dict[str, Any]],
     questions: list[dict[str, Any]] | None = None,
     moves: dict[str, str] | None = None,
+    holes: list[dict[str, Any]] | None = None,
 ) -> str:
     """How a batch appears in the agent session (one event of the comment channel). `questions`
     gives the text of the agent questions an answer batch answers, `moves` the README of
-    each row of the move plans (`move_readmes`)."""
+    each row of the move plans (`move_readmes`), `holes` the hole records a comment is
+    attached to."""
     number = {s["id"]: i + 1 for i, s in enumerate(outline)}
     n = len(batch["comments"])
     lines = [f"view-concept · {slug} · batch {batch['id']} · {n} comment{'s' * (n != 1)}"]
@@ -2987,7 +3112,7 @@ def format_batch(
     if batch.get("action") == "missing":
         lines.append(
             "action: missing (the user asked what the drawing still misses: read it again, "
-            "and open holes or suppositions, or say nothing is left)"
+            "and open holes or suppositions (`view-concept hole`), or say nothing is left)"
         )
     if batch.get("action") == "end-scoping":
         lines.append(
@@ -3024,7 +3149,7 @@ def format_batch(
             lines += [f"    (from side thread {t}: threads/{t}.json)" for t in a.get("threads", [])]
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
-    lines += [format_comment(c, number, moves) for c in batch["comments"]]
+    lines += [format_comment(c, number, moves, holes) for c in batch["comments"]]
     return "\n".join(lines)
 
 
@@ -3088,14 +3213,22 @@ def format_move(r: dict[str, Any]) -> str:
 
 
 def format_comment(
-    c: dict[str, Any], number: dict[str, int], moves: dict[str, str] | None = None
+    c: dict[str, Any],
+    number: dict[str, int],
+    moves: dict[str, str] | None = None,
+    holes: list[dict[str, Any]] | None = None,
 ) -> str:
     """One comment of a batch: where it is anchored (a section, a doc of the Doc tab by its
     path, a missing fact of a README, the doc set list, a row of the concept triage, a row
-    of a README's move plan, whose README `moves` gives by row id), its text, the thread it
-    comes from."""
+    of a README's move plan, whose README `moves` gives by row id, a hole box, with the
+    hole's sentence from `holes`), the marked element of the drawing it falls in, with
+    the holes open on it, its text, the thread it comes from."""
     sec = c["section"]
-    if sec == DOC_SET_ANCHOR:
+    if sec.startswith(HOLE_KEY):
+        hid = sec.removeprefix(HOLE_KEY)
+        hole = next((h for h in holes or [] if h["id"] == hid), None)
+        where = f"(hole {hid} « {hole['text']} »)" if hole else f"(hole {hid})"
+    elif sec == DOC_SET_ANCHOR:
         where = "(doc set)"
     elif sec.startswith(TRIAGE_KEY):
         where = f"(triage {sec.removeprefix(TRIAGE_KEY)})"
@@ -3108,6 +3241,13 @@ def format_comment(
         where = f"(doc {sec.removeprefix(DOC_KEY)}{fact})"
     else:
         where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
+    if c.get("element"):
+        on = [
+            h["id"]
+            for h in holes or []
+            if h.get("element") == c["element"] and h["status"] == "open"
+        ]
+        where += f" · element {c['element']}" + (f" (open holes {', '.join(on)})" if on else "")
     quote = " ".join(c["quote"].split())
     lines = [f"[{c['id']}] {where} « {quote} »" if quote else f"[{c['id']}] {where}"]
     lines += [f"    {line}" for line in c["text"].splitlines()]

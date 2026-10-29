@@ -22,13 +22,14 @@ Roles:
 
 - `scoper`: owns the scoping section of a feature (the drawing of the problem, an HTML
   section with `"part": "scoping"`) and its holes, until « End scoping », and again when a
-  later agent's hole sends the session back to scoping. Gets the scoping sections.
+  later agent's hole sends the session back to scoping. Gets the scoping sections and the
+  hole records (holes.json): the open ones, then the recent closed ones with their note.
 - `planner`: owns the outline and the lexicon during scoping, or, in a feature with a
   scoping section, writes them at « End scoping » by converting the drawing. Gets the
-  scoping sections; no other section exists yet.
+  scoping sections and the hole records; no other section exists yet.
 - `writer`: owns the modeling part (its sections), the to-do list (the section `todo`,
   in the refactoring part) and, from « Write model » on, the outline and the lexicon.
-  Gets every section.
+  Gets every section and the hole records.
 - `implementer`: owns the code, from « Approve model » on, and never touches the docs.
   Gets the modeling part, the to-do list, and the sections its trigger names (the
   reviewer's items it must act on).
@@ -40,7 +41,8 @@ Roles:
   model. Gets every section.
 - `thread`: a side thread, read-only. Gets the section its passage belongs to; it reads
   the others on demand. A passage of the Doc tab gets its doc, read from the worktree
-  (`doc:<path>`), or the doc set (`doc:` alone), in place of a section.
+  (`doc:<path>`), or the doc set (`doc:` alone), in place of a section; a hole box
+  (`hole:<id>`) its hole record and the scoping sections.
 
 An HTML section is loaded by its visible text, the words a reader sees in it, not its HTML
 source; its heading names its file, for an agent that needs the source.
@@ -76,6 +78,7 @@ from typing import Any
 from .store import (
     DOC_KEY,
     DOC_SET_ANCHOR,
+    HOLE_KEY,
     MOVES_KEY,
     SCOPING_PART,
     TRIAGE_KEY,
@@ -101,8 +104,13 @@ FACT_ROLES = ("documenter",)
 # The roles that get the concept triage and the move plans: the doc pass follows them, the
 # reviewer checks the docs against them.
 TRIAGE_ROLES = ("documenter", "reviewer")
+# The roles that get the hole records: the scoper opens and closes them, the planner reads
+# the settled ones as decisions and facts, the planner and the writer open one when they
+# find a point only the user can settle.
+HOLE_ROLES = ("scoper", "planner", "writer")
 
 QUESTION_ID = re.compile(r"^q\d+$")
+HOLE_ID = re.compile(r"^h\d+$")
 COMMENT_ID = re.compile(r"^c\d+$")
 BATCH_ID = re.compile(r"^b\d+$")
 MESSAGE_ID = re.compile(r"^tm\d+$")
@@ -139,6 +147,8 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
         out += ["", *_doc_tab(s, role)]
     out += ["", *_change_history(s)]
     out += ["", *_questions(questions)]
+    if role in HOLE_ROLES:
+        out += ["", *_holes(s)]
     out += ["", *_recent("Terminal messages", s.read_terminal_messages(), _message_line)]
     html = s.html_sections()
     # An HTML section is read by its visible text, not its HTML source.
@@ -164,6 +174,13 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
             out += ["", *_triage(s)]
         elif section.startswith(MOVES_KEY):  # a row of a move plan
             out += ["", *_moves(s)]
+        elif section.startswith(HOLE_KEY):  # a hole box: the hole, on the drawing
+            hid = section.removeprefix(HOLE_KEY)
+            hole = [_hole_line(h, set()) for h in s.read_holes() if h["id"] == hid]
+            out += ["", "## The hole", *hole]
+            scoping = {sec["id"] for sec in outline if _scoping(sec)}
+            out += ["", "## Scoping (the drawing the hole is on)"]
+            out += _sections(outline, sections, None, scoping, html)
         else:
             sec = _sections(outline, sections, section, html=html)
             out += ["", "## Section of the passage", *sec]
@@ -307,6 +324,11 @@ def _trigger(
     if not ids:
         return ["none: the first run of this role"]
     by_question = {q["id"]: q for q in questions}
+    holes = s.read_holes()
+    by_hole = {h["id"]: h for h in holes}
+    # An old session's holes moved from questions.json keep their question id.
+    by_hole |= {h["question"]: h for h in holes if h.get("question")}
+    waiting = s.waiting_holes()
     batches = s.read_comments()["batches"]
     comments = {c["id"]: c for b in batches for c in b["comments"]}
     messages = {m["id"]: m for m in s.read_terminal_messages()}
@@ -317,20 +339,26 @@ def _trigger(
     for event in ids:
         if QUESTION_ID.match(event) and event in by_question:
             lines.append(_question_line(by_question[event], full=True))
+        elif (HOLE_ID.match(event) or QUESTION_ID.match(event)) and event in by_hole:
+            lines.append(_hole_line(by_hole[event], waiting))
         elif COMMENT_ID.match(event) and event in comments:
-            lines.append(format_comment(comments[event], _number(outline), s.move_readmes()))
+            lines.append(
+                format_comment(comments[event], _number(outline), s.move_readmes(), s.read_holes())
+            )
         elif BATCH_ID.match(event):
             batch = next((b for b in batches if b["id"] == event), None)
             if batch is None:
                 raise SessionError(f"no batch {event!r}")
-            lines.append(format_batch(s.slug, batch, outline, questions, s.move_readmes()))
+            lines.append(
+                format_batch(s.slug, batch, outline, questions, s.move_readmes(), s.read_holes())
+            )
         elif MESSAGE_ID.match(event) and event in messages:
             lines.append(_message_line(messages[event]))
         elif CHANGE_ID.match(event) and event in changes:
             lines.append(_change_line(changes[event]))
         elif event in number:
             lines.append(f"- section {number[event]}. {titles[event]} ({event}), below")
-        elif re.match(r"^(q|c|tm|m)\d+$", event):
+        elif re.match(r"^(q|h|c|tm|m)\d+$", event):
             raise SessionError(f"no {event!r} in this session")
         else:
             lines.append(event)
@@ -420,10 +448,6 @@ def _question_line(q: dict[str, Any], full: bool) -> str:
             line += f" (recommended: {q['recommended']})"
     if q.get("section"):
         line += f" (anchor section: {q['section']})"
-    if q.get("element"):
-        line += f" (element: {q['element']})"
-    if q.get("kind") == "supposition":
-        line += " (supposition: approve, or the user's correction)"
     if waiting or full:
         # Each « I don't understand », with what the user said was missing.
         for u in q.get("unclear", []):
@@ -460,6 +484,39 @@ def _questions(questions: list[dict[str, Any]]) -> list[str]:
         lines += ["Answered or skipped:", *(_question_line(q, True) for q in recent)]
     if older:
         lines += ["Older, answer not loaded:", *(_question_line(q, False) for q in older)]
+    return lines
+
+
+def _hole_line(h: dict[str, Any], waiting: set[str]) -> str:
+    """One hole record: its id, kind, state, element and sentence; once closed, the note
+    that says how it was settled."""
+    state = "open, waiting for you" if h["id"] in waiting else h["status"]
+    element = f" (element: {h['element']})" if h.get("element") else " (no element)"
+    line = f"- {h['id']} [{h['kind']} · {state}]{element} {h['text']}"
+    if h.get("question"):
+        line += f" (was question {h['question']})"
+    if h["status"] == "closed" and h.get("note"):
+        line += f" → {h['note']}"
+    return line
+
+
+def _holes(s: Session) -> list[str]:
+    """Every open hole record, then the most recent closed ones with their note. An open
+    hole waits for the scoper when a sent comment attached to it, or to its element, is
+    not resolved yet."""
+    holes = s.read_holes()
+    if not holes:
+        return ["## Holes", "(none)"]
+    waiting = s.waiting_holes()
+    open_ = [h for h in holes if h["status"] == "open"]
+    closed = [h for h in holes if h["status"] != "open"]
+    recent, older = closed[-CONTEXT_RECENT:], closed[:-CONTEXT_RECENT]
+    lines = ["## Holes"]
+    lines += ["Open:", *(_hole_line(h, waiting) for h in open_)] if open_ else ["Open: none"]
+    if recent:
+        lines += ["Closed:", *(_hole_line(h, waiting) for h in recent)]
+    if older:
+        lines.append(f"Older closed holes: {len(older)}, in {s.holes_path}")
     return lines
 
 

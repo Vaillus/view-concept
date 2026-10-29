@@ -181,7 +181,9 @@ def _batches(s: Session, slug: str):
                     cursor += len(raw)
                     if raw.strip():
                         batch = json.loads(raw)
-                        text = format_batch(slug, batch, outline, questions, s.move_readmes())
+                        text = format_batch(
+                            slug, batch, outline, questions, s.move_readmes(), s.read_holes()
+                        )
                         yield text, cursor, str(batch.get("id", ""))
                     else:
                         s.cursor_path.write_text(str(cursor))
@@ -243,8 +245,6 @@ def cmd_question(a: argparse.Namespace) -> None:
         a.recommended or "",
         a.background or "",
         a.section or "",
-        a.element or "",
-        a.supposition,
     )
     print(q["id"])
     # The answer only reaches the agent through a watch or a wait: say so while none runs.
@@ -254,6 +254,29 @@ def cmd_question(a: argparse.Namespace) -> None:
             "inbox until one starts. Start listening now.",
             file=sys.stderr,
         )
+
+
+def cmd_hole(a: argparse.Namespace) -> None:
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    h = s.add_hole(a.text, a.element or "", a.supposition)
+    print(h["id"])
+    # The user's comments on it only reach the agent through a watch or a wait.
+    if not s.is_listening():
+        print(
+            f"view-concept: no watch or wait is running for {a.slug}; the comments on it will "
+            "wait in the inbox until one starts. Start listening now.",
+            file=sys.stderr,
+        )
+
+
+def cmd_close_hole(a: argparse.Namespace) -> None:
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    for h in s.close_holes(a.hids, a.note or ""):
+        print(f"{h['id']} closed")
 
 
 def cmd_answered(a: argparse.Namespace) -> None:
@@ -648,11 +671,11 @@ def cmd_check(a: argparse.Namespace) -> None:
 
 def cmd_pending(a: argparse.Namespace) -> None:
     s = Session(a.slug)
-    outline, moves = s.read_plan()["outline"], s.move_readmes()
+    outline, moves, holes = s.read_plan()["outline"], s.move_readmes(), s.read_holes()
     for b in s.read_comments()["batches"]:
         open_ = [c for c in b["comments"] if c["status"] == "sent"]
         if open_:
-            print(format_batch(a.slug, {**b, "comments": open_}, outline, moves=moves))
+            print(format_batch(a.slug, {**b, "comments": open_}, outline, moves=moves, holes=holes))
             print()
 
 
@@ -767,17 +790,34 @@ def main() -> None:
         "--background",
         help="what the user needs to know to answer: the mechanism today, each option's trade-offs",
     )
-    q.add_argument("--section", help="the anchor section: the page shows the question after it")
     q.add_argument(
-        "--element",
-        help="on a scoping section: the id of the element of the drawing the hole bears on",
+        "--section",
+        help="the anchor section: the page shows the question after it (not a scoping section:"
+        " a hole of the drawing is opened with `hole`)",
     )
+    q.set_defaults(fn=cmd_question)
+
+    q = sub.add_parser(
+        "hole",
+        help="open a hole record on the drawing: one sentence, what is not known (sends the "
+        "session back to scoping when scoping has ended)",
+    )
+    q.add_argument("slug")
+    q.add_argument("text", help="the one sentence: what is not known, or your supposition")
+    q.add_argument("--element", help="the id of the element of the drawing it marks")
     q.add_argument(
         "--supposition",
         action="store_true",
-        help="a hole you already answered (the text): the user approves or corrects it",
+        help="a hole you already answered from the code (the text): the user approves or "
+        "corrects it",
     )
-    q.set_defaults(fn=cmd_question)
+    q.set_defaults(fn=cmd_hole)
+
+    q = sub.add_parser("close-hole", help="close open hole records once the drawing settles them")
+    q.add_argument("slug")
+    q.add_argument("hids", nargs="+", help="the hole ids, e.g. h1")
+    q.add_argument("--note", help="how it was settled, in a few words")
+    q.set_defaults(fn=cmd_close_hole)
 
     q = sub.add_parser(
         "anchor", help="set the section after which an open or deferred question is asked"

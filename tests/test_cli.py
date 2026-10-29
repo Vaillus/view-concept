@@ -90,22 +90,23 @@ def test_question_prints_its_id(tmp_path):
     assert not (tmp_path / "sessions" / "nope").exists()
 
 
-def test_question_puts_a_hole_or_a_supposition_on_the_drawing(tmp_path):
+def test_hole_opens_and_close_hole_closes_a_hole_record(tmp_path):
     assert view_concept(tmp_path, "new", "Ask").returncode == 0
     d = tmp_path / "sessions" / "ask"
     plan = json.loads((d / "plan.json").read_text())
     plan["outline"] = [{"id": "scoping", "title": "Scoping", "part": "scoping"}]
     (d / "plan.json").write_text(json.dumps(plan))
-    r = view_concept(
-        tmp_path, "question", "ask", "Unit?", "--section", "scoping", "--element", "e3"
-    )
-    assert r.returncode == 0, r.stderr
-    r = view_concept(
-        tmp_path, "question", "ask", "Kept beside.", "--section", "scoping", "--supposition"
-    )
-    assert r.returncode == 0, r.stderr
-    hole, supposition = json.loads((d / "questions.json").read_text())
+    r = view_concept(tmp_path, "hole", "ask", "The unit.", "--element", "e3")
+    assert r.returncode == 0 and r.stdout.strip() == "h1", r.stderr
+    r = view_concept(tmp_path, "hole", "ask", "Kept beside.", "--supposition")
+    assert r.returncode == 0 and r.stdout.strip() == "h2", r.stderr
+    hole, supposition = json.loads((d / "holes.json").read_text())
     assert hole["element"] == "e3" and supposition["kind"] == "supposition"
+    r = view_concept(tmp_path, "close-hole", "ask", "h1", "h2", "--note", "per token")
+    assert r.returncode == 0 and r.stdout.split() == ["h1", "closed", "h2", "closed"]
+    assert all(h["note"] == "per token" for h in json.loads((d / "holes.json").read_text()))
+    r = view_concept(tmp_path, "question", "ask", "Unit?", "--section", "scoping")
+    assert r.returncode != 0 and "view-concept hole" in r.stderr
 
 
 def test_answered_marks_a_question_answered_in_the_terminal(tmp_path):
