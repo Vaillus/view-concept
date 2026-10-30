@@ -24,9 +24,9 @@ Roles:
 
 - `scoper`: owns the scoping section (the drawing of a feature's problem, or of the subject
   of an explanation on the scoping path: an HTML section with `"part": "scoping"`) and its
-  pins, until « End scoping », and again when a
-  later agent's pin sends the session back to scoping. Gets the scoping sections and the
-  pins (pins.json): the open ones, then the recent closed ones with their note.
+  pins, until « End scoping », and again when a later agent's pin sends the session back
+  to scoping. Gets the scoping sections and the pins (pins.json): the open ones, then the
+  recent closed ones with their note.
 - `planner`: owns the outline and the lexicon during scoping, or, in a session with a
   scoping section, writes them at « End scoping » by converting the drawing. Gets the
   scoping sections and the pins; no other section exists yet.
@@ -46,6 +46,10 @@ Roles:
   the others on demand. A passage of the Doc tab gets its doc, read from the worktree
   (`doc:<path>`), or the doc set (`doc:` alone), in place of a section; a pin's box
   (`pin:<id>`) its pin and the scoping sections.
+
+The scoper, the planner and the writer also get the parameters file (params.json), when a
+section's script used the channel: what each script saved and the answers it received, so
+the report gives each prerequisite the depth the user chose.
 
 An HTML section is loaded by its visible text, the words a reader sees in it, not its HTML
 source; its heading names its file, for an agent that needs the source.
@@ -75,6 +79,7 @@ code lags behind them.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -114,6 +119,9 @@ TRIAGE_ROLES = ("documenter", "reviewer")
 # settled ones as decisions and facts, the planner and the writer open one when they find
 # a point only the user can settle.
 PIN_ROLES = ("scoper", "planner", "writer")
+# The roles that get the parameters file: the depth the user chose on each prerequisite,
+# and what the sections' scripts received.
+PARAMS_ROLES = ("scoper", "planner", "writer")
 
 QUESTION_ID = re.compile(r"^q\d+$")
 PIN_ID = re.compile(r"^[ph]\d+$")
@@ -157,6 +165,8 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     out += ["", *_questions(questions)]
     if role in PIN_ROLES:
         out += ["", *_pins(s)]
+    if role in PARAMS_ROLES and (params := s.read_params()):
+        out += ["", *_params(params)]
     out += ["", *_recent("Terminal messages", s.read_terminal_messages(), _message_line)]
     html = s.html_sections()
     # An HTML section is read by its visible text, not its HTML source.
@@ -524,6 +534,20 @@ def _pins(s: Session) -> list[str]:
     if older:
         lines.append(f"Older closed pins: {len(older)}, in {s.pins_path}")
     return lines
+
+
+def _params(params: dict[str, dict[str, Any]]) -> list[str]:
+    """The parameters file, one entry per section that used the channel: what its script
+    saved (the user's answers, on the prerequisite tree) and what it received."""
+    return [
+        "## Parameters",
+        "The parameters file (params.json): per section whose script uses the channel, what"
+        " the script saved (`saved`) and the answers the channel received (`received`, by"
+        " request key). Only the page and the server write it.",
+        "```json",
+        json.dumps(params, ensure_ascii=False, indent=1),
+        "```",
+    ]
 
 
 def _sections(

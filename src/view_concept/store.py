@@ -36,6 +36,8 @@ reach the agent session through the inbox.
                         concept triage under `triage:`, a README's move plan under
                         `moves:<path>`  (server)
         drafts.json     the drafts and the general note, shared by every page (server)
+        params.json     the parameters file: what each channel section's script saved
+                        and the answers it received (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
         doc-set.json    the doc set: the repo docs the Doc tab shows, in the write order,
@@ -203,6 +205,16 @@ writes it, and the server tells the other pages (the session's live updates, eve
 stays in `deleted`, so an edit to it arriving later is dropped. A batch clears the drafts
 it carried and the note. Like seen.json, it is the page's write: it never counts as the
 agent's activity.
+
+params.json, the parameters file, holds what the scripts of HTML sections keep across a
+redraw of their section: {section id: {saved (the object the script saved last), received
+({key: answer}, each answer the channel received for the script's request of that key)}}.
+A section's script reads its entry and saves through the page, and asks a small agent for
+data through the channel (channel.py): the page writes `saved`, the server `received`;
+no skill writes it, and the scoper, the planner and the writer read it in their context.
+On the scoping path the prerequisite tree's answers, rows and texts live there, so a
+redraw of the drawing loses none of them. Like drafts.json, it is never the agent's
+activity, and the page is not re-rendered when it changes.
 
 The doc set is the list of repo docs the Doc tab shows: {docs: [{path, reason, minor?,
 diff?, failing?, from?}], removed: [paths]}. `path` is relative to the repo root (plan.json
@@ -453,6 +465,10 @@ DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread", "fact", "element
 DRAFT_OPTIONAL = ("thread", "fact", "element")
 # The pages of every session write the drafts file from the server's threadpool.
 _DRAFTS_LOCK = threading.Lock()
+# The pages and the channel's small agents write the parameters file from the same pool.
+_PARAMS_LOCK = threading.Lock()
+# The largest entry of the parameters file a section may keep, its JSON text in bytes.
+PARAMS_LIMIT = 2**20
 # The key prefix of a doc's highlight baseline in seen.json, and of the anchor of a comment,
 # a draft or a side thread on its text: `doc:<path>`. A comment on the doc set list is
 # anchored to DOC_SET_ANCHOR, `doc:` alone: no doc path is empty, and no section id may
@@ -707,6 +723,10 @@ class Session:
     @property
     def drafts_path(self) -> Path:
         return self.dir / "drafts.json"
+
+    @property
+    def params_path(self) -> Path:
+        return self.dir / "params.json"
 
     @property
     def threads_dir(self) -> Path:
@@ -2134,6 +2154,55 @@ class Session:
         """The worktree file of each doc of the doc set, for `signature`."""
         files = (self.doc_file(d["path"]) for d in self.read_doc_set()["docs"])
         return [f for f in files if f is not None]
+
+    # ---- the parameters file ----
+    def read_params(self) -> dict[str, dict[str, Any]]:
+        """The parameters file: {section id: {"saved": {...}, "received": {key: answer}}},
+        an entry per section whose script used the channel."""
+        data = _read_json(self.params_path, {})
+        return {
+            str(sid): {
+                "saved": dict(e.get("saved") or {}),
+                "received": dict(e.get("received") or {}),
+            }
+            for sid, e in data.items()
+            if isinstance(e, dict)
+        }
+
+    def section_params(self, sid: str) -> dict[str, Any]:
+        """The entry of section `sid`, `saved` and `received` empty when it has none."""
+        self._check_channel_section(sid)
+        return self.read_params().get(sid, {"saved": {}, "received": {}})
+
+    def save_params(self, sid: str, saved: Any) -> None:
+        """Replace what section `sid`'s script saved (the page writes it)."""
+        if not isinstance(saved, dict):
+            raise SessionError("a section saves an object")
+        self._write_params(sid, "saved", saved)
+
+    def set_received(self, sid: str, key: str, answer: Any) -> None:
+        """Keep the answer the channel received for section `sid`'s request `key`."""
+        if not key.strip():
+            raise SessionError("a request needs a key")
+        self._write_params(sid, "received", answer, key)
+
+    def _write_params(self, sid: str, field: str, value: Any, key: str = "") -> None:
+        self._check_channel_section(sid)
+        with _PARAMS_LOCK:
+            data = self.read_params()
+            entry = data.setdefault(sid, {"saved": {}, "received": {}})
+            if key:
+                entry[field][key] = value
+            else:
+                entry[field] = value
+            if len(json.dumps(entry, ensure_ascii=False).encode("utf-8")) > PARAMS_LIMIT:
+                raise SessionError(f"the parameters of {sid} would pass {PARAMS_LIMIT} bytes")
+            _write_json(self.params_path, data)
+
+    def _check_channel_section(self, sid: str) -> None:
+        """Refuse a section that cannot use the channel: only an HTML section runs a script."""
+        if sid not in self.html_sections():
+            raise SessionError(f"no HTML section {sid!r}: only an HTML section's script asks")
 
     # ---- the drafts file ----
     def read_drafts(self) -> dict[str, Any]:

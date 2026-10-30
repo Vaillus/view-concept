@@ -1,5 +1,5 @@
 """The local web server: serves the page, streams file changes, receives comment batches,
-runs side threads."""
+runs side threads, keeps the parameters file."""
 
 from __future__ import annotations
 
@@ -642,6 +642,33 @@ def import_drafts(slug: str, body: DraftsImportIn) -> dict[str, bool]:
     s = get_session(slug)
     try:
         s.import_drafts(body.drafts, body.note)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True}
+
+
+# ---- the parameters file (store.py) ----
+
+
+class ParamsIn(BaseModel):
+    saved: dict[str, Any] = {}
+
+
+@app.get("/api/s/{slug}/params/{sid}")
+def section_params(slug: str, sid: str) -> dict[str, Any]:
+    """The entry of the parameters file of HTML section `sid`: {saved, received}; what its
+    script's `viewConcept.load()` resolves with."""
+    try:
+        return get_session(slug).section_params(sid)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.put("/api/s/{slug}/params/{sid}")
+def save_params(slug: str, sid: str, body: ParamsIn) -> dict[str, bool]:
+    """`viewConcept.save(saved)`: replace what section `sid`'s script saved."""
+    try:
+        get_session(slug).save_params(sid, body.saved)
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
     return {"ok": True}
