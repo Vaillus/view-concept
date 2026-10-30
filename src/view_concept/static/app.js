@@ -995,23 +995,35 @@ function sectionBlock(s, { bare = false } = {}) {
 /* ---------------- pin records ----------------
    A pin is an open point of the drawing; the server keeps each one as a record of
    pins.json (`state.pins`, oldest first): {id (p1…, or h1… for one written before the
-   rename), kind, text (one sentence), element (optional: the id of the element of the
-   drawing it sits on), status "open" | "closed"}. Its kind is "hole", something only the
-   user can settle, or "supposition", a statement the scoper drew from the code, for the
-   user to approve or correct. Pins live on the pin section, the first scoping section of
-   the outline. The page draws a pin from its
+   rename), kind, text (one sentence), element or elements (optional: the id of the element
+   of the drawing it sits on, or the ids when it sits on several, as a tension between two
+   elements), sources (optional: where a lead's finding was looked up), status "open" |
+   "closed"}. Each skill places its own kinds (PIN_LABELS): a feature's scoper a "hole",
+   something only the user can settle, or a "supposition", a statement it drew from the
+   code, for the user to approve or correct; an explanation's scoper a "probe", a
+   "correction", a "tension", a "choice" or a "lead". Pins live on the pin section, the
+   first scoping section of the outline. The page draws a pin from its
    record only: the mark on its element (postPins), its box in the pin window and its
    line in the pin index (see "the pin window"); a closed pin has none of them.
    A pin is waiting (« en attente ») while a comment of a sent batch, not yet resolved, is
    attached to it: anchored to "pin:<its id>" (a comment or a side thread in its box), or
-   carrying `element` equal to its element (a comment on a selection in the drawing inside
-   its marked element). Nothing is stored for it: the server reads it from the sent
+   carrying `element` equal to one of its elements (a comment on a selection in the drawing
+   inside its marked element). Nothing is stored for it: the server reads it from the sent
    comments and sends the colours it implies (`state.pin_tones`: {pins: {id: tone},
    elements: {element: tone}}, tone a kind of pin, or "waiting" grey).
    A waiting pin is grey (its box, its index line, and the mark once all the element's
    open pins wait) until the scoper resolves the comment: the pin is then closed, or
    back to its colour. A waiting pin stays open: « End scoping » still counts it. */
 const pinRecords = () => (state ? state.pins || [] : []);
+// The ids of the elements a pin sits on.
+const pinElements = (h) => (Array.isArray(h.elements) && h.elements.length ? h.elements.map(String)
+  : h.element ? [String(h.element)] : []);
+/* What a pin's box and index line say of its kind, before its sentence: a hole's « ? », a
+   supposition's statement alone (the feature's two kinds, as before pins), and the name of
+   each kind an explanation's scoper places. */
+const PIN_LABELS = { hole: "? ", supposition: "", probe: "probe · ", correction: "correction · ",
+                     tension: "tension · ", choice: "choice · ", lead: "lead · " };
+const pinLabel = (h) => (PIN_LABELS[h.kind] ?? `${h.kind} · `);
 const openPins = () => pinRecords().filter((h) => h.status === "open");
 const pinSection = () => (state.plan.outline.find(isScopingSection) || {}).id;
 const pinTones = () => (state && state.pin_tones) || { pins: {}, elements: {} };
@@ -1055,7 +1067,7 @@ function scopingActions() {
 function postPins(id, f = frames.get(id)) {
   if (!f || !f.contentWindow || !state || !inScoping(id)) return;
   const on = new Map();
-  if (id === pinSection()) for (const h of openPins()) if (h.element) on.set(h.element, [...(on.get(h.element) || []), h]);
+  if (id === pinSection()) for (const h of openPins()) for (const e of pinElements(h)) on.set(e, [...(on.get(e) || []), h]);
   const pins = [...on].map(([element, list]) => ({ element, pins: list.map((h) => h.id), tone: elementTone(element) }));
   f.contentWindow.postMessage({ viewConcept: "pins", pins }, "*");
 }
@@ -1083,21 +1095,25 @@ function revealElement(id, element, pins, line) {
    click in the composer, a draft of the review, the selection buttons or a side thread
    does not. It closes by itself once the scoper has closed all its pins, and docks across the
    bottom in the narrow layout, as the thread popover does.
-   A pin's box says the pin in one sentence, dashed in its kind's colour: orange for a
-   hole, its sentence after a « ? »; blue for a supposition, its statement alone; grey for
-   a waiting pin of any kind (see "pin records"). It has no options, no text field, no
+   A pin's box says the pin in one sentence, dashed in its kind's colour (app.css), after
+   its label (pinLabel): a hole's sentence after a « ? », a supposition's statement alone,
+   an explanation's pin after its kind's name, a lead's sources under it; grey for a
+   waiting pin of any kind (see "pin records"). It has no options, no text field, no
    button to answer: the user answers by a comment on a selection of its text (anchored to
    "pin:<id>", as a row of a Doc tab table) or by « ask », a side thread on the pin,
    whose conclusion reaches the scoper with « → batch ».
    The end of the pin section keeps the pin index: one line per open pin record, in its
-   tone, with its element and the start of its sentence. A click on a line shows the
+   tone, with its elements and the start of its sentence. A click on a line shows the
    element (revealElement) and opens its pin window there; a pin with no element, or
    whose element the drawing no longer has, opens its window on the line itself. */
-let pinPop = null; // { section, pins: [ids], element, anchor: { f, rect } (in the frame's viewport) | { line: pin id } }
+let pinPop = null; // { section, pins: [ids], element (the one it opened on), anchor: { f, rect } (in the frame's viewport) | { line: pin id } }
 const pinBoxes = new Map(); // pin id -> its box, kept while its tone and sentence stay
 
-// The pin window of a pin: the open pins on its element, or the pin alone without one.
-const pinsOn = (h) => (h.element ? openPins().filter((x) => x.element === h.element).map((x) => x.id) : [h.id]);
+// The pin window of a pin: the open pins on its first element, or the pin alone without one.
+const pinsOn = (h) => {
+  const e = pinElements(h)[0];
+  return e ? openPins().filter((x) => pinElements(x).includes(e)).map((x) => x.id) : [h.id];
+};
 
 function pinIndex(id) {
   if (id !== pinSection() || !openPins().length) return null;
@@ -1105,8 +1121,8 @@ function pinIndex(id) {
     class: `pin-line ${pinPop && pinPop.pins.includes(h.id) ? "open" : ""}`, "data-pin": h.id, "data-tone": pinTone(h),
     title: `${h.id} · show it in the drawing, in its pin window`,
     onclick: (e) => { e.stopPropagation(); showPin(h.id); } },
-    h.element ? el("span", { class: "badge", text: h.element }) : null,
-    el("span", { class: "pin-text" }, h.kind === "supposition" ? null : el("b", { class: "pin-q", text: "? " }), h.text));
+    pinElements(h).length ? el("span", { class: "badge", text: pinElements(h).join(" ") }) : null,
+    el("span", { class: "pin-text" }, pinLabel(h) ? el("b", { class: "pin-q", text: pinLabel(h) }) : null, h.text));
   return el("div", { class: "sec-questions pin-index" }, ...openPins().map(line));
 }
 
@@ -1116,7 +1132,7 @@ function showPin(hid) {
   const h = openPins().find((x) => x.id === hid);
   const id = pinSection();
   if (!h || !id) { setTab("scoping"); return; }
-  if (h.element) revealElement(id, h.element, pinsOn(h), h.id);
+  if (pinElements(h).length) revealElement(id, pinElements(h)[0], pinsOn(h), h.id);
   else { setTab(tabOf(id)); openPinOnLine(id, pinsOn(h), h.id); }
 }
 
@@ -1128,7 +1144,7 @@ function openPinOnLine(section, pins, line) {
 
 function openPinPop(section, pins, anchor) {
   const first = openPins().find((h) => pins.includes(h.id));
-  pinPop = { section, pins, element: first ? first.element : undefined, anchor };
+  pinPop = { section, pins, element: first ? pinElements(first)[0] : undefined, anchor };
   renderPinPop();
   document.querySelectorAll(".pin-line").forEach((b) => b.classList.toggle("open", !!pinPop && pinPop.pins.includes(b.dataset.pin)));
 }
@@ -1144,9 +1160,11 @@ function pinBox(h) {
   const kept = pinBoxes.get(h.id);
   if (kept && kept.dataset.tone === tone && kept._text === h.text) return kept;
   const anchor = PIN_PREFIX + h.id;
+  const sources = Array.isArray(h.sources) ? h.sources : [];
   const box = el("div", { class: "pin-box", "data-pin": h.id, "data-tone": tone },
     el("div", { class: "pin-sentence", "data-anchor": anchor },
-       h.kind === "supposition" ? null : el("b", { class: "pin-q", text: "? " }), h.text),
+       pinLabel(h) ? el("b", { class: "pin-q", text: pinLabel(h) }) : null, h.text),
+    sources.length ? el("div", { class: "pin-sources dim", text: `source${sources.length > 1 ? "s" : ""}: ${sources.join(" · ")}` }) : null,
     el("div", { class: "pin-actions" },
        el("span", { class: "t-chips", "data-section": anchor }),
        el("button", { class: "btn pin-ask", text: "ask",
@@ -1161,7 +1179,7 @@ function pinBox(h) {
 function renderPinPop() {
   const pop = $("#pin-pop");
   if (!pinPop) return;
-  const open = openPins().filter((h) => pinPop.pins.includes(h.id) || (!!pinPop.element && h.element === pinPop.element));
+  const open = openPins().filter((h) => pinPop.pins.includes(h.id) || (!!pinPop.element && pinElements(h).includes(pinPop.element)));
   if (!open.length) { closePinPop(); return; }
   pinPop.pins = open.map((h) => h.id);
   const boxes = open.map(pinBox);

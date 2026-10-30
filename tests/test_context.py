@@ -26,11 +26,12 @@ def test_planner_context_holds_the_folder_and_no_sections(session):
 def test_the_scoper_and_the_planner_get_the_scoping_sections(session):
     plan = session.read_plan()
     plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
+    plan["workflow"] = "build-feature"
     session.plan_path.write_text(json.dumps(plan))
     (session.sections_dir / "scoping.html").write_text('<p id="e1">the drawing</p>')
-    session.add_pin("Which unit.", "hole", element="e1")
+    session.add_pin("Which unit.", "hole", ["e1"])
     session.add_pin("Approve this.", "supposition")
-    session.add_pin("Settled.", "hole", element="e1")
+    session.add_pin("Settled.", "hole", ["e1"])
     session.close_pins(["p3"], note="per token")
     session.add_batch([{"section": "pin:p2", "text": "yes"}])
     for role in ("scoper", "planner"):

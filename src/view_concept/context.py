@@ -90,6 +90,7 @@ from .store import (
     format_move,
     format_triage,
     pin_anchor,
+    pin_elements,
 )
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
@@ -483,11 +484,14 @@ def _questions(questions: list[dict[str, Any]]) -> list[str]:
 
 
 def _pin_line(p: dict[str, Any], waiting: set[str]) -> str:
-    """One pin: its id, kind, state, element and sentence; once closed, the note that says
-    how it was settled."""
+    """One pin: its id, kind, state, elements and sentence, a lead's sources; once closed,
+    the note that says how it was settled."""
     state = "open, waiting for the scoper" if p["id"] in waiting else p["status"]
-    element = f" (element: {p['element']})" if p.get("element") else " (no element)"
+    on = pin_elements(p)
+    element = f" (element{'s' * (len(on) > 1)}: {', '.join(on)})" if on else " (no element)"
     line = f"- {p['id']} [{p['kind']} · {state}]{element} {p['text']}"
+    if p.get("sources"):
+        line += f" (sources: {'; '.join(p['sources'])})"
     if p.get("question"):
         line += f" (was question {p['question']})"
     if p["status"] == "closed" and p.get("note"):

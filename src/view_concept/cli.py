@@ -25,7 +25,7 @@ from .store import (
     KINDS,
     MOVE_FATES,
     PHASES,
-    PIN_KINDS,
+    PIN_TONE_ORDER,
     WORKFLOWS,
     Session,
     SessionError,
@@ -38,6 +38,7 @@ from .store import (
     format_section_problem,
     format_triage,
     list_sessions,
+    pin_elements,
     slugify,
 )
 
@@ -261,7 +262,7 @@ def cmd_pin(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
-    p = s.add_pin(a.text, a.kind, a.element or "")
+    p = s.add_pin(a.text, a.kind, a.element, a.source)
     print(p["id"])
     # The user's comments on it only reach the agent through a watch or a wait.
     if not s.is_listening():
@@ -277,7 +278,7 @@ def cmd_pin_element(a: argparse.Namespace) -> None:
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
     p = s.set_pin_element(a.pid, a.element)
-    print(f"{p['id']} on {p['element']}")
+    print(f"{p['id']} on {', '.join(pin_elements(p))}")
 
 
 def cmd_close_pin(a: argparse.Namespace) -> None:
@@ -813,8 +814,25 @@ def main() -> None:
     )
     q.add_argument("slug")
     q.add_argument("text", help="the one sentence of the pin")
-    q.add_argument("--kind", required=True, choices=PIN_KINDS, help="the kind of pin")
-    q.add_argument("--element", help="the id of the element of the drawing it sits on")
+    q.add_argument(
+        "--kind",
+        required=True,
+        choices=PIN_TONE_ORDER,
+        help="the kind of pin: hole or supposition in a build-feature session; probe, "
+        "correction, tension, choice or lead in a view-concept session",
+    )
+    q.add_argument(
+        "--element",
+        action="append",
+        default=[],
+        help="the id of an element of the drawing it sits on (repeatable: a tension sits on two)",
+    )
+    q.add_argument(
+        "--source",
+        action="append",
+        default=[],
+        help="where a lead's finding was looked up (repeatable)",
+    )
     q.set_defaults(fn=cmd_pin)
 
     q = sub.add_parser(
@@ -823,7 +841,9 @@ def main() -> None:
     )
     q.add_argument("slug")
     q.add_argument("pid", help="the pin id, e.g. p1")
-    q.add_argument("element", help="the id of the element of the drawing it sits on")
+    q.add_argument(
+        "element", nargs="+", help="the id of the element of the drawing it sits on (or several)"
+    )
     q.set_defaults(fn=cmd_pin_element)
 
     q = sub.add_parser("close-pin", help="close open pins once the drawing settles them")

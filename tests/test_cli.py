@@ -95,6 +95,7 @@ def test_pin_opens_and_close_pin_closes_a_pin(tmp_path):
     d = tmp_path / "sessions" / "ask"
     plan = json.loads((d / "plan.json").read_text())
     plan["outline"] = [{"id": "scoping", "title": "Scoping", "part": "scoping"}]
+    plan["workflow"] = "build-feature"
     (d / "plan.json").write_text(json.dumps(plan))
     r = view_concept(tmp_path, "pin", "ask", "The unit.", "--kind", "hole", "--element", "e3")
     assert r.returncode == 0 and r.stdout.strip() == "p1", r.stderr
@@ -103,6 +104,8 @@ def test_pin_opens_and_close_pin_closes_a_pin(tmp_path):
     hole, supposition = json.loads((d / "pins.json").read_text())
     assert hole["element"] == "e3" and supposition["kind"] == "supposition"
     assert view_concept(tmp_path, "pin", "ask", "No kind.").returncode != 0
+    r = view_concept(tmp_path, "pin", "ask", "What do you believe?", "--kind", "probe")
+    assert r.returncode != 0 and "places no 'probe' pin" in r.stderr
     r = view_concept(tmp_path, "pin-element", "ask", "p2", "e5")
     assert r.returncode == 0 and r.stdout.strip() == "p2 on e5", r.stderr
     assert json.loads((d / "pins.json").read_text())[1]["element"] == "e5"
@@ -114,6 +117,22 @@ def test_pin_opens_and_close_pin_closes_a_pin(tmp_path):
     assert view_concept(tmp_path, "question", "ask", "Unit?").returncode == 0
     r = view_concept(tmp_path, "anchor", "ask", "q1", "scoping")
     assert r.returncode != 0 and "view-concept pin" in r.stderr
+
+
+def test_pin_takes_several_elements_and_sources(tmp_path):
+    assert view_concept(tmp_path, "new", "Learn").returncode == 0
+    d = tmp_path / "sessions" / "learn"
+    plan = json.loads((d / "plan.json").read_text())
+    plan["outline"] = [{"id": "scoping", "title": "Scoping", "part": "scoping"}]
+    (d / "plan.json").write_text(json.dumps(plan))
+    args = ["pin", "learn", "At odds.", "--kind", "tension", "--element", "e1", "--element", "e2"]
+    assert view_concept(tmp_path, *args).stdout.strip() == "p1"
+    args = ["pin", "learn", "It exists.", "--kind", "lead", "--source", "A", "--source", "B"]
+    assert view_concept(tmp_path, *args).stdout.strip() == "p2"
+    tension, lead = json.loads((d / "pins.json").read_text())
+    assert tension["elements"] == ["e1", "e2"] and lead["sources"] == ["A", "B"]
+    r = view_concept(tmp_path, "pin-element", "learn", "p2", "e3", "e4")
+    assert r.stdout.strip() == "p2 on e3, e4", r.stderr
 
 
 def test_answered_marks_a_question_answered_in_the_terminal(tmp_path):

@@ -139,24 +139,27 @@ batch is sent, since the agent already has the answer; the phase is left to the 
 
 A pin is a record of an open point on an element of the drawing (a scoping section). The
 page counts the open ones, so each is a record of the pin file, pins.json, never text
-written in the drawing: {id: p1… (h1… for a pin of an old session's holes.json), kind
-(PIN_KINDS: "hole", something only the user can settle; "supposition", the statement the
-agent already drew from the code, which the user approves or corrects), text (one
-sentence), element? (the id of the element of the drawing it sits on), status: "open" |
-"closed", asked, closed?, note? (how it was settled), question? (the id of the question an
-old session's pin was moved from)}. Only the colour the page draws it in depends on its
-kind. The page marks its element, opens its box beside the element on a click, and lists
-it at the end of the scoping tab while it is open. The user answers by a comment, anchored
-to the box (`pin:<id>`; `hole:<id>`, written before the rename, is read the same way,
-`pin_anchor`) or carrying the marked element a selection in the drawing falls in
-(`element`), or by a side thread on the box; the scoper closes it (`close_pins`) when it
-redraws. An open pin with a sent comment not resolved yet is waiting (`waiting_pins`):
-nothing stores it; `pin_tones` gives the colour of each open pin and of each marked
-element, which the page draws. A session with a scoping section ends its scoping with
-« End scoping »: a batch whose action is "end-scoping", refused while a pin is open
-(`open_pins`); « What's missing? » sends one whose action is "missing", asking the scoper
-to read the drawing again. A pin opened after scoping ended (by an agent that found one
-while converting or writing) sends the session back to scoping: the phase becomes
+written in the drawing: {id: p1… (h1… for a pin of an old session's holes.json), kind,
+text (one sentence), element? (the id of the element of the drawing it sits on) or
+elements? (the ids, when it sits on several: a tension between two elements), sources?
+(where a lead's finding was looked up), status: "open" | "closed", asked, closed?, note?
+(how it was settled), question? (the id of the question an old session's pin was moved
+from)}. Each skill places its own kinds of pin (PIN_KINDS, by workflow; `add_pin` refuses
+another): /build-feature a hole (what only the user can settle) or a supposition (the
+statement the agent already drew from the code, which the user approves or corrects);
+/view-concept a probe, a correction, a tension, a choice or a lead. The page draws each
+kind in its own colour: it marks the pin's elements, opens its box beside the element on a
+click, and lists it at the end of the scoping tab while it is open. The user answers by a
+comment, anchored to the box (`pin:<id>`; `hole:<id>`, written before the rename, is read
+the same way, `pin_anchor`) or carrying the marked element a selection in the drawing
+falls in (`element`), or by a side thread on the box; the scoper closes it (`close_pins`)
+when it redraws. An open pin with a sent comment not resolved yet is waiting
+(`waiting_pins`): nothing stores it; `pin_tones` gives the colour of each open pin and of
+each marked element, which the page draws. A session with a scoping section ends its
+scoping with « End scoping »: a batch whose action is "end-scoping", refused while a pin
+is open (`open_pins`); « What's missing? » sends one whose action is "missing", asking the
+scoper to read the drawing again. A pin opened after scoping ended (by an agent that found
+one while converting or writing) sends the session back to scoping: the phase becomes
 "scoping"; when it has no element, the scoper draws one and gives it to the record
 (`set_pin_element`), which keeps its id. A scoping section takes no agent question. An old
 session's holes.json is moved to pins.json at first read, and one whose questions.json
@@ -396,8 +399,20 @@ PIN_ID_RE = re.compile(r"^[ph][0-9]{1,6}$")
 # may start with either (write_plan refuses it).
 PIN_KEY = "pin:"
 LEGACY_PIN_KEY = "hole:"
-# The kinds of pin, each the colour the page draws it in.
-PIN_KINDS = ("hole", "supposition")
+# The kinds of pin each skill places, by session workflow: the pin command refuses another.
+# /build-feature's user knows the feature: a hole is what only they can settle, a
+# supposition the agent's answer from the code for them to approve. /view-concept's user
+# is learning the subject: a probe asks what they believe on an element they drew, a
+# correction states that one is wrong and gives the fix, a tension sits on two elements
+# that do not hold together (or one against the goal), a choice asks which framing the
+# explanation follows, a lead offers what the agent found, with its sources when looked up.
+PIN_KINDS = {
+    "build-feature": ("hole", "supposition"),
+    "view-concept": ("probe", "correction", "tension", "choice", "lead"),
+}
+# Every kind, in the order an element's mark takes its colour from its open pins: the
+# kinds that hold « End scoping » back first.
+PIN_TONE_ORDER = ("correction", "tension", "hole", "supposition", "probe", "choice", "lead")
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
@@ -1254,23 +1269,42 @@ class Session:
         self._migrate_pins()
         return _read_json(self.pins_path, [])
 
-    def add_pin(self, text: str, kind: str, element: str = "") -> dict[str, Any]:
+    def pin_kinds(self) -> tuple[str, ...]:
+        """The kinds of pin the session's skill places (PIN_KINDS by workflow); a session
+        created before workflows existed gets its kind's default workflow."""
+        plan = self.read_plan()
+        workflow = plan.get("workflow") or DEFAULT_WORKFLOW.get(plan.get("kind", ""), "")
+        return PIN_KINDS.get(workflow, ())
+
+    def add_pin(
+        self,
+        text: str,
+        kind: str,
+        elements: list[str] | None = None,
+        sources: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Open a pin on the drawing (a scoping section): `text` is its one sentence,
-        `kind` one of PIN_KINDS, `element` the id of the element of the drawing it sits on.
-        Opened outside the phase "scoping" (by the planner or the writer, after « End
-        scoping »), it sends the session back to scoping: the phase becomes "scoping".
-        Returns the record."""
+        `kind` one of the kinds the session's skill places (`pin_kinds`), `elements` the
+        ids of the elements of the drawing it sits on (two for a tension between them),
+        `sources` where a lead's finding was looked up. Opened outside the phase "scoping"
+        (by the planner or the writer, after « End scoping »), it sends the session back to
+        scoping: the phase becomes "scoping". Returns the record."""
         if not text.strip():
             raise SessionError("empty pin")
-        if kind not in PIN_KINDS:
-            raise SessionError(f"unknown pin kind {kind!r}; one of {', '.join(PIN_KINDS)}")
+        kinds = self.pin_kinds()
+        if kind not in kinds:
+            workflow = self.read_plan().get("workflow") or "this"
+            raise SessionError(
+                f"a {workflow} session places no {kind!r} pin; its kinds: {', '.join(kinds)}"
+            )
         if not self.scoping_sections():
             raise SessionError("no scoping section in the outline: a pin marks the drawing")
         pins = self.read_pins()
         n = max((int(p["id"][1:]) for p in pins if p["id"].startswith("p")), default=0)
         p: dict[str, Any] = {"id": f"p{n + 1}", "kind": kind, "text": " ".join(text.split())}
-        if element.strip():
-            p["element"] = element.strip()
+        p |= _pin_place(elements or [])
+        if listed := [" ".join(s.split()) for s in sources or [] if s.strip()]:
+            p["sources"] = listed
         p |= {"status": "open", "asked": now_iso()}
         pins.append(p)
         _write_json(self.pins_path, pins)
@@ -1297,13 +1331,13 @@ class Session:
         _write_json(self.pins_path, pins)
         return [by_id[i] for i in ids]
 
-    def set_pin_element(self, pid: str, element: str) -> dict[str, Any]:
-        """Give an open pin its element: the scoper drew the element of the drawing a pin
-        sits on (one the planner or the writer opened with none, or whose element a redraw
-        removed). The record keeps its id, so the comments attached to it stay on it.
-        Returns the record."""
-        element = element.strip()
-        if not element:
+    def set_pin_element(self, pid: str, elements: list[str]) -> dict[str, Any]:
+        """Give an open pin its elements: the scoper drew the element(s) of the drawing a
+        pin sits on (one the planner or the writer opened with none, or whose element a
+        redraw removed). The record keeps its id, so the comments attached to it stay on
+        it. Returns the record."""
+        place = _pin_place(elements)
+        if not place:
             raise SessionError("empty element")
         pins = self.read_pins()
         p = next((p for p in pins if p["id"] == pid), None)
@@ -1311,7 +1345,9 @@ class Session:
             raise SessionError(f"no pin {pid}")
         if p["status"] != "open":
             raise SessionError(f"already closed: {pid}")
-        p["element"] = element
+        p.pop("element", None)
+        p.pop("elements", None)
+        p.update(place)
         _write_json(self.pins_path, pins)
         return p
 
@@ -1330,26 +1366,25 @@ class Session:
         return {
             p["id"]
             for p in self.open_pins()
-            if p["id"] in anchors or (p.get("element") and p["element"] in elements)
+            if p["id"] in anchors or elements.intersection(pin_elements(p))
         }
 
     def pin_tones(self) -> dict[str, dict[str, str]]:
         """The colour the page draws each open pin in: {"pins": {pin id: tone},
         "elements": {element id: tone}}. A pin's tone is "waiting" (grey) while it waits
-        for the scoper, else its kind ("hole" orange, "supposition" blue): its box and its
-        line of the pin index. An element's tone, its mark, comes from its open pins:
-        among those not waiting, the first kind of PIN_KINDS one of them has; "waiting"
-        when all of them wait."""
+        for the scoper, else its kind: its box and its line of the pin index. An element's
+        tone, its mark, comes from the open pins on it: among those not waiting, the first
+        kind of PIN_TONE_ORDER one of them has; "waiting" when all of them wait."""
         waiting = self.waiting_pins()
         pins: dict[str, str] = {}
         on: dict[str, list[str]] = {}
         for p in self.open_pins():
             tone = "waiting" if p["id"] in waiting else p["kind"]
             pins[p["id"]] = tone
-            if p.get("element"):
-                on.setdefault(p["element"], []).append(tone)
+            for e in pin_elements(p):
+                on.setdefault(e, []).append(tone)
         elements = {
-            e: next((k for k in PIN_KINDS if k in tones), "waiting") for e, tones in on.items()
+            e: next((k for k in PIN_TONE_ORDER if k in tones), "waiting") for e, tones in on.items()
         }
         return {"pins": pins, "elements": elements}
 
@@ -3083,6 +3118,23 @@ def _check_row(section: str) -> None:
         raise SessionError(f"a pin box's anchor is pin:<id>: {section!r}")
 
 
+def pin_elements(p: dict[str, Any]) -> list[str]:
+    """The ids of the elements a pin sits on: `elements` when it sits on several, else its
+    `element`, none without one."""
+    if p.get("elements"):
+        return [str(e) for e in p["elements"]]
+    return [str(p["element"])] if p.get("element") else []
+
+
+def _pin_place(elements: list[str]) -> dict[str, Any]:
+    """The fields that place a pin on its elements: `element` for one, `elements` for
+    several (each id once, in order), nothing for none."""
+    ids = list(dict.fromkeys(e.strip() for e in elements if e.strip()))
+    if len(ids) > 1:
+        return {"elements": ids}
+    return {"element": ids[0]} if ids else {}
+
+
 def pin_anchor(section: str) -> str:
     """The id of the pin whose box an anchor names (`pin:<id>`, or `hole:<id>` written
     before the rename), "" for any other anchor."""
@@ -3312,9 +3364,7 @@ def format_comment(
         where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
     if c.get("element"):
         on = [
-            p["id"]
-            for p in pins or []
-            if p.get("element") == c["element"] and p["status"] == "open"
+            p["id"] for p in pins or [] if c["element"] in pin_elements(p) and p["status"] == "open"
         ]
         where += f" · element {c['element']}" + (f" (open pins {', '.join(on)})" if on else "")
     quote = " ".join(c["quote"].split())

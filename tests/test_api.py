@@ -363,9 +363,10 @@ def test_state_carries_what_the_banner_is_computed_from(client, session):
 def test_state_carries_the_pins_and_their_tones(client, session):
     plan = session.read_plan()
     plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
+    plan["workflow"] = "build-feature"
     session.plan_path.write_text(json.dumps(plan))
     (session.sections_dir / "scoping.html").write_text('<p id="e1">a point</p>')
-    session.add_pin("What the unit is.", "hole", element="e1")
+    session.add_pin("What the unit is.", "hole", ["e1"])
     session.add_pin("Per layer.", "supposition")
     client.post("/api/s/kv-cache/batch", json={"comments": [{"section": "pin:p2", "text": "yes"}]})
     state = client.get("/api/s/kv-cache").json()
