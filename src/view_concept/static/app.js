@@ -999,10 +999,11 @@ function sectionBlock(s, { bare = false } = {}) {
    rename), kind, text (one sentence), element or elements (optional: the id of the element
    of the drawing it sits on, or the ids when it sits on several, as a tension between two
    elements), sources (optional: where a lead's finding was looked up), status "open" |
-   "closed"}. Each skill places its own kinds (PIN_LABELS): a feature's scoper a "hole",
-   something only the user can settle, or a "supposition", a statement it drew from the
-   code, for the user to approve or correct; an explanation's scoper a "probe", a
-   "correction", a "tension", a "choice" or a "lead". Pins live on the pin section, the
+   "closed"}. Each skill places its own kinds, which the server sends (`state.pin_kinds`):
+   a feature's scoper a "hole", something only the user can settle, or a "supposition", a
+   statement it drew from the code, for the user to approve or correct; an explanation's
+   scoper a "probe", a "correction", a "tension", a "choice" or a "lead". Pins live on the
+   pin section, the
    first scoping section of the outline. The page draws a pin from its
    record only: the mark on its element (postPins), its box in the pin window and its
    line in the pin index (see "the pin window"); a closed pin has none of them.
@@ -1022,9 +1023,8 @@ const pinElements = (h) => (Array.isArray(h.elements) && h.elements.length ? h.e
   : h.element ? [String(h.element)] : []);
 /* What a pin's box and index line say of its kind, before its sentence: a hole's « ? », a
    supposition's statement alone (the feature's two kinds, as before pins), and the name of
-   each kind an explanation's scoper places. */
-const PIN_LABELS = { hole: "? ", supposition: "", probe: "probe · ", correction: "correction · ",
-                     tension: "tension · ", choice: "choice · ", lead: "lead · " };
+   any other kind. */
+const PIN_LABELS = { hole: "? ", supposition: "" };
 const pinLabel = (h) => (PIN_LABELS[h.kind] ?? `${h.kind} · `);
 const openPins = () => pinRecords().filter((h) => h.status === "open");
 const pinSection = () => (state.plan.outline.find(isScopingSection) || {}).id;
@@ -1043,29 +1043,37 @@ const elementTone = (element) => pinTones().elements[element] || "waiting";
    « End scoping » (action "end-scoping": the planner converts the drawing into the outline
    and the lexicon, then the writer writes the model, or an explanation's prose:
    drawingProduct). « End scoping » waits until no pin
-   that holds it back is open (BLOCKING_PINS: a correction, a tension, a hole or a
-   supposition), waiting or not; the server refuses it otherwise. An open probe, choice or
-   lead does not hold it back: it is left out of the report.
+   that holds it back is open (the kinds the server sends, `state.blocking_kinds`: a
+   correction, a tension, a hole or a supposition), waiting or not; the server refuses it
+   otherwise, and the button's tooltip names the kinds still open. An open probe, choice
+   or lead does not hold it back: it is left out of the report.
    Both take the draft comments with them, and hide once « End scoping » is sent, until
    the status moves. */
 const sentSince = (action) => {
   const b = lastBatchOf(action);
   return !!b.sent && b.sent >= (state.status.since || "");
 };
-const BLOCKING_PINS = ["correction", "tension", "hole", "supposition"];
 const isFeature = () => state.workflow === "build-feature";
 // What the writer writes from the drawing once scoping ends: a feature's model, an explanation's prose.
 const drawingProduct = () => (isFeature() ? "model" : "prose");
-const blockingPins = () => openPins().filter((h) => BLOCKING_PINS.includes(h.kind));
+const blockingPins = () => openPins().filter((h) => (state.blocking_kinds || []).includes(h.kind));
+// « a, b or c », « a, b and c »: a list of words for a tooltip.
+const wordList = (words, last) => (words.length > 1 ? `${words.slice(0, -1).join(", ")} ${last} ${words.at(-1)}` : words[0] || "");
+// The open pins `list` counted by kind, in the user's words: « a correction and 2 tensions ».
+const kindCount = (list) => wordList([...new Set(list.map((h) => h.kind))].map((k) => {
+  const n = list.filter((h) => h.kind === k).length;
+  return n > 1 ? `${n} ${k}s` : `${/^[aeiou]/.test(k) ? "an" : "a"} ${k}`;
+}), "and");
 function scopingActions() {
   if (!drawingScoping() || sentSince("end-scoping")) return null;
-  const n = blockingPins().length;
+  const blocking = blockingPins();
+  const n = blocking.length;
   return el("div", { class: "scoping-actions" },
     el("button", { class: "btn", text: "What's missing?",
-                   title: `The scoper reads the drawing again: it opens ${isFeature() ? "holes or suppositions" : "probes, corrections, tensions, choices or leads"}, or says nothing is left`,
+                   title: `The scoper reads the drawing again: it opens ${wordList((state.pin_kinds || []).map((k) => `${k}s`), "or") || "pins"}, or says nothing is left`,
                    onclick: (e) => send("missing", e.currentTarget) }),
     el("button", { class: "btn primary", text: "End scoping", disabled: n > 0,
-                   title: n ? `${plural(n, "pin")} still open that hold${n > 1 ? "" : "s"} it back: answer ${n > 1 ? "them" : "it"} first`
+                   title: n ? `${kindCount(blocking)} still open: answer ${n > 1 ? "them" : "it"} first`
                      : `The planner converts the drawing into the outline and the lexicon, then the writer writes the ${drawingProduct()}`,
                    onclick: (e) => send("end-scoping", e.currentTarget) }));
 }

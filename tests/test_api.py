@@ -379,6 +379,9 @@ def test_state_carries_the_pins_and_their_tones(client, session):
         "pins": {"p1": "hole", "p2": "waiting"},
         "elements": {"e1": "hole"},
     }
+    assert state["pin_kinds"] == ["hole", "supposition"]
+    assert set(state["blocking_kinds"]) >= {"hole", "supposition", "correction", "tension"}
+    assert "probe" not in state["blocking_kinds"]
 
 
 def test_metrics_serve_branch_reviews_only(client, session, tmp_path, monkeypatch):

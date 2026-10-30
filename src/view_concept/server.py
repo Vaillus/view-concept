@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from . import channel, frame, gate, launch, metrics, publish, push, threads
 from .render import md
 from .store import (
+    BLOCKING_PINS,
     DOC_KEY,
     FACTS_KEY,
     MOVES_KEY,
@@ -307,6 +308,10 @@ def state(slug: str) -> dict[str, Any]:
         "pins": pins,
         # The colour of each open pin's box and index line, and of each marked element.
         "pin_tones": pin_tones,
+        # The kinds of pin the session's skill places, and the kinds that hold « End
+        # scoping » back while open: the page labels and counts pins from these lists.
+        "pin_kinds": list(s.pin_kinds()),
+        "blocking_kinds": list(BLOCKING_PINS),
         "grilling": grilling,
         "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),
         "published": published,
