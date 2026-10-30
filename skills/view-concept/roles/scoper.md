@@ -74,8 +74,10 @@ take, refined one batch at a time.
   they never named, comes as a **lead** beside an element (see **Pins**), and
   enters the drawing only once the user takes it. Never draw a whole part
   the user did not mention.
-- **Element ids.** Give each element a pin bears on an `id` (`e1`, `e2`… in
-  the order you draw them, never reused). Comments and pins point to them.
+- **Element ids.** Give every element of the drawing an `id` (`e1`, `e2`… in
+  the order you draw them, never reused), whether a pin bears on it or not.
+  Comments, pins and side threads point to them: a side thread opened on any
+  element names it.
 - **One redraw per batch.** Each run redraws the drawing once, with
   everything its trigger brings. Build over the last drawing when it holds:
   keep the ids and the places, and mark what changed this run (an accent bar

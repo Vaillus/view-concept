@@ -72,9 +72,10 @@ where they form a sequence (a timeline of « today » next to one of
 
   Each command prints the pin's id (`p1`, `p2`…; a pin carried over from an
   older session keeps its `h…` id). A pin bears on an
-  element the drawing already shows: give that element an `id` (`e1`,
-  `e2`… in the order you draw them, never reused) and name it with
-  `--element`. The page draws the rest from the pin: it marks the
+  element the drawing already shows: name its `id` with `--element`.
+  Every element of the drawing has an `id` (`e1`, `e2`… in the order you
+  draw them, never reused), whether a pin bears on it or not: a comment or
+  a side thread opened on any element names it. The page draws the rest from the pin: it marks the
   element (dashed, orange for a hole, blue when only suppositions are open
   on it), opens a dashed box per open pin of the element when the user
   clicks it, and lists each open pin at the end of the scoping tab. So
