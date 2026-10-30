@@ -1,10 +1,12 @@
-"""The context a subagent of a coordinated session starts from.
+"""The context a role agent of a coordinated session starts from.
 
-In a coordinated session (the build-feature workflow) the main session only coordinates:
-the work is done by subagents, each started fresh, and a side thread starts the same way.
-None of them sees the main conversation, so each one starts from the session folder, as
-`build` prints it: the base context (where the feature stands now) plus the trigger (the
-events that started this run).
+In a coordinated session (an explanation, the view-concept workflow, or a feature, the
+build-feature workflow) the main session only coordinates: the work is done by role
+agents, each started fresh, and a side thread starts the same way. None of them sees the
+main conversation, so each one starts from the session folder, as `build` prints it: the
+base context (where the explanation or the feature stands now) plus the trigger (the
+events that started this run). An explanation has the scoper, the planner, the writer and
+the thread; the roles that work on the code (FEATURE_ROLES) are a feature's only.
 
 The files keep everything; the context loads only the recent part of each log, the
 CONTEXT_RECENT most recent entries. Three parts are always loaded in full: the request
@@ -20,16 +22,17 @@ path, and open it when a comment needs the user's reasons.
 
 Roles:
 
-- `scoper`: owns the scoping section of a feature (the drawing of the problem, an HTML
-  section with `"part": "scoping"`) and its pins, until « End scoping », and again when a
+- `scoper`: owns the scoping section (the drawing of a feature's problem, or of the subject
+  of an explanation on the scoping path: an HTML section with `"part": "scoping"`) and its
+  pins, until « End scoping », and again when a
   later agent's pin sends the session back to scoping. Gets the scoping sections and the
   pins (pins.json): the open ones, then the recent closed ones with their note.
-- `planner`: owns the outline and the lexicon during scoping, or, in a feature with a
+- `planner`: owns the outline and the lexicon during scoping, or, in a session with a
   scoping section, writes them at « End scoping » by converting the drawing. Gets the
   scoping sections and the pins; no other section exists yet.
 - `writer`: owns the modeling part (its sections), the to-do list (the section `todo`,
-  in the refactoring part) and, from « Write model » on, the outline and the lexicon.
-  Gets every section and the pins.
+  in the refactoring part) and, from « Write model » on, the outline and the lexicon; in
+  an explanation, the prose and the vocabulary audit. Gets every section and the pins.
 - `implementer`: owns the code, from « Approve model » on, and never touches the docs.
   Gets the modeling part, the to-do list, and the sections its trigger names (the
   reviewer's items it must act on).
@@ -95,6 +98,8 @@ from .store import (
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
 ROLES = ("scoper", "planner", "writer", "implementer", "documenter", "reviewer", "thread")
+# The roles that work on the code: a feature's only.
+FEATURE_ROLES = ("implementer", "documenter", "reviewer")
 # The roles that read the request transcript whole.
 TRANSCRIPT_ROLES = ("scoper", "planner", "writer")
 # The roles that keep the doc set or work on its docs: the writer writes the first one,
@@ -123,6 +128,8 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
         raise SessionError(f"unknown role {role!r}; one of {', '.join(ROLES)}")
     if not s.exists():
         raise SessionError(f"no session {s.slug!r}")
+    if role in FEATURE_ROLES and not s.is_feature:
+        raise SessionError(f"{s.slug} is not a feature: the {role} works on a feature's code")
     plan = s.read_plan()
     outline = plan["outline"]
     questions = s.read_questions()
@@ -374,7 +381,7 @@ def _change_history(s: Session) -> list[str]:
     and every change not implemented yet, even one older than the recent ones."""
     changes = s.read_changes()
     lines = _recent("Change history", changes, _change_line)
-    if not s.coordinated or not s.model_approved():
+    if not s.is_feature or not s.model_approved():
         return lines
     through = s.implemented_through()
     pending = s.unimplemented_changes()

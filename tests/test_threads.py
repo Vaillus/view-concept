@@ -46,6 +46,15 @@ def fake_claude(tmp_path, monkeypatch):
     return script
 
 
+def no_workflow(session):
+    """The session as one written before workflows existed: an explanation that is not
+    coordinated, whose threads fork the main conversation."""
+    plan = session.read_plan()
+    del plan["workflow"]
+    session.plan_path.write_text(json.dumps(plan))
+    return session
+
+
 def calls(script):
     return [json.loads(line) for line in (script.parent / "claude.calls").read_text().splitlines()]
 
@@ -59,6 +68,7 @@ def wait_idle(session, tid):
 
 
 def test_first_turn_forks_the_main_session(session, fake_claude):
+    no_workflow(session)
     session.bind_agent("claude", "main-1")
     t = threads.create(session, "s2", "Le cache", "", "why a cache?")
     assert t["id"] == "t1" and t["state"] == "running"
@@ -95,6 +105,7 @@ def test_later_turns_resume_the_thread(session, fake_claude):
 
 
 def test_without_a_parent_the_thread_starts_fresh(session, fake_claude):
+    no_workflow(session)
     threads.create(session, "", "", "", "hello")
     wait_idle(session, "t1")
     (call,) = calls(fake_claude)
@@ -223,6 +234,7 @@ def codex_calls(script):
 
 
 def test_codex_first_turn_forks_then_resumes(session, fake_codex):
+    no_workflow(session)
     session.bind_agent("codex", "codex-main")
     threads.create(session, "s2", "Le cache", "", "why a cache?")
     t = wait_idle(session, "t1")
@@ -258,6 +270,7 @@ def fake_command(tmp_path, monkeypatch):
 
 
 def test_command_backend_replays_the_thread_each_turn(session, fake_command):
+    no_workflow(session)
     threads.create(session, "s2", "Le cache", "", "why a cache?")
     t = wait_idle(session, "t1")
     assert t["state"] == "idle" and t["messages"][1]["text"] == "line one\nline two"
@@ -327,6 +340,19 @@ def test_a_branch_review_thread_starts_from_the_folder(tmp_path, fake_claude):
     assert "starts from the session folder" in call["prompt"]
     assert "## Initial request\nrework the gate" in call["prompt"]
     assert call["prompt"].endswith("why a gate?")
+
+
+def test_an_explanation_thread_starts_from_the_folder(session, fake_claude):
+    session.bind_agent("claude", "main-1")
+    assert session.coordinated and not session.is_feature and session.fork_parent() == ""
+    threads.create(session, "s2", "Le cache", "", "why a cache?")
+    t = wait_idle(session, "t1")
+    assert t["forked_from"] == ""
+    (call,) = calls(fake_claude)
+    assert "--resume" not in call["args"]
+    assert "the context below is where the explanation stands now" in call["prompt"]
+    assert "# view-concept context · kv-cache · role thread" in call["prompt"]
+    assert "### 2. Cache (s2)\nLe cache." in call["prompt"]
 
 
 def test_the_briefing_gives_the_vocabulary_read_up_to_the_passage(session):

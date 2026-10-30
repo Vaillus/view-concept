@@ -328,3 +328,12 @@ def test_the_implementer_gets_nothing_of_the_docs(review, tmp_path):
     for head in ("## Doc set", "## Stale passages", "## Missing facts", "## Concept triage"):
         assert head in documenter
     assert "## Move plans" in documenter
+
+
+def test_an_explanation_gets_the_scoper_planner_writer_and_thread_only(session):
+    assert session.coordinated and not session.is_feature
+    for role in ("scoper", "planner", "writer", "thread"):
+        assert f"role {role}" in build(session, role)
+    with pytest.raises(SessionError, match="not a feature"):
+        build(session, "implementer")
+    assert "## Code map" not in build(session, "writer")

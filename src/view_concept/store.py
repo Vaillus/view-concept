@@ -90,9 +90,12 @@ A side thread is a separate headless agent conversation that the user opens from
 to discuss a passage without changing anything (see threads.py). Only a comment batch
 reaches the main session.
 
-A coordinated session (the build-feature workflow) is driven by a main session that only
-coordinates: subagents do the work, each started from the session folder as
-`view-concept context` prints it (context.py). The initial request is the user's first
+A coordinated session (COORDINATED_WORKFLOWS: an explanation, view-concept, or a feature,
+build-feature) is driven by a main session that only coordinates: role agents do the
+work, each started from the session folder as `view-concept context` prints it
+(context.py), and a side thread starts from the folder too, never from the main
+conversation. Only a feature has the code map, the doc set, the implemented mark and the
+roles that work on the code (`is_feature`). The initial request is the user's first
 message, kept verbatim in plan.json. When the review follows a conversation about the
 feature, request.md, the request transcript, holds all of it: every message from the
 first one about the feature, the user's and the agent's, verbatim and in order, under a
@@ -435,6 +438,10 @@ RENAMED_WORKFLOWS = {
 }
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "build-feature"}
+# The workflows whose main session only coordinates role agents, each started from the
+# session folder (`view-concept context`): an explanation's scoper, planner and writer, a
+# feature's too, with its implementer, documenter and reviewer.
+COORDINATED_WORKFLOWS = ("view-concept", "build-feature")
 # The role agents a feature's coordinator starts; a variant sets a model per role.
 AGENT_ROLES = ("scoper", "planner", "writer", "implementer", "documenter", "reviewer")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
@@ -1155,7 +1162,7 @@ class Session:
         """The changes of the model the code does not carry yet: every change logged after
         the last one an implementer took into account. None before the model is approved:
         until then there is no code to keep up with the model."""
-        if not self.coordinated or not self.model_approved():
+        if not self.is_feature or not self.model_approved():
             return []
         changes = self.read_changes()
         ids = [d["id"] for d in changes]
@@ -2475,13 +2482,20 @@ class Session:
 
     def has_written(self) -> bool:
         """Whether what « Write plan » or « Write model » asks for exists already, so the
-        button asks for a rewrite: the plan, or in a coordinated session the sections (its
-        planner drafts an outline before scoping ends)."""
-        return bool(self.read_sections() if self.coordinated else self.read_plan()["outline"])
+        button asks for a rewrite: the plan, or in a feature the sections (its planner
+        drafts an outline before scoping ends)."""
+        return bool(self.read_sections() if self.is_feature else self.read_plan()["outline"])
 
     @property
     def coordinated(self) -> bool:
-        """Whether the main session only coordinates subagents (the build-feature workflow)."""
+        """Whether the main session only coordinates role agents (COORDINATED_WORKFLOWS:
+        an explanation, a feature)."""
+        return self.read_plan().get("workflow") in COORDINATED_WORKFLOWS
+
+    @property
+    def is_feature(self) -> bool:
+        """Whether the session is a feature (the build-feature workflow): what only a
+        feature has, the code it changes and the roles that work on it, goes by this."""
         return self.read_plan().get("workflow") == "build-feature"
 
     def fork_parent(self) -> str:

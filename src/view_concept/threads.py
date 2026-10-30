@@ -3,10 +3,11 @@
 A thread discusses a passage without changing anything. On an agent that can fork its
 conversation (Claude Code, Codex), its first turn forks the main session, so it starts
 knowing the whole conversation so far while the main session stays untouched; every later
-turn resumes the thread's own session. In a coordinated session (build-feature) the main
-session only coordinates subagents, so a thread never forks it: its first turn carries the
-context a subagent gets (`view-concept context --role thread`), and later turns resume the
-thread's own session as usual. On any other agent (a program that answers a prompt
+turn resumes the thread's own session. In a coordinated session (an explanation,
+view-concept, or a feature, build-feature) the main session only coordinates role agents,
+so a thread never forks it: its first turn carries the context a role agent gets
+(`view-concept context --role thread`), and later turns resume the thread's own session as
+usual. On any other agent (a program that answers a prompt
 on stdin, such as `jazz run`) every turn restates where the explanation is and what the
 thread has said. Each turn is one process, run by the server in a background Python thread;
 its reply streams into threads/<id>.json, which the server's event stream watches like the
@@ -317,9 +318,10 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
     else:
         anchor = f"none (a general question about the {doc})"
     if s.coordinated:
+        what = "feature" if s.is_feature else doc
         origin = (
-            "The main session only coordinates subagents, so this thread starts from the"
-            " session folder: the context below is where the feature stands now."
+            "The main session only coordinates role agents, so this thread starts from the"
+            f" session folder: the context below is where the {what} stands now."
         )
     elif backend.forks and s.read_parent():
         origin = (

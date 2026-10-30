@@ -105,7 +105,8 @@ def test_api_renders_tips(client, session):
 
 def test_api_threads(client, session):
     r = client.get("/api/s/kv-cache/threads")
-    assert r.json() == {"forkable": False, "threads": []}
+    # An explanation's threads start from the folder: they need no main conversation.
+    assert r.json() == {"forkable": True, "threads": []}
     assert client.post("/api/s/kv-cache/threads", json={"text": " "}).status_code == 400
     # A fact goes on a doc's anchor only.
     bad = {"section": "s1", "quote": "x", "fact": "f1", "text": "why?"}
