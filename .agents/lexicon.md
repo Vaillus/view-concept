@@ -18,19 +18,55 @@ One explanation or review, with its files and comments, kept in `~/.view-concept
 The comments and answers you send from the page to the agent at once, with « Send ».
 
 **Side thread**:
-A separate, read-only conversation forked from the session to discuss a passage; the session never sees it.
+A separate, read-only conversation opened from the page to discuss a passage; the session never sees it.
+
+**Coordinator**:
+The main session of a skill that only routes each batch to a role agent and does none of the work itself.
+
+**Role agent**:
+An agent the coordinator starts for one part of the work, from the session folder: the scoper, the planner or the writer, and on a feature the implementer, the reviewer or the documenter.
+
+**Direct path**:
+A request for an explanation run through the six phases of `/view-concept`, for a straightforward explanation.
+
+**Scoping path**:
+A request for an explanation whose subject is drawn first, for an idea that needs morphing before it can be explained.
+
+**Pin**:
+A record of an open point on an element of the drawing, kept in the pin file, that the scoper closes once it is settled.
+
+**Pin file**:
+`pins.json` in the session folder: every pin of the session, open and closed.
 
 **Hole**:
-Something of the drawing only you can settle, recorded open on one element of the drawing until the scoper closes it.
+A pin of `/build-feature`: something of the drawing only you can settle.
 
 **Supposition**:
-A hole the scoper already answered from the code: its statement, in one sentence, in blue, for you to approve or correct.
+A pin of `/build-feature`: the scoper's answer from the code, for you to approve or correct.
 
-**Hole record**:
-What the page stores for a hole: hole or supposition, its sentence, its element, open or closed.
+**Probe**:
+A pin of `/view-concept` on an element you drew, asking what you actually believe on that point.
 
-**Hole file**:
-`holes.json` in the session folder: every hole record of the session, open and closed.
+**Correction**:
+A pin of `/view-concept` on an element you drew, stating that it is wrong or imprecise, and the fix.
+
+**Tension**:
+A pin of `/view-concept` on two of your elements that do not sit together, or on one that contradicts your goal.
+
+**Choice**:
+A pin of `/view-concept` where the subject has several framings, asking which one the explanation follows.
+
+**Lead**:
+A pin of `/view-concept` beside an element, offering something the agent found, with its sources when it looked it up.
+
+**Channel**:
+The path a section's script uses to ask an agent for data: frame, page, server, small agent, and back.
+
+**Small agent**:
+A headless, read-only agent the server starts to answer one request of the channel.
+
+**Parameters file**:
+`params.json` in the session folder, kept by the server for the sections that use the channel: what each one's script saved and the answers it received.
 
 **Feature**:
 A `/build-feature` session: a feature designed concepts first, from its model to its implementation, its docs and its PR.

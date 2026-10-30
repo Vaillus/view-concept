@@ -6,13 +6,26 @@ The agent writes plain files; the **page** renders them in your browser as they 
 
 ![An explanation in the page: hovering a term shows its definition, and the review pane holds the comments with the agent's replies](docs/screenshots/explanation.png)
 
+## Files
+
+| Path | Holds |
+|---|---|
+| [`skills/`](skills/README.md) | the skills, one folder each |
+| [`src/view_concept/`](src/view_concept/README.md) | the Python package: the `view-concept` command and the page's server |
+| [`bin/`](bin/README.md) | the script the Claude Code plugin runs the command with |
+| [`tests/`](tests/README.md) | the pytest suite |
+| [`docs/`](docs/README.md) | the docs that go further than this README, and its screenshots |
+| `.claude-plugin/` | the Claude Code plugin and marketplace manifests |
+| `pyproject.toml` | the package, its dependencies and the `view-concept` entry point |
+| `CLAUDE.md` | the rules an agent follows when it changes this repo |
+
 ## Why a page
 
 In the terminal, a long explanation scrolls away, you cannot point at the sentence you did not understand, and each revision is a new copy to compare with the old one. In the page, the text stays put, comments are anchored to their passage, and a rewritten section highlights what changed.
 
 The page is built around an explanation method, which the `view-concept` skill carries (it started as the **explain-concept** skill). Two of its rules show in the page:
 
-- **The plan comes before the prose.** The **plan** is the outline plus the **lexicon**, the list of every term the explanation uses, with the section that introduces it and its definition. You approve the plan before any paragraph is written.
+- **The plan comes before the prose.** The **plan** is the outline plus the **lexicon**, the list of every term the explanation uses, with the section that introduces it and its definition. You approve the plan before any paragraph is written, or, for an idea that needs morphing before it can be explained, the agent first draws the subject with you, one comment batch after another, and the plan is converted from that drawing with no approval step (see [`skills/view-concept/README.md`](skills/view-concept/README.md)).
 - **Every term is defined before it is used.** Hovering a lexicon term shows its definition, and a final **vocabulary audit** flags terms that slipped through undefined.
 
 ## What a session looks like
@@ -22,7 +35,7 @@ You type `/view-concept explain KKT conditions`. The agent opens the page and as
 1. **Plan.** The agent writes the outline and the lexicon in the Plan tab. You correct it or click « Approve plan ».
 2. **Prose.** The agent writes the sections one by one; the page re-renders as each one lands.
 3. **Comments.** Select a passage, « + comment », repeat, then « Send ». The agent edits the sections, replies to each comment, and the words it changed stay highlighted until your next batch.
-4. **Side threads.** To discuss a passage before asking for a change, select it and click « ask ». A **side thread** is a separate, read-only conversation forked from the session, so it knows the discussion so far; the session never sees it. (On Claude Code and Codex it forks the real conversation; on any other agent, and in a feature, it starts from the session's files.)
+4. **Side threads.** To discuss a passage before asking for a change, select it and click « ask ». A **side thread** is a separate, read-only conversation opened from the page to discuss a passage; the session never sees it. It starts from the session's files, so it knows the explanation as it stands (the request, the plan, the sections, the comments), not the terminal conversation. (In a `/triage-code` or `/review-docs` session on Claude Code or Codex, it forks the real conversation instead.)
 
 ![The Plan tab waiting for approval](docs/screenshots/plan.png)
 
