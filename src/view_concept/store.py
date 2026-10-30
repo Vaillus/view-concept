@@ -328,7 +328,8 @@ at} (written by `pr`). The page links it at the top and at the end of the code t
 published.json is the publish record, what the session remembers of its last publish
 (see publish.py): {url (the published page's link), at (when), fingerprint}. The
 fingerprint is a hash of what a published page shows: the title, the published sections
-(the explanation sections that are written, in outline order) and the lexicon. The
+(the explanation sections that are written, in outline order), the lexicon and the
+parameters of its channel sections. The
 session is "out of date" when its fingerprint now differs from the recorded one;
 comments, threads and highlights do not count, since a published page does not show them.
 Unpublishing deletes the record.
@@ -2840,11 +2841,18 @@ class Session:
             if s.get("part") != 2 and s["id"] in sections
         ]  # fmt: skip
 
+    def published_params(self, plan: dict[str, Any] | None = None) -> dict[str, Any]:
+        """What a published page carries of the parameters file: the entry of each
+        published HTML section that has one, whose script answers its requests from it."""
+        shown = {s["id"] for s in self.published_sections(plan) if s["html"]}
+        return {sid: e for sid, e in self.read_params().items() if sid in shown}
+
     def fingerprint(self) -> str:
-        """A hash of what a published page shows: the title, the published sections and
-        the lexicon. The publish date, comments and highlights are left out."""
+        """A hash of what a published page shows: the title, the published sections, the
+        lexicon, and the parameters of its channel sections when it has any. The publish
+        date, comments and highlights are left out."""
         plan = self.read_plan()
-        content = {
+        content: dict[str, Any] = {
             "title": str(plan["title"]).strip() or self.slug,
             "sections": [
                 [s["id"], s["title"], s["markdown"]] for s in self.published_sections(plan)
@@ -2854,6 +2862,8 @@ class Session:
                 for t in plan["lexicon"]
             ],
         }
+        if params := self.published_params(plan):
+            content["params"] = params
         canonical = json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 

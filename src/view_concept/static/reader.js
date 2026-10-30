@@ -2,15 +2,18 @@
    their tip on hover, typesets the maths, draws the Mermaid charts and talks to the
    section frames.
 
-   wrapTerm, annotateLexicon, typesetMath, renderMermaid and the tooltip handler mirror
-   their namesakes in app.js (the session page): change them together. They differ only
-   where the published page does: the lexicon is the JSON in #lexicon (each entry's term,
-   home section and tip_html), every chart is in sight (no hidden tab), and a chart is
-   redrawn when the reader's system switches between light and dark. */
+   wrapTerm, annotateLexicon, typesetMath, renderMermaid, the tooltip handler and
+   frameChannel mirror their namesakes in app.js (the session page): change them together.
+   They differ only where the published page does: the lexicon is the JSON in #lexicon
+   (each entry's term, home section and tip_html), every chart is in sight (no hidden tab),
+   a chart is redrawn when the reader's system switches between light and dark, and a
+   section's channel requests are answered from the JSON in #params, with no server. */
 
 "use strict";
 
 const LEXICON = JSON.parse(document.getElementById("lexicon").textContent);
+// The parameters file's entry of each published section whose script uses the channel.
+const PARAMS = JSON.parse((document.getElementById("params") || {}).textContent || "{}");
 
 function el(tag, attrs = {}, ...children) {
   const n = document.createElement(tag);
@@ -157,7 +160,27 @@ window.addEventListener("message", (e) => {
   if (!f) return;
   if (d.viewConcept === "height") f.style.height = `${d.height}px`;
   else if (d.viewConcept === "term-hover") frameTermHover(f, d);
+  else if (d.viewConcept === "channel") frameChannel(f.dataset.section, f, d);
 });
+
+/* The channel message (frame.js's `viewConcept`), as app.js answers it but with no server
+   behind the page: « load » gives the section's entry of the parameters file as it was
+   published, « save » keeps what the script saved in this page only (a reload starts
+   again from the published entry), « ask » answers with the answer received for that key
+   before publishing, and fails for a request never received. No request leaves the
+   page. */
+function frameChannel(id, f, d) {
+  const entry = PARAMS[id] || (PARAMS[id] = { saved: {}, received: {} });
+  entry.saved = entry.saved || {};
+  entry.received = entry.received || {};
+  const answer = (reply) => { if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "channel-answer", id: d.id, ...reply }, "*"); };
+  if (d.op === "load") answer({ ok: true, data: { saved: entry.saved, received: entry.received } });
+  else if (d.op === "save") { entry.saved = d.saved || {}; answer({ ok: true, data: null }); }
+  else if (d.op === "ask") {
+    if (Object.prototype.hasOwnProperty.call(entry.received, d.key)) answer({ ok: true, data: entry.received[d.key] });
+    else answer({ ok: false, error: `not received before publishing: ${d.key}` });
+  } else answer({ ok: false, error: `unknown request ${d.op}` });
+}
 document.querySelectorAll("iframe.frame").forEach((f) => {
   f.addEventListener("load", () => { postTheme(f); postTerms(f); });
   postTheme(f);

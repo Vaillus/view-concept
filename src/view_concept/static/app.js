@@ -2115,7 +2115,8 @@ window.addEventListener("message", (e) => {
    script saved, « ask » has the server start a small agent whose answer, held to the
    request's schema, comes back as data (server.py, channel.py). The page answers the
    frame with « channel-answer », {id, ok, data} or {id, ok: false, error}; the section is
-   never redrawn. */
+   never redrawn. reader.js mirrors it on the published page, answering from the
+   published parameters: change them together. */
 async function frameChannel(id, f, d) {
   const url = `/api/s/${SLUG}/params/${encodeURIComponent(id)}`;
   const json = { "content-type": "application/json" };
