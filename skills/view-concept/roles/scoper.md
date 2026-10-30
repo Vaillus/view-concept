@@ -145,9 +145,10 @@ view-concept close-pin <slug> <pin id>... --note "<how it was settled, in the us
 
 - **A probe answered**: draw the user's answer on the element, in their
   words. An answer that shows a misconception gets a correction on it.
-- **A correction** accepted: draw the fix. Defended: when the user's point
-  holds, close the pin with a note that says so and keep their element;
-  when it does not, leave it open and draw what they need to see it.
+- **A correction** accepted: draw the fix. Defended: close it all the same,
+  keep their element in their words, and say in the note that they kept
+  their point. An open correction holds « End scoping » back, and the
+  button is the user's alone: never keep one open because you disagree.
 - **A tension**: draw the side that held, and change the other.
 - **A choice**: the drawing follows the framing picked.
 - **A lead** taken: draw it into the drawing, as an element of its own with
