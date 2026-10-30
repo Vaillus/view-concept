@@ -2141,7 +2141,10 @@ async function frameChannel(id, f, d) {
                                      body: JSON.stringify({ key: d.key, instruction: d.instruction, schema: d.schema }) });
     } else { answer({ ok: false, error: `unknown request ${d.op}` }); return; }
     const body = await r.json().catch(() => ({}));
-    if (!r.ok) { answer({ ok: false, error: body.detail || `${r.status} ${r.statusText}` }); return; }
+    // A refusal before the endpoint (a 422) has a list of objects as its detail: pass
+    // its JSON text, so the script reads it.
+    const detail = typeof body.detail === "string" ? body.detail : body.detail && JSON.stringify(body.detail);
+    if (!r.ok) { answer({ ok: false, error: detail || `${r.status} ${r.statusText}` }); return; }
     answer({ ok: true, data: d.op === "ask" ? body.answer : d.op === "load" ? body : null });
   } catch (err) {
     answer({ ok: false, error: String(err && err.message || err) });
@@ -2158,7 +2161,8 @@ function pageRect(f, r) {
 
 /* The selection message: a passage selected in an HTML section gets the box a passage of
    a Markdown section gets, anchored the same way (section id, quote, prefix). A passage
-   inside an element of the drawing also carries that element's id (`element`): a marked
+   inside an element of the drawing (a scoping section: an element id elsewhere names no
+   element of the drawing) also carries that element's id (`element`): a marked
    element's first, and the comment on it is read with the element's pins (see "pin
    records"); a side thread asked on it is told the element, so its agent finds it in the
    drawing's source at once. */
@@ -2169,7 +2173,7 @@ function frameSelection(id, f, d) {
   }
   const rect = pageRect(f, d.rect);
   showSelection({ section: id, quote: collapse(String(d.quote)), prefix: collapse(String(d.prefix || "")), rect,
-                  ...(d.element ? { element: String(d.element) } : {}) });
+                  ...(d.element && inScoping(id) ? { element: String(d.element) } : {}) });
 }
 
 /* The anchors message: the passages the drafts, the sent comments and the side threads
