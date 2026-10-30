@@ -428,6 +428,13 @@ def published_view(s: Session) -> dict[str, Any] | None:
     return {"url": record.get("url"), "at": record.get("at"), "out_of_date": s.is_out_of_date()}
 
 
+@app.get("/api/s/{slug}/published")
+def published_record(slug: str) -> dict[str, Any]:
+    """The publish record alone, {published: {url, at, out_of_date} | None}: the page
+    reloads it when the parameters file changes."""
+    return {"published": published_view(get_session(slug))}
+
+
 def section_view(text: str, seen: str, html: bool = False) -> dict[str, Any]:
     """A section as the page renders it. An updated section (its text differs from its
     highlight baseline, the text at the last batch or « mark read ») also carries the
@@ -521,7 +528,7 @@ async def events(slug: str, request: Request) -> StreamingResponse:
 
     async def stream():
         last, last_threads = s.signature(), s.thread_signature()
-        last_drafts = s.drafts_signature()
+        last_drafts, last_params = s.drafts_signature(), s.params_signature()
         listening = s.is_listening()
         yield "event: hello\ndata: {}\n\n"
         ticks = 0
@@ -534,6 +541,10 @@ async def events(slug: str, request: Request) -> StreamingResponse:
             if (sig_drafts := s.drafts_signature()) != last_drafts:
                 last_drafts = sig_drafts
                 yield "event: drafts\ndata: {}\n\n"
+            # The parameters file changes the publish record only: the page reloads it.
+            if (sig_params := s.params_signature()) != last_params:
+                last_params = sig_params
+                yield "event: params\ndata: {}\n\n"
             if sig_threads != last_threads:
                 last_threads = sig_threads
                 yield "event: threads\ndata: {}\n\n"

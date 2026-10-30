@@ -2520,6 +2520,12 @@ class Session:
             paths += self.doc_files()
         return _stat_signature(paths)
 
+    def params_signature(self) -> tuple:
+        """Changes whenever the parameters file changes. Kept apart from `signature` so a
+        save of a section's script never re-renders the page; an answer received after
+        publishing still makes the publish record out of date (`is_out_of_date`)."""
+        return _stat_signature([self.params_path])
+
     def thread_signature(self) -> tuple:
         """Changes whenever a thread changes. Kept apart from `signature` so a streaming
         reply refreshes the threads without re-rendering the explanation."""

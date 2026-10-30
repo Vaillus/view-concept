@@ -91,6 +91,7 @@ function connect() {
   es.addEventListener("changed", () => load());
   es.addEventListener("threads", () => loadThreads());
   es.addEventListener("drafts", () => loadDrafts());
+  es.addEventListener("params", () => loadPublished());
   es.addEventListener("listening", (e) => {
     if (!state) return;
     state.listening = JSON.parse(e.data).listening;
@@ -3726,6 +3727,16 @@ function renderPublish() {
     pub.textContent = `Published ${localDate(rec.at)}`;
     pub.title = `Copy the link: ${rec.url}`;
   }
+}
+
+/* The parameters file changed (the params event): an answer received after publishing
+   makes the published page out of date, so the page reloads the publish record alone. */
+async function loadPublished() {
+  if (!state || !state.published) return;
+  const r = await fetch(`/api/s/${SLUG}/published`);
+  if (!r.ok) return;
+  state.published = (await r.json()).published;
+  renderPublish();
 }
 
 async function copyLink(url) {
