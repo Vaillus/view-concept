@@ -1917,3 +1917,18 @@ def test_a_moved_readme_is_compared_at_its_old_path(branch_docs):
     with pytest.raises(SessionError, match="not in the doc set"):
         s.set_moved("docs/README.md", "README.md")
     assert "from" not in s.set_moved("lib/README.md", None)
+
+
+def test_an_explanation_s_report_leaves_the_drawing_out(session, tmp_path):
+    _with_scoping(session, "view-concept")
+    (session.sections_dir / "scoping.html").write_text('<p id="e1">the drawing</p>')
+    assert [s["id"] for s in session.published_sections()] == ["s1", "s2"]
+    note = session.export(tmp_path / "vault").read_text()
+    assert "## Scoping" not in note and "## Attention" in note
+    assert not (tmp_path / "vault" / "kv-cache" / "scoping.html").exists()
+    # A feature keeps its drawing in its export, as before.
+    plan = session.read_plan()
+    plan["workflow"] = "build-feature"
+    session.plan_path.write_text(json.dumps(plan))
+    assert [s["id"] for s in session.published_sections()] == ["scoping", "s1", "s2"]
+    assert "## Scoping" in session.export(tmp_path / "vault").read_text()

@@ -54,30 +54,32 @@ reach the agent session through the inbox.
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
 EARNS_MAX characters). An optional `"overview": true` marks an overview section, which
-names terms the sections after it introduce: the precedence check reports no early use
-in it. A `brief` left in an older session's entry stays in the file, and
-nothing reads it. Its text is one file of sections/, whose extension alone says which
-kind of section it is: Markdown in <id>.md, or an HTML section in <id>.html, a
-self-contained HTML document (its HTML, CSS and JavaScript) which may hold prose and
-visuals alike, as an artifact does. A section has one file; when both exist (an agent
-switched the kind and left the old file), every reader takes the .html file, and `check`
-reports the pair. An HTML section's media folder, sections/<id>/, holds the media files
-the agent produced for it (a manim render, a GIF), which have no web address: the
-section loads them by a relative address (<id>/<file>), the page serves them, and the
-published page and the vault export copy them along. An answer to a comment that belongs
-in the explanation amends a section or adds one at its place in the outline; a `kind:
-"question"` left by an older session is ignored, and the section reads as any other. A
-refactor section, marked `part: "refactoring"`, belongs to the refactoring part of a
-feature or a triage and is shown in the code tab; every other section is an
-explanation section, shown in the Explanation tab. A scoping section, marked `part:
-"scoping"`, is the drawing of the problem a feature's scoper builds with the user before
-any model is written (an HTML section, sections/scoping.html by convention): the page
-shows it in a tab of its own, the scoping tab, first. A refactor section about one item of
-the diff carries its item fields under `item`: {files, verdict (one of the keys of the
-session workflow's list in verdicts.yaml, next to this module), batch? (a short label or
-number), implements, note, relations: [{to, kind, from?}]}, where the optional `from`
-names which of the item's files a relation starts from (by default the first). One with
-`kind: "finding"` and `items: [<section ids>]` is a finding across items.
+names terms the sections after it introduce: the precedence check reports no early use in
+it. A `brief` left in an older session's entry stays in the file, and nothing reads it.
+Its text is one file of sections/, whose extension alone says which kind of section it is:
+Markdown in <id>.md, or an HTML section in <id>.html, a self-contained HTML document (its
+HTML, CSS and JavaScript) which may hold prose and visuals alike, as an artifact does. A
+section has one file; when both exist (an agent switched the kind and left the old file),
+every reader takes the .html file, and `check` reports the pair. An HTML section's media
+folder, sections/<id>/, holds the media files the agent produced for it (a manim render, a
+GIF), which have no web address: the section loads them by a relative address
+(<id>/<file>), the page serves them, and the published page and the vault export copy them
+along. An answer to a comment that belongs in the explanation amends a section or adds one
+at its place in the outline; a `kind: "question"` left by an older session is ignored, and
+the section reads as any other. A refactor section, marked `part: "refactoring"`, belongs
+to the refactoring part of a feature or a triage and is shown in the code tab; every other
+section is an explanation section, shown in the Explanation tab. A scoping section, marked
+`part: "scoping"`, is the drawing a scoper builds with the user before any model or prose
+is written (an HTML section, sections/scoping.html by convention): a feature's problem, or
+the subject of an explanation on the scoping path (a view-concept session with a scoping
+section; the path is stored nowhere else). The page shows it in a tab of its own, the
+scoping tab, first; an explanation's report, its export and its published page, leaves it
+out (`in_report`). A refactor section about one item of the diff carries its item fields
+under `item`: {files, verdict (one of the keys of the session workflow's list in
+verdicts.yaml, next to this module), batch? (a short label or number), implements, note,
+relations: [{to, kind, from?}]}, where the optional `from` names which of the item's files
+a relation starts from (by default the first). One with `kind: "finding"` and `items:
+[<section ids>]` is a finding across items.
 
 The session workflow, `workflow` in plan.json, is the skill that drives the session:
 view-concept, build-feature, triage-code (a triage of existing code) or review-docs (a docs
@@ -405,8 +407,9 @@ ACTIONS = (
     "missing",
     "end-scoping",
 )
-# The part of a scoping section: the drawing of the problem a feature's scoper builds with
-# the user before any model is written, shown in the page's scoping tab.
+# The part of a scoping section: the drawing a scoper builds with the user before any model
+# or prose is written (a feature's problem, an explanation's subject), shown in the page's
+# scoping tab.
 SCOPING_PART = "scoping"
 # A pin's id: p1, p2… for a new one; a pin moved from an old session's holes.json keeps
 # its h… id, which the comments on it already name.
@@ -2828,9 +2831,10 @@ class Session:
     # ---- the publish record ----
     def published_sections(self, plan: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """What a published page shows of the prose: every explanation section (no
-        `"part": 2`) that is written, in outline order, as {id, number (its position in
-        the outline, as the page numbers it), title, markdown (the file's text: the HTML
-        document of an HTML section), html (whether it is an HTML section)}."""
+        `"part": 2`) that is written and belongs in the report (`in_report`), in outline
+        order, as {id, number (its position in the outline, as the page numbers it), title,
+        markdown (the file's text: the HTML document of an HTML section), html (whether it
+        is an HTML section)}."""
         plan = plan or self.read_plan()
         sections = self.read_sections()
         html = self.html_sections()
@@ -2838,8 +2842,15 @@ class Session:
             {"id": s["id"], "number": i + 1, "title": s.get("title", s["id"]),
              "markdown": sections[s["id"]], "html": s["id"] in html}
             for i, s in enumerate(plan["outline"])
-            if s.get("part") != 2 and s["id"] in sections
+            if s.get("part") != 2 and s["id"] in sections and self.in_report(s, plan)
         ]  # fmt: skip
+
+    def in_report(self, sec: dict[str, Any], plan: dict[str, Any] | None = None) -> bool:
+        """Whether outline entry `sec` belongs in an explanation's report, the page export
+        and publishing write: every section but the drawing of a view-concept session (its
+        scoping section), which the report retranscribes in sequence instead."""
+        plan = plan or self.read_plan()
+        return not (plan.get("workflow") == "view-concept" and sec.get("part") == SCOPING_PART)
 
     def published_params(self, plan: dict[str, Any] | None = None) -> dict[str, Any]:
         """What a published page carries of the parameters file: the entry of each
@@ -2887,7 +2898,9 @@ class Session:
 
     # ---- export ----
     def export(self, vault_dir: Path | None = None) -> Path:
-        """Write the explanation as one Obsidian note. Re-exporting overwrites the same note."""
+        """Write the explanation as one Obsidian note: every section of the report
+        (`in_report`, so not the drawing of a view-concept session), the lexicon, the change
+        history. Re-exporting overwrites the same note."""
         vault_dir = vault_dir or VAULT_DIR
         vault_dir.mkdir(parents=True, exist_ok=True)
         plan = self.read_plan()
@@ -2897,11 +2910,14 @@ class Session:
         if path.exists() and f"view-concept: {self.slug}\n" not in path.read_text(encoding="utf-8"):
             path = vault_dir / f"{base} ({self.slug}).md"
         html = self.html_sections()
+        # The drawing of a view-concept session stays out of its report.
+        left_out = {s["id"] for s in plan["outline"] if not self.in_report(s, plan)}
         sections = {
             sid: _export_html_section(self, sid, text, vault_dir)
             if sid in html
             else _externalize(text, vault_dir, self.slug)
             for sid, text in self.read_sections().items()
+            if sid not in left_out
         }
         path.write_text(self.render_markdown(plan, sections), encoding="utf-8")
         return path
