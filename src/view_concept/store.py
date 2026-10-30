@@ -156,15 +156,16 @@ falls in (`element`), or by a side thread on the box; the scoper closes it (`clo
 when it redraws. An open pin with a sent comment not resolved yet is waiting
 (`waiting_pins`): nothing stores it; `pin_tones` gives the colour of each open pin and of
 each marked element, which the page draws. A session with a scoping section ends its
-scoping with « End scoping »: a batch whose action is "end-scoping", refused while a pin
-is open (`open_pins`); « What's missing? » sends one whose action is "missing", asking the
-scoper to read the drawing again. A pin opened after scoping ended (by an agent that found
-one while converting or writing) sends the session back to scoping: the phase becomes
-"scoping"; when it has no element, the scoper draws one and gives it to the record
-(`set_pin_element`), which keeps its id. A scoping section takes no agent question. An old
-session's holes.json is moved to pins.json at first read, and one whose questions.json
-still holds questions anchored on a scoping section sees them moved to the pin file
-(`_migrate_pins`).
+scoping with « End scoping »: a batch whose action is "end-scoping", refused while a
+correction, a tension, a hole or a supposition is open (`blocking_pins`), an open probe,
+choice or lead being left out of the report; « What's missing? » sends one whose action is
+"missing", asking the scoper to read the drawing again. A pin opened after scoping ended
+(by an agent that found one while converting or writing) sends the session back to
+scoping: the phase becomes "scoping"; when it has no element, the scoper draws one and
+gives it to the record (`set_pin_element`), which keeps its id. A scoping section takes no
+agent question. An old session's holes.json is moved to pins.json at first read, and one
+whose questions.json still holds questions anchored on a scoping section sees them moved
+to the pin file (`_migrate_pins`).
 
 Scoping ends when the user clicks « Write plan » (« Write model » in a feature or
 a triage): a batch whose action is "plan", after which
@@ -410,9 +411,13 @@ PIN_KINDS = {
     "build-feature": ("hole", "supposition"),
     "view-concept": ("probe", "correction", "tension", "choice", "lead"),
 }
+# The kinds that hold « End scoping » back while open: an element known to be wrong, two at
+# odds, what only the user can settle, a supposition not approved. An open probe, choice
+# or lead is one the user ignored: it is left out of the report.
+BLOCKING_PINS = ("correction", "tension", "hole", "supposition")
 # Every kind, in the order an element's mark takes its colour from its open pins: the
 # kinds that hold « End scoping » back first.
-PIN_TONE_ORDER = ("correction", "tension", "hole", "supposition", "probe", "choice", "lead")
+PIN_TONE_ORDER = (*BLOCKING_PINS, "probe", "choice", "lead")
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
@@ -1354,6 +1359,11 @@ class Session:
     def open_pins(self) -> list[dict[str, Any]]:
         """The open pins, of every kind."""
         return [p for p in self.read_pins() if p["status"] == "open"]
+
+    def blocking_pins(self) -> list[dict[str, Any]]:
+        """The open pins that hold « End scoping » back (BLOCKING_PINS): a correction, a
+        tension, a hole or a supposition."""
+        return [p for p in self.open_pins() if p["kind"] in BLOCKING_PINS]
 
     def waiting_pins(self) -> set[str]:
         """The ids of the open pins waiting for the scoper: a sent comment not resolved yet
@@ -2589,7 +2599,8 @@ class Session:
         (REPO_LEXICON), refused once the file exists, "write-readmes" that they read
         the move plans and asked the doc pass to write the folder models it held, "missing"
         that they asked the scoper what the drawing still misses, and "end-scoping" that
-        they ended the scoping of a drawing (refused while a pin is open, `open_pins`). `path`
+        they ended the scoping of a drawing (refused while a correction, a tension, a hole or a
+        supposition is open, `blocking_pins`). `path`
         goes with "rewrite-readme" only, which needs it."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
@@ -2603,7 +2614,7 @@ class Session:
             path = self._readme_to_rewrite(path)
         if action == "write-lexicon" and (lex := self.doc_file(REPO_LEXICON)) and lex.is_file():
             raise SessionError(f"{REPO_LEXICON} exists: correct it in the Doc tab")
-        if action == "end-scoping" and (pins := self.open_pins()):
+        if action == "end-scoping" and (pins := self.blocking_pins()):
             ids = ", ".join(p["id"] for p in pins)
             raise SessionError(f"pins still open in the scoping: {ids}")
         note = note.strip()
@@ -3238,8 +3249,10 @@ def format_batch(
         )
     if batch.get("action") == "end-scoping":
         lines.append(
-            "action: end-scoping (the user ended the scoping, no pin left: convert the "
-            "drawing into the outline and the lexicon, then write the model)"
+            "action: end-scoping (the user ended the scoping, no correction, tension, hole or "
+            "supposition left open: convert the drawing into the outline and the lexicon, then "
+            "write the model, or the prose of an explanation; leave out the probes, choices "
+            "and leads still open)"
         )
     if batch.get("action") == "answer":
         asked = {q["id"]: q["text"] for q in questions or []}

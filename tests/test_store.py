@@ -621,10 +621,25 @@ def test_end_scoping_waits_until_no_pin_is_open(session):
     session.close_pins(["p2"])
     b = session.add_batch([], action="end-scoping")
     text = format_batch("kv-cache", b, session.read_plan()["outline"])
-    assert "action: end-scoping (the user ended the scoping, no pin left:" in text
+    assert "action: end-scoping (the user ended the scoping, no correction, tension" in text
     missing = session.add_batch([], action="missing")
     text = format_batch("kv-cache", missing, session.read_plan()["outline"])
     assert "action: missing (the user asked what the drawing still misses:" in text
+
+
+def test_end_scoping_waits_on_corrections_and_tensions_only(session):
+    _with_scoping(session, "view-concept")
+    session.add_pin("What do the weights add up to?", "probe", ["e1"])
+    session.add_pin("Which framing?", "choice")
+    session.add_pin("Multi-head attention exists.", "lead", ["e1"])
+    session.add_pin("Itself included.", "correction", ["e1"])
+    session.add_pin("They do not hold together.", "tension", ["e1", "e2"])
+    assert [p["id"] for p in session.blocking_pins()] == ["p4", "p5"]
+    with pytest.raises(SessionError, match="pins still open in the scoping: p4, p5"):
+        session.add_batch([], action="end-scoping")
+    session.close_pins(["p4", "p5"])
+    b = session.add_batch([], action="end-scoping")
+    assert b["action"] == "end-scoping" and len(session.open_pins()) == 3
 
 
 def test_a_pin_waits_while_a_comment_attached_to_it_is_not_resolved(session):

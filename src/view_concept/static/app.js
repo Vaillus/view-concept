@@ -1013,7 +1013,8 @@ function sectionBlock(s, { bare = false } = {}) {
    elements: {element: tone}}, tone a kind of pin, or "waiting" grey).
    A waiting pin is grey (its box, its index line, and the mark once all the element's
    open pins wait) until the scoper resolves the comment: the pin is then closed, or
-   back to its colour. A waiting pin stays open: « End scoping » still counts it. */
+   back to its colour. A waiting pin stays open: « End scoping » still counts it when its
+   kind holds it back (see scopingActions). */
 const pinRecords = () => (state ? state.pins || [] : []);
 // The ids of the elements a pin sits on.
 const pinElements = (h) => (Array.isArray(h.elements) && h.elements.length ? h.elements.map(String)
@@ -1040,22 +1041,26 @@ const elementTone = (element) => pinTones().elements[element] || "waiting";
    reads the drawing again, and opens pins, or says nothing is left) and
    « End scoping » (action "end-scoping": the planner converts the drawing into the outline
    and the lexicon, then the writer writes the model). « End scoping » waits until no pin
-   is open, waiting or not; the server refuses it otherwise.
+   that holds it back is open (BLOCKING_PINS: a correction, a tension, a hole or a
+   supposition), waiting or not; the server refuses it otherwise. An open probe, choice or
+   lead does not hold it back: it is left out of the report.
    Both take the draft comments with them, and hide once « End scoping » is sent, until
    the status moves. */
 const sentSince = (action) => {
   const b = lastBatchOf(action);
   return !!b.sent && b.sent >= (state.status.since || "");
 };
+const BLOCKING_PINS = ["correction", "tension", "hole", "supposition"];
+const blockingPins = () => openPins().filter((h) => BLOCKING_PINS.includes(h.kind));
 function scopingActions() {
   if (!drawingScoping() || sentSince("end-scoping")) return null;
-  const n = openPins().length;
+  const n = blockingPins().length;
   return el("div", { class: "scoping-actions" },
     el("button", { class: "btn", text: "What's missing?",
                    title: "The scoper reads the drawing again: it opens pins or suppositions, or says nothing is left",
                    onclick: (e) => send("missing", e.currentTarget) }),
     el("button", { class: "btn primary", text: "End scoping", disabled: n > 0,
-                   title: n ? `${n} pin${n > 1 ? "s or suppositions" : " or supposition"} still open: answer ${n > 1 ? "them" : "it"} first`
+                   title: n ? `${plural(n, "pin")} still open that hold${n > 1 ? "" : "s"} it back: answer ${n > 1 ? "them" : "it"} first`
                      : "The planner converts the drawing into the outline and the lexicon, then the writer writes the model",
                    onclick: (e) => send("end-scoping", e.currentTarget) }));
 }
