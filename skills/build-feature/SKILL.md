@@ -699,7 +699,7 @@ names is not taken back.
    while scoping runs), and opens the first holes and suppositions on it
    (`view-concept pin --kind hole|supposition`).
 3. **The scoping loop.** Each event goes to the scoper, as **Routing the
-   events** says: one redraw per batch, which closes the holes the comments
+   events** says: one redraw per batch, which closes the pins the comments
    settled (`view-concept close-pin`). When a run opens nothing and no pin
    is open, say in one terminal line that the scoper has nothing left
    to ask, and wait.
