@@ -121,8 +121,9 @@ const titleOf = (id) => (state.plan.outline.find((s) => s.id === id) || {}).titl
    the same section blocks. Sessions written before the rename mark them "part": 2. */
 const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
-/* The scoping tab (id "scoping"): a feature's scoping section ("part": "scoping"), the
-   drawing of the problem the scoper builds with the user before any model, shown first,
+/* The scoping tab (id "scoping"): the scoping section ("part": "scoping"), the drawing the
+   scoper builds with the user before any model or prose (a feature's problem, or the
+   subject of an explanation on the scoping path), shown first,
    with its pins (the open pin records of `state.pins`, see "pin records") marked on
    the elements they bear on and indexed at its end (see "the pin window"), and the
    scoping's two buttons under the index (see scopingActions). While scoping runs on a
@@ -557,11 +558,11 @@ function banner() {
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Write plan » ends it.
     // On a drawing, the pins of its elements ask, and « End scoping » ends it.
-    scoping: drawingScoping() ? (sentSince("end-scoping") ? "scoping ended · the planner is converting the drawing"
+    scoping: drawingScoping() ? (sentSince("end-scoping") ? `scoping ended · the planner is converting the drawing, then the writer writes the ${drawingProduct()}`
            : asking ? "scoping · pins waiting for you"
            : state.status.scoping_done ? "scoping done · End scoping when ready"
            : repliedInScoping() ? "reading your reply"
-           : "drawing the problem")
+           : `drawing the ${isFeature() ? "problem" : "subject"}`)
            : asking ? "scoping · questions waiting for you"
            : planPending() ? `scoping ended · the agent is ${rewriting() ? "revising" : "writing"} the ${scopingProduct()}`
            : scopingDone ? "scoping done · Write plan when ready"
@@ -1040,7 +1041,8 @@ const elementTone = (element) => pinTones().elements[element] || "waiting";
    runs on a drawing: « What's missing? » (a batch whose action is "missing": the scoper
    reads the drawing again, and opens pins, or says nothing is left) and
    « End scoping » (action "end-scoping": the planner converts the drawing into the outline
-   and the lexicon, then the writer writes the model). « End scoping » waits until no pin
+   and the lexicon, then the writer writes the model, or an explanation's prose:
+   drawingProduct). « End scoping » waits until no pin
    that holds it back is open (BLOCKING_PINS: a correction, a tension, a hole or a
    supposition), waiting or not; the server refuses it otherwise. An open probe, choice or
    lead does not hold it back: it is left out of the report.
@@ -1051,17 +1053,20 @@ const sentSince = (action) => {
   return !!b.sent && b.sent >= (state.status.since || "");
 };
 const BLOCKING_PINS = ["correction", "tension", "hole", "supposition"];
+const isFeature = () => state.workflow === "build-feature";
+// What the writer writes from the drawing once scoping ends: a feature's model, an explanation's prose.
+const drawingProduct = () => (isFeature() ? "model" : "prose");
 const blockingPins = () => openPins().filter((h) => BLOCKING_PINS.includes(h.kind));
 function scopingActions() {
   if (!drawingScoping() || sentSince("end-scoping")) return null;
   const n = blockingPins().length;
   return el("div", { class: "scoping-actions" },
     el("button", { class: "btn", text: "What's missing?",
-                   title: "The scoper reads the drawing again: it opens pins or suppositions, or says nothing is left",
+                   title: `The scoper reads the drawing again: it opens ${isFeature() ? "holes or suppositions" : "probes, corrections, tensions, choices or leads"}, or says nothing is left`,
                    onclick: (e) => send("missing", e.currentTarget) }),
     el("button", { class: "btn primary", text: "End scoping", disabled: n > 0,
                    title: n ? `${plural(n, "pin")} still open that hold${n > 1 ? "" : "s"} it back: answer ${n > 1 ? "them" : "it"} first`
-                     : "The planner converts the drawing into the outline and the lexicon, then the writer writes the model",
+                     : `The planner converts the drawing into the outline and the lexicon, then the writer writes the ${drawingProduct()}`,
                    onclick: (e) => send("end-scoping", e.currentTarget) }));
 }
 
@@ -2968,7 +2973,7 @@ function renderScope() {
   grill.textContent = state.grilling ? "Stop grill" : "Grill me";
   grill.title = state.grilling ? "Stop the interview" : "The agent asks about every open decision, each with its suggestion, until none is left";
   const plan = $("#scope-plan");
-  // A feature with a scoping section ends its scoping with « End scoping », in the scoping tab.
+  // A session with a scoping section ends its scoping with « End scoping », in the scoping tab.
   plan.hidden = !(state.status.phase === "scoping" || open.length) || planPending() || paused() || hasScopingTab();
   $("#scope-go-on").hidden = !paused();
   plan.textContent = `${rewriting() ? "Rewrite" : "Write"} ${scopingProduct()}`;
