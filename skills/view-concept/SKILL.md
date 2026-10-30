@@ -72,9 +72,10 @@ the request or later in the terminal: take it into account, but the choice is
 yours. Nothing records the path as a setting: a session is on the scoping
 path once its outline holds the drawing (a section with `"part":
 "scoping"`), which the scoper's first run writes. A session on the direct
-path moves to the scoping path when you start the scoper on it. Whether a
-session with a drawing may go back to the direct path is not settled: when
-the user asks for it, say so in one terminal line and change nothing.
+path moves to the scoping path when you start the scoper on it. A session
+with a drawing stays on the scoping path, and its prose comes through « End
+scoping »: when the user asks to go back to the direct path, say so in one
+terminal line and change nothing.
 
 ## The page
 
