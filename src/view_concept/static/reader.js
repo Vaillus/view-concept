@@ -7,7 +7,8 @@
    They differ only where the published page does: the lexicon is the JSON in #lexicon
    (each entry's term, home section and tip_html), every chart is in sight (no hidden tab),
    a chart is redrawn when the reader's system switches between light and dark, and a
-   section's channel requests are answered from the JSON in #params, with no server. */
+   section's channel requests are answered from the JSON in #params, with no server (a
+   request never received before publishing is answered « not received »). */
 
 "use strict";
 
@@ -167,8 +168,9 @@ window.addEventListener("message", (e) => {
    behind the page: « load » gives the section's entry of the parameters file as it was
    published, « save » keeps what the script saved in this page only (a reload starts
    again from the published entry), « ask » answers with the answer received for that key
-   before publishing, and fails for a request never received. No request leaves the
-   page. */
+   before publishing, and for a request never received answers « not received »
+   (`reason: "not-received"`), which the frame tells apart from a failure: the section
+   draws nothing for it. No request leaves the page. */
 function frameChannel(id, f, d) {
   const entry = PARAMS[id] || (PARAMS[id] = { saved: {}, received: {} });
   entry.saved = entry.saved || {};
@@ -178,7 +180,7 @@ function frameChannel(id, f, d) {
   else if (d.op === "save") { entry.saved = d.saved || {}; answer({ ok: true, data: null }); }
   else if (d.op === "ask") {
     if (Object.prototype.hasOwnProperty.call(entry.received, d.key)) answer({ ok: true, data: entry.received[d.key] });
-    else answer({ ok: false, error: `not received before publishing: ${d.key}` });
+    else answer({ ok: false, reason: "not-received", error: `not received before publishing: ${d.key}` });
   } else answer({ ok: false, error: `unknown request ${d.op}` });
 }
 document.querySelectorAll("iframe.frame").forEach((f) => {

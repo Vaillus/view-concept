@@ -72,7 +72,9 @@
      of the section's own script, {id (the frame's count), op ("load", "save" or "ask"),
      saved (save), key, instruction and schema (ask)}. The page runs it against its server
      (app.js) and answers {id, ok, data} or {id, ok: false, error}. The published page
-     answers from the published files instead (reader.js), with no server behind it.
+     answers from the published files instead (reader.js), with no server behind it, and
+     adds `reason: "not-received"` to the answer to a request never received before
+     publishing.
 
    The channel is the section's script's way to ask an agent for data and draw the answer
    itself, without its section being redrawn: the frame script gives every section a
@@ -84,7 +86,9 @@
    - `viewConcept.ask(key, instruction, schema)` -> the answer: a small agent answers the
      instruction with data held to the JSON schema, kept as `received[key]`. It takes the
      seconds of a model call; it rejects with an Error when the agent fails, times out or
-     breaks the schema, or when no page answers (a frame opened alone, a vault note).
+     breaks the schema, or when no page answers (a frame opened alone, a vault note). On
+     a published page, a request never received before publishing rejects with an Error
+     named "NotReceivedError": no failure, only nothing to draw.
 
    The frame script also runs the component kit's tabs (`.tabs`, see frame.css): a click
    on a `.tab` selects it and shows its panel, the n-th `.tab-panel` child of its `.tabs`,
@@ -134,8 +138,10 @@
     if (!c) return;
     delete calls[d.id];
     clearTimeout(c.timer);
-    if (d.ok) c.resolve(d.data);
-    else c.reject(new Error(String(d.error || "viewConcept: the request failed")));
+    if (d.ok) { c.resolve(d.data); return; }
+    var error = new Error(String(d.error || "viewConcept: the request failed"));
+    if (d.reason === "not-received") error.name = "NotReceivedError";
+    c.reject(error);
   }
   window.viewConcept = {
     load: function () { return request("load", {}, LOAD_WAIT); },

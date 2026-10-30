@@ -251,4 +251,4 @@ def test_a_published_channel_section_carries_its_parameters(session, tmp_path):
     page = (out / "index.html").read_text()
     raw = page.split('<script type="application/json" id="params">')[1].split("</script>")[0]
     assert json.loads(raw) == session.published_params()
-    assert "frameChannel" in page and "not received before publishing" in page
+    assert "frameChannel" in page and 'reason: "not-received"' in page

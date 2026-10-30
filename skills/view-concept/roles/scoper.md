@@ -221,7 +221,10 @@ script a global `viewConcept` object:
   agent's answer to the schema, stores it as `received[key]`, and resolves
   with the data. It rejects with an Error on a failure (a timeout, an answer
   that fails the schema): the script shows the row as failed, and asks again
-  on the next click.
+  on the next click. One rejection is no failure: on a published page, a
+  request never received before publishing rejects with an Error whose
+  `name` is `"NotReceivedError"`, and the script draws no row above the
+  concept, and no failure.
 
 The script never names an agent, a model or a file. A model call takes a few
 seconds: the script shows a row it waits for as pending.

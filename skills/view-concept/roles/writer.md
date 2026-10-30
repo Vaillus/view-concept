@@ -257,14 +257,18 @@ answer, without a comment batch and without the section being redrawn: the
   its answer to the schema, stores it as `received[key]`, and resolves with
   the data. It rejects with an Error on a failure (a timeout, an answer that
   fails the schema): the script shows the failure where the data would
-  have gone.
+  have gone. One rejection is no failure: on a published page, a request
+  never received before publishing rejects with an Error whose `name` is
+  `"NotReceivedError"`, and the script draws nothing where the data would
+  have gone (no row above the concept, no failure).
 
 The script never names an agent, a model or a file: what the small agent
 reads and runs on is the server's business. A model call takes a few
 seconds, so the script shows what it waits for as pending. On a published
 page no request leaves: `load` answers from the entry published with the
 page, `ask` with `received[key]` when it was received before publishing
-(and rejects otherwise), and `save` keeps the object in memory only. So a
+(and rejects with a `NotReceivedError` otherwise), and `save` keeps the
+object in memory only. So a
 section that uses the channel shows, once published, what it received before
 publishing; publishing again carries what it received since.
 
