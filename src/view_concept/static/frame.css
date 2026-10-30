@@ -197,8 +197,8 @@
    on, outlined dashed in its tone: the colour of the first kind among its open pins not
    waiting (the server's order), as its box in the page (app.css): a hole --warn, a
    supposition --info, a probe --accent, a correction --danger, a tension --flag, a choice
-   --alt, a lead --ok; grey (--muted) when all its open pins wait for the scoper. Under :where(), as every base rule, so a rule of the section on the same
-   element wins. */
+   --alt, a lead --ok; grey (--muted) when all its open pins wait for the scoper. Under
+   :where(), as every base rule, so a rule of the section on the same element wins. */
 :where([data-vc-pin]) {
   outline: 1px dashed var(--warn);
   outline-offset: 2px;

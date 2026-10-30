@@ -69,12 +69,12 @@
      in its own text and has every other frame clear its paint; a tap on the page's own
      text has every frame clear it.
    - The channel (frame -> page), answered by "channel-answer" (page -> frame): a request
-     of the section's own script, {id (the frame's count), op ("load", "save" or "ask"),
-     saved (save), key, instruction and schema (ask)}. The page runs it against its server
-     (app.js) and answers {id, ok, data} or {id, ok: false, error}. The published page
-     answers from the published files instead (reader.js), with no server behind it, and
-     adds `reason: "not-received"` to the answer to a request never received before
-     publishing.
+     of the section's own script, {id (a prefix of the frame's load, and its count), op
+     ("load", "save" or "ask"), saved (save), key, instruction and schema (ask)}. The page
+     runs it against its server (app.js) and answers {id, ok, data} or {id, ok: false,
+     error}. The published page answers from the published files instead (reader.js),
+     with no server behind it, and adds `reason: "not-received"` to the answer to a
+     request never received before publishing.
 
    The channel is the section's script's way to ask an agent for data and draw the answer
    itself, without its section being redrawn: the frame script gives every section a
@@ -118,11 +118,14 @@
 
   /* ---- the channel ---- */
   var LOAD_WAIT = 15000, ASK_WAIT = 200000; // ms before a request with no answer rejects
-  var calls = {}, callCount = 0;
+  // A call's id: this load's own prefix and its count. The page may reload the frame
+  // while an ask runs; the answer to a call of the previous load then finds no call here
+  // and is dropped, instead of resolving the call of this load that has its count.
+  var calls = {}, callCount = 0, loadId = Math.random().toString(36).slice(2, 10);
   function request(op, fields, wait) {
     return new Promise(function (resolve, reject) {
       if (!framed) { reject(new Error("viewConcept: no page to ask")); return; }
-      var id = ++callCount;
+      var id = loadId + ":" + ++callCount;
       var timer = setTimeout(function () {
         delete calls[id];
         reject(new Error("viewConcept: no answer from the page"));
