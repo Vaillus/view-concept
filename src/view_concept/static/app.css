@@ -343,8 +343,8 @@ a.cite code { color: var(--info); background: var(--infobg); }
    boxes (app.js). A pin's tone (data-tone) colours its dashes and its label (--pin): its
    kind's colour, the same as its mark in the drawing (frame.css): a hole --warn, a
    supposition --info, a probe --accent, a correction --danger, a tension --flag, a choice
-   --alt, a lead --ok; grey (--muted) while it waits for the scoper. Under the selection buttons (z-index 10), so a passage selected in
-   a box can be commented. */
+   --alt, a lead --ok; grey (--muted) while it waits for the scoper. Under the selection
+   buttons (z-index 10), so a passage selected in a box can be commented. */
 .pin-line, .pin-box { --pin: var(--warn); }
 .pin-line[data-tone="supposition"], .pin-box[data-tone="supposition"] { --pin: var(--info); }
 .pin-line[data-tone="probe"], .pin-box[data-tone="probe"] { --pin: var(--accent); }

@@ -132,6 +132,8 @@ const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) 
    scoping », and hide again when a later agent's pin sends the session back to scoping
    (the return to scoping: the server sets the phase back to "scoping"). */
 const isScopingSection = (s) => s.part === "scoping";
+// A feature's session (/build-feature), as against an explanation's.
+const isFeature = () => state.workflow === "build-feature";
 const inScoping = (id) => isScopingSection(state.plan.outline.find((s) => s.id === id) || {});
 const hasScopingTab = () => state.plan.outline.some(isScopingSection);
 const drawingScoping = () => hasScopingTab() && state.status.phase === "scoping";
@@ -154,7 +156,7 @@ const isNarrow = () => NARROW.matches;
 const TOUCH = matchMedia("(hover: none)");
 const isTouch = () => TOUCH.matches;
 // The Metrics tab (metrics.js) draws a feature's runs: other workflows have no role agents.
-const hasMetricsTab = () => state.workflow === "build-feature" && !isNarrow();
+const hasMetricsTab = () => isFeature() && !isNarrow();
 const docViews = () => [$("#scoping"), $("#model"), $("#refactor"), $("#doc")];
 /* The Doc tab (id "doc"): the repo docs the branch concerns, from `state.docs` (see "the
    Doc tab"). It shows once the doc set is written; a docs review (workflow review-docs)
@@ -198,7 +200,7 @@ const rowOf = (id) => {
 };
 const pinOf = (id) => {
   const r = rowOf(id);
-  return r && r.kind === "pin" ? pinRecords().find((h) => h.id === r.id) || { id: r.id, status: "closed" } : null;
+  return r && r.kind === "pin" ? pinRecords().find((p) => p.id === r.id) || { id: r.id, status: "closed" } : null;
 };
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
@@ -296,7 +298,7 @@ function followSession() {
     if (tab !== "scoping" && tab !== "review") setTab("scoping");
   }
   // In a feature, the explanation is the modeling part, so its tab is named after the model.
-  const modelLabel = state.workflow === "build-feature" ? "model" : "explanation";
+  const modelLabel = isFeature() ? "model" : "explanation";
   $('.tab[data-tab="model"]').title = `${modelLabel[0].toUpperCase()}${modelLabel.slice(1)} (2)`;
   for (const [name, label] of [["scoping", "scoping"], ["model", modelLabel], ["refactor", "code"]]) {
     const n = Object.keys(state.sections).filter((id) => isUpdated(id) && tabOf(id) === name).length;
@@ -597,7 +599,7 @@ const approvalReady = (approval) =>
   (approval.action === "create-pr" && isDocsReview() ? "docs written · waiting for you to create the PR" : approval.ready);
 
 function repliedInScoping() {
-  const asked = [...(state.questions || []).flatMap((q) => [q.asked, q.reasked]), ...pinRecords().map((h) => h.asked)]
+  const asked = [...(state.questions || []).flatMap((q) => [q.asked, q.reasked]), ...pinRecords().map((p) => p.asked)]
     .filter(Boolean);
   const since = [...asked, state.status.since || ""].reduce((a, b) => (b > a ? b : a), "");
   return state.comments.batches.some((b) => b.sent >= since);
@@ -1020,20 +1022,20 @@ function sectionBlock(s, { bare = false } = {}) {
    kind holds it back (see scopingActions). */
 const pinRecords = () => (state ? state.pins || [] : []);
 // The ids of the elements a pin sits on.
-const pinElements = (h) => (Array.isArray(h.elements) && h.elements.length ? h.elements.map(String)
-  : h.element ? [String(h.element)] : []);
+const pinElements = (p) => (Array.isArray(p.elements) && p.elements.length ? p.elements.map(String)
+  : p.element ? [String(p.element)] : []);
 /* What a pin's box and index line say of its kind, before its sentence: a hole's « ? », a
    supposition's statement alone (the feature's two kinds, as before pins), and the name of
    any other kind. */
 const PIN_LABELS = { hole: "? ", supposition: "" };
-const pinLabel = (h) => (PIN_LABELS[h.kind] ?? `${h.kind} · `);
-const openPins = () => pinRecords().filter((h) => h.status === "open");
+const pinLabel = (p) => (PIN_LABELS[p.kind] ?? `${p.kind} · `);
+const openPins = () => pinRecords().filter((p) => p.status === "open");
 const pinSection = () => (state.plan.outline.find(isScopingSection) || {}).id;
 const pinTones = () => (state && state.pin_tones) || { pins: {}, elements: {} };
 // The colour of a pin's box and index line: "waiting" (grey), else its kind.
-const pinTone = (h) => pinTones().pins[h.id] || h.kind;
+const pinTone = (p) => pinTones().pins[p.id] || p.kind;
 // The open pins waiting for the user, not for the scoper.
-const pinsForYou = () => openPins().filter((h) => pinTone(h) !== "waiting");
+const pinsForYou = () => openPins().filter((p) => pinTone(p) !== "waiting");
 // The colour of an element's mark, from its open pins (the server picks it): among those
 // not waiting, the first kind in the server's order; grey when all of them wait.
 const elementTone = (element) => pinTones().elements[element] || "waiting";
@@ -1054,15 +1056,14 @@ const sentSince = (action) => {
   const b = lastBatchOf(action);
   return !!b.sent && b.sent >= (state.status.since || "");
 };
-const isFeature = () => state.workflow === "build-feature";
 // What the writer writes from the drawing once scoping ends: a feature's model, an explanation's prose.
 const drawingProduct = () => (isFeature() ? "model" : "prose");
-const blockingPins = () => openPins().filter((h) => (state.blocking_kinds || []).includes(h.kind));
+const blockingPins = () => openPins().filter((p) => (state.blocking_kinds || []).includes(p.kind));
 // « a, b or c », « a, b and c »: a list of words for a tooltip.
 const wordList = (words, last) => (words.length > 1 ? `${words.slice(0, -1).join(", ")} ${last} ${words.at(-1)}` : words[0] || "");
 // The open pins `list` counted by kind, in the user's words: « a correction and 2 tensions ».
-const kindCount = (list) => wordList([...new Set(list.map((h) => h.kind))].map((k) => {
-  const n = list.filter((h) => h.kind === k).length;
+const kindCount = (list) => wordList([...new Set(list.map((p) => p.kind))].map((k) => {
+  const n = list.filter((p) => p.kind === k).length;
   return n > 1 ? `${n} ${k}s` : `${/^[aeiou]/.test(k) ? "an" : "a"} ${k}`;
 }), "and");
 function scopingActions() {
@@ -1086,8 +1087,8 @@ function scopingActions() {
 function postPins(id, f = frames.get(id)) {
   if (!f || !f.contentWindow || !state || !inScoping(id)) return;
   const on = new Map();
-  if (id === pinSection()) for (const h of openPins()) for (const e of pinElements(h)) on.set(e, [...(on.get(e) || []), h]);
-  const pins = [...on].map(([element, list]) => ({ element, pins: list.map((h) => h.id), tone: elementTone(element) }));
+  if (id === pinSection()) for (const p of openPins()) for (const e of pinElements(p)) on.set(e, [...(on.get(e) || []), p]);
+  const pins = [...on].map(([element, list]) => ({ element, pins: list.map((p) => p.id), tone: elementTone(element) }));
   f.contentWindow.postMessage({ viewConcept: "pins", pins }, "*");
 }
 
@@ -1129,30 +1130,30 @@ let pinPop = null; // { section, pins: [ids], element (the one it opened on), an
 const pinBoxes = new Map(); // pin id -> its box, kept while its tone and sentence stay
 
 // The pin window of a pin: the open pins on its first element, or the pin alone without one.
-const pinsOn = (h) => {
-  const e = pinElements(h)[0];
-  return e ? openPins().filter((x) => pinElements(x).includes(e)).map((x) => x.id) : [h.id];
+const pinsOn = (p) => {
+  const e = pinElements(p)[0];
+  return e ? openPins().filter((x) => pinElements(x).includes(e)).map((x) => x.id) : [p.id];
 };
 
 function pinIndex(id) {
   if (id !== pinSection() || !openPins().length) return null;
-  const line = (h) => el("button", {
-    class: `pin-line ${pinPop && pinPop.pins.includes(h.id) ? "open" : ""}`, "data-pin": h.id, "data-tone": pinTone(h),
-    title: `${h.id} · show it in the drawing, in its pin window`,
-    onclick: (e) => { e.stopPropagation(); showPin(h.id); } },
-    pinElements(h).length ? el("span", { class: "badge", text: pinElements(h).join(" ") }) : null,
-    el("span", { class: "pin-text" }, pinLabel(h) ? el("b", { class: "pin-q", text: pinLabel(h) }) : null, h.text));
+  const line = (p) => el("button", {
+    class: `pin-line ${pinPop && pinPop.pins.includes(p.id) ? "open" : ""}`, "data-pin": p.id, "data-tone": pinTone(p),
+    title: `${p.id} · show it in the drawing, in its pin window`,
+    onclick: (e) => { e.stopPropagation(); showPin(p.id); } },
+    pinElements(p).length ? el("span", { class: "badge", text: pinElements(p).join(" ") }) : null,
+    el("span", { class: "pin-text" }, pinLabel(p) ? el("b", { class: "pin-q", text: pinLabel(p) }) : null, p.text));
   return el("div", { class: "sec-questions pin-index" }, ...openPins().map(line));
 }
 
-// Open the pin window of pin `hid`, on its element or on its index line; a pin closed
+// Open the pin window of pin `pid`, on its element or on its index line; a pin closed
 // since (a comment on it revealed from the review pane) only shows the scoping tab.
-function showPin(hid) {
-  const h = openPins().find((x) => x.id === hid);
+function showPin(pid) {
+  const p = openPins().find((x) => x.id === pid);
   const id = pinSection();
-  if (!h || !id) { setTab("scoping"); return; }
-  if (pinElements(h).length) revealElement(id, pinElements(h)[0], pinsOn(h), h.id);
-  else { setTab(tabOf(id)); openPinOnLine(id, pinsOn(h), h.id); }
+  if (!p || !id) { setTab("scoping"); return; }
+  if (pinElements(p).length) revealElement(id, pinElements(p)[0], pinsOn(p), p.id);
+  else { setTab(tabOf(id)); openPinOnLine(id, pinsOn(p), p.id); }
 }
 
 function openPinOnLine(section, pins, line, element) {
@@ -1175,15 +1176,15 @@ function closePinPop() {
   document.querySelectorAll(".pin-line.open").forEach((b) => b.classList.remove("open"));
 }
 
-function pinBox(h) {
-  const tone = pinTone(h);
-  const kept = pinBoxes.get(h.id);
-  if (kept && kept.dataset.tone === tone && kept._text === h.text) return kept;
-  const anchor = PIN_PREFIX + h.id;
-  const sources = Array.isArray(h.sources) ? h.sources : [];
-  const box = el("div", { class: "pin-box", "data-pin": h.id, "data-tone": tone },
+function pinBox(p) {
+  const tone = pinTone(p);
+  const kept = pinBoxes.get(p.id);
+  if (kept && kept.dataset.tone === tone && kept._text === p.text) return kept;
+  const anchor = PIN_PREFIX + p.id;
+  const sources = Array.isArray(p.sources) ? p.sources : [];
+  const box = el("div", { class: "pin-box", "data-pin": p.id, "data-tone": tone },
     el("div", { class: "pin-sentence", "data-anchor": anchor },
-       pinLabel(h) ? el("b", { class: "pin-q", text: pinLabel(h) }) : null, h.text),
+       pinLabel(p) ? el("b", { class: "pin-q", text: pinLabel(p) }) : null, p.text),
     sources.length ? el("div", { class: "pin-sources dim", text: `source${sources.length > 1 ? "s" : ""}: ${sources.join(" · ")}` }) : null,
     el("div", { class: "pin-actions" },
        el("span", { class: "t-chips", "data-section": anchor }),
@@ -1191,17 +1192,17 @@ function pinBox(h) {
                       title: "Open a side thread about this pin; « → batch » sends its conclusion to the scoper",
                       onclick: (e) => openComposer({ section: anchor, quote: "", prefix: "",
                                                      rect: e.currentTarget.getBoundingClientRect() }, "ask") })));
-  box._text = h.text;
-  pinBoxes.set(h.id, box);
+  box._text = p.text;
+  pinBoxes.set(p.id, box);
   return box;
 }
 
 function renderPinPop() {
   const pop = $("#pin-pop");
   if (!pinPop) return;
-  const open = openPins().filter((h) => pinPop.pins.includes(h.id) || (!!pinPop.element && pinElements(h).includes(pinPop.element)));
+  const open = openPins().filter((p) => pinPop.pins.includes(p.id) || (!!pinPop.element && pinElements(p).includes(pinPop.element)));
   if (!open.length) { closePinPop(); return; }
-  pinPop.pins = open.map((h) => h.id);
+  pinPop.pins = open.map((p) => p.id);
   const boxes = open.map(pinBox);
   // Re-attaching a box would drop a selection in its text: only when the boxes changed.
   const same = boxes.length === pop.children.length - 1 && boxes.every((b, i) => pop.children[i + 1] === b);
@@ -2975,7 +2976,7 @@ function scopingProduct() {
 // Once what the button writes exists, the answers given since may change it: « Write »
 // becomes « Rewrite ». A feature's planner drafts an outline before scoping ends, so
 // there the button rewrites once the sections are written (as Session.has_written).
-const rewriting = () => (state.workflow === "build-feature"
+const rewriting = () => (isFeature()
   ? Object.keys(state.sections).length > 0
   : (state.plan.outline || []).length > 0);
 
@@ -3041,10 +3042,10 @@ const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
 
 function renderWaiting() {
   const n = openQuestions().length;
-  const h = pinsWaiting();
+  const pins = pinsWaiting();
   const line = $("#questions-waiting");
-  line.hidden = !(n || h);
-  line.textContent = `${[n && plural(n, "question"), h && plural(h, "pin")].filter(Boolean).join(" · ")} waiting →`;
+  line.hidden = !(n || pins);
+  line.textContent = `${[n && plural(n, "question"), pins && plural(pins, "pin")].filter(Boolean).join(" · ")} waiting →`;
 }
 
 $("#questions-waiting").addEventListener("click", () => {
