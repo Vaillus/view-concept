@@ -90,29 +90,30 @@ def test_question_prints_its_id(tmp_path):
     assert not (tmp_path / "sessions" / "nope").exists()
 
 
-def test_hole_opens_and_close_hole_closes_a_hole_record(tmp_path):
+def test_pin_opens_and_close_pin_closes_a_pin(tmp_path):
     assert view_concept(tmp_path, "new", "Ask").returncode == 0
     d = tmp_path / "sessions" / "ask"
     plan = json.loads((d / "plan.json").read_text())
     plan["outline"] = [{"id": "scoping", "title": "Scoping", "part": "scoping"}]
     (d / "plan.json").write_text(json.dumps(plan))
-    r = view_concept(tmp_path, "hole", "ask", "The unit.", "--element", "e3")
-    assert r.returncode == 0 and r.stdout.strip() == "h1", r.stderr
-    r = view_concept(tmp_path, "hole", "ask", "Kept beside.", "--supposition")
-    assert r.returncode == 0 and r.stdout.strip() == "h2", r.stderr
-    hole, supposition = json.loads((d / "holes.json").read_text())
+    r = view_concept(tmp_path, "pin", "ask", "The unit.", "--kind", "hole", "--element", "e3")
+    assert r.returncode == 0 and r.stdout.strip() == "p1", r.stderr
+    r = view_concept(tmp_path, "pin", "ask", "Kept beside.", "--kind", "supposition")
+    assert r.returncode == 0 and r.stdout.strip() == "p2", r.stderr
+    hole, supposition = json.loads((d / "pins.json").read_text())
     assert hole["element"] == "e3" and supposition["kind"] == "supposition"
-    r = view_concept(tmp_path, "hole-element", "ask", "h2", "e5")
-    assert r.returncode == 0 and r.stdout.strip() == "h2 on e5", r.stderr
-    assert json.loads((d / "holes.json").read_text())[1]["element"] == "e5"
-    r = view_concept(tmp_path, "close-hole", "ask", "h1", "h2", "--note", "per token")
-    assert r.returncode == 0 and r.stdout.split() == ["h1", "closed", "h2", "closed"]
-    assert all(h["note"] == "per token" for h in json.loads((d / "holes.json").read_text()))
+    assert view_concept(tmp_path, "pin", "ask", "No kind.").returncode != 0
+    r = view_concept(tmp_path, "pin-element", "ask", "p2", "e5")
+    assert r.returncode == 0 and r.stdout.strip() == "p2 on e5", r.stderr
+    assert json.loads((d / "pins.json").read_text())[1]["element"] == "e5"
+    r = view_concept(tmp_path, "close-pin", "ask", "p1", "p2", "--note", "per token")
+    assert r.returncode == 0 and r.stdout.split() == ["p1", "closed", "p2", "closed"]
+    assert all(p["note"] == "per token" for p in json.loads((d / "pins.json").read_text()))
     r = view_concept(tmp_path, "question", "ask", "Unit?", "--section", "scoping")
-    assert r.returncode != 0 and "view-concept hole" in r.stderr
+    assert r.returncode != 0 and "view-concept pin" in r.stderr
     assert view_concept(tmp_path, "question", "ask", "Unit?").returncode == 0
     r = view_concept(tmp_path, "anchor", "ask", "q1", "scoping")
-    assert r.returncode != 0 and "view-concept hole" in r.stderr
+    assert r.returncode != 0 and "view-concept pin" in r.stderr
 
 
 def test_answered_marks_a_question_answered_in_the_terminal(tmp_path):

@@ -360,18 +360,18 @@ def test_state_carries_what_the_banner_is_computed_from(client, session):
     assert batch["id"] == "b1" and batch["stage"] == "sent" and batch["comments"] == 1
 
 
-def test_state_carries_the_hole_records_and_their_tones(client, session):
+def test_state_carries_the_pins_and_their_tones(client, session):
     plan = session.read_plan()
     plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
     session.plan_path.write_text(json.dumps(plan))
     (session.sections_dir / "scoping.html").write_text('<p id="e1">a point</p>')
-    session.add_hole("What the unit is.", element="e1")
-    session.add_hole("Per layer.", supposition=True)
-    client.post("/api/s/kv-cache/batch", json={"comments": [{"section": "hole:h2", "text": "yes"}]})
+    session.add_pin("What the unit is.", "hole", element="e1")
+    session.add_pin("Per layer.", "supposition")
+    client.post("/api/s/kv-cache/batch", json={"comments": [{"section": "pin:p2", "text": "yes"}]})
     state = client.get("/api/s/kv-cache").json()
-    assert [h["id"] for h in state["holes"]] == ["h1", "h2"]
-    assert state["hole_tones"] == {
-        "holes": {"h1": "hole", "h2": "waiting"},
+    assert [h["id"] for h in state["pins"]] == ["p1", "p2"]
+    assert state["pin_tones"] == {
+        "pins": {"p1": "hole", "p2": "waiting"},
         "elements": {"e1": "hole"},
     }
 

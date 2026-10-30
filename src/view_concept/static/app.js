@@ -1,7 +1,7 @@
 /* view-concept — the session page.
 
    Tabs share the main space: in a feature whose scoper draws the problem, the scoping tab
-   (the drawing and its hole records, see "the scoping tab"), the plan (the scope block with the agent questions, outline,
+   (the drawing and its pin records, see "the scoping tab"), the plan (the scope block with the agent questions, outline,
    lexicon, change history), the explanation (one block per explanation section; the Model
    tab of a feature), in a feature that has reached the refactoring step the
    code tab (the refactor sections, the refactoring part), and once a doc set exists the
@@ -123,17 +123,17 @@ const isRefactorSection = (s) => s.part === "refactoring" || s.part === 2;
 const inRefactoringPart = (id) => isRefactorSection(state.plan.outline.find((s) => s.id === id) || {});
 /* The scoping tab (id "scoping"): a feature's scoping section ("part": "scoping"), the
    drawing of the problem the scoper builds with the user before any model, shown first,
-   with its holes (the open hole records of `state.holes`, see "hole records") marked on
-   the elements they bear on and indexed at its end (see "the hole window"), and the
+   with its pins (the open pin records of `state.pins`, see "pin records") marked on
+   the elements they bear on and indexed at its end (see "the pin window"), and the
    scoping's two buttons under the index (see scopingActions). While scoping runs on a
    drawing (drawingScoping), it is the only tab shown: the others appear at « End
-   scoping », and hide again when a later agent's hole sends the session back to scoping
+   scoping », and hide again when a later agent's pin sends the session back to scoping
    (the return to scoping: the server sets the phase back to "scoping"). */
 const isScopingSection = (s) => s.part === "scoping";
 const inScoping = (id) => isScopingSection(state.plan.outline.find((s) => s.id === id) || {});
 const hasScopingTab = () => state.plan.outline.some(isScopingSection);
 const drawingScoping = () => hasScopingTab() && state.status.phase === "scoping";
-const tabOf = (id) => (String(id || "").startsWith(HOLE_PREFIX) || inScoping(id) ? "scoping"
+const tabOf = (id) => (pinOf(id) || inScoping(id) ? "scoping"
   : isDocAnchor(id) || rowOf(id) ? "doc"
   : inRefactoringPart(id) ? "refactor" : "model");
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
@@ -178,23 +178,25 @@ const isDocAnchor = (id) => String(id || "").startsWith(DOC_PREFIX);
 /* A row of a Doc tab table is commented on its own anchor: "triage:<id>" for a row of the
    concept triage (store.py's TRIAGE_KEY), "moves:<id>" for a row of a README's move plan
    (MOVES_KEY). The triage's highlight baseline is kept under "triage:" alone, a move
-   plan's under "moves:<path>". A hole box of the hole window is commented the same way, on
-   "hole:<hole id>" (see "hole records"); it sits in the scoping tab. No section id starts
-   with any of them. `rowOf` gives the kind and id of a row anchor, null for any other id;
-   `holeOf` the hole record of a hole anchor (a closed stand-in for one the page no longer
+   plan's under "moves:<path>". A pin's box in the pin window is commented the same way, on
+   "pin:<pin id>" (see "pin records"); it sits in the scoping tab. A "hole:<id>" anchor,
+   written before the hole records were renamed pins, is read as a pin's. No section id
+   starts with any of them. `rowOf` gives the kind and id of a row anchor, null for any other id;
+   `pinOf` the pin record of a pin anchor (a closed stand-in for one the page no longer
    has), null for any other id. */
 const TRIAGE_PREFIX = "triage:";
 const MOVES_PREFIX = "moves:";
-const HOLE_PREFIX = "hole:";
-const ROW_KINDS = { [TRIAGE_PREFIX]: "triage", [MOVES_PREFIX]: "passage", [HOLE_PREFIX]: "hole" };
+const PIN_PREFIX = "pin:";
+const LEGACY_PIN_PREFIX = "hole:";
+const ROW_KINDS = { [TRIAGE_PREFIX]: "triage", [MOVES_PREFIX]: "passage", [PIN_PREFIX]: "pin", [LEGACY_PIN_PREFIX]: "pin" };
 const rowOf = (id) => {
   const s = String(id || "");
   const prefix = Object.keys(ROW_KINDS).find((p) => s.startsWith(p) && s.length > p.length);
   return prefix ? { kind: ROW_KINDS[prefix], id: s.slice(prefix.length) } : null;
 };
-const holeOf = (id) => {
+const pinOf = (id) => {
   const r = rowOf(id);
-  return r && r.kind === "hole" ? holeRecords().find((h) => h.id === r.id) || { id: r.id, status: "closed" } : null;
+  return r && r.kind === "pin" ? pinRecords().find((h) => h.id === r.id) || { id: r.id, status: "closed" } : null;
 };
 // Rewritten since its highlight baseline: the text at the last batch sent, or at « mark
 // read » (the server compares with seen.json).
@@ -202,10 +204,10 @@ const isUpdated = (id) => !!(state.sections[id] || {}).updated;
 
 function render() {
   const { plan } = state;
-  // A mark in the tab title while an agent question or a hole waits for you, and the progress of a writing
+  // A mark in the tab title while an agent question or a pin waits for you, and the progress of a writing
   // run, to be seen from another window.
   const run = writingRun();
-  document.title = `${openQuestions().length || holesForYou().length ? "● " : ""}${run ? `${run.k}/${run.set.length} · ` : ""}${plan.title} · view-concept`;
+  document.title = `${openQuestions().length || pinsForYou().length ? "● " : ""}${run ? `${run.k}/${run.set.length} · ` : ""}${plan.title} · view-concept`;
   $("#title").textContent = plan.title;
   renderListening();
   renderPublish();
@@ -543,9 +545,9 @@ function banner() {
     return { text, active: true, ask: false };
   }
   const approval = APPROVALS[phase];
-  // On a drawing, the open holes not waiting for the scoper ask too (see "hole records").
+  // On a drawing, the open pins not waiting for the scoper ask too (see "pin records").
   const asking = ["scoping", "awaiting-answer"].includes(phase) && !goOnPending()
-    && openQuestions().length + (drawingScoping() ? holesForYou().length : 0) > 0;
+    && openQuestions().length + (drawingScoping() ? pinsForYou().length : 0) > 0;
   // The PR recorded after the last « Create PR »: the agent opened (or updated) it.
   const prReady = phase === "awaiting-pr" && approvalPending() && !!state.plan.pr &&
                   state.plan.pr.at >= lastBatchOf("create-pr").sent;
@@ -554,9 +556,9 @@ function banner() {
   const scopingDone = phase === "scoping" && !asking && !planPending() && !!state.status.scoping_done;
   const labels = {
     // Scoping runs while the agent asks; its questions wait in the scope block, and « Write plan » ends it.
-    // On a drawing, the holes of its elements ask, and « End scoping » ends it.
+    // On a drawing, the pins of its elements ask, and « End scoping » ends it.
     scoping: drawingScoping() ? (sentSince("end-scoping") ? "scoping ended · the planner is converting the drawing"
-           : asking ? "scoping · holes waiting for you"
+           : asking ? "scoping · pins waiting for you"
            : state.status.scoping_done ? "scoping done · End scoping when ready"
            : repliedInScoping() ? "reading your reply"
            : "drawing the problem")
@@ -593,7 +595,7 @@ const approvalReady = (approval) =>
   (approval.action === "create-pr" && isDocsReview() ? "docs written · waiting for you to create the PR" : approval.ready);
 
 function repliedInScoping() {
-  const asked = [...(state.questions || []).flatMap((q) => [q.asked, q.reasked]), ...holeRecords().map((h) => h.asked)]
+  const asked = [...(state.questions || []).flatMap((q) => [q.asked, q.reasked]), ...pinRecords().map((h) => h.asked)]
     .filter(Boolean);
   const since = [...asked, state.status.since || ""].reduce((a, b) => (b > a ? b : a), "");
   return state.comments.batches.some((b) => b.sent >= since);
@@ -955,11 +957,11 @@ function renderSections() {
   }
   anchorWatch.disconnect();
   for (const view of docViews()) for (const child of view.children) anchorWatch.observe(child);
-  frames.forEach((f, id) => { postTerms(id, f); postHoles(id, f); });
+  frames.forEach((f, id) => { postTerms(id, f); postPins(id, f); });
   applyHighlights();
   renderThreadChips();
   positionPopover();
-  renderHolePop();
+  renderPinPop();
 }
 
 /* A bare block leaves out the number and the title (the description of an item: its
@@ -984,49 +986,49 @@ function sectionBlock(s, { bare = false } = {}) {
       el("button", { class: "sec-comment ask", text: "ask", title: "Open a side thread about this section",
                      onclick: () => openComposer({ section: s.id, quote: "", prefix: "" }, "ask") })),
     body,
-    ...(written && isScopingSection(s) ? [holeIndex(s.id)]
+    ...(written && isScopingSection(s) ? [pinIndex(s.id)]
       : written && sectionQuestions(s.id).length
         ? [el("div", { class: "sec-questions" }, ...sectionQuestions(s.id).map(questionCard),
               ...(paused() ? [goOnButton()] : []))] : []));
 }
 
-/* ---------------- hole records ----------------
-   A hole is something of the drawing only the user can settle; the server keeps each one
-   as a hole record of holes.json (`state.holes`, oldest first): {id (h1…), kind "hole" |
-   "supposition", text (one sentence), element (optional: the id of the element of the
-   drawing it marks), status "open" | "closed"}. A supposition is a hole the scoper already
-   answered from the code, for the user to approve or correct. Hole records live on the
-   hole section, the first scoping section of the outline. The page draws a hole from its
-   record only: the mark on its element (postHoles), its box in the hole window and its
-   line in the hole index (see "the hole window"); a closed hole has none of them.
-   A hole is waiting (« en attente ») while a comment of a sent batch, not yet resolved, is
-   attached to it: anchored to "hole:<its id>" (a comment or a side thread in its box), or
+/* ---------------- pin records ----------------
+   A pin is an open point of the drawing; the server keeps each one as a record of
+   pins.json (`state.pins`, oldest first): {id (p1…, or h1… for one written before the
+   rename), kind, text (one sentence), element (optional: the id of the element of the
+   drawing it sits on), status "open" | "closed"}. Its kind is "hole", something only the
+   user can settle, or "supposition", a statement the scoper drew from the code, for the
+   user to approve or correct. Pins live on the pin section, the first scoping section of
+   the outline. The page draws a pin from its
+   record only: the mark on its element (postPins), its box in the pin window and its
+   line in the pin index (see "the pin window"); a closed pin has none of them.
+   A pin is waiting (« en attente ») while a comment of a sent batch, not yet resolved, is
+   attached to it: anchored to "pin:<its id>" (a comment or a side thread in its box), or
    carrying `element` equal to its element (a comment on a selection in the drawing inside
    its marked element). Nothing is stored for it: the server reads it from the sent
-   comments and sends the colours it implies (`state.hole_tones`: {holes: {id: tone},
-   elements: {element: tone}}, tone "hole" orange, "supposition" blue, "waiting" grey).
-   A waiting hole is grey (its box, its index line, and the mark once all the element's
-   open holes wait) until the scoper resolves the comment: the hole is then closed, or
-   back to its colour. A waiting hole stays open: « End scoping » still counts it. */
-const holeRecords = () => (state ? state.holes || [] : []);
-const openHoles = () => holeRecords().filter((h) => h.status === "open");
-const holeSection = () => (state.plan.outline.find(isScopingSection) || {}).id;
-const holeTones = () => (state && state.hole_tones) || { holes: {}, elements: {} };
-// The colour of a hole's box and index line: "waiting" (grey), else its kind ("hole"
-// orange, "supposition" blue).
-const holeTone = (h) => holeTones().holes[h.id] || (h.kind === "supposition" ? "supposition" : "hole");
-// The open holes waiting for the user, not for the scoper.
-const holesForYou = () => openHoles().filter((h) => holeTone(h) !== "waiting");
-// The colour of an element's mark, from its open holes: among those not waiting, orange
-// when one is a hole, else blue (only suppositions); grey when all of them wait.
-const elementTone = (element) => holeTones().elements[element] || "hole";
+   comments and sends the colours it implies (`state.pin_tones`: {pins: {id: tone},
+   elements: {element: tone}}, tone a kind of pin, or "waiting" grey).
+   A waiting pin is grey (its box, its index line, and the mark once all the element's
+   open pins wait) until the scoper resolves the comment: the pin is then closed, or
+   back to its colour. A waiting pin stays open: « End scoping » still counts it. */
+const pinRecords = () => (state ? state.pins || [] : []);
+const openPins = () => pinRecords().filter((h) => h.status === "open");
+const pinSection = () => (state.plan.outline.find(isScopingSection) || {}).id;
+const pinTones = () => (state && state.pin_tones) || { pins: {}, elements: {} };
+// The colour of a pin's box and index line: "waiting" (grey), else its kind.
+const pinTone = (h) => pinTones().pins[h.id] || h.kind;
+// The open pins waiting for the user, not for the scoper.
+const pinsForYou = () => openPins().filter((h) => pinTone(h) !== "waiting");
+// The colour of an element's mark, from its open pins (the server picks it): among those
+// not waiting, the first kind in the server's order; grey when all of them wait.
+const elementTone = (element) => pinTones().elements[element] || "waiting";
 
-/* The scoping's two buttons, under the hole index at the end of the scoping tab, while scoping
+/* The scoping's two buttons, under the pin index at the end of the scoping tab, while scoping
    runs on a drawing: « What's missing? » (a batch whose action is "missing": the scoper
-   reads the drawing again, and opens holes or suppositions, or says nothing is left) and
+   reads the drawing again, and opens pins, or says nothing is left) and
    « End scoping » (action "end-scoping": the planner converts the drawing into the outline
-   and the lexicon, then the writer writes the model). « End scoping » waits until no hole
-   record is open, hole or supposition, waiting or not; the server refuses it otherwise.
+   and the lexicon, then the writer writes the model). « End scoping » waits until no pin
+   is open, waiting or not; the server refuses it otherwise.
    Both take the draft comments with them, and hide once « End scoping » is sent, until
    the status moves. */
 const sentSince = (action) => {
@@ -1035,161 +1037,161 @@ const sentSince = (action) => {
 };
 function scopingActions() {
   if (!drawingScoping() || sentSince("end-scoping")) return null;
-  const n = openHoles().length;
+  const n = openPins().length;
   return el("div", { class: "scoping-actions" },
     el("button", { class: "btn", text: "What's missing?",
-                   title: "The scoper reads the drawing again: it opens holes or suppositions, or says nothing is left",
+                   title: "The scoper reads the drawing again: it opens pins or suppositions, or says nothing is left",
                    onclick: (e) => send("missing", e.currentTarget) }),
     el("button", { class: "btn primary", text: "End scoping", disabled: n > 0,
-                   title: n ? `${n} hole${n > 1 ? "s or suppositions" : " or supposition"} still open: answer ${n > 1 ? "them" : "it"} first`
+                   title: n ? `${n} pin${n > 1 ? "s or suppositions" : " or supposition"} still open: answer ${n > 1 ? "them" : "it"} first`
                      : "The planner converts the drawing into the outline and the lexicon, then the writer writes the model",
                    onclick: (e) => send("end-scoping", e.currentTarget) }));
 }
 
-/* The holes message (page -> frame), to the frame of the hole section: one entry per
-   element of the drawing (`element`, an id in the HTML) bearing open hole records, with
-   their ids (`holes`, in the order asked) and the tone of its mark (elementTone), which the
-   frame draws. A closed hole leaves no mark. */
-function postHoles(id, f = frames.get(id)) {
+/* The pins message (page -> frame), to the frame of the pin section: one entry per
+   element of the drawing (`element`, an id in the HTML) bearing open pin records, with
+   their ids (`pins`, in the order asked) and the tone of its mark (elementTone), which the
+   frame draws. A closed pin leaves no mark. */
+function postPins(id, f = frames.get(id)) {
   if (!f || !f.contentWindow || !state || !inScoping(id)) return;
   const on = new Map();
-  if (id === holeSection()) for (const h of openHoles()) if (h.element) on.set(h.element, [...(on.get(h.element) || []), h]);
-  const holes = [...on].map(([element, list]) => ({ element, holes: list.map((h) => h.id), tone: elementTone(element) }));
-  f.contentWindow.postMessage({ viewConcept: "holes", holes }, "*");
+  if (id === pinSection()) for (const h of openPins()) if (h.element) on.set(h.element, [...(on.get(h.element) || []), h]);
+  const pins = [...on].map(([element, list]) => ({ element, pins: list.map((h) => h.id), tone: elementTone(element) }));
+  f.contentWindow.postMessage({ viewConcept: "pins", pins }, "*");
 }
 
-/* Show an element of the drawing and open the hole window `holes` (hole ids) on it: the
+/* Show an element of the drawing and open the pin window `pins` (pin ids) on it: the
    page shows the scoping tab, the frame opens the element's holders (a hidden tab or a
    closed fold of the drawing) and answers « revealed » with where it sits (frameRevealed).
-   When the drawing no longer has the element, the window opens on the index line of hole
+   When the drawing no longer has the element, the window opens on the index line of pin
    `line` instead. */
-function revealElement(id, element, holes, line) {
+function revealElement(id, element, pins, line) {
   setTab(tabOf(id));
   const f = frames.get(id);
-  if (!f || !f.contentWindow) { openHoleOnLine(id, holes, line); return; }
-  revealing.set(id, { element, holes, line });
+  if (!f || !f.contentWindow) { openPinOnLine(id, pins, line); return; }
+  revealing.set(id, { element, pins, line });
   f.contentWindow.postMessage({ viewConcept: "reveal-element", element }, "*");
 }
 
-/* ---------------- the hole window ----------------
-   A hole is read on the element of the drawing it bears on, not in a list: a click on an
-   element the frame marks (the hole click) opens the hole window beside it, under it or
+/* ---------------- the pin window ----------------
+   A pin is read on the element of the drawing it bears on, not in a list: a click on an
+   element the frame marks (the pin click) opens the pin window beside it, under it or
    above it when the room runs out below, as a side thread opens on its passage. The window
-   holds one hole box per open hole record on that element, in the order asked, and
-   nothing of a closed hole. Escape (in the page, or passed on by the frame that holds the
+   holds one pin box per open pin record on that element, in the order asked, and
+   nothing of a closed pin. Escape (in the page, or passed on by the frame that holds the
    focus), its ×, a click elsewhere in the drawing or outside the window closes it; a
    click in the composer, a draft of the review, the selection buttons or a side thread
-   does not. It closes by itself once the scoper has closed all its holes, and docks across the
+   does not. It closes by itself once the scoper has closed all its pins, and docks across the
    bottom in the narrow layout, as the thread popover does.
-   A hole box says in one sentence what is not known: dashed orange for a hole, its
-   sentence after a « ? »; dashed blue for a supposition, its statement alone; grey for a
-   waiting hole of either kind (see "hole records"). It has no options, no text field, no
+   A pin's box says the pin in one sentence, dashed in its kind's colour: orange for a
+   hole, its sentence after a « ? »; blue for a supposition, its statement alone; grey for
+   a waiting pin of any kind (see "pin records"). It has no options, no text field, no
    button to answer: the user answers by a comment on a selection of its text (anchored to
-   "hole:<id>", as a row of a Doc tab table) or by « ask », a side thread on the hole,
+   "pin:<id>", as a row of a Doc tab table) or by « ask », a side thread on the pin,
    whose conclusion reaches the scoper with « → batch ».
-   The end of the hole section keeps the hole index: one line per open hole record, in its
+   The end of the pin section keeps the pin index: one line per open pin record, in its
    tone, with its element and the start of its sentence. A click on a line shows the
-   element (revealElement) and opens its hole window there; a hole with no element, or
+   element (revealElement) and opens its pin window there; a pin with no element, or
    whose element the drawing no longer has, opens its window on the line itself. */
-let holePop = null; // { section, holes: [ids], element, anchor: { f, rect } (in the frame's viewport) | { line: hole id } }
-const holeBoxes = new Map(); // hole id -> its box, kept while its tone and sentence stay
+let pinPop = null; // { section, pins: [ids], element, anchor: { f, rect } (in the frame's viewport) | { line: pin id } }
+const pinBoxes = new Map(); // pin id -> its box, kept while its tone and sentence stay
 
-// The hole window of a hole: the open holes on its element, or the hole alone without one.
-const holesOn = (h) => (h.element ? openHoles().filter((x) => x.element === h.element).map((x) => x.id) : [h.id]);
+// The pin window of a pin: the open pins on its element, or the pin alone without one.
+const pinsOn = (h) => (h.element ? openPins().filter((x) => x.element === h.element).map((x) => x.id) : [h.id]);
 
-function holeIndex(id) {
-  if (id !== holeSection() || !openHoles().length) return null;
+function pinIndex(id) {
+  if (id !== pinSection() || !openPins().length) return null;
   const line = (h) => el("button", {
-    class: `hole-line ${holePop && holePop.holes.includes(h.id) ? "open" : ""}`, "data-hole": h.id, "data-tone": holeTone(h),
-    title: `${h.id} · show it in the drawing, in its hole window`,
-    onclick: (e) => { e.stopPropagation(); showHole(h.id); } },
+    class: `pin-line ${pinPop && pinPop.pins.includes(h.id) ? "open" : ""}`, "data-pin": h.id, "data-tone": pinTone(h),
+    title: `${h.id} · show it in the drawing, in its pin window`,
+    onclick: (e) => { e.stopPropagation(); showPin(h.id); } },
     h.element ? el("span", { class: "badge", text: h.element }) : null,
-    el("span", { class: "hole-text" }, h.kind === "supposition" ? null : el("b", { class: "hole-q", text: "? " }), h.text));
-  return el("div", { class: "sec-questions hole-index" }, ...openHoles().map(line));
+    el("span", { class: "pin-text" }, h.kind === "supposition" ? null : el("b", { class: "pin-q", text: "? " }), h.text));
+  return el("div", { class: "sec-questions pin-index" }, ...openPins().map(line));
 }
 
-// Open the hole window of hole `hid`, on its element or on its index line; a hole closed
+// Open the pin window of pin `hid`, on its element or on its index line; a pin closed
 // since (a comment on it revealed from the review pane) only shows the scoping tab.
-function showHole(hid) {
-  const h = openHoles().find((x) => x.id === hid);
-  const id = holeSection();
+function showPin(hid) {
+  const h = openPins().find((x) => x.id === hid);
+  const id = pinSection();
   if (!h || !id) { setTab("scoping"); return; }
-  if (h.element) revealElement(id, h.element, holesOn(h), h.id);
-  else { setTab(tabOf(id)); openHoleOnLine(id, holesOn(h), h.id); }
+  if (h.element) revealElement(id, h.element, pinsOn(h), h.id);
+  else { setTab(tabOf(id)); openPinOnLine(id, pinsOn(h), h.id); }
 }
 
-function openHoleOnLine(section, holes, line) {
-  openHolePop(section, holes, { line });
-  const b = document.querySelector(`.hole-line[data-hole="${CSS.escape(line || "")}"]`);
+function openPinOnLine(section, pins, line) {
+  openPinPop(section, pins, { line });
+  const b = document.querySelector(`.pin-line[data-pin="${CSS.escape(line || "")}"]`);
   if (b) pageScroll(b.closest(".view"), () => b.scrollIntoView({ block: "center", behavior: "smooth" }));
 }
 
-function openHolePop(section, holes, anchor) {
-  const first = openHoles().find((h) => holes.includes(h.id));
-  holePop = { section, holes, element: first ? first.element : undefined, anchor };
-  renderHolePop();
-  document.querySelectorAll(".hole-line").forEach((b) => b.classList.toggle("open", !!holePop && holePop.holes.includes(b.dataset.hole)));
+function openPinPop(section, pins, anchor) {
+  const first = openPins().find((h) => pins.includes(h.id));
+  pinPop = { section, pins, element: first ? first.element : undefined, anchor };
+  renderPinPop();
+  document.querySelectorAll(".pin-line").forEach((b) => b.classList.toggle("open", !!pinPop && pinPop.pins.includes(b.dataset.pin)));
 }
 
-function closeHolePop() {
-  holePop = null;
-  $("#hole-pop").hidden = true;
-  document.querySelectorAll(".hole-line.open").forEach((b) => b.classList.remove("open"));
+function closePinPop() {
+  pinPop = null;
+  $("#pin-pop").hidden = true;
+  document.querySelectorAll(".pin-line.open").forEach((b) => b.classList.remove("open"));
 }
 
-function holeBox(h) {
-  const tone = holeTone(h);
-  const kept = holeBoxes.get(h.id);
+function pinBox(h) {
+  const tone = pinTone(h);
+  const kept = pinBoxes.get(h.id);
   if (kept && kept.dataset.tone === tone && kept._text === h.text) return kept;
-  const anchor = HOLE_PREFIX + h.id;
-  const box = el("div", { class: "hole-box", "data-hole": h.id, "data-tone": tone },
-    el("div", { class: "hole-sentence", "data-anchor": anchor },
-       h.kind === "supposition" ? null : el("b", { class: "hole-q", text: "? " }), h.text),
-    el("div", { class: "hole-actions" },
+  const anchor = PIN_PREFIX + h.id;
+  const box = el("div", { class: "pin-box", "data-pin": h.id, "data-tone": tone },
+    el("div", { class: "pin-sentence", "data-anchor": anchor },
+       h.kind === "supposition" ? null : el("b", { class: "pin-q", text: "? " }), h.text),
+    el("div", { class: "pin-actions" },
        el("span", { class: "t-chips", "data-section": anchor }),
-       el("button", { class: "btn hole-ask", text: "ask",
-                      title: "Open a side thread about this hole; « → batch » sends its conclusion to the scoper",
+       el("button", { class: "btn pin-ask", text: "ask",
+                      title: "Open a side thread about this pin; « → batch » sends its conclusion to the scoper",
                       onclick: (e) => openComposer({ section: anchor, quote: "", prefix: "",
                                                      rect: e.currentTarget.getBoundingClientRect() }, "ask") })));
   box._text = h.text;
-  holeBoxes.set(h.id, box);
+  pinBoxes.set(h.id, box);
   return box;
 }
 
-function renderHolePop() {
-  const pop = $("#hole-pop");
-  if (!holePop) return;
-  const open = openHoles().filter((h) => holePop.holes.includes(h.id) || (!!holePop.element && h.element === holePop.element));
-  if (!open.length) { closeHolePop(); return; }
-  holePop.holes = open.map((h) => h.id);
-  const boxes = open.map(holeBox);
+function renderPinPop() {
+  const pop = $("#pin-pop");
+  if (!pinPop) return;
+  const open = openPins().filter((h) => pinPop.pins.includes(h.id) || (!!pinPop.element && h.element === pinPop.element));
+  if (!open.length) { closePinPop(); return; }
+  pinPop.pins = open.map((h) => h.id);
+  const boxes = open.map(pinBox);
   // Re-attaching a box would drop a selection in its text: only when the boxes changed.
   const same = boxes.length === pop.children.length - 1 && boxes.every((b, i) => pop.children[i + 1] === b);
   if (!same) {
     const head = el("div", { class: "t-title" },
-      el("span", { class: "dim", text: holePop.element ? `element ${holePop.element}` : `hole ${open[0].id}` }),
-      el("button", { class: "t-close", text: "×", title: "Close (Esc)", onclick: closeHolePop }));
+      el("span", { class: "dim", text: pinPop.element ? `element ${pinPop.element}` : `pin ${open[0].id}` }),
+      el("button", { class: "t-close", text: "×", title: "Close (Esc)", onclick: closePinPop }));
     pop.replaceChildren(head, ...boxes);
   }
   pop.hidden = false;
-  positionHolePop();
+  positionPinPop();
   // The boxes' passages under comment or side thread, found once the boxes are in place;
   // a side thread open on one of them moves onto it.
   if (!same) { applyHighlights(); renderThreadChips(); positionPopover(); }
 }
 
-function holeAnchorRect() {
+function pinAnchorRect() {
   // A frame drawn again (the scoper redrew) loses the element's place: the line holds it.
-  const a = holePop.anchor;
+  const a = pinPop.anchor;
   if (a.f && a.f.isConnected) return pageRect(a.f, a.rect);
-  const line = document.querySelector(`.hole-line[data-hole="${CSS.escape(a.line || holePop.holes[0])}"]`);
+  const line = document.querySelector(`.pin-line[data-pin="${CSS.escape(a.line || pinPop.pins[0])}"]`);
   return line ? line.getBoundingClientRect() : null;
 }
 
-function positionHolePop() {
-  const pop = $("#hole-pop");
-  if (!holePop || pop.hidden || isNarrow()) return;
-  const r = holeAnchorRect();
+function positionPinPop() {
+  const pop = $("#pin-pop");
+  if (!pinPop || pop.hidden || isNarrow()) return;
+  const r = pinAnchorRect();
   const visible = r && r.bottom > 0 && r.top < innerHeight;
   pop.style.visibility = visible ? "visible" : "hidden";
   if (!visible) return;
@@ -1201,21 +1203,21 @@ function positionHolePop() {
   pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
 }
 
-/* The hole click message: the hole ids of the marked element clicked and where it sits,
+/* The pin click message: the pin ids of the marked element clicked and where it sits,
    or none for a click elsewhere in the drawing. */
-function frameHoleClick(id, f, d) {
-  const holes = Array.isArray(d.holes) ? d.holes.map(String) : [];
-  if (!holes.length || !d.rect) { closeHolePop(); return; }
-  openHolePop(id, holes, { f, rect: d.rect });
+function framePinClick(id, f, d) {
+  const pins = Array.isArray(d.pins) ? d.pins.map(String) : [];
+  if (!pins.length || !d.rect) { closePinPop(); return; }
+  openPinPop(id, pins, { f, rect: d.rect });
 }
 
-document.querySelectorAll(".view").forEach((v) => v.addEventListener("scroll", positionHolePop, { passive: true }));
-addEventListener("resize", positionHolePop);
+document.querySelectorAll(".view").forEach((v) => v.addEventListener("scroll", positionPinPop, { passive: true }));
+addEventListener("resize", positionPinPop);
 document.addEventListener("mousedown", (e) => {
-  if (holePop && !e.target.closest("#hole-pop, #composer, #drafts, #thread-pop, #sel-actions, .hole-line")) closeHolePop();
+  if (pinPop && !e.target.closest("#pin-pop, #composer, #drafts, #thread-pop, #sel-actions, .pin-line")) closePinPop();
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && holePop && !e.target.closest("#composer")) closeHolePop();
+  if (e.key === "Escape" && pinPop && !e.target.closest("#composer")) closePinPop();
 });
 
 /* ---------------- the Doc tab ----------------
@@ -2040,7 +2042,7 @@ function placeFrames() {
       if (f) f.remove();
       f = el("iframe", { class: "frame", sandbox: SANDBOX, allow: "fullscreen", title: titleOf(id),
                          "data-version": version, src: `/s/${SLUG}/sections/${encodeURIComponent(id)}.html?v=${version}` });
-      f.addEventListener("load", () => { postTheme(f); postAnchors(id, f); postChanges(id, f); postTerms(id, f); postHoles(id, f); });
+      f.addEventListener("load", () => { postTheme(f); postAnchors(id, f); postChanges(id, f); postTerms(id, f); postPins(id, f); });
       frames.set(id, f);
     }
     moveInto(slot, f);
@@ -2073,8 +2075,8 @@ window.addEventListener("message", (e) => {
   else if (d.viewConcept === "revealed") frameRevealed(id, f, d);
   else if (d.viewConcept === "placed") framePlaced(f, d);
   else if (d.viewConcept === "thread-click") frameThreadClick(id, f, d);
-  else if (d.viewConcept === "hole-click") frameHoleClick(id, f, d);
-  else if (d.viewConcept === "escape") { if (holePop) closeHolePop(); }
+  else if (d.viewConcept === "pin-click") framePinClick(id, f, d);
+  else if (d.viewConcept === "escape") { if (pinPop) closePinPop(); }
   else if (d.viewConcept === "term-hover") frameTermHover(f, d);
   else if (d.viewConcept === "tap") tapElsewhere(f);
 });
@@ -2090,7 +2092,7 @@ function pageRect(f, r) {
 /* The selection message: a passage selected in an HTML section gets the box a passage of
    a Markdown section gets, anchored the same way (section id, quote, prefix). A passage
    inside a marked element of the drawing also carries that element's id (`element`): the
-   comment on it is read with the element's holes (see "hole records"). */
+   comment on it is read with the element's pins (see "pin records"). */
 function frameSelection(id, f, d) {
   if (!d.quote || !d.rect) {
     if (pendingSelection && pendingSelection.section === id) showSelection(null);
@@ -2217,11 +2219,11 @@ function frameTermHover(f, d) {
 function frameRevealed(id, f, d) {
   const asked = revealing.get(id);
   if (!revealing.delete(id)) return;
-  // A line of the hole index: the hole window opens on the element, or on the line when
+  // A line of the pin index: the pin window opens on the element, or on the line when
   // the drawing no longer has it.
-  if (asked.holes) {
-    if (!d.found) { openHoleOnLine(id, asked.holes, asked.line); return; }
-    openHolePop(id, asked.holes, { f, rect: { left: d.left ?? 0, right: d.right ?? 0, top: d.top, bottom: d.bottom } });
+  if (asked.pins) {
+    if (!d.found) { openPinOnLine(id, asked.pins, asked.line); return; }
+    openPinPop(id, asked.pins, { f, rect: { left: d.left ?? 0, right: d.right ?? 0, top: d.top, bottom: d.bottom } });
   }
   if (!d.found) { scrollToSection(id); return; }
   const r = pageRect(f, { left: 0, right: 0, top: d.top, bottom: d.bottom });
@@ -2526,8 +2528,8 @@ async function markRead(sections) {
 function revealQuote(c) {
   if (!c.section) return;
   if (c.quote.startsWith("plan · ")) { setTab("plan"); return; }
-  // A comment on a hole box: the box is shown in its hole window.
-  if (holeOf(c.section)) { showHole(holeOf(c.section).id); return; }
+  // A comment on a pin box: the box is shown in its pin window.
+  if (pinOf(c.section)) { showPin(pinOf(c.section).id); return; }
   openSection(c.section);
   openItemOf(c.section);
   const f = c.quote && (state.sections[c.section] || {}).kind === "html" && frames.get(c.section);
@@ -2562,8 +2564,8 @@ function currentSelection() {
   if (!sel.rangeCount || sel.isCollapsed) return null;
   const range = sel.getRangeAt(0);
   const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
-  // A passage of a hole box in the hole window: anchored to its hole.
-  const box = start.closest("#hole-pop [data-anchor]");
+  // A passage of a pin box in the pin window: anchored to its pin.
+  const box = start.closest("#pin-pop [data-anchor]");
   if (box) {
     const quote = collapse(sel.toString());
     return quote ? { section: box.dataset.anchor, quote, prefix: "", rect: range.getBoundingClientRect() } : null;
@@ -2769,8 +2771,8 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    the user's choice or text. A recommended answer that is one of the options is
    preselected; any other is pre-filled in the text field; either is marked « suggested ».
    A question may carry a background (the mechanism as it is today, each option's
-   trade-offs), shown folded under its text. The holes of a drawing are not questions:
-   they are hole records, read in the hole window (see "hole records"). A question with
+   trade-offs), shown folded under its text. The pins of a drawing are not questions:
+   they are pin records, read in the pin window (see "pin records"). A question with
    an anchor section (`section`)
    whose section is written is shown at the end of that section in the Model tab instead,
    and the scope block keeps a line pointing to it (see sectionQuestions).
@@ -2957,26 +2959,26 @@ $("#scope-plan").addEventListener("click", (e) => send("plan", e.currentTarget))
 $("#scope-go-on").addEventListener("click", (e) => send("go-on", e.currentTarget));
 
 /* The review pane keeps one line for what waits for the user: the open agent questions,
-   and on a drawing during scoping the open holes not waiting for the scoper (holesForYou),
-   « N holes waiting ». A click opens the first question's place (its section, or the Plan
-   tab at the scope block), or, with no question open, the hole index at the end of the
+   and on a drawing during scoping the open pins not waiting for the scoper (pinsForYou),
+   « N pins waiting ». A click opens the first question's place (its section, or the Plan
+   tab at the scope block), or, with no question open, the pin index at the end of the
    scoping tab. */
-const holesWaiting = () => (drawingScoping() ? holesForYou().length : 0);
+const pinsWaiting = () => (drawingScoping() ? pinsForYou().length : 0);
 const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
 
 function renderWaiting() {
   const n = openQuestions().length;
-  const h = holesWaiting();
+  const h = pinsWaiting();
   const line = $("#questions-waiting");
   line.hidden = !(n || h);
-  line.textContent = `${[n && plural(n, "question"), h && plural(h, "hole")].filter(Boolean).join(" · ")} waiting →`;
+  line.textContent = `${[n && plural(n, "question"), h && plural(h, "pin")].filter(Boolean).join(" · ")} waiting →`;
 }
 
 $("#questions-waiting").addEventListener("click", () => {
   const q = openQuestions()[0];
-  if (!q && holesWaiting()) {
-    setTab(tabOf(holeSection()));
-    const index = document.querySelector(".hole-index");
+  if (!q && pinsWaiting()) {
+    setTab(tabOf(pinSection()));
+    const index = document.querySelector(".pin-index");
     if (index) pageScroll(index.closest(".view"), () => index.scrollIntoView({ block: "center", behavior: "smooth" }));
     return;
   }
@@ -2989,7 +2991,7 @@ $("#questions-waiting").addEventListener("click", () => {
    The pane reads like a conversation, oldest at the top: the sent batches in time order
    (a batch answering an agent question shows the question, then the answer or « skipped »),
    then a line counting the open agent questions (they live in the scope block) and, on a
-   drawing during scoping, the open holes waiting for the user, then the
+   drawing during scoping, the open pins waiting for the user, then the
    drafts, the note and « Send » at the bottom. It stays
    scrolled to the bottom as content arrives, unless the user scrolled up. */
 
@@ -3003,7 +3005,7 @@ $(".review").addEventListener("scroll", (e) => {
 const rowLabel = (id) => `${rowOf(id).kind} ${rowOf(id).id}`;
 
 // Where a comment sits: its section's number, « doc set », the file name of its doc, or
-// the row of a Doc tab table or the hole box (« hole h2 ») it is anchored to.
+// the row of a Doc tab table or the pin box (« pin p2 ») it is anchored to.
 function whereOf(id) {
   if (id === DOC_SET) return "doc set";
   if (rowOf(id)) return rowLabel(id);
@@ -3016,7 +3018,7 @@ function quoteLine(c) {
   const where = (c.section ? whereOf(c.section) : "·") + (c.fact ? ` · fact ${c.fact}` : "")
     + (c.element ? ` · element ${c.element}` : "");
   const q = c.quote ? `« ${c.quote.length > 90 ? c.quote.slice(0, 90) + "…" : c.quote} »`
-          : holeOf(c.section) ? "whole hole" : c.section ? "whole section" : "general";
+          : pinOf(c.section) ? "whole pin" : c.section ? "whole section" : "general";
   const open = () => {
     revealQuote(c);
     if (c.thread && threadsState.threads.some((t) => t.id === c.thread)) openPopover(c.thread);
@@ -3418,9 +3420,9 @@ function openPopover(id) {
     openSection(t.section);
     openItemOf(t.section);
   }
-  // A thread on a hole sits on its box: the hole window opens first.
-  const hole = holeOf(t.section);
-  if (hole && !(holePop && holePop.holes.includes(hole.id))) showHole(hole.id);
+  // A thread on a pin sits on its box: the pin window opens first.
+  const pin = pinOf(t.section);
+  if (pin && !(pinPop && pinPop.pins.includes(pin.id))) showPin(pin.id);
   popThread = id;
   renderPopover();
 }

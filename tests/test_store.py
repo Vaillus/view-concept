@@ -14,6 +14,7 @@ from view_concept.store import (
     format_changes,
     format_doc,
     list_sessions,
+    pin_anchor,
     project_of,
 )
 
@@ -490,176 +491,203 @@ def _with_scoping(session):
     return session
 
 
-def test_a_hole_is_a_record_of_the_hole_file(session):
+def test_a_pin_is_a_record_of_the_pin_file(session):
     _with_scoping(session)
     session.write_status("scoping")
-    h = session.add_hole("What  the unit is.", element=" e1 ")
+    h = session.add_pin("What  the unit is.", "hole", element=" e1 ")
     assert h == {
-        "id": "h1",
+        "id": "p1",
         "kind": "hole",
         "text": "What the unit is.",
         "element": "e1",
         "status": "open",
         "asked": h["asked"],
     }
-    s = session.add_hole("The cache is per layer.", supposition=True)
-    assert s["id"] == "h2" and s["kind"] == "supposition" and "element" not in s
-    assert json.loads(session.holes_path.read_text()) == [h, s]
+    s = session.add_pin("The cache is per layer.", "supposition")
+    assert s["id"] == "p2" and s["kind"] == "supposition" and "element" not in s
+    assert json.loads(session.pins_path.read_text()) == [h, s]
     assert session.read_status()["phase"] == "scoping"
     assert session.read_questions() == []
-    assert [h["id"] for h in session.open_holes()] == ["h1", "h2"]
-    with pytest.raises(SessionError, match="empty hole"):
-        session.add_hole("  ")
+    assert [h["id"] for h in session.open_pins()] == ["p1", "p2"]
+    with pytest.raises(SessionError, match="empty pin"):
+        session.add_pin("  ", "hole")
 
 
-def test_a_hole_needs_a_drawing(session):
+def test_a_pin_needs_a_drawing(session):
     with pytest.raises(SessionError, match="no scoping section"):
-        session.add_hole("What the unit is.")
+        session.add_pin("What the unit is.", "hole")
 
 
 def test_a_question_is_not_asked_on_the_drawing(session):
     _with_scoping(session)
-    with pytest.raises(SessionError, match="view-concept hole"):
+    with pytest.raises(SessionError, match="view-concept pin"):
         session.add_question("Which unit?", section="scoping")
     session.add_question("Elsewhere?", section="s1")
-    assert session.open_holes() == []
+    assert session.open_pins() == []
 
 
-def test_the_scoper_closes_a_hole_with_a_note(session):
+def test_the_scoper_closes_a_pin_with_a_note(session):
     _with_scoping(session)
-    session.add_hole("What the unit is.", element="e1")
-    session.add_hole("Per layer.", supposition=True)
-    (closed,) = session.close_holes(["h2"], note="approved")
+    session.add_pin("What the unit is.", "hole", element="e1")
+    session.add_pin("Per layer.", "supposition")
+    (closed,) = session.close_pins(["p2"], note="approved")
     assert closed["status"] == "closed" and closed["note"] == "approved" and closed["closed"]
-    assert [h["id"] for h in session.open_holes()] == ["h1"]
-    with pytest.raises(SessionError, match="already closed: h2"):
-        session.close_holes(["h2"])
-    with pytest.raises(SessionError, match="no hole h9"):
-        session.close_holes(["h9"])
+    assert [h["id"] for h in session.open_pins()] == ["p1"]
+    with pytest.raises(SessionError, match="already closed: p2"):
+        session.close_pins(["p2"])
+    with pytest.raises(SessionError, match="no pin p9"):
+        session.close_pins(["p9"])
 
 
-def test_the_scoper_gives_a_hole_its_element_on_the_same_record(session):
+def test_the_scoper_gives_a_pin_its_element_on_the_same_record(session):
     _with_scoping(session)
-    session.add_hole("What the unit is.")
-    h = session.set_hole_element("h1", " e1 ")
-    assert h["id"] == "h1" and h["element"] == "e1"
-    assert [(h["id"], h["element"]) for h in session.open_holes()] == [("h1", "e1")]
+    session.add_pin("What the unit is.", "hole")
+    h = session.set_pin_element("p1", " e1 ")
+    assert h["id"] == "p1" and h["element"] == "e1"
+    assert [(h["id"], h["element"]) for h in session.open_pins()] == [("p1", "e1")]
     with pytest.raises(SessionError, match="empty element"):
-        session.set_hole_element("h1", " ")
-    with pytest.raises(SessionError, match="no hole h9"):
-        session.set_hole_element("h9", "e1")
-    session.close_holes(["h1"])
-    with pytest.raises(SessionError, match="already closed: h1"):
-        session.set_hole_element("h1", "e2")
+        session.set_pin_element("p1", " ")
+    with pytest.raises(SessionError, match="no pin p9"):
+        session.set_pin_element("p9", "e1")
+    session.close_pins(["p1"])
+    with pytest.raises(SessionError, match="already closed: p1"):
+        session.set_pin_element("p1", "e2")
 
 
-def test_a_hole_opened_after_scoping_sends_the_session_back_to_scoping(session):
+def test_a_pin_opened_after_scoping_sends_the_session_back_to_scoping(session):
     _with_scoping(session)
     session.write_status("writing", "s1")
-    session.add_hole("What the unit is.", element="e1")
+    session.add_pin("What the unit is.", "hole", element="e1")
     assert session.read_status()["phase"] == "scoping"
     session.write_status("writing", "s1")
     session.add_question("PR or merge?", section="s1")
     assert session.read_status()["phase"] == "awaiting-answer"
 
 
-def test_end_scoping_waits_until_no_hole_is_open(session):
+def test_end_scoping_waits_until_no_pin_is_open(session):
     _with_scoping(session)
-    session.add_hole("What the unit is.")
-    session.add_hole("Per layer.", supposition=True)
-    with pytest.raises(SessionError, match="holes still open in the scoping: h1, h2"):
+    session.add_pin("What the unit is.", "hole")
+    session.add_pin("Per layer.", "supposition")
+    with pytest.raises(SessionError, match="pins still open in the scoping: p1, p2"):
         session.add_batch([], action="end-scoping")
-    session.close_holes(["h1"], note="per recording")
-    with pytest.raises(SessionError, match="holes still open in the scoping: h2"):
+    session.close_pins(["p1"], note="per recording")
+    with pytest.raises(SessionError, match="pins still open in the scoping: p2"):
         session.add_batch([], action="end-scoping")
-    session.close_holes(["h2"])
+    session.close_pins(["p2"])
     b = session.add_batch([], action="end-scoping")
     text = format_batch("kv-cache", b, session.read_plan()["outline"])
-    assert "action: end-scoping (the user ended the scoping, no hole left:" in text
+    assert "action: end-scoping (the user ended the scoping, no pin left:" in text
     missing = session.add_batch([], action="missing")
     text = format_batch("kv-cache", missing, session.read_plan()["outline"])
     assert "action: missing (the user asked what the drawing still misses:" in text
 
 
-def test_a_hole_waits_while_a_comment_attached_to_it_is_not_resolved(session):
+def test_a_pin_waits_while_a_comment_attached_to_it_is_not_resolved(session):
     _with_scoping(session)
-    session.add_hole("What the unit is.", element="e1")
-    session.add_hole("Per layer.", supposition=True)
-    session.add_hole("Where it goes.", element="e2")
-    assert session.waiting_holes() == set()
+    session.add_pin("What the unit is.", "hole", element="e1")
+    session.add_pin("Per layer.", "supposition")
+    session.add_pin("Where it goes.", "hole", element="e2")
+    assert session.waiting_pins() == set()
     b = session.add_batch(
         [
-            {"section": "hole:h2", "quote": "", "text": "yes"},
+            {"section": "pin:p2", "quote": "", "text": "yes"},
             {"section": "scoping", "quote": "a point", "text": "per token", "element": "e1"},
         ]
     )
-    assert b["comments"][0]["section"] == "hole:h2" and "element" not in b["comments"][0]
+    assert b["comments"][0]["section"] == "pin:p2" and "element" not in b["comments"][0]
     assert b["comments"][1]["element"] == "e1"
-    assert session.waiting_holes() == {"h1", "h2"}
+    assert session.waiting_pins() == {"p1", "p2"}
     session.resolve([b["comments"][1]["id"]])
-    assert session.waiting_holes() == {"h2"}
-    session.close_holes(["h2"])
-    assert session.waiting_holes() == set()
+    assert session.waiting_pins() == {"p2"}
+    session.close_pins(["p2"])
+    assert session.waiting_pins() == set()
 
 
-def test_hole_tones_colour_each_open_hole_and_each_marked_element(session):
+def test_pin_tones_colour_each_open_pin_and_each_marked_element(session):
     _with_scoping(session)
-    session.add_hole("What the unit is.", element="e1")
-    session.add_hole("Per layer.", supposition=True, element="e1")
-    session.add_hole("Kept beside.", supposition=True, element="e2")
-    assert session.hole_tones() == {
-        "holes": {"h1": "hole", "h2": "supposition", "h3": "supposition"},
+    session.add_pin("What the unit is.", "hole", element="e1")
+    session.add_pin("Per layer.", "supposition", element="e1")
+    session.add_pin("Kept beside.", "supposition", element="e2")
+    assert session.pin_tones() == {
+        "pins": {"p1": "hole", "p2": "supposition", "p3": "supposition"},
         "elements": {"e1": "hole", "e2": "supposition"},
     }
     b = session.add_batch(
         [
-            {"section": "hole:h1", "quote": "", "text": "per token"},
-            {"section": "hole:h3", "quote": "", "text": "yes"},
+            {"section": "pin:p1", "quote": "", "text": "per token"},
+            {"section": "pin:p3", "quote": "", "text": "yes"},
         ]
     )
-    assert session.hole_tones() == {
-        "holes": {"h1": "waiting", "h2": "supposition", "h3": "waiting"},
+    assert session.pin_tones() == {
+        "pins": {"p1": "waiting", "p2": "supposition", "p3": "waiting"},
         "elements": {"e1": "supposition", "e2": "waiting"},
     }
-    session.resolve([c["id"] for c in b["comments"]])  # handled, neither hole closed
-    assert session.hole_tones()["holes"] == {"h1": "hole", "h2": "supposition", "h3": "supposition"}
-    assert session.hole_tones()["elements"] == {"e1": "hole", "e2": "supposition"}
-    session.close_holes(["h1", "h3"])
-    assert session.hole_tones() == {
-        "holes": {"h2": "supposition"},
+    session.resolve([c["id"] for c in b["comments"]])  # handled, neither pin closed
+    assert session.pin_tones()["pins"] == {"p1": "hole", "p2": "supposition", "p3": "supposition"}
+    assert session.pin_tones()["elements"] == {"e1": "hole", "e2": "supposition"}
+    session.close_pins(["p1", "p3"])
+    assert session.pin_tones() == {
+        "pins": {"p2": "supposition"},
         "elements": {"e1": "supposition"},
     }
 
 
-def test_a_hole_box_anchor_names_a_hole(session):
+def test_a_pin_box_anchor_names_a_pin(session):
     _with_scoping(session)
-    with pytest.raises(SessionError, match="hole:<id>"):
+    with pytest.raises(SessionError, match="pin:<id>"):
+        session.add_batch([{"section": "pin:x", "text": "hm"}])
+    with pytest.raises(SessionError, match="pin:<id>"):
         session.add_batch([{"section": "hole:x", "text": "hm"}])
-    t = session.new_thread("hole:h1", "", "")
-    assert t["section"] == "hole:h1"
+    t = session.new_thread("pin:p1", "", "")
+    assert t["section"] == "pin:p1"
 
 
-def test_a_comment_attached_to_a_hole_names_it_in_the_batch(session):
+def test_a_hole_anchor_written_before_the_rename_reads_as_a_pin_s(session):
     _with_scoping(session)
-    session.add_hole("What the unit is.", element="e1")
-    session.add_hole("Per layer.", element="e1", supposition=True)
+    session.add_pin("What the unit is.", "hole", element="e1")
+    b = session.add_batch([{"section": "hole:p1", "quote": "", "text": "per token"}])
+    assert pin_anchor("hole:p1") == pin_anchor("pin:p1") == "p1" and pin_anchor("s1") == ""
+    assert session.waiting_pins() == {"p1"}
+    text = format_batch("kv-cache", b, session.read_plan()["outline"], pins=session.read_pins())
+    assert "[c1] (pin p1 « What the unit is. »)" in text
+
+
+def test_an_old_session_s_holes_json_is_read_as_its_pin_file(session):
+    _with_scoping(session)
+    old = [{"id": "h1", "kind": "hole", "text": "Which unit?", "status": "open", "asked": "x"}]
+    session.legacy_holes_path.write_text(json.dumps(old))
+    assert session.read_pins() == old
+    assert not session.legacy_holes_path.exists()
+    assert json.loads(session.pins_path.read_text()) == old
+    # Its h… ids stay; a new pin takes the next p… id.
+    assert session.add_pin("Per layer.", "supposition")["id"] == "p1"
+    assert [p["id"] for p in session.open_pins()] == ["h1", "p1"]
+    session.close_pins(["h1"])
+
+
+def test_a_comment_attached_to_a_pin_names_it_in_the_batch(session):
+    _with_scoping(session)
+    session.add_pin("What the unit is.", "hole", element="e1")
+    session.add_pin("Per layer.", "supposition", element="e1")
     b = session.add_batch(
         [
-            {"section": "hole:h1", "quote": "the unit", "text": "per token"},
+            {"section": "pin:p1", "quote": "the unit", "text": "per token"},
             {"section": "scoping", "quote": "a point", "text": "yes", "element": "e1"},
         ]
     )
-    text = format_batch("kv-cache", b, session.read_plan()["outline"], holes=session.read_holes())
-    assert "[c1] (hole h1 « What the unit is. ») « the unit »\n    per token" in text
-    assert "[c2] §1 (scoping) · element e1 (open holes h1, h2) « a point »" in text
+    text = format_batch("kv-cache", b, session.read_plan()["outline"], pins=session.read_pins())
+    assert "[c1] (pin p1 « What the unit is. ») « the unit »\n    per token" in text
+    assert "[c2] §1 (scoping) · element e1 (open pins p1, p2) « a point »" in text
 
 
-def test_no_outline_id_starts_with_a_hole_box_anchor(session):
+def test_no_outline_id_starts_with_a_pin_box_anchor(session):
+    with pytest.raises(SessionError, match="may not start with"):
+        session.write_plan(outline=[{"id": "pin:p1", "title": "x"}])
     with pytest.raises(SessionError, match="may not start with"):
         session.write_plan(outline=[{"id": "hole:h1", "title": "x"}])
 
 
-def test_an_old_session_s_holes_move_to_the_hole_file(session):
+def test_an_old_session_s_scoping_questions_move_to_the_pin_file(session):
     _with_scoping(session)
     old = [
         {
@@ -696,7 +724,7 @@ def test_an_old_session_s_holes_move_to_the_hole_file(session):
     ]
     session.questions_path.write_text(json.dumps(old))
     assert [q["id"] for q in session.read_questions()] == ["q2"]
-    assert session.read_holes() == [
+    assert session.read_pins() == [
         {
             "id": "h1",
             "kind": "hole",
@@ -717,7 +745,7 @@ def test_an_old_session_s_holes_move_to_the_hole_file(session):
             "question": "q3",
         },
     ]
-    # A new question never takes the id of a question that became a hole.
+    # A new question never takes the id of a question that became a pin.
     assert session.add_question("Squash?")["id"] == "q4"
 
 

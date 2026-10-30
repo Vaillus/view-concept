@@ -337,27 +337,27 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .q-background .q-text { color: var(--ink-dim); margin-top: 4px; }
 .sec-questions { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .sec-questions .go-on { align-self: flex-start; }
-/* The scoping tab: the scoping's two buttons under the hole index. */
+/* The scoping tab: the scoping's two buttons under the pin index. */
 .scoping-actions { display: flex; gap: 8px; justify-content: flex-end; margin: 14px 0 24px; }
-/* The hole index at the end of the scoping section, and the hole window with its hole
-   boxes (app.js). A hole's tone (data-tone) colours its dashes and its « ? »: orange for a
+/* The pin index at the end of the scoping section, and the pin window with its pin
+   boxes (app.js). A pin's tone (data-tone) colours its dashes and its « ? »: orange for a
    hole, blue for a supposition, grey while it waits for the scoper. Under the selection
    buttons (z-index 10), so a passage selected in a box can be commented. */
-.hole-index { gap: 4px; }
-.hole-line { display: flex; align-items: baseline; gap: 6px; text-align: left; font: inherit; color: var(--ink);
+.pin-index { gap: 4px; }
+.pin-line { display: flex; align-items: baseline; gap: 6px; text-align: left; font: inherit; color: var(--ink);
              background: none; border: 1px dashed var(--warn); padding: 4px 8px; cursor: pointer; }
-.hole-line:hover, .hole-line.open { border-style: solid; }
-.hole-line .hole-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.thread-pop.hole-pop { max-height: 70vh; overflow: auto; z-index: 9; border-color: var(--line-strong); }
-.hole-box { border: 1px dashed var(--warn); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
-.hole-sentence { font-size: 13px; white-space: pre-wrap; }
-.hole-q { color: var(--warn); }
-.hole-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
-.hole-actions .t-chips { margin-right: auto; }
-.hole-ask { font-size: 12px; }
-.hole-line[data-tone="supposition"], .hole-box[data-tone="supposition"] { border-color: var(--info); }
-.hole-line[data-tone="waiting"], .hole-box[data-tone="waiting"] { border-color: var(--muted); color: var(--muted); }
-.hole-line[data-tone="waiting"] .hole-q, .hole-box[data-tone="waiting"] .hole-q { color: var(--muted); }
+.pin-line:hover, .pin-line.open { border-style: solid; }
+.pin-line .pin-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-pop.pin-pop { max-height: 70vh; overflow: auto; z-index: 9; border-color: var(--line-strong); }
+.pin-box { border: 1px dashed var(--warn); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
+.pin-sentence { font-size: 13px; white-space: pre-wrap; }
+.pin-q { color: var(--warn); }
+.pin-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+.pin-actions .t-chips { margin-right: auto; }
+.pin-ask { font-size: 12px; }
+.pin-line[data-tone="supposition"], .pin-box[data-tone="supposition"] { border-color: var(--info); }
+.pin-line[data-tone="waiting"], .pin-box[data-tone="waiting"] { border-color: var(--muted); color: var(--muted); }
+.pin-line[data-tone="waiting"] .pin-q, .pin-box[data-tone="waiting"] .pin-q { color: var(--muted); }
 #scope-questions .questions-waiting { width: 100%; }
 #scope-answered { margin-top: 8px; }
 #scope-answered summary { cursor: pointer; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; padding: 4px 0; }
