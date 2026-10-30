@@ -272,9 +272,10 @@ object in memory only. So a
 section that uses the channel shows, once published, what it received before
 publishing; publishing again carries what it received since.
 
-On the scoping path a report section may carry a prerequisite tree this way
-(see **A report written from a drawing**). You never write the parameters
-file: the page and the server do.
+A prerequisite tree is never such a section: it stays in the drawing, and
+no section of the report carries one (see **A report written from a
+drawing**). You never write the parameters file: the page and the server
+do.
 
 ## A report written from a drawing
 
@@ -306,8 +307,10 @@ with these differences:
 - **A sequence, not a schema.** The report retranscribes the drawing in text
   and visuals, as a sequence of sections in reading order: no section
   reproduces the drawing whole. What the drawing showed as a figure stays a
-  figure where it carries the point, a prerequisite tree included: a report
-  section can carry one, its rows fetched through the channel.
+  figure where it carries the point. A prerequisite tree does not: it served
+  to decide what the report covers and at what depth, so it stays in the
+  drawing and no section of the report carries one. The vault export holds
+  the report's sections as they are, and nothing from the parameters file.
 - **The depth the user chose.** The parameters file says which prerequisite
   concepts the user went into (yes), skimmed (quickly) or skipped (no): give
   each the depth they chose, a full explanation, one sentence, or its name
