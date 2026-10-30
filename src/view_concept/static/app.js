@@ -2147,8 +2147,10 @@ function pageRect(f, r) {
 
 /* The selection message: a passage selected in an HTML section gets the box a passage of
    a Markdown section gets, anchored the same way (section id, quote, prefix). A passage
-   inside a marked element of the drawing also carries that element's id (`element`): the
-   comment on it is read with the element's pins (see "pin records"). */
+   inside an element of the drawing also carries that element's id (`element`): a marked
+   element's first, and the comment on it is read with the element's pins (see "pin
+   records"); a side thread asked on it is told the element, so its agent finds it in the
+   drawing's source at once. */
 function frameSelection(id, f, d) {
   if (!d.quote || !d.rect) {
     if (pendingSelection && pendingSelection.section === id) showSelection(null);
@@ -3415,9 +3417,9 @@ async function askThread() {
   const c = $("#composer");
   const text = $("textarea", c).value.trim();
   if (!text) return;
-  const { section, quote, prefix, question = "", fact = "" } = c._target;
+  const { section, quote, prefix, question = "", fact = "", element = "" } = c._target;
   try {
-    const t = await postJSON(`/api/s/${SLUG}/threads`, { section, quote, prefix, question, fact, text });
+    const t = await postJSON(`/api/s/${SLUG}/threads`, { section, quote, prefix, question, fact, element, text });
     closeComposer();
     getSelection().removeAllRanges();
     popThread = t.id;

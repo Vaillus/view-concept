@@ -337,3 +337,18 @@ def test_an_explanation_gets_the_scoper_planner_writer_and_thread_only(session):
     with pytest.raises(SessionError, match="not a feature"):
         build(session, "implementer")
     assert "## Code map" not in build(session, "writer")
+
+
+def test_a_thread_on_the_drawing_gets_its_html_source(session):
+    plan = session.read_plan()
+    plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
+    session.plan_path.write_text(json.dumps(plan))
+    (session.sections_dir / "scoping.html").write_text('<p id="e7">each word looks</p>')
+    thread = build(session, "thread", section="scoping")
+    assert "Section of the passage (the drawing, its HTML source)" in thread
+    assert '<p id="e7">each word looks</p>' in thread
+    session.add_pin("What do you believe?", "probe", ["e7"])
+    assert '<p id="e7">' in build(session, "thread", section="pin:p1")
+    # The roles keep the visible text.
+    scoper = build(session, "scoper")
+    assert "each word looks" in scoper and '<p id="e7">' not in scoper

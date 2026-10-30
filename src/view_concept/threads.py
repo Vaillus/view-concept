@@ -13,8 +13,11 @@ thread has said. Each turn is one process, run by the server in a background Pyt
 its reply streams into threads/<id>.json, which the server's event stream watches like the
 other session files. `agents.py` holds what differs between agents.
 
-A thread opened on a doc of the Doc tab (section `doc:<path>`) gets that doc's text, read
-from the worktree, in place of a section; one on the doc set list (`doc:` alone) gets the doc
+A thread opened on a passage of the drawing (a scoping section) or on a pin's box gets the
+drawing's HTML source, so its agent reads the element ids there, and a passage inside an
+element of the drawing names it (`element`), so the agent finds it at once. A thread
+opened on a doc of the Doc tab (section `doc:<path>`) gets that doc's text, read from the
+worktree, in place of a section; one on the doc set list (`doc:` alone) gets the doc
 set. One opened on a pin's box (section `pin:<id>`) is told the pin's kind and sentence,
 and gets the scoping section; its conclusion, sent with « → batch », reaches the scoper as
 a comment attached to that pin.
@@ -89,13 +92,15 @@ def create(
     text: str,
     question: str = "",
     fact: str = "",
+    element: str = "",
 ) -> dict[str, Any]:
-    """Open a side thread on a passage (`fact`: the id of the missing fact it quotes), an
-    agent question or nothing, and start the turn that answers its first message."""
+    """Open a side thread on a passage (`fact`: the id of the missing fact it quotes;
+    `element`: the element of the drawing it is in), an agent question or nothing, and
+    start the turn that answers its first message."""
     if not text.strip():
         raise SessionError("empty message")
     with _lock:
-        thread = s.new_thread(section, quote, prefix, question, fact)
+        thread = s.new_thread(section, quote, prefix, question, fact, element)
     return send(s, thread["id"], text)
 
 
@@ -315,6 +320,8 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
         else:
             where = f"§{number.get(sec, '?')} {titles.get(sec, sec)} ({sec})"
         anchor = f"{where}: « {thread['quote']} »" if thread["quote"] else f"the whole of {where}"
+        if thread.get("element"):
+            anchor += f" · element {thread['element']} (its id in the drawing's HTML source)"
     else:
         anchor = f"none (a general question about the {doc})"
     if s.coordinated:

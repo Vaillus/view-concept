@@ -2615,11 +2615,13 @@ class Session:
         prefix: str = "",
         question: str = "",
         fact: str = "",
+        element: str = "",
     ) -> dict[str, Any]:
         """Create an empty thread, anchored to a passage like a comment, to an open agent
         question (`question`, its id: the user discusses it before answering), or to
         nothing. A thread on a missing fact carries the fact's id (`fact`, kept only when
-        set), which the comment it becomes carries too."""
+        set), which the comment it becomes carries too; one on a passage of the drawing,
+        the id of the element it is in (`element`, kept only when set)."""
         _check_fact(fact, section)
         _check_row(section)
         if question:
@@ -2633,6 +2635,7 @@ class Session:
             "prefix": prefix,
             "question": question,
             **({"fact": fact} if fact else {}),
+            **({"element": element.strip()} if element.strip() else {}),
             "agent_session": "",
             "forked_from": "",
             "state": "idle",

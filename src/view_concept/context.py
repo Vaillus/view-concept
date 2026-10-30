@@ -52,7 +52,10 @@ section's script used the channel: what each script saved and the answers it rec
 the report gives each prerequisite the depth the user chose.
 
 An HTML section is loaded by its visible text, the words a reader sees in it, not its HTML
-source; its heading names its file, for an agent that needs the source.
+source; its heading names its file, for an agent that needs the source. A side thread on
+the drawing (a passage of a scoping section, or a pin's box) gets the drawing's HTML
+source instead, where the element ids its passage names live; the scoper, the planner and
+the writer keep the visible text.
 
 In a code session every role also gets the code map (code-map.md): which modules carry
 the feature and where each concept lives, as the planner wrote it and the implementer
@@ -196,8 +199,12 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
             pin = [_pin_line(p, set()) for p in s.read_pins() if p["id"] == pid]
             out += ["", "## The pin", *pin]
             scoping = {sec["id"] for sec in outline if _scoping(sec)}
-            out += ["", "## Scoping (the drawing the pin is on)"]
-            out += _sections(outline, sections, None, scoping, html)
+            out += ["", "## Scoping (the drawing the pin is on, its HTML source)"]
+            out += _sections(outline, s.read_sections(), None, scoping, source=scoping)
+        elif any(sec["id"] == section and _scoping(sec) for sec in outline):
+            # The drawing by its source: the element ids a passage names live in its HTML.
+            sec = _sections(outline, s.read_sections(), section, source={section})
+            out += ["", "## Section of the passage (the drawing, its HTML source)", *sec]
         else:
             sec = _sections(outline, sections, section, html=html)
             out += ["", "## Section of the passage", *sec]
@@ -556,7 +563,10 @@ def _sections(
     only: str | None,
     among: set[str] | None = None,
     html: set[str] | None = None,
+    source: set[str] | None = None,
 ) -> list[str]:
+    """The sections `only` (or all, or those `among`), each under its heading; an HTML
+    section of `html` is given as its visible text, one of `source` as its HTML source."""
     number = _number(outline)
     ids = [
         sec["id"]
@@ -573,5 +583,7 @@ def _sections(
         kind = ""
         if sid in (html or ()):
             kind = f" · HTML section, its visible text (sections/{sid}.html)"
+        elif sid in (source or ()):
+            kind = f" · HTML section, its source (sections/{sid}.html)"
         lines += [f"### {number[sid]}. {titles[sid]} ({sid}){kind}", sections[sid].strip(), ""]
     return lines

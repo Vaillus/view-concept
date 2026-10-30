@@ -553,7 +553,7 @@ class CommentIn(BaseModel):
     thread: str = ""
     # A comment on a missing fact of a README: the fact's id.
     fact: str = ""
-    # A comment on a selection in the drawing inside a marked element: the element's id.
+    # A comment on a selection in the drawing inside an element: the element's id.
     element: str = ""
 
 
@@ -742,6 +742,8 @@ class ThreadIn(BaseModel):
     question: str = ""
     # A thread opened on a missing fact carries its id, as a comment on it does.
     fact: str = ""
+    # A thread opened on a selection in the drawing: the element it is in.
+    element: str = ""
     text: str
 
 
@@ -785,7 +787,14 @@ def new_thread(slug: str, body: ThreadIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
         t = threads.create(
-            s, body.section, body.quote, body.prefix, body.text, body.question, body.fact
+            s,
+            body.section,
+            body.quote,
+            body.prefix,
+            body.text,
+            body.question,
+            body.fact,
+            body.element,
         )
         return thread_view(s, t)
     except SessionError as e:

@@ -471,3 +471,18 @@ def test_a_thread_on_a_doc_gets_the_doc_from_the_worktree(tmp_path):
     assert "## Doc of the passage: README.md" in text and "The keys 1 to 4." in text
     listed = build(s, "thread", ["x"], "doc:")
     assert "## Doc set of the passage\n- README.md — the install" in listed
+
+
+def test_a_thread_on_an_element_of_the_drawing_names_it(session, fake_claude):
+    from view_concept.agents import ClaudeBackend
+
+    plan = session.read_plan()
+    plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
+    session.plan_path.write_text(json.dumps(plan))
+    (session.sections_dir / "scoping.html").write_text('<p id="e7">each word looks</p>')
+    t = threads.create(session, "scoping", "each word", "", "why?", element="e7")
+    assert session.read_thread(t["id"])["element"] == "e7"
+    text = threads._briefing(session, session.read_thread(t["id"]), ClaudeBackend())
+    assert "Passage: §1 Scoping (scoping): « each word » · element e7" in text
+    assert '<p id="e7">each word looks</p>' in text
+    wait_idle(session, t["id"])

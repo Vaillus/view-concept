@@ -103,7 +103,7 @@ def test_api_renders_tips(client, session):
     assert lex[1]["tip_html"] == "l'autre vecteur"  # falls back to the definition
 
 
-def test_api_threads(client, session):
+def test_api_threads(client, session, monkeypatch):
     r = client.get("/api/s/kv-cache/threads")
     # An explanation's threads start from the folder: they need no main conversation.
     assert r.json() == {"forkable": True, "threads": []}
@@ -116,6 +116,9 @@ def test_api_threads(client, session):
     r = client.get("/api/s/kv-cache/threads").json()
     assert r["forkable"] and r["threads"][0]["id"] == "t1"
     assert client.post("/api/s/kv-cache/threads/x1", json={"text": "hi"}).status_code == 400
+    monkeypatch.setenv("VIEW_CONCEPT_AGENT_COMMAND", "true")
+    body = {"section": "s1", "quote": "x", "element": "e7", "text": "why?"}
+    assert client.post("/api/s/kv-cache/threads", json=body).json()["element"] == "e7"
     assert client.delete("/api/s/kv-cache/threads/t1").status_code == 200
     assert client.delete("/api/s/kv-cache/threads/t1").status_code == 400
 

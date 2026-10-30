@@ -14,9 +14,10 @@
    - The selection (frame -> page): each time the reader's selection in the section
      changes (a finger's handles, as a mouse's drag), the quoted text and the few
      characters before it (the anchor a passage of a Markdown section gets), with where
-     the selection sits in the frame, and the id of the nearest marked element (see the
-     pins) holding the whole selection, if any (`element`); an empty quote when the
-     selection is gone. The page opens the same box to comment or to ask on it.
+     the selection sits in the frame, and the id of the element of the drawing holding the
+     whole selection, if any (`element`): the nearest marked element (see the pins), else
+     the nearest element whose id is a drawing's element id (e1, e2…); an empty quote when
+     the selection is gone. The page opens the same box to comment or to ask on it.
    - The anchors (page -> frame), answered by "placed" (frame -> page): the passages the
      page's drafts, sent comments and side threads quote in this section. Each is
      highlighted, and highlighted again when a script of the section redraws its text.
@@ -290,7 +291,13 @@
     var marked = common && common.closest ? common.closest("[data-vc-pin]") : null;
     return { quote: quote, prefix: collapse(index.text.slice(0, k)).slice(-32),
              rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom },
-             element: marked ? marked.id : "" };
+             element: marked ? marked.id : drawnElement(common) };
+  }
+  // The nearest element holding `node` whose id is a drawing's element id (e1, e2…), "".
+  var ELEMENT_ID = /^e[0-9]+$/;
+  function drawnElement(node) {
+    for (var n = node; n && n.nodeType === 1; n = n.parentElement) if (ELEMENT_ID.test(n.id || "")) return n.id;
+    return "";
   }
   // Posted on every change of the selection: a finger releases no mouse button.
   var lastQuote = null;
