@@ -1,5 +1,5 @@
 """The local web server: serves the page, streams file changes, receives comment batches,
-runs side threads, keeps the parameters file."""
+runs side threads, keeps the parameters file and runs the channel's requests."""
 
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from . import frame, gate, launch, metrics, publish, push, threads
+from . import channel, frame, gate, launch, metrics, publish, push, threads
 from .render import md
 from .store import (
     DOC_KEY,
@@ -647,11 +647,17 @@ def import_drafts(slug: str, body: DraftsImportIn) -> dict[str, bool]:
     return {"ok": True}
 
 
-# ---- the parameters file (store.py) ----
+# ---- the parameters file and the channel (store.py, channel.py) ----
 
 
 class ParamsIn(BaseModel):
     saved: dict[str, Any] = {}
+
+
+class AskIn(BaseModel):
+    key: str
+    instruction: str
+    schema_: dict[str, Any] = Field(alias="schema")
 
 
 @app.get("/api/s/{slug}/params/{sid}")
@@ -672,6 +678,21 @@ def save_params(slug: str, sid: str, body: ParamsIn) -> dict[str, bool]:
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
     return {"ok": True}
+
+
+# Sync: FastAPI runs it in a threadpool while the small agent answers (seconds).
+@app.post("/api/s/{slug}/params/{sid}/ask")
+def channel_ask(slug: str, sid: str, body: AskIn) -> dict[str, Any]:
+    """`viewConcept.ask(key, instruction, schema)`: a small agent answers the request, held
+    to its schema, and the answer is kept as the section's `received[key]`. 502 when the
+    agent fails, times out or breaks the schema; the page hands the script the error."""
+    s = get_session(slug)
+    try:
+        return {"answer": channel.ask(s, sid, body.key, body.instruction, body.schema_)}
+    except channel.ChannelError as e:
+        raise HTTPException(502, str(e)) from e
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
 
 
 class AnswerIn(BaseModel):

@@ -129,7 +129,7 @@ def send(s: Session, tid: str, text: str, draft: bool = False) -> dict[str, Any]
         try:
             proc = subprocess.Popen(
                 args,
-                cwd=_cwd(s),
+                cwd=working_dir(s),
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -254,7 +254,7 @@ def delete(s: Session, tid: str) -> None:
         s.delete_thread(tid)
 
 
-def _cwd(s: Session) -> Path:
+def working_dir(s: Session) -> Path:
     """The repo of a code session (the thread may read it), else the session dir."""
     repo = Path(s.read_plan().get("repo", "") or s.dir)
     return repo if repo.is_dir() else s.dir

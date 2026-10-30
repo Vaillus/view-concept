@@ -3,7 +3,7 @@
    theme tokens. The page cannot read the frame, nor the frame the page: the frame has an
    origin of its own, so they talk by frame messages, each an object whose `viewConcept`
    names it. The frame script is the frame's end of every one; the section's own scripts
-   take no part.
+   take part only through the channel (below).
 
    - The theme (page -> frame): the tokens define every theme, keyed by data-theme on
      <html>. The page posts its theme at load and at every change; until then (and where
@@ -67,6 +67,23 @@
      only: the frame says it was tapped, so the page clears the paint of a changed passage
      in its own text and has every other frame clear its paint; a tap on the page's own
      text has every frame clear it.
+   - The channel (frame -> page), answered by "channel-answer" (page -> frame): a request
+     of the section's own script, {id (the frame's count), op ("load", "save" or "ask"),
+     saved (save), key, instruction and schema (ask)}. The page runs it against its server
+     (app.js) and answers {id, ok, data} or {id, ok: false, error}. The published page
+     answers from the published files instead (reader.js), with no server behind it.
+
+   The channel is the section's script's way to ask an agent for data and draw the answer
+   itself, without its section being redrawn: the frame script gives every section a
+   global `viewConcept` object, whose three calls each return a Promise.
+   - `viewConcept.load()` -> {saved, received}: the section's entry of the parameters file,
+     what its script saved last and the answers it received (each {} when none).
+   - `viewConcept.save(saved)`: replace what the section's script saved (an object), kept
+     by the server across every redraw of the section.
+   - `viewConcept.ask(key, instruction, schema)` -> the answer: a small agent answers the
+     instruction with data held to the JSON schema, kept as `received[key]`. It takes the
+     seconds of a model call; it rejects with an Error when the agent fails, times out or
+     breaks the schema, or when no page answers (a frame opened alone, a vault note).
 
    The frame script also runs the component kit's tabs (`.tabs`, see frame.css): a click
    on a `.tab` selects it and shows its panel, the n-th `.tab-panel` child of its `.tabs`,
@@ -93,6 +110,45 @@
   // Touch controls: the device's main pointer cannot hover (a finger), as the page reads it.
   var touch = window.matchMedia ? matchMedia("(hover: none)").matches : false;
   function post(message) { if (framed) parent.postMessage(message, "*"); }
+
+  /* ---- the channel ---- */
+  var LOAD_WAIT = 15000, ASK_WAIT = 200000; // ms before a request with no answer rejects
+  var calls = {}, callCount = 0;
+  function request(op, fields, wait) {
+    return new Promise(function (resolve, reject) {
+      if (!framed) { reject(new Error("viewConcept: no page to ask")); return; }
+      var id = ++callCount;
+      var timer = setTimeout(function () {
+        delete calls[id];
+        reject(new Error("viewConcept: no answer from the page"));
+      }, wait);
+      calls[id] = { resolve: resolve, reject: reject, timer: timer };
+      var message = { viewConcept: "channel", id: id, op: op };
+      for (var k in fields) message[k] = fields[k];
+      post(message);
+    });
+  }
+  function answered(d) {
+    var c = calls[d.id];
+    if (!c) return;
+    delete calls[d.id];
+    clearTimeout(c.timer);
+    if (d.ok) c.resolve(d.data);
+    else c.reject(new Error(String(d.error || "viewConcept: the request failed")));
+  }
+  window.viewConcept = {
+    load: function () { return request("load", {}, LOAD_WAIT); },
+    save: function (saved) {
+      if (!saved || typeof saved !== "object" || Array.isArray(saved)) return Promise.reject(new Error("viewConcept.save takes an object"));
+      return request("save", { saved: saved }, LOAD_WAIT);
+    },
+    ask: function (key, instruction, schema) {
+      if (!key || !instruction || !schema || typeof schema !== "object") {
+        return Promise.reject(new Error("viewConcept.ask takes a key, an instruction and a JSON schema"));
+      }
+      return request("ask", { key: String(key), instruction: String(instruction), schema: schema }, ASK_WAIT);
+    },
+  };
 
   /* ---- the height ---- */
   var last = -1;
@@ -512,5 +568,6 @@
     else if (d.viewConcept === "pins" && Array.isArray(d.pins)) { pins = d.pins; markPins(); }
     else if (d.viewConcept === "reveal-element") revealElement(d.element);
     else if (d.viewConcept === "tap-elsewhere" && touch) { pointer = null; paintChanges(null); }
+    else if (d.viewConcept === "channel-answer") answered(d);
   });
 })();

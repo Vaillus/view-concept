@@ -2107,7 +2107,34 @@ window.addEventListener("message", (e) => {
   else if (d.viewConcept === "escape") { if (pinPop) closePinPop(); }
   else if (d.viewConcept === "term-hover") frameTermHover(f, d);
   else if (d.viewConcept === "tap") tapElsewhere(f);
+  else if (d.viewConcept === "channel") frameChannel(id, f, d);
 });
+
+/* The channel message: a request of the section's own script (frame.js's `viewConcept`):
+   « load » reads the section's entry of the parameters file, « save » replaces what its
+   script saved, « ask » has the server start a small agent whose answer, held to the
+   request's schema, comes back as data (server.py, channel.py). The page answers the
+   frame with « channel-answer », {id, ok, data} or {id, ok: false, error}; the section is
+   never redrawn. */
+async function frameChannel(id, f, d) {
+  const url = `/api/s/${SLUG}/params/${encodeURIComponent(id)}`;
+  const json = { "content-type": "application/json" };
+  const answer = (reply) => { if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "channel-answer", id: d.id, ...reply }, "*"); };
+  try {
+    let r;
+    if (d.op === "load") r = await fetch(url);
+    else if (d.op === "save") r = await fetch(url, { method: "PUT", headers: json, body: JSON.stringify({ saved: d.saved }) });
+    else if (d.op === "ask") {
+      r = await fetch(`${url}/ask`, { method: "POST", headers: json,
+                                     body: JSON.stringify({ key: d.key, instruction: d.instruction, schema: d.schema }) });
+    } else { answer({ ok: false, error: `unknown request ${d.op}` }); return; }
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) { answer({ ok: false, error: body.detail || `${r.status} ${r.statusText}` }); return; }
+    answer({ ok: true, data: d.op === "ask" ? body.answer : d.op === "load" ? body : null });
+  } catch (err) {
+    answer({ ok: false, error: String(err && err.message || err) });
+  }
+}
 
 /* A rect of the frame's viewport, in the page's viewport. */
 function pageRect(f, r) {
