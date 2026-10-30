@@ -26,32 +26,33 @@ def test_planner_context_holds_the_folder_and_no_sections(session):
 def test_the_scoper_and_the_planner_get_the_scoping_sections(session):
     plan = session.read_plan()
     plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
+    plan["workflow"] = "build-feature"
     session.plan_path.write_text(json.dumps(plan))
     (session.sections_dir / "scoping.html").write_text('<p id="e1">the drawing</p>')
-    session.add_hole("Which unit.", element="e1")
-    session.add_hole("Approve this.", supposition=True)
-    session.add_hole("Settled.", element="e1")
-    session.close_holes(["h3"], note="per token")
-    session.add_batch([{"section": "hole:h2", "text": "yes"}])
+    session.add_pin("Which unit.", "hole", ["e1"])
+    session.add_pin("Approve this.", "supposition")
+    session.add_pin("Settled.", "hole", ["e1"])
+    session.close_pins(["p3"], note="per token")
+    session.add_batch([{"section": "pin:p2", "text": "yes"}])
     for role in ("scoper", "planner"):
         text = build(session, role)
         assert "## Scoping (the drawing; its source is the HTML file)" in text
         assert "the drawing" in text and "L'attention." not in text
     text = build(session, "scoper")
-    holes = text.split("## Holes\n")[1].split("\n\n")[0]
-    assert holes == (
+    pins = text.split("## Pins\n")[1].split("\n\n")[0]
+    assert pins == (
         "Open:\n"
-        "- h1 [hole · open] (element: e1) Which unit.\n"
-        "- h2 [supposition · open, waiting for the scoper] (no element) Approve this.\n"
+        "- p1 [hole · open] (element: e1) Which unit.\n"
+        "- p2 [supposition · open, waiting for the scoper] (no element) Approve this.\n"
         "Closed:\n"
-        "- h3 [hole · closed] (element: e1) Settled. → per token"
+        "- p3 [hole · closed] (element: e1) Settled. → per token"
     )
-    assert "## Holes" in build(session, "writer") and "## Holes" not in build(session, "reviewer")
-    trigger = build(session, "scoper", ["h1", "c1"]).split("## Trigger\n")[1].split("\n\n")[0]
-    assert "- h1 [hole · open] (element: e1) Which unit." in trigger
-    assert "[c1] (hole h2 « Approve this. »)" in trigger
-    thread = build(session, "thread", section="hole:h2")
-    assert "## The hole\n- h2 [supposition" in thread and "the drawing" in thread
+    assert "## Pins" in build(session, "writer") and "## Pins" not in build(session, "reviewer")
+    trigger = build(session, "scoper", ["p1", "c1"]).split("## Trigger\n")[1].split("\n\n")[0]
+    assert "- p1 [hole · open] (element: e1) Which unit." in trigger
+    assert "[c1] (pin p2 « Approve this. »)" in trigger
+    thread = build(session, "thread", section="pin:p2")
+    assert "## The pin\n- p2 [supposition" in thread and "the drawing" in thread
 
 
 def test_writer_gets_every_section_and_thread_only_its_own(session):
@@ -327,3 +328,27 @@ def test_the_implementer_gets_nothing_of_the_docs(review, tmp_path):
     for head in ("## Doc set", "## Stale passages", "## Missing facts", "## Concept triage"):
         assert head in documenter
     assert "## Move plans" in documenter
+
+
+def test_an_explanation_gets_the_scoper_planner_writer_and_thread_only(session):
+    assert session.coordinated and not session.is_feature
+    for role in ("scoper", "planner", "writer", "thread"):
+        assert f"role {role}" in build(session, role)
+    with pytest.raises(SessionError, match="not a feature"):
+        build(session, "implementer")
+    assert "## Code map" not in build(session, "writer")
+
+
+def test_a_thread_on_the_drawing_gets_its_html_source(session):
+    plan = session.read_plan()
+    plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
+    session.plan_path.write_text(json.dumps(plan))
+    (session.sections_dir / "scoping.html").write_text('<p id="e7">each word looks</p>')
+    thread = build(session, "thread", section="scoping")
+    assert "Section of the passage (the drawing, its HTML source)" in thread
+    assert '<p id="e7">each word looks</p>' in thread
+    session.add_pin("What do you believe?", "probe", ["e7"])
+    assert '<p id="e7">' in build(session, "thread", section="pin:p1")
+    # The roles keep the visible text.
+    scoper = build(session, "scoper")
+    assert "each word looks" in scoper and '<p id="e7">' not in scoper

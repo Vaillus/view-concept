@@ -1,7 +1,8 @@
 """The agent harnesses a session can run on, and how a side thread talks to each.
 
 The skills drive a session from whichever agent the user works in; only the side threads
-need the harness itself, because each one is a headless conversation the server starts.
+and the channel's small agents (channel.py) need the harness itself, because each one is a
+headless conversation the server starts.
 A backend knows how to start one turn (`args`), what the harness prints (`feed`), and how
 the harness names the conversation it ran (`TurnState.session`).
 
@@ -10,8 +11,9 @@ Three backends:
 - `claude`: `claude -p`, forking the main conversation on a thread's first turn.
 - `codex`: `codex exec`, forking the main conversation the same way.
 
-A coordinated session (build-feature) never forks: its main conversation only coordinates
-subagents, so a thread starts from the session folder instead (`Session.fork_parent`).
+A coordinated session (an explanation or a feature) never forks: its main conversation
+only coordinates role agents, so a thread starts from the session folder instead
+(`Session.fork_parent`).
 - `command`: any program that reads a prompt on stdin and prints its answer on stdout
   (`VIEW_CONCEPT_AGENT_COMMAND`, or the `jazz run` preset). It has no conversation to
   fork, so every turn carries the explanation's location and the thread so far.
@@ -66,7 +68,10 @@ class Backend:
     forks = False  # a thread can start from the main conversation
     structured = False  # a turn can be held to a JSON schema (`schema_args`)
 
-    def args(self, s: Session, thread: dict[str, Any]) -> list[str]:
+    def args(self, s: Session, thread: dict[str, Any], fork: bool = True) -> list[str]:
+        """The command of one turn of `thread`: it resumes the thread's own conversation, or
+        on its first turn forks the main one when the session has one to fork and `fork`
+        (a side thread) allows it; a channel's small agent never forks."""
         raise NotImplementedError
 
     def schema_args(self, schema: dict[str, Any]) -> list[str]:
@@ -101,7 +106,7 @@ class ClaudeBackend(Backend):
     forks = True
     structured = True
 
-    def args(self, s: Session, thread: dict[str, Any]) -> list[str]:
+    def args(self, s: Session, thread: dict[str, Any], fork: bool = True) -> list[str]:
         args = [os.environ.get(CLAUDE_ENV, "claude"), "-p", "--output-format", "stream-json"]
         args += ["--verbose", "--include-partial-messages", "--strict-mcp-config"]
         args += ["--permission-mode", "dontAsk"]
@@ -109,7 +114,7 @@ class ClaudeBackend(Backend):
         args += ["--add-dir", str(s.dir)]
         if thread["agent_session"]:
             args += ["--resume", thread["agent_session"]]
-        elif s.fork_parent():
+        elif fork and s.fork_parent():
             args += ["--resume", s.fork_parent(), "--fork-session"]
         return args
 
@@ -165,11 +170,11 @@ class CodexBackend(Backend):
     name = "codex"
     forks = True
 
-    def args(self, s: Session, thread: dict[str, Any]) -> list[str]:
+    def args(self, s: Session, thread: dict[str, Any], fork: bool = True) -> list[str]:
         args = [os.environ.get(CODEX_ENV, "codex"), "exec"]
         if thread["agent_session"]:
             args += ["resume", thread["agent_session"]]
-        elif s.fork_parent():
+        elif fork and s.fork_parent():
             args += ["fork", s.fork_parent()]
         args += ["--json", "--skip-git-repo-check"]
         args += ["-c", 'sandbox_mode="read-only"', "-c", 'approval_policy="never"']
@@ -222,7 +227,7 @@ class CommandBackend(Backend):
     def __init__(self, argv: list[str]):
         self.argv = argv
 
-    def args(self, s: Session, thread: dict[str, Any]) -> list[str]:
+    def args(self, s: Session, thread: dict[str, Any], fork: bool = True) -> list[str]:
         return list(self.argv)
 
     def prompt(self, thread: dict[str, Any], briefing: str, text: str) -> str:

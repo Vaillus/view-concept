@@ -1,5 +1,5 @@
 """The local web server: serves the page, streams file changes, receives comment batches,
-runs side threads."""
+runs side threads, keeps the parameters file and runs the channel's requests."""
 
 from __future__ import annotations
 
@@ -16,11 +16,12 @@ import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from . import frame, gate, launch, metrics, publish, push, threads
+from . import channel, frame, gate, launch, metrics, publish, push, threads
 from .render import md
 from .store import (
+    BLOCKING_PINS,
     DOC_KEY,
     FACTS_KEY,
     MOVES_KEY,
@@ -268,8 +269,8 @@ def state(slug: str) -> dict[str, Any]:
         implemented = s.implemented_through()
         unimplemented = [d["id"] for d in s.unimplemented_changes()]
         questions = s.read_questions()
-        holes = s.read_holes()
-        hole_tones = s.hole_tones()
+        pins = s.read_pins()
+        pin_tones = s.pin_tones()
         grilling = s.is_grilling()
         docs = s.read_docs()
         doc_texts = {DOC_KEY + p: t for p, t in docs.items() if t is not None}
@@ -303,10 +304,14 @@ def state(slug: str) -> dict[str, Any]:
         "implemented": implemented,
         "unimplemented": unimplemented,
         "questions": questions,
-        # The hole file: every hole record of the drawing, open and closed.
-        "holes": holes,
-        # The colour of each open hole's box and index line, and of each marked element.
-        "hole_tones": hole_tones,
+        # The pin file: every pin of the drawing, open and closed.
+        "pins": pins,
+        # The colour of each open pin's box and index line, and of each marked element.
+        "pin_tones": pin_tones,
+        # The kinds of pin the session's skill places, and the kinds that hold « End
+        # scoping » back while open: the page labels and counts pins from these lists.
+        "pin_kinds": list(s.pin_kinds()),
+        "blocking_kinds": list(BLOCKING_PINS),
         "grilling": grilling,
         "verdicts": VERDICTS.get(plan.get("workflow") or LEGACY_WORKFLOW, []),
         "published": published,
@@ -423,6 +428,13 @@ def published_view(s: Session) -> dict[str, Any] | None:
     return {"url": record.get("url"), "at": record.get("at"), "out_of_date": s.is_out_of_date()}
 
 
+@app.get("/api/s/{slug}/published")
+def published_record(slug: str) -> dict[str, Any]:
+    """The publish record alone, {published: {url, at, out_of_date} | None}: the page
+    reloads it when the parameters file changes."""
+    return {"published": published_view(get_session(slug))}
+
+
 def section_view(text: str, seen: str, html: bool = False) -> dict[str, Any]:
     """A section as the page renders it. An updated section (its text differs from its
     highlight baseline, the text at the last batch or « mark read ») also carries the
@@ -516,7 +528,7 @@ async def events(slug: str, request: Request) -> StreamingResponse:
 
     async def stream():
         last, last_threads = s.signature(), s.thread_signature()
-        last_drafts = s.drafts_signature()
+        last_drafts, last_params = s.drafts_signature(), s.params_signature()
         listening = s.is_listening()
         yield "event: hello\ndata: {}\n\n"
         ticks = 0
@@ -529,6 +541,10 @@ async def events(slug: str, request: Request) -> StreamingResponse:
             if (sig_drafts := s.drafts_signature()) != last_drafts:
                 last_drafts = sig_drafts
                 yield "event: drafts\ndata: {}\n\n"
+            # The parameters file changes the publish record only: the page reloads it.
+            if (sig_params := s.params_signature()) != last_params:
+                last_params = sig_params
+                yield "event: params\ndata: {}\n\n"
             if sig_threads != last_threads:
                 last_threads = sig_threads
                 yield "event: threads\ndata: {}\n\n"
@@ -553,7 +569,7 @@ class CommentIn(BaseModel):
     thread: str = ""
     # A comment on a missing fact of a README: the fact's id.
     fact: str = ""
-    # A comment on a selection in the drawing inside a marked element: the element's id.
+    # A comment on a selection in the drawing inside an element: the element's id.
     element: str = ""
 
 
@@ -647,6 +663,54 @@ def import_drafts(slug: str, body: DraftsImportIn) -> dict[str, bool]:
     return {"ok": True}
 
 
+# ---- the parameters file and the channel (store.py, channel.py) ----
+
+
+class ParamsIn(BaseModel):
+    saved: dict[str, Any] = {}
+
+
+class AskIn(BaseModel):
+    key: str
+    instruction: str
+    schema_: dict[str, Any] = Field(alias="schema")
+
+
+@app.get("/api/s/{slug}/params/{sid}")
+def section_params(slug: str, sid: str) -> dict[str, Any]:
+    """The entry of the parameters file of HTML section `sid`: {saved, received}; what its
+    script's `viewConcept.load()` resolves with."""
+    try:
+        return get_session(slug).section_params(sid)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.put("/api/s/{slug}/params/{sid}")
+def save_params(slug: str, sid: str, body: ParamsIn) -> dict[str, bool]:
+    """`viewConcept.save(saved)`: replace what section `sid`'s script saved."""
+    try:
+        get_session(slug).save_params(sid, body.saved)
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True}
+
+
+# Sync: FastAPI runs it in a threadpool while the small agent answers (seconds).
+@app.post("/api/s/{slug}/params/{sid}/ask")
+def channel_ask(slug: str, sid: str, body: AskIn) -> dict[str, Any]:
+    """`viewConcept.ask(key, instruction, schema)`: a small agent answers the request, held
+    to its schema, and the answer is kept as the section's `received[key]`. 502 when the
+    agent fails, times out or breaks the schema; the page hands the script the error."""
+    s = get_session(slug)
+    try:
+        return {"answer": channel.ask(s, sid, body.key, body.instruction, body.schema_)}
+    except channel.ChannelError as e:
+        raise HTTPException(502, str(e)) from e
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 class AnswerIn(BaseModel):
     choices: list[str] = []
     text: str = ""
@@ -694,6 +758,8 @@ class ThreadIn(BaseModel):
     question: str = ""
     # A thread opened on a missing fact carries its id, as a comment on it does.
     fact: str = ""
+    # A thread opened on a selection in the drawing: the element it is in.
+    element: str = ""
     text: str
 
 
@@ -737,7 +803,14 @@ def new_thread(slug: str, body: ThreadIn) -> dict[str, Any]:
     s = get_session(slug)
     try:
         t = threads.create(
-            s, body.section, body.quote, body.prefix, body.text, body.question, body.fact
+            s,
+            body.section,
+            body.quote,
+            body.prefix,
+            body.text,
+            body.question,
+            body.fact,
+            body.element,
         )
         return thread_view(s, t)
     except SessionError as e:

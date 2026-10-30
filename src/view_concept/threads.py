@@ -3,20 +3,24 @@
 A thread discusses a passage without changing anything. On an agent that can fork its
 conversation (Claude Code, Codex), its first turn forks the main session, so it starts
 knowing the whole conversation so far while the main session stays untouched; every later
-turn resumes the thread's own session. In a coordinated session (build-feature) the main
-session only coordinates subagents, so a thread never forks it: its first turn carries the
-context a subagent gets (`view-concept context --role thread`), and later turns resume the
-thread's own session as usual. On any other agent (a program that answers a prompt
+turn resumes the thread's own session. In a coordinated session (an explanation,
+view-concept, or a feature, build-feature) the main session only coordinates role agents,
+so a thread never forks it: its first turn carries the context a role agent gets
+(`view-concept context --role thread`), and later turns resume the thread's own session as
+usual. On any other agent (a program that answers a prompt
 on stdin, such as `jazz run`) every turn restates where the explanation is and what the
 thread has said. Each turn is one process, run by the server in a background Python thread;
 its reply streams into threads/<id>.json, which the server's event stream watches like the
 other session files. `agents.py` holds what differs between agents.
 
-A thread opened on a doc of the Doc tab (section `doc:<path>`) gets that doc's text, read
-from the worktree, in place of a section; one on the doc set list (`doc:` alone) gets the doc
-set. One opened on a hole box (section `hole:<id>`) is told the hole's kind and sentence,
+A thread opened on a passage of the drawing (a scoping section) or on a pin's box gets the
+drawing's HTML source, so its agent reads the element ids there, and a passage inside an
+element of the drawing names it (`element`), so the agent finds it at once. A thread
+opened on a doc of the Doc tab (section `doc:<path>`) gets that doc's text, read from the
+worktree, in place of a section; one on the doc set list (`doc:` alone) gets the doc
+set. One opened on a pin's box (section `pin:<id>`) is told the pin's kind and sentence,
 and gets the scoping section; its conclusion, sent with « → batch », reaches the scoper as
-a comment attached to that hole.
+a comment attached to that pin.
 
 A thread opened on an agent question (`question`) helps the user understand it before
 answering it from its box. Its « use as answer » turn (`draft`) asks for the answer, which
@@ -46,13 +50,13 @@ from .context import build, doc_passage
 from .store import (
     DOC_KEY,
     DOC_SET_ANCHOR,
-    HOLE_KEY,
     MOVES_KEY,
     TRIAGE_KEY,
     Session,
     SessionError,
     now_iso,
     now_iso_ms,
+    pin_anchor,
 )
 
 FLUSH_EVERY = 0.25  # seconds between writes of a streaming reply
@@ -88,13 +92,15 @@ def create(
     text: str,
     question: str = "",
     fact: str = "",
+    element: str = "",
 ) -> dict[str, Any]:
-    """Open a side thread on a passage (`fact`: the id of the missing fact it quotes), an
-    agent question or nothing, and start the turn that answers its first message."""
+    """Open a side thread on a passage (`fact`: the id of the missing fact it quotes;
+    `element`: the element of the drawing it is in), an agent question or nothing, and
+    start the turn that answers its first message."""
     if not text.strip():
         raise SessionError("empty message")
     with _lock:
-        thread = s.new_thread(section, quote, prefix, question, fact)
+        thread = s.new_thread(section, quote, prefix, question, fact, element)
     return send(s, thread["id"], text)
 
 
@@ -128,7 +134,7 @@ def send(s: Session, tid: str, text: str, draft: bool = False) -> dict[str, Any]
         try:
             proc = subprocess.Popen(
                 args,
-                cwd=_cwd(s),
+                cwd=working_dir(s),
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -253,7 +259,7 @@ def delete(s: Session, tid: str) -> None:
         s.delete_thread(tid)
 
 
-def _cwd(s: Session) -> Path:
+def working_dir(s: Session) -> Path:
     """The repo of a code session (the thread may read it), else the session dir."""
     repo = Path(s.read_plan().get("repo", "") or s.dir)
     return repo if repo.is_dir() else s.dir
@@ -302,12 +308,11 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
             where = f"the doc {sec.removeprefix(DOC_KEY)} (a file of the repository)"
         elif sec.startswith(TRIAGE_KEY):
             where = f"row {sec.removeprefix(TRIAGE_KEY)} of the concept triage (the Doc tab)"
-        elif sec.startswith(HOLE_KEY):
-            hid = sec.removeprefix(HOLE_KEY)
-            hole = next((h for h in s.read_holes() if h["id"] == hid), None)
-            kind = hole["kind"] if hole else "hole"
-            said = f" « {hole['text']} »" if hole else ""
-            where = f"the {kind} {hid}{said}, an open point of the drawing (the scoping section)"
+        elif pid := pin_anchor(sec):
+            pin = next((p for p in s.read_pins() if p["id"] == pid), None)
+            kind = pin["kind"] if pin else "pin"
+            said = f" « {pin['text']} »" if pin else ""
+            where = f"the {kind} {pid}{said}, an open point of the drawing (the scoping section)"
         elif sec.startswith(MOVES_KEY):
             row = sec.removeprefix(MOVES_KEY)
             readme = s.move_readmes().get(row, "a README")
@@ -315,12 +320,15 @@ def _briefing(s: Session, thread: dict[str, Any], backend: Backend) -> str:
         else:
             where = f"§{number.get(sec, '?')} {titles.get(sec, sec)} ({sec})"
         anchor = f"{where}: « {thread['quote']} »" if thread["quote"] else f"the whole of {where}"
+        if thread.get("element"):
+            anchor += f" · element {thread['element']} (its id in the drawing's HTML source)"
     else:
         anchor = f"none (a general question about the {doc})"
     if s.coordinated:
+        what = "feature" if s.is_feature else doc
         origin = (
-            "The main session only coordinates subagents, so this thread starts from the"
-            " session folder: the context below is where the feature stands now."
+            "The main session only coordinates role agents, so this thread starts from the"
+            f" session folder: the context below is where the {what} stands now."
         )
     elif backend.forks and s.read_parent():
         origin = (

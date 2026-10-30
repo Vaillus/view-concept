@@ -64,6 +64,8 @@ A term opens nothing. A tab row shows one panel at a time: when two of its panel
 | `changes` | page → frame | the passages added since the last read; the frame highlights one while the pointer is over a block holding its start or its end |
 | `terms` | page → frame | underlines lexicon terms and audit words |
 | `term-hover` | frame → page | the term under the pointer; the page shows its tip |
+| `channel` | frame → page | a call of the section's script (`load`, `save` or `ask`, see [the channel](../src/view_concept/README.md#the-channel)); the page passes it to the server, the published page answers it from its own copy |
+| `channel-answer` | page → frame | answers `channel` under the call's id: the data, or the error |
 
 When a script rewrites the section's text, `frame.js` repaints every highlight from what it already holds. The page sends nothing.
 

@@ -25,6 +25,7 @@ from .store import (
     KINDS,
     MOVE_FATES,
     PHASES,
+    PIN_TONE_ORDER,
     WORKFLOWS,
     Session,
     SessionError,
@@ -37,6 +38,7 @@ from .store import (
     format_section_problem,
     format_triage,
     list_sessions,
+    pin_elements,
     slugify,
 )
 
@@ -182,7 +184,7 @@ def _batches(s: Session, slug: str):
                     if raw.strip():
                         batch = json.loads(raw)
                         text = format_batch(
-                            slug, batch, outline, questions, s.move_readmes(), s.read_holes()
+                            slug, batch, outline, questions, s.move_readmes(), s.read_pins()
                         )
                         yield text, cursor, str(batch.get("id", ""))
                     else:
@@ -256,12 +258,12 @@ def cmd_question(a: argparse.Namespace) -> None:
         )
 
 
-def cmd_hole(a: argparse.Namespace) -> None:
+def cmd_pin(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
-    h = s.add_hole(a.text, a.element or "", a.supposition)
-    print(h["id"])
+    p = s.add_pin(a.text, a.kind, a.element, a.source)
+    print(p["id"])
     # The user's comments on it only reach the agent through a watch or a wait.
     if not s.is_listening():
         print(
@@ -271,20 +273,20 @@ def cmd_hole(a: argparse.Namespace) -> None:
         )
 
 
-def cmd_hole_element(a: argparse.Namespace) -> None:
+def cmd_pin_element(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
-    h = s.set_hole_element(a.hid, a.element)
-    print(f"{h['id']} on {h['element']}")
+    p = s.set_pin_element(a.pid, a.element)
+    print(f"{p['id']} on {', '.join(pin_elements(p))}")
 
 
-def cmd_close_hole(a: argparse.Namespace) -> None:
+def cmd_close_pin(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
         raise SessionError(f"no session {a.slug!r}")
-    for h in s.close_holes(a.hids, a.note or ""):
-        print(f"{h['id']} closed")
+    for p in s.close_pins(a.pids, a.note or ""):
+        print(f"{p['id']} closed")
 
 
 def cmd_answered(a: argparse.Namespace) -> None:
@@ -679,11 +681,11 @@ def cmd_check(a: argparse.Namespace) -> None:
 
 def cmd_pending(a: argparse.Namespace) -> None:
     s = Session(a.slug)
-    outline, moves, holes = s.read_plan()["outline"], s.move_readmes(), s.read_holes()
+    outline, moves, pins = s.read_plan()["outline"], s.move_readmes(), s.read_pins()
     for b in s.read_comments()["batches"]:
         open_ = [c for c in b["comments"] if c["status"] == "sent"]
         if open_:
-            print(format_batch(a.slug, {**b, "comments": open_}, outline, moves=moves, holes=holes))
+            print(format_batch(a.slug, {**b, "comments": open_}, outline, moves=moves, pins=pins))
             print()
 
 
@@ -801,40 +803,54 @@ def main() -> None:
     q.add_argument(
         "--section",
         help="the anchor section: the page shows the question after it (not a scoping section:"
-        " a hole of the drawing is opened with `hole`)",
+        " an open point of the drawing is a pin, opened with `pin`)",
     )
     q.set_defaults(fn=cmd_question)
 
     q = sub.add_parser(
-        "hole",
-        help="open a hole record on the drawing: one sentence, what is not known (sends the "
-        "session back to scoping when scoping has ended)",
+        "pin",
+        help="open a pin on the drawing: one sentence, the open point (sends the session "
+        "back to scoping when scoping has ended); prints its id",
     )
     q.add_argument("slug")
-    q.add_argument("text", help="the one sentence: what is not known, or your supposition")
-    q.add_argument("--element", help="the id of the element of the drawing it marks")
+    q.add_argument("text", help="the one sentence of the pin")
     q.add_argument(
-        "--supposition",
-        action="store_true",
-        help="a hole you already answered from the code (the text): the user approves or "
-        "corrects it",
+        "--kind",
+        required=True,
+        choices=PIN_TONE_ORDER,
+        help="the kind of pin: hole or supposition in a build-feature session; probe, "
+        "correction, tension, choice or lead in a view-concept session",
     )
-    q.set_defaults(fn=cmd_hole)
+    q.add_argument(
+        "--element",
+        action="append",
+        default=[],
+        help="the id of an element of the drawing it sits on (repeatable: a tension sits on two)",
+    )
+    q.add_argument(
+        "--source",
+        action="append",
+        default=[],
+        help="where a lead's finding was looked up (repeatable)",
+    )
+    q.set_defaults(fn=cmd_pin)
 
     q = sub.add_parser(
-        "hole-element",
-        help="give an open hole record its element of the drawing; the hole keeps its id",
+        "pin-element",
+        help="give an open pin its element of the drawing; the pin keeps its id",
     )
     q.add_argument("slug")
-    q.add_argument("hid", help="the hole id, e.g. h1")
-    q.add_argument("element", help="the id of the element of the drawing it marks")
-    q.set_defaults(fn=cmd_hole_element)
+    q.add_argument("pid", help="the pin id, e.g. p1")
+    q.add_argument(
+        "element", nargs="+", help="the id of the element of the drawing it sits on (or several)"
+    )
+    q.set_defaults(fn=cmd_pin_element)
 
-    q = sub.add_parser("close-hole", help="close open hole records once the drawing settles them")
+    q = sub.add_parser("close-pin", help="close open pins once the drawing settles them")
     q.add_argument("slug")
-    q.add_argument("hids", nargs="+", help="the hole ids, e.g. h1")
+    q.add_argument("pids", nargs="+", help="the pin ids, e.g. p1")
     q.add_argument("--note", help="how it was settled, in a few words")
-    q.set_defaults(fn=cmd_close_hole)
+    q.set_defaults(fn=cmd_close_pin)
 
     q = sub.add_parser(
         "anchor", help="set the section after which an open or deferred question is asked"

@@ -23,8 +23,8 @@ reach the agent session through the inbox.
         request.md      the request transcript: the conversation that led to a review,
                         one `## User` or `## Agent` heading per message  (written by `request`)
         questions.json  agent questions put to the user, with their answers  (`question`, server)
-        holes.json      the hole file: every hole record of the drawing, open and closed
-                                          (`hole`, `hole-element`, `close-hole`)
+        pins.json       the pin file: every pin of the drawing, open and closed (holes.json
+                        before the rename)              (`pin`, `pin-element`, `close-pin`)
         comments.json   every batch sent from the page, with status (server + CLI)
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
@@ -36,6 +36,8 @@ reach the agent session through the inbox.
                         concept triage under `triage:`, a README's move plan under
                         `moves:<path>`  (server)
         drafts.json     the drafts and the general note, shared by every page (server)
+        params.json     the parameters file: what each channel section's script saved
+                        and the answers it received (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
         published.json  the publish record: link, time, fingerprint  (written by `publish`)
         doc-set.json    the doc set: the repo docs the Doc tab shows, in the write order,
@@ -52,30 +54,32 @@ reach the agent session through the inbox.
 A section is one element of the `outline` list in plan.json: {id, title, earns}: `earns`
 is the one sentence the user reads under the title (what the section gives them, at most
 EARNS_MAX characters). An optional `"overview": true` marks an overview section, which
-names terms the sections after it introduce: the precedence check reports no early use
-in it. A `brief` left in an older session's entry stays in the file, and
-nothing reads it. Its text is one file of sections/, whose extension alone says which
-kind of section it is: Markdown in <id>.md, or an HTML section in <id>.html, a
-self-contained HTML document (its HTML, CSS and JavaScript) which may hold prose and
-visuals alike, as an artifact does. A section has one file; when both exist (an agent
-switched the kind and left the old file), every reader takes the .html file, and `check`
-reports the pair. An HTML section's media folder, sections/<id>/, holds the media files
-the agent produced for it (a manim render, a GIF), which have no web address: the
-section loads them by a relative address (<id>/<file>), the page serves them, and the
-published page and the vault export copy them along. An answer to a comment that belongs
-in the explanation amends a section or adds one at its place in the outline; a `kind:
-"question"` left by an older session is ignored, and the section reads as any other. A
-refactor section, marked `part: "refactoring"`, belongs to the refactoring part of a
-feature or a triage and is shown in the code tab; every other section is an
-explanation section, shown in the Explanation tab. A scoping section, marked `part:
-"scoping"`, is the drawing of the problem a feature's scoper builds with the user before
-any model is written (an HTML section, sections/scoping.html by convention): the page
-shows it in a tab of its own, the scoping tab, first. A refactor section about one item of
-the diff carries its item fields under `item`: {files, verdict (one of the keys of the
-session workflow's list in verdicts.yaml, next to this module), batch? (a short label or
-number), implements, note, relations: [{to, kind, from?}]}, where the optional `from`
-names which of the item's files a relation starts from (by default the first). One with
-`kind: "finding"` and `items: [<section ids>]` is a finding across items.
+names terms the sections after it introduce: the precedence check reports no early use in
+it. A `brief` left in an older session's entry stays in the file, and nothing reads it.
+Its text is one file of sections/, whose extension alone says which kind of section it is:
+Markdown in <id>.md, or an HTML section in <id>.html, a self-contained HTML document (its
+HTML, CSS and JavaScript) which may hold prose and visuals alike, as an artifact does. A
+section has one file; when both exist (an agent switched the kind and left the old file),
+every reader takes the .html file, and `check` reports the pair. An HTML section's media
+folder, sections/<id>/, holds the media files the agent produced for it (a manim render, a
+GIF), which have no web address: the section loads them by a relative address
+(<id>/<file>), the page serves them, and the published page and the vault export copy them
+along. An answer to a comment that belongs in the explanation amends a section or adds one
+at its place in the outline; a `kind: "question"` left by an older session is ignored, and
+the section reads as any other. A refactor section, marked `part: "refactoring"`, belongs
+to the refactoring part of a feature or a triage and is shown in the code tab; every other
+section is an explanation section, shown in the Explanation tab. A scoping section, marked
+`part: "scoping"`, is the drawing a scoper builds with the user before any model or prose
+is written (an HTML section, sections/scoping.html by convention): a feature's problem, or
+the subject of an explanation on the scoping path (a view-concept session with a scoping
+section; the path is stored nowhere else). The page shows it in a tab of its own, the
+scoping tab, first; an explanation's report, its export and its published page, leaves it
+out (`in_report`). A refactor section about one item of the diff carries its item fields
+under `item`: {files, verdict (one of the keys of the session workflow's list in
+verdicts.yaml, next to this module), batch? (a short label or number), implements, note,
+relations: [{to, kind, from?}]}, where the optional `from` names which of the item's files
+a relation starts from (by default the first). One with `kind: "finding"` and `items:
+[<section ids>]` is a finding across items.
 
 The session workflow, `workflow` in plan.json, is the skill that drives the session:
 view-concept, build-feature, triage-code (a triage of existing code) or review-docs (a docs
@@ -90,9 +94,12 @@ A side thread is a separate headless agent conversation that the user opens from
 to discuss a passage without changing anything (see threads.py). Only a comment batch
 reaches the main session.
 
-A coordinated session (the build-feature workflow) is driven by a main session that only
-coordinates: subagents do the work, each started from the session folder as
-`view-concept context` prints it (context.py). The initial request is the user's first
+A coordinated session (COORDINATED_WORKFLOWS: an explanation, view-concept, or a feature,
+build-feature) is driven by a main session that only coordinates: role agents do the
+work, each started from the session folder as `view-concept context` prints it
+(context.py), and a side thread starts from the folder too, never from the main
+conversation. Only a feature has the code map, the doc set, the implemented mark and the
+roles that work on the code (`is_feature`). The initial request is the user's first
 message, kept verbatim in plan.json. When the review follows a conversation about the
 feature, request.md, the request transcript, holds all of it: every message from the
 first one about the feature, the user's and the agent's, verbatim and in order, under a
@@ -137,29 +144,35 @@ user answers in the terminal instead, the agent runs `answered`: the question is
 answered with `from: "terminal"`, empty choices and the user's words as text, and no
 batch is sent, since the agent already has the answer; the phase is left to the agent.
 
-A hole is something of the drawing (a feature's scoping section) only the user can
-settle. The page counts the open ones, so each is a record of the hole file, holes.json,
-never text written in the drawing: {id: h1…, kind: "hole" | "supposition", text (one
-sentence: what is not known; for a supposition, the statement the agent already drew from
-the code, which the user approves or corrects), element? (the id of the element of the
-drawing it marks), status: "open" | "closed", asked, closed?, note? (how it was settled),
-question? (the id of the question an old session's hole was moved from)}. Only the colour
-the page draws it in depends on its kind. The page marks its element, opens its box beside
-the element on a click, and lists it at the end of the scoping tab while it is open. The
-user answers by a comment, anchored to the box (`hole:<id>`) or carrying the marked
-element a selection in the drawing falls in (`element`), or by a side thread on the box;
-the scoper closes it (`close_holes`) when it redraws. An open hole with a sent comment not
-resolved yet is waiting (`waiting_holes`): nothing stores it; `hole_tones` gives the
-colour of each open hole and of each marked element, which the page draws. A feature with a scoping
-section ends its scoping with « End scoping »: a batch whose action is "end-scoping",
-refused while a hole record is open (`open_holes`); « What's missing? » sends one whose
-action is "missing", asking the scoper to read the drawing again. A hole opened after
-scoping ended (by an agent that found one while converting or writing the model) sends the
-session back to scoping: the phase becomes "scoping"; when it has no element, the scoper
-draws one and gives it to the record (`set_hole_element`), which keeps its id. A scoping
-section takes no agent
-question. An old session whose questions.json still holds questions anchored on a scoping
-section sees them moved to the hole file at first read (`_migrate_holes`).
+A pin is a record of an open point on an element of the drawing (a scoping section). The
+page counts the open ones, so each is a record of the pin file, pins.json, never text
+written in the drawing: {id: p1… (h1… for a pin of an old session's holes.json), kind,
+text (one sentence), element? (the id of the element of the drawing it sits on) or
+elements? (the ids, when it sits on several: a tension between two elements), sources?
+(where a lead's finding was looked up), status: "open" | "closed", asked, closed?, note?
+(how it was settled), question? (the id of the question an old session's pin was moved
+from)}. Each skill places its own kinds of pin (PIN_KINDS, by workflow; `add_pin` refuses
+another): /build-feature a hole (what only the user can settle) or a supposition (the
+statement the agent already drew from the code, which the user approves or corrects);
+/view-concept a probe, a correction, a tension, a choice or a lead. The page draws each
+kind in its own colour: it marks the pin's elements, opens its box beside the element on a
+click, and lists it at the end of the scoping tab while it is open. The user answers by a
+comment, anchored to the box (`pin:<id>`; `hole:<id>`, written before the rename, is read
+the same way, `pin_anchor`) or carrying the marked element a selection in the drawing
+falls in (`element`), or by a side thread on the box; the scoper closes it (`close_pins`)
+when it redraws. An open pin with a sent comment not resolved yet is waiting
+(`waiting_pins`): nothing stores it; `pin_tones` gives the colour of each open pin and of
+each marked element, which the page draws. A session with a scoping section ends its
+scoping with « End scoping »: a batch whose action is "end-scoping", refused while a
+correction, a tension, a hole or a supposition is open (`blocking_pins`), an open probe,
+choice or lead being left out of the report; « What's missing? » sends one whose action is
+"missing", asking the scoper to read the drawing again. A pin opened after scoping ended
+(by an agent that found one while converting or writing) sends the session back to
+scoping: the phase becomes "scoping"; when it has no element, the scoper draws one and
+gives it to the record (`set_pin_element`), which keeps its id. A scoping section takes no
+agent question. An old session's holes.json is moved to pins.json at first read, and one
+whose questions.json still holds questions anchored on a scoping section sees them moved
+to the pin file (`_migrate_pins`).
 
 Scoping ends when the user clicks « Write plan » (« Write model » in a feature or
 a triage): a batch whose action is "plan", after which
@@ -194,6 +207,16 @@ writes it, and the server tells the other pages (the session's live updates, eve
 stays in `deleted`, so an edit to it arriving later is dropped. A batch clears the drafts
 it carried and the note. Like seen.json, it is the page's write: it never counts as the
 agent's activity.
+
+params.json, the parameters file, holds what the scripts of HTML sections keep across a
+redraw of their section: {section id: {saved (the object the script saved last), received
+({key: answer}, each answer the channel received for the script's request of that key)}}.
+A section's script reads its entry and saves through the page, and asks a small agent for
+data through the channel (channel.py): the page writes `saved`, the server `received`;
+no skill writes it, and the scoper, the planner and the writer read it in their context.
+On the scoping path the prerequisite tree's answers, rows and texts live there, so a
+redraw of the drawing loses none of them. Like drafts.json, it is never the agent's
+activity, and the page is not re-rendered when it changes.
 
 The doc set is the list of repo docs the Doc tab shows: {docs: [{path, reason, minor?,
 diff?, failing?, from?}], removed: [paths]}. `path` is relative to the repo root (plan.json
@@ -307,7 +330,8 @@ at} (written by `pr`). The page links it at the top and at the end of the code t
 published.json is the publish record, what the session remembers of its last publish
 (see publish.py): {url (the published page's link), at (when), fingerprint}. The
 fingerprint is a hash of what a published page shows: the title, the published sections
-(the explanation sections that are written, in outline order) and the lexicon. The
+(the explanation sections that are written, in outline order), the lexicon and the
+parameters of its channel sections. The
 session is "out of date" when its fingerprint now differs from the recorded one;
 comments, threads and highlights do not count, since a published page does not show them.
 Unpublishing deletes the record.
@@ -383,13 +407,36 @@ ACTIONS = (
     "missing",
     "end-scoping",
 )
-# The part of a scoping section: the drawing of the problem a feature's scoper builds with
-# the user before any model is written, shown in the page's scoping tab.
+# The part of a scoping section: the drawing a scoper builds with the user before any model
+# or prose is written (a feature's problem, an explanation's subject), shown in the page's
+# scoping tab.
 SCOPING_PART = "scoping"
-HOLE_ID_RE = re.compile(r"^h[0-9]{1,6}$")
-# A comment, a draft or a side thread on a hole box is anchored to `hole:<id>`. No section
-# id may start with it (write_plan refuses it).
-HOLE_KEY = "hole:"
+# A pin's id: p1, p2… for a new one; a pin moved from an old session's holes.json keeps
+# its h… id, which the comments on it already name.
+PIN_ID_RE = re.compile(r"^[ph][0-9]{1,6}$")
+# A comment, a draft or a side thread on a pin's box is anchored to `pin:<id>`; one written
+# before the rename, `hole:<id>`, is read as a pin's anchor (`pin_anchor`). No section id
+# may start with either (write_plan refuses it).
+PIN_KEY = "pin:"
+LEGACY_PIN_KEY = "hole:"
+# The kinds of pin each skill places, by session workflow: the pin command refuses another.
+# /build-feature's user knows the feature: a hole is what only they can settle, a
+# supposition the agent's answer from the code for them to approve. /view-concept's user
+# is learning the subject: a probe asks what they believe on an element they drew, a
+# correction states that one is wrong and gives the fix, a tension sits on two elements
+# that do not hold together (or one against the goal), a choice asks which framing the
+# explanation follows, a lead offers what the agent found, with its sources when looked up.
+PIN_KINDS = {
+    "build-feature": ("hole", "supposition"),
+    "view-concept": ("probe", "correction", "tension", "choice", "lead"),
+}
+# The kinds that hold « End scoping » back while open: an element known to be wrong, two at
+# odds, what only the user can settle, a supposition not approved. An open probe, choice
+# or lead is one the user ignored: it is left out of the report.
+BLOCKING_PINS = ("correction", "tension", "hole", "supposition")
+# Every kind, in the order an element's mark takes its colour from its open pins: the
+# kinds that hold « End scoping » back first.
+PIN_TONE_ORDER = (*BLOCKING_PINS, "probe", "choice", "lead")
 # "code": the explanation is about a repository — citations link into it, and the
 # model changes it leads to are what outlive it. "explanation": understanding for its own sake.
 KINDS = ("explanation", "code")
@@ -407,6 +454,10 @@ RENAMED_WORKFLOWS = {
 }
 # The workflow of a session created without --workflow, by kind.
 DEFAULT_WORKFLOW = {"explanation": "view-concept", "code": "build-feature"}
+# The workflows whose main session only coordinates role agents, each started from the
+# session folder (`view-concept context`): an explanation's scoper, planner and writer, a
+# feature's too, with its implementer, documenter and reviewer.
+COORDINATED_WORKFLOWS = ("view-concept", "build-feature")
 # The role agents a feature's coordinator starts; a variant sets a model per role.
 AGENT_ROLES = ("scoper", "planner", "writer", "implementer", "documenter", "reviewer")
 THREAD_ID_RE = re.compile(r"^t[0-9]{1,6}$")
@@ -418,6 +469,10 @@ DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread", "fact", "element
 DRAFT_OPTIONAL = ("thread", "fact", "element")
 # The pages of every session write the drafts file from the server's threadpool.
 _DRAFTS_LOCK = threading.Lock()
+# The pages and the channel's small agents write the parameters file from the same pool.
+_PARAMS_LOCK = threading.Lock()
+# The largest entry of the parameters file a section may keep, its JSON text in bytes.
+PARAMS_LIMIT = 2**20
 # The key prefix of a doc's highlight baseline in seen.json, and of the anchor of a comment,
 # a draft or a side thread on its text: `doc:<path>`. A comment on the doc set list is
 # anchored to DOC_SET_ANCHOR, `doc:` alone: no doc path is empty, and no section id may
@@ -451,8 +506,8 @@ MOVE_ID_RE = re.compile(r"^p[0-9]{1,6}$")
 MOVE_FATES = ("as-is", "rewritten", "nowhere")
 # The key prefixes of the Doc tab, in seen.json and in anchors: no section id starts with one.
 DOC_TAB_KEYS = (DOC_KEY, FACTS_KEY, TRIAGE_KEY, MOVES_KEY)
-# The key prefixes no outline id may start with: the Doc tab's, and a hole box's anchor.
-RESERVED_KEYS = (*DOC_TAB_KEYS, HOLE_KEY)
+# The key prefixes no outline id may start with: the Doc tab's, and a pin box's anchor.
+RESERVED_KEYS = (*DOC_TAB_KEYS, PIN_KEY, LEGACY_PIN_KEY)
 # The longest `earns` an outline entry may have: one sentence, read in the page's outline.
 EARNS_MAX = 200
 # The term kind of a lexicon entry (its optional `kind`): a core concept is one the model
@@ -632,7 +687,12 @@ class Session:
         return self.dir / "questions.json"
 
     @property
-    def holes_path(self) -> Path:
+    def pins_path(self) -> Path:
+        return self.dir / "pins.json"
+
+    @property
+    def legacy_holes_path(self) -> Path:
+        """What the pin file was called before the rename: read as pins.json, once."""
         return self.dir / "holes.json"
 
     @property
@@ -667,6 +727,10 @@ class Session:
     @property
     def drafts_path(self) -> Path:
         return self.dir / "drafts.json"
+
+    @property
+    def params_path(self) -> Path:
+        return self.dir / "params.json"
 
     @property
     def threads_dir(self) -> Path:
@@ -780,7 +844,7 @@ class Session:
             if taken:
                 raise SessionError(
                     f"outline ids may not start with {', '.join(map(repr, RESERVED_KEYS))}, "
-                    "the keys of the Doc tab and of a hole box: " + ", ".join(taken)
+                    "the keys of the Doc tab and of a pin box: " + ", ".join(taken)
                 )
             long = [sec["id"] for sec in outline if len(str(sec.get("earns", ""))) > EARNS_MAX]
             if long:
@@ -1122,7 +1186,7 @@ class Session:
         """The changes of the model the code does not carry yet: every change logged after
         the last one an implementer took into account. None before the model is approved:
         until then there is no code to keep up with the model."""
-        if not self.coordinated or not self.model_approved():
+        if not self.is_feature or not self.model_approved():
             return []
         changes = self.read_changes()
         ids = [d["id"] for d in changes]
@@ -1172,14 +1236,14 @@ class Session:
         return d
 
     def read_questions(self) -> list[dict[str, Any]]:
-        self._migrate_holes()
+        self._migrate_pins()
         return _read_json(self.questions_path, [])
 
     def _next_question_id(self, questions: list[dict[str, Any]]) -> str:
         """The id of the next agent question: after every id given so far, those of the
-        questions an old session's holes were moved from included, so none is given twice."""
+        questions an old session's pins were moved from included, so none is given twice."""
         taken = [q["id"] for q in questions]
-        taken += [h["question"] for h in _read_json(self.holes_path, []) if h.get("question")]
+        taken += [p["question"] for p in _read_json(self.pins_path, []) if p.get("question")]
         return f"q{max((int(t[1:]) for t in taken), default=0) + 1}"
 
     def add_question(
@@ -1195,7 +1259,7 @@ class Session:
         "awaiting-answer". During scoping nothing waits: the phase stays "scoping".
         `recommended` is the answer the agent suggests, `background` what the user needs to
         know to answer, `section` the anchor section the page shows it after. A scoping
-        section takes no question: a hole of the drawing is a hole record (`add_hole`)."""
+        section takes no question: an open point of the drawing is a pin (`add_pin`)."""
         if not text.strip():
             raise SessionError("empty question")
         if section:
@@ -1223,57 +1287,75 @@ class Session:
 
     def _check_question_section(self, section: str) -> None:
         """Refuse an unknown section, and a scoping section: a question is never asked on
-        the drawing, a hole of the drawing is a hole record."""
+        the drawing, an open point of the drawing is a pin."""
         self._check_section(section)
         if section in self.scoping_sections():
             raise SessionError(
-                f"{section} is a scoping section: a hole of the drawing is opened with "
-                "`view-concept hole`"
+                f"{section} is a scoping section: an open point of the drawing is a pin, "
+                "opened with `view-concept pin`"
             )
 
     def scoping_sections(self) -> list[str]:
         """The ids of the outline's scoping sections (`"part": "scoping"`), in outline order."""
         return [s["id"] for s in self.read_plan()["outline"] if s.get("part") == SCOPING_PART]
 
-    # ---- the hole file ----
-    def read_holes(self) -> list[dict[str, Any]]:
-        """Every hole record of the session, open and closed, oldest first."""
-        self._migrate_holes()
-        return _read_json(self.holes_path, [])
+    # ---- the pin file ----
+    def read_pins(self) -> list[dict[str, Any]]:
+        """Every pin of the session, open and closed, oldest first."""
+        self._migrate_pins()
+        return _read_json(self.pins_path, [])
 
-    def add_hole(self, text: str, element: str = "", supposition: bool = False) -> dict[str, Any]:
-        """Open a hole record on the drawing (the feature's scoping section): `text` is the
-        one sentence that says what is not known (a supposition: the agent's statement),
-        `element` the id of the element of the drawing it marks. Opened outside the phase
-        "scoping" (by the planner or the writer, after « End scoping »), it sends the
-        session back to scoping: the phase becomes "scoping". Returns the record."""
+    def pin_kinds(self) -> tuple[str, ...]:
+        """The kinds of pin the session's skill places (PIN_KINDS by workflow); a session
+        created before workflows existed gets its kind's default workflow."""
+        plan = self.read_plan()
+        workflow = plan.get("workflow") or DEFAULT_WORKFLOW.get(plan.get("kind", ""), "")
+        return PIN_KINDS.get(workflow, ())
+
+    def add_pin(
+        self,
+        text: str,
+        kind: str,
+        elements: list[str] | None = None,
+        sources: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Open a pin on the drawing (a scoping section): `text` is its one sentence,
+        `kind` one of the kinds the session's skill places (`pin_kinds`), `elements` the
+        ids of the elements of the drawing it sits on (two for a tension between them),
+        `sources` where a lead's finding was looked up. Opened outside the phase "scoping"
+        (by the planner or the writer, after « End scoping »), it sends the session back to
+        scoping: the phase becomes "scoping". Returns the record."""
         if not text.strip():
-            raise SessionError("empty hole")
+            raise SessionError("empty pin")
+        kinds = self.pin_kinds()
+        if kind not in kinds:
+            workflow = self.read_plan().get("workflow") or "this"
+            raise SessionError(
+                f"a {workflow} session places no {kind!r} pin; its kinds: {', '.join(kinds)}"
+            )
         if not self.scoping_sections():
-            raise SessionError("no scoping section in the outline: a hole marks the drawing")
-        holes = self.read_holes()
-        h: dict[str, Any] = {
-            "id": f"h{max((int(h['id'][1:]) for h in holes), default=0) + 1}",
-            "kind": "supposition" if supposition else "hole",
-            "text": " ".join(text.split()),
-        }
-        if element.strip():
-            h["element"] = element.strip()
-        h |= {"status": "open", "asked": now_iso()}
-        holes.append(h)
-        _write_json(self.holes_path, holes)
+            raise SessionError("no scoping section in the outline: a pin marks the drawing")
+        pins = self.read_pins()
+        n = max((int(p["id"][1:]) for p in pins if p["id"].startswith("p")), default=0)
+        p: dict[str, Any] = {"id": f"p{n + 1}", "kind": kind, "text": " ".join(text.split())}
+        p |= _pin_place(elements or [])
+        if listed := [" ".join(s.split()) for s in sources or [] if s.strip()]:
+            p["sources"] = listed
+        p |= {"status": "open", "asked": now_iso()}
+        pins.append(p)
+        _write_json(self.pins_path, pins)
         if self.read_status().get("phase") != "scoping":
             self.write_status("scoping")
-        return h
+        return p
 
-    def close_holes(self, ids: list[str], note: str = "") -> list[dict[str, Any]]:
-        """Close open hole records: the scoper settled them from the user's comments when it
+    def close_pins(self, ids: list[str], note: str = "") -> list[dict[str, Any]]:
+        """Close open pins: the scoper settled them from the user's comments when it
         redrew. `note` says how. Returns the records closed."""
-        holes = self.read_holes()
-        by_id = {h["id"]: h for h in holes}
+        pins = self.read_pins()
+        by_id = {p["id"]: p for p in pins}
         unknown = [i for i in ids if i not in by_id]
         if unknown:
-            raise SessionError(f"no hole {', '.join(unknown)}")
+            raise SessionError(f"no pin {', '.join(unknown)}")
         shut = [i for i in ids if by_id[i]["status"] != "open"]
         if shut:
             raise SessionError(f"already closed: {', '.join(shut)}")
@@ -1282,71 +1364,83 @@ class Session:
             by_id[i] |= {"status": "closed", "closed": at}
             if note.strip():
                 by_id[i]["note"] = note.strip()
-        _write_json(self.holes_path, holes)
+        _write_json(self.pins_path, pins)
         return [by_id[i] for i in ids]
 
-    def set_hole_element(self, hid: str, element: str) -> dict[str, Any]:
-        """Give an open hole record its element: the scoper drew the element of the drawing
-        a hole bears on (one the planner or the writer opened with none, or whose element a
-        redraw removed). The record keeps its id, so the comments attached to it stay on it.
-        Returns the record."""
-        element = element.strip()
-        if not element:
+    def set_pin_element(self, pid: str, elements: list[str]) -> dict[str, Any]:
+        """Give an open pin its elements: the scoper drew the element(s) of the drawing a
+        pin sits on (one the planner or the writer opened with none, or whose element a
+        redraw removed). The record keeps its id, so the comments attached to it stay on
+        it. Returns the record."""
+        place = _pin_place(elements)
+        if not place:
             raise SessionError("empty element")
-        holes = self.read_holes()
-        h = next((h for h in holes if h["id"] == hid), None)
-        if h is None:
-            raise SessionError(f"no hole {hid}")
-        if h["status"] != "open":
-            raise SessionError(f"already closed: {hid}")
-        h["element"] = element
-        _write_json(self.holes_path, holes)
-        return h
+        pins = self.read_pins()
+        p = next((p for p in pins if p["id"] == pid), None)
+        if p is None:
+            raise SessionError(f"no pin {pid}")
+        if p["status"] != "open":
+            raise SessionError(f"already closed: {pid}")
+        p.pop("element", None)
+        p.pop("elements", None)
+        p.update(place)
+        _write_json(self.pins_path, pins)
+        return p
 
-    def open_holes(self) -> list[dict[str, Any]]:
-        """The open hole records, holes and suppositions: what « End scoping » waits on."""
-        return [h for h in self.read_holes() if h["status"] == "open"]
+    def open_pins(self) -> list[dict[str, Any]]:
+        """The open pins, of every kind."""
+        return [p for p in self.read_pins() if p["status"] == "open"]
 
-    def waiting_holes(self) -> set[str]:
-        """The ids of the open holes waiting for the scoper: a sent comment not resolved yet
-        is attached to the hole (`hole:<id>`) or to its element (`element`). Nothing stores
+    def blocking_pins(self) -> list[dict[str, Any]]:
+        """The open pins that hold « End scoping » back (BLOCKING_PINS): a correction, a
+        tension, a hole or a supposition."""
+        return [p for p in self.open_pins() if p["kind"] in BLOCKING_PINS]
+
+    def waiting_pins(self) -> set[str]:
+        """The ids of the open pins waiting for the scoper: a sent comment not resolved yet
+        is attached to the pin (`pin:<id>`) or to its element (`element`). Nothing stores
         it: the page reads it from the comments the same way."""
         batches = self.read_comments()["batches"]
         pending = [c for b in batches for c in b["comments"] if c["status"] != "resolved"]
-        anchors = {c["section"] for c in pending}
+        anchors = {pin_anchor(c["section"]) for c in pending} - {""}
         elements = {c["element"] for c in pending if c.get("element")}
         return {
-            h["id"]
-            for h in self.open_holes()
-            if HOLE_KEY + h["id"] in anchors or (h.get("element") and h["element"] in elements)
+            p["id"]
+            for p in self.open_pins()
+            if p["id"] in anchors or elements.intersection(pin_elements(p))
         }
 
-    def hole_tones(self) -> dict[str, dict[str, str]]:
-        """The colour the page draws each open hole record in: {"holes": {hole id: tone},
-        "elements": {element id: tone}}. A hole's tone is "waiting" (grey) while it waits
-        for the scoper, else its kind ("hole" orange, "supposition" blue): its box and its
-        line of the hole index. An element's tone, its mark, comes from its open holes:
-        among those not waiting, "hole" when one is a hole, else "supposition"; "waiting"
-        when all of them wait."""
-        waiting = self.waiting_holes()
-        holes: dict[str, str] = {}
+    def pin_tones(self) -> dict[str, dict[str, str]]:
+        """The colour the page draws each open pin in: {"pins": {pin id: tone},
+        "elements": {element id: tone}}. A pin's tone is "waiting" (grey) while it waits
+        for the scoper, else its kind: its box and its line of the pin index. An element's
+        tone, its mark, comes from the open pins on it: among those not waiting, the first
+        kind of PIN_TONE_ORDER one of them has; "waiting" when all of them wait."""
+        waiting = self.waiting_pins()
+        pins: dict[str, str] = {}
         on: dict[str, list[str]] = {}
-        for h in self.open_holes():
-            tone = "waiting" if h["id"] in waiting else h["kind"]
-            holes[h["id"]] = tone
-            if h.get("element"):
-                on.setdefault(h["element"], []).append(tone)
+        for p in self.open_pins():
+            tone = "waiting" if p["id"] in waiting else p["kind"]
+            pins[p["id"]] = tone
+            for e in pin_elements(p):
+                on.setdefault(e, []).append(tone)
         elements = {
-            e: "hole" if "hole" in tones else "supposition" if "supposition" in tones else "waiting"
-            for e, tones in on.items()
+            e: next((k for k in PIN_TONE_ORDER if k in tones), "waiting") for e, tones in on.items()
         }
-        return {"holes": holes, "elements": elements}
+        return {"pins": pins, "elements": elements}
 
-    def _migrate_holes(self) -> None:
-        """Move an old session's holes, the questions anchored on a scoping section in
-        questions.json, to the hole file, once: open ones stay open, the others are closed,
-        their answer kept as the closing note and their question id as `question`."""
-        if self.holes_path.exists() or not self.questions_path.exists():
+    def _migrate_pins(self) -> None:
+        """Bring an old session's pins into the pin file, once: a holes.json written before
+        the rename is moved to pins.json as it is (its ids kept); before holes.json existed,
+        the questions anchored on a scoping section in questions.json are moved there, open
+        ones staying open, the others closed, their answer kept as the closing note and
+        their question id as `question`."""
+        if self.pins_path.exists():
+            return
+        if self.legacy_holes_path.exists():
+            self.legacy_holes_path.replace(self.pins_path)
+            return
+        if not self.questions_path.exists():
             return
         questions = _read_json(self.questions_path, [])
         try:
@@ -1356,27 +1450,27 @@ class Session:
         moved = [q for q in questions if q.get("section") in scoping]
         if not moved:
             return
-        holes = []
+        pins = []
         for i, q in enumerate(moved, 1):
-            h: dict[str, Any] = {
+            p: dict[str, Any] = {
                 "id": f"h{i}",
                 "kind": "supposition" if q.get("kind") == "supposition" else "hole",
                 "text": " ".join(str(q.get("text", "")).split()),
             }
             if q.get("element"):
-                h["element"] = q["element"]
-            h["status"] = "open" if q["status"] == "open" else "closed"
-            h["asked"] = q.get("asked", "")
-            if h["status"] == "closed":
+                p["element"] = q["element"]
+            p["status"] = "open" if q["status"] == "open" else "closed"
+            p["asked"] = q.get("asked", "")
+            if p["status"] == "closed":
                 a = q.get("answer") or {}
-                h["closed"] = a.get("at") or q.get("skipped") or q.get("asked", "")
+                p["closed"] = a.get("at") or q.get("skipped") or q.get("asked", "")
                 parts = [", ".join(a.get("choices", [])), a.get("text", "")]
-                note = " — ".join(p for p in parts if p)
+                note = " — ".join(part for part in parts if part)
                 if note:
-                    h["note"] = note
-            h["question"] = q["id"]
-            holes.append(h)
-        _write_json(self.holes_path, holes)
+                    p["note"] = note
+            p["question"] = q["id"]
+            pins.append(p)
+        _write_json(self.pins_path, pins)
         _write_json(self.questions_path, [q for q in questions if q not in moved])
 
     def _question(self, questions: list[dict[str, Any]], qid: str) -> dict[str, Any]:
@@ -2065,6 +2159,55 @@ class Session:
         files = (self.doc_file(d["path"]) for d in self.read_doc_set()["docs"])
         return [f for f in files if f is not None]
 
+    # ---- the parameters file ----
+    def read_params(self) -> dict[str, dict[str, Any]]:
+        """The parameters file: {section id: {"saved": {...}, "received": {key: answer}}},
+        an entry per section whose script used the channel."""
+        data = _read_json(self.params_path, {})
+        return {
+            str(sid): {
+                "saved": dict(e.get("saved") or {}),
+                "received": dict(e.get("received") or {}),
+            }
+            for sid, e in data.items()
+            if isinstance(e, dict)
+        }
+
+    def section_params(self, sid: str) -> dict[str, Any]:
+        """The entry of section `sid`, `saved` and `received` empty when it has none."""
+        self._check_channel_section(sid)
+        return self.read_params().get(sid, {"saved": {}, "received": {}})
+
+    def save_params(self, sid: str, saved: Any) -> None:
+        """Replace what section `sid`'s script saved (the page writes it)."""
+        if not isinstance(saved, dict):
+            raise SessionError("a section saves an object")
+        self._write_params(sid, "saved", saved)
+
+    def set_received(self, sid: str, key: str, answer: Any) -> None:
+        """Keep the answer the channel received for section `sid`'s request `key`."""
+        if not key.strip():
+            raise SessionError("a request needs a key")
+        self._write_params(sid, "received", answer, key)
+
+    def _write_params(self, sid: str, field: str, value: Any, key: str = "") -> None:
+        self._check_channel_section(sid)
+        with _PARAMS_LOCK:
+            data = self.read_params()
+            entry = data.setdefault(sid, {"saved": {}, "received": {}})
+            if key:
+                entry[field][key] = value
+            else:
+                entry[field] = value
+            if len(json.dumps(entry, ensure_ascii=False).encode("utf-8")) > PARAMS_LIMIT:
+                raise SessionError(f"the parameters of {sid} would pass {PARAMS_LIMIT} bytes")
+            _write_json(self.params_path, data)
+
+    def _check_channel_section(self, sid: str) -> None:
+        """Refuse a section that cannot use the channel: only an HTML section runs a script."""
+        if sid not in self.html_sections():
+            raise SessionError(f"no HTML section {sid!r}: only an HTML section's script asks")
+
     # ---- the drafts file ----
     def read_drafts(self) -> dict[str, Any]:
         """The drafts file: {drafts: [{id, section, quote, prefix, text, thread?}], note,
@@ -2268,9 +2411,9 @@ class Session:
         return out
 
     def _asked_times(self) -> list[str]:
-        """When each agent question was asked or asked again, and each hole opened."""
+        """When each agent question was asked or asked again, and each pin opened."""
         asked = [t for q in self.read_questions() for t in (q.get("asked"), q.get("reasked")) if t]
-        return asked + [h["asked"] for h in self.read_holes() if h.get("asked")]
+        return asked + [p["asked"] for p in self.read_pins() if p.get("asked")]
 
     def last_activity(self) -> str:
         """When the agent last wrote a session file, "" when never. Only what the agent
@@ -2287,7 +2430,7 @@ class Session:
             self.terminal_messages_path,
             self.code_map_path,
             self.request_path,
-            self.holes_path,
+            self.pins_path,
             self.doc_set_path,
             self.stale_path,
             self.missing_facts_path,
@@ -2365,7 +2508,7 @@ class Session:
             self.legacy_changes_path,
             self.implemented_path,
             self.questions_path,
-            self.holes_path,
+            self.pins_path,
             self.published_path,
         ]
         if self.sections_dir.is_dir():
@@ -2376,6 +2519,12 @@ class Session:
         with contextlib.suppress(SessionError):
             paths += self.doc_files()
         return _stat_signature(paths)
+
+    def params_signature(self) -> tuple:
+        """Changes whenever the parameters file changes. Kept apart from `signature` so a
+        save of a section's script never re-renders the page; an answer received after
+        publishing still makes the publish record out of date (`is_out_of_date`)."""
+        return _stat_signature([self.params_path])
 
     def thread_signature(self) -> tuple:
         """Changes whenever a thread changes. Kept apart from `signature` so a streaming
@@ -2412,13 +2561,20 @@ class Session:
 
     def has_written(self) -> bool:
         """Whether what « Write plan » or « Write model » asks for exists already, so the
-        button asks for a rewrite: the plan, or in a coordinated session the sections (its
-        planner drafts an outline before scoping ends)."""
-        return bool(self.read_sections() if self.coordinated else self.read_plan()["outline"])
+        button asks for a rewrite: the plan, or in a feature the sections (its planner
+        drafts an outline before scoping ends)."""
+        return bool(self.read_sections() if self.is_feature else self.read_plan()["outline"])
 
     @property
     def coordinated(self) -> bool:
-        """Whether the main session only coordinates subagents (the build-feature workflow)."""
+        """Whether the main session only coordinates role agents (COORDINATED_WORKFLOWS:
+        an explanation, a feature)."""
+        return self.read_plan().get("workflow") in COORDINATED_WORKFLOWS
+
+    @property
+    def is_feature(self) -> bool:
+        """Whether the session is a feature (the build-feature workflow): what only a
+        feature has, the code it changes and the roles that work on it, goes by this."""
         return self.read_plan().get("workflow") == "build-feature"
 
     def fork_parent(self) -> str:
@@ -2465,11 +2621,13 @@ class Session:
         prefix: str = "",
         question: str = "",
         fact: str = "",
+        element: str = "",
     ) -> dict[str, Any]:
         """Create an empty thread, anchored to a passage like a comment, to an open agent
         question (`question`, its id: the user discusses it before answering), or to
         nothing. A thread on a missing fact carries the fact's id (`fact`, kept only when
-        set), which the comment it becomes carries too."""
+        set), which the comment it becomes carries too; one on a passage of the drawing,
+        the id of the element it is in (`element`, kept only when set)."""
         _check_fact(fact, section)
         _check_row(section)
         if question:
@@ -2483,6 +2641,7 @@ class Session:
             "prefix": prefix,
             "question": question,
             **({"fact": fact} if fact else {}),
+            **({"element": element.strip()} if element.strip() else {}),
             "agent_session": "",
             "forked_from": "",
             "state": "idle",
@@ -2536,7 +2695,8 @@ class Session:
         (REPO_LEXICON), refused once the file exists, "write-readmes" that they read
         the move plans and asked the doc pass to write the folder models it held, "missing"
         that they asked the scoper what the drawing still misses, and "end-scoping" that
-        they ended a feature's scoping (refused while a hole is open, `open_holes`). `path`
+        they ended the scoping of a drawing (refused while a correction, a tension, a hole or a
+        supposition is open, `blocking_pins`). `path`
         goes with "rewrite-readme" only, which needs it."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
@@ -2550,9 +2710,9 @@ class Session:
             path = self._readme_to_rewrite(path)
         if action == "write-lexicon" and (lex := self.doc_file(REPO_LEXICON)) and lex.is_file():
             raise SessionError(f"{REPO_LEXICON} exists: correct it in the Doc tab")
-        if action == "end-scoping" and (holes := self.open_holes()):
-            ids = ", ".join(q["id"] for q in holes)
-            raise SessionError(f"holes still open in the scoping: {ids}")
+        if action == "end-scoping" and (pins := self.blocking_pins()):
+            ids = ", ".join(p["id"] for p in pins)
+            raise SessionError(f"pins still open in the scoping: {ids}")
         note = note.strip()
         # A comment from a side thread may have no text: the thread's conclusion is the comment.
         comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
@@ -2580,7 +2740,7 @@ class Session:
                     # A comment on a missing fact carries the fact's id.
                     **({"fact": str(c["fact"])} if c.get("fact") else {}),
                     # A comment on a selection in the drawing that falls in a marked
-                    # element carries its id: it is read with that element's holes.
+                    # element carries its id: it is read with that element's pins.
                     **({"element": str(c["element"])} if c.get("element") else {}),
                     "status": "sent",
                 }
@@ -2680,9 +2840,10 @@ class Session:
     # ---- the publish record ----
     def published_sections(self, plan: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """What a published page shows of the prose: every explanation section (no
-        `"part": 2`) that is written, in outline order, as {id, number (its position in
-        the outline, as the page numbers it), title, markdown (the file's text: the HTML
-        document of an HTML section), html (whether it is an HTML section)}."""
+        `"part": 2`) that is written and belongs in the report (`in_report`), in outline
+        order, as {id, number (its position in the outline, as the page numbers it), title,
+        markdown (the file's text: the HTML document of an HTML section), html (whether it
+        is an HTML section)}."""
         plan = plan or self.read_plan()
         sections = self.read_sections()
         html = self.html_sections()
@@ -2690,14 +2851,28 @@ class Session:
             {"id": s["id"], "number": i + 1, "title": s.get("title", s["id"]),
              "markdown": sections[s["id"]], "html": s["id"] in html}
             for i, s in enumerate(plan["outline"])
-            if s.get("part") != 2 and s["id"] in sections
+            if s.get("part") != 2 and s["id"] in sections and self.in_report(s, plan)
         ]  # fmt: skip
 
+    def in_report(self, sec: dict[str, Any], plan: dict[str, Any] | None = None) -> bool:
+        """Whether outline entry `sec` belongs in an explanation's report, the page export
+        and publishing write: every section but the drawing of a view-concept session (its
+        scoping section), which the report retranscribes in sequence instead."""
+        plan = plan or self.read_plan()
+        return not (plan.get("workflow") == "view-concept" and sec.get("part") == SCOPING_PART)
+
+    def published_params(self, plan: dict[str, Any] | None = None) -> dict[str, Any]:
+        """What a published page carries of the parameters file: the entry of each
+        published HTML section that has one, whose script answers its requests from it."""
+        shown = {s["id"] for s in self.published_sections(plan) if s["html"]}
+        return {sid: e for sid, e in self.read_params().items() if sid in shown}
+
     def fingerprint(self) -> str:
-        """A hash of what a published page shows: the title, the published sections and
-        the lexicon. The publish date, comments and highlights are left out."""
+        """A hash of what a published page shows: the title, the published sections, the
+        lexicon, and the parameters of its channel sections when it has any. The publish
+        date, comments and highlights are left out."""
         plan = self.read_plan()
-        content = {
+        content: dict[str, Any] = {
             "title": str(plan["title"]).strip() or self.slug,
             "sections": [
                 [s["id"], s["title"], s["markdown"]] for s in self.published_sections(plan)
@@ -2707,6 +2882,8 @@ class Session:
                 for t in plan["lexicon"]
             ],
         }
+        if params := self.published_params(plan):
+            content["params"] = params
         canonical = json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -2730,7 +2907,9 @@ class Session:
 
     # ---- export ----
     def export(self, vault_dir: Path | None = None) -> Path:
-        """Write the explanation as one Obsidian note. Re-exporting overwrites the same note."""
+        """Write the explanation as one Obsidian note: every section of the report
+        (`in_report`, so not the drawing of a view-concept session), the lexicon, the change
+        history. Re-exporting overwrites the same note."""
         vault_dir = vault_dir or VAULT_DIR
         vault_dir.mkdir(parents=True, exist_ok=True)
         plan = self.read_plan()
@@ -2740,11 +2919,14 @@ class Session:
         if path.exists() and f"view-concept: {self.slug}\n" not in path.read_text(encoding="utf-8"):
             path = vault_dir / f"{base} ({self.slug}).md"
         html = self.html_sections()
+        # The drawing of a view-concept session stays out of its report.
+        left_out = {s["id"] for s in plan["outline"] if not self.in_report(s, plan)}
         sections = {
             sid: _export_html_section(self, sid, text, vault_dir)
             if sid in html
             else _externalize(text, vault_dir, self.slug)
             for sid, text in self.read_sections().items()
+            if sid not in left_out
         }
         path.write_text(self.render_markdown(plan, sections), encoding="utf-8")
         return path
@@ -3056,13 +3238,39 @@ def _check_fact(fact: str, section: str) -> None:
 
 def _check_row(section: str) -> None:
     """Refuse an anchor on a row of a Doc tab table (the concept triage, a move plan) that
-    names no row id, or on a hole box that names no hole id."""
+    names no row id, or on a pin's box that names no pin id."""
     if section.startswith(TRIAGE_KEY) and not TRIAGE_ID_RE.match(section[len(TRIAGE_KEY) :]):
         raise SessionError(f"a triage row's anchor is triage:<id>: {section!r}")
     if section.startswith(MOVES_KEY) and not MOVE_ID_RE.match(section[len(MOVES_KEY) :]):
         raise SessionError(f"a move plan row's anchor is moves:<id>: {section!r}")
-    if section.startswith(HOLE_KEY) and not HOLE_ID_RE.match(section[len(HOLE_KEY) :]):
-        raise SessionError(f"a hole box's anchor is hole:<id>: {section!r}")
+    if section.startswith((PIN_KEY, LEGACY_PIN_KEY)) and not pin_anchor(section):
+        raise SessionError(f"a pin box's anchor is pin:<id>: {section!r}")
+
+
+def pin_elements(p: dict[str, Any]) -> list[str]:
+    """The ids of the elements a pin sits on: `elements` when it sits on several, else its
+    `element`, none without one."""
+    if p.get("elements"):
+        return [str(e) for e in p["elements"]]
+    return [str(p["element"])] if p.get("element") else []
+
+
+def _pin_place(elements: list[str]) -> dict[str, Any]:
+    """The fields that place a pin on its elements: `element` for one, `elements` for
+    several (each id once, in order), nothing for none."""
+    ids = list(dict.fromkeys(e.strip() for e in elements if e.strip()))
+    if len(ids) > 1:
+        return {"elements": ids}
+    return {"element": ids[0]} if ids else {}
+
+
+def pin_anchor(section: str) -> str:
+    """The id of the pin whose box an anchor names (`pin:<id>`, or `hole:<id>` written
+    before the rename), "" for any other anchor."""
+    for key in (PIN_KEY, LEGACY_PIN_KEY):
+        if section.startswith(key) and PIN_ID_RE.match(section[len(key) :]):
+            return section[len(key) :]
+    return ""
 
 
 def _upgrade_thread(thread: dict[str, Any]) -> dict[str, Any]:
@@ -3079,11 +3287,11 @@ def format_batch(
     outline: list[dict[str, Any]],
     questions: list[dict[str, Any]] | None = None,
     moves: dict[str, str] | None = None,
-    holes: list[dict[str, Any]] | None = None,
+    pins: list[dict[str, Any]] | None = None,
 ) -> str:
     """How a batch appears in the agent session (one event of the comment channel). `questions`
     gives the text of the agent questions an answer batch answers, `moves` the README of
-    each row of the move plans (`move_readmes`), `holes` the hole records a comment is
+    each row of the move plans (`move_readmes`), `pins` the pins a comment is
     attached to."""
     number = {s["id"]: i + 1 for i, s in enumerate(outline)}
     n = len(batch["comments"])
@@ -3155,12 +3363,14 @@ def format_batch(
     if batch.get("action") == "missing":
         lines.append(
             "action: missing (the user asked what the drawing still misses: read it again, "
-            "and open holes or suppositions (`view-concept hole`), or say nothing is left)"
+            "and open pins (`view-concept pin`), or say nothing is left)"
         )
     if batch.get("action") == "end-scoping":
         lines.append(
-            "action: end-scoping (the user ended the scoping, no hole left: convert the "
-            "drawing into the outline and the lexicon, then write the model)"
+            "action: end-scoping (the user ended the scoping, no correction, tension, hole or "
+            "supposition left open: convert the drawing into the outline and the lexicon, then "
+            "write the model, or the prose of an explanation; leave out the probes, choices "
+            "and leads still open)"
         )
     if batch.get("action") == "answer":
         asked = {q["id"]: q["text"] for q in questions or []}
@@ -3192,7 +3402,7 @@ def format_batch(
             lines += [f"    (from side thread {t}: threads/{t}.json)" for t in a.get("threads", [])]
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
-    lines += [format_comment(c, number, moves, holes) for c in batch["comments"]]
+    lines += [format_comment(c, number, moves, pins) for c in batch["comments"]]
     return "\n".join(lines)
 
 
@@ -3259,18 +3469,17 @@ def format_comment(
     c: dict[str, Any],
     number: dict[str, int],
     moves: dict[str, str] | None = None,
-    holes: list[dict[str, Any]] | None = None,
+    pins: list[dict[str, Any]] | None = None,
 ) -> str:
     """One comment of a batch: where it is anchored (a section, a doc of the Doc tab by its
     path, a missing fact of a README, the doc set list, a row of the concept triage, a row
-    of a README's move plan, whose README `moves` gives by row id, a hole box, with the
-    hole's sentence from `holes`), the marked element of the drawing it falls in, with
-    the holes open on it, its text, the thread it comes from."""
+    of a README's move plan, whose README `moves` gives by row id, a pin's box, with the
+    pin's sentence from `pins`), the marked element of the drawing it falls in, with
+    the pins open on it, its text, the thread it comes from."""
     sec = c["section"]
-    if sec.startswith(HOLE_KEY):
-        hid = sec.removeprefix(HOLE_KEY)
-        hole = next((h for h in holes or [] if h["id"] == hid), None)
-        where = f"(hole {hid} « {hole['text']} »)" if hole else f"(hole {hid})"
+    if pid := pin_anchor(sec):
+        pin = next((p for p in pins or [] if p["id"] == pid), None)
+        where = f"(pin {pid} « {pin['text']} »)" if pin else f"(pin {pid})"
     elif sec == DOC_SET_ANCHOR:
         where = "(doc set)"
     elif sec.startswith(TRIAGE_KEY):
@@ -3286,11 +3495,9 @@ def format_comment(
         where = f"§{number[sec]} ({sec})" if sec in number else f"({sec or 'no section'})"
     if c.get("element"):
         on = [
-            h["id"]
-            for h in holes or []
-            if h.get("element") == c["element"] and h["status"] == "open"
+            p["id"] for p in pins or [] if c["element"] in pin_elements(p) and p["status"] == "open"
         ]
-        where += f" · element {c['element']}" + (f" (open holes {', '.join(on)})" if on else "")
+        where += f" · element {c['element']}" + (f" (open pins {', '.join(on)})" if on else "")
     quote = " ".join(c["quote"].split())
     lines = [f"[{c['id']}] {where} « {quote} »" if quote else f"[{c['id']}] {where}"]
     lines += [f"    {line}" for line in c["text"].splitlines()]

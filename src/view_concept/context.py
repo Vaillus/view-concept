@@ -1,10 +1,12 @@
-"""The context a subagent of a coordinated session starts from.
+"""The context a role agent of a coordinated session starts from.
 
-In a coordinated session (the build-feature workflow) the main session only coordinates:
-the work is done by subagents, each started fresh, and a side thread starts the same way.
-None of them sees the main conversation, so each one starts from the session folder, as
-`build` prints it: the base context (where the feature stands now) plus the trigger (the
-events that started this run).
+In a coordinated session (an explanation, the view-concept workflow, or a feature, the
+build-feature workflow) the main session only coordinates: the work is done by role
+agents, each started fresh, and a side thread starts the same way. None of them sees the
+main conversation, so each one starts from the session folder, as `build` prints it: the
+base context (where the explanation or the feature stands now) plus the trigger (the
+events that started this run). An explanation has the scoper, the planner, the writer and
+the thread; the roles that work on the code (FEATURE_ROLES) are a feature's only.
 
 The files keep everything; the context loads only the recent part of each log, the
 CONTEXT_RECENT most recent entries. Three parts are always loaded in full: the request
@@ -20,16 +22,17 @@ path, and open it when a comment needs the user's reasons.
 
 Roles:
 
-- `scoper`: owns the scoping section of a feature (the drawing of the problem, an HTML
-  section with `"part": "scoping"`) and its holes, until « End scoping », and again when a
-  later agent's hole sends the session back to scoping. Gets the scoping sections and the
-  hole records (holes.json): the open ones, then the recent closed ones with their note.
-- `planner`: owns the outline and the lexicon during scoping, or, in a feature with a
+- `scoper`: owns the scoping section (the drawing of a feature's problem, or of the subject
+  of an explanation on the scoping path: an HTML section with `"part": "scoping"`) and its
+  pins, until « End scoping », and again when a later agent's pin sends the session back
+  to scoping. Gets the scoping sections and the pins (pins.json): the open ones, then the
+  recent closed ones with their note.
+- `planner`: owns the outline and the lexicon during scoping, or, in a session with a
   scoping section, writes them at « End scoping » by converting the drawing. Gets the
-  scoping sections and the hole records; no other section exists yet.
+  scoping sections and the pins; no other section exists yet.
 - `writer`: owns the modeling part (its sections), the to-do list (the section `todo`,
-  in the refactoring part) and, from « Write model » on, the outline and the lexicon.
-  Gets every section and the hole records.
+  in the refactoring part) and, from « Write model » on, the outline and the lexicon; in
+  an explanation, the prose and the vocabulary audit. Gets every section and the pins.
 - `implementer`: owns the code, from « Approve model » on, and never touches the docs.
   Gets the modeling part, the to-do list, and the sections its trigger names (the
   reviewer's items it must act on).
@@ -41,11 +44,18 @@ Roles:
   model. Gets every section.
 - `thread`: a side thread, read-only. Gets the section its passage belongs to; it reads
   the others on demand. A passage of the Doc tab gets its doc, read from the worktree
-  (`doc:<path>`), or the doc set (`doc:` alone), in place of a section; a hole box
-  (`hole:<id>`) its hole record and the scoping sections.
+  (`doc:<path>`), or the doc set (`doc:` alone), in place of a section; a pin's box
+  (`pin:<id>`) its pin and the scoping sections.
+
+The scoper, the planner and the writer also get the parameters file (params.json), when a
+section's script used the channel: what each script saved and the answers it received, so
+the report gives each prerequisite the depth the user chose.
 
 An HTML section is loaded by its visible text, the words a reader sees in it, not its HTML
-source; its heading names its file, for an agent that needs the source.
+source; its heading names its file, for an agent that needs the source. A side thread on
+the drawing (a passage of a scoping section, or a pin's box) gets the drawing's HTML
+source instead, where the element ids its passage names live; the scoper, the planner and
+the writer keep the visible text.
 
 In a code session every role also gets the code map (code-map.md): which modules carry
 the feature and where each concept lives, as the planner wrote it and the implementer
@@ -72,13 +82,13 @@ code lags behind them.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
 from .store import (
     DOC_KEY,
     DOC_SET_ANCHOR,
-    HOLE_KEY,
     MOVES_KEY,
     SCOPING_PART,
     TRIAGE_KEY,
@@ -90,10 +100,14 @@ from .store import (
     format_fact,
     format_move,
     format_triage,
+    pin_anchor,
+    pin_elements,
 )
 
 CONTEXT_RECENT = 20  # entries of each log loaded into the context
 ROLES = ("scoper", "planner", "writer", "implementer", "documenter", "reviewer", "thread")
+# The roles that work on the code: a feature's only.
+FEATURE_ROLES = ("implementer", "documenter", "reviewer")
 # The roles that read the request transcript whole.
 TRANSCRIPT_ROLES = ("scoper", "planner", "writer")
 # The roles that keep the doc set or work on its docs: the writer writes the first one,
@@ -104,13 +118,16 @@ FACT_ROLES = ("documenter",)
 # The roles that get the concept triage and the move plans: the doc pass follows them, the
 # reviewer checks the docs against them.
 TRIAGE_ROLES = ("documenter", "reviewer")
-# The roles that get the hole records: the scoper opens and closes them, the planner reads
-# the settled ones as decisions and facts, the planner and the writer open one when they
-# find a point only the user can settle.
-HOLE_ROLES = ("scoper", "planner", "writer")
+# The roles that get the pins: the scoper opens and closes them, the planner reads the
+# settled ones as decisions and facts, the planner and the writer open one when they find
+# a point only the user can settle.
+PIN_ROLES = ("scoper", "planner", "writer")
+# The roles that get the parameters file: the depth the user chose on each prerequisite,
+# and what the sections' scripts received.
+PARAMS_ROLES = ("scoper", "planner", "writer")
 
 QUESTION_ID = re.compile(r"^q\d+$")
-HOLE_ID = re.compile(r"^h\d+$")
+PIN_ID = re.compile(r"^[ph]\d+$")
 COMMENT_ID = re.compile(r"^c\d+$")
 BATCH_ID = re.compile(r"^b\d+$")
 MESSAGE_ID = re.compile(r"^tm\d+$")
@@ -122,6 +139,8 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
         raise SessionError(f"unknown role {role!r}; one of {', '.join(ROLES)}")
     if not s.exists():
         raise SessionError(f"no session {s.slug!r}")
+    if role in FEATURE_ROLES and not s.is_feature:
+        raise SessionError(f"{s.slug} is not a feature: the {role} works on a feature's code")
     plan = s.read_plan()
     outline = plan["outline"]
     questions = s.read_questions()
@@ -147,8 +166,10 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
         out += ["", *_doc_tab(s, role)]
     out += ["", *_change_history(s)]
     out += ["", *_questions(questions)]
-    if role in HOLE_ROLES:
-        out += ["", *_holes(s)]
+    if role in PIN_ROLES:
+        out += ["", *_pins(s)]
+    if role in PARAMS_ROLES and (params := s.read_params()):
+        out += ["", *_params(params)]
     out += ["", *_recent("Terminal messages", s.read_terminal_messages(), _message_line)]
     html = s.html_sections()
     # An HTML section is read by its visible text, not its HTML source.
@@ -174,13 +195,16 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
             out += ["", *_triage(s)]
         elif section.startswith(MOVES_KEY):  # a row of a move plan
             out += ["", *_moves(s)]
-        elif section.startswith(HOLE_KEY):  # a hole box: the hole, on the drawing
-            hid = section.removeprefix(HOLE_KEY)
-            hole = [_hole_line(h, set()) for h in s.read_holes() if h["id"] == hid]
-            out += ["", "## The hole", *hole]
+        elif pid := pin_anchor(section):  # a pin's box: the pin, on the drawing
+            pin = [_pin_line(p, set()) for p in s.read_pins() if p["id"] == pid]
+            out += ["", "## The pin", *pin]
             scoping = {sec["id"] for sec in outline if _scoping(sec)}
-            out += ["", "## Scoping (the drawing the hole is on)"]
-            out += _sections(outline, sections, None, scoping, html)
+            out += ["", "## Scoping (the drawing the pin is on, its HTML source)"]
+            out += _sections(outline, s.read_sections(), None, scoping, source=scoping)
+        elif any(sec["id"] == section and _scoping(sec) for sec in outline):
+            # The drawing by its source: the element ids a passage names live in its HTML.
+            sec = _sections(outline, s.read_sections(), section, source={section})
+            out += ["", "## Section of the passage (the drawing, its HTML source)", *sec]
         else:
             sec = _sections(outline, sections, section, html=html)
             out += ["", "## Section of the passage", *sec]
@@ -324,11 +348,11 @@ def _trigger(
     if not ids:
         return ["none: the first run of this role"]
     by_question = {q["id"]: q for q in questions}
-    holes = s.read_holes()
-    by_hole = {h["id"]: h for h in holes}
-    # An old session's holes moved from questions.json keep their question id.
-    by_hole |= {h["question"]: h for h in holes if h.get("question")}
-    waiting = s.waiting_holes()
+    pins = s.read_pins()
+    by_pin = {p["id"]: p for p in pins}
+    # An old session's pins moved from questions.json keep their question id.
+    by_pin |= {p["question"]: p for p in pins if p.get("question")}
+    waiting = s.waiting_pins()
     batches = s.read_comments()["batches"]
     comments = {c["id"]: c for b in batches for c in b["comments"]}
     messages = {m["id"]: m for m in s.read_terminal_messages()}
@@ -339,26 +363,22 @@ def _trigger(
     for event in ids:
         if QUESTION_ID.match(event) and event in by_question:
             lines.append(_question_line(by_question[event], full=True))
-        elif (HOLE_ID.match(event) or QUESTION_ID.match(event)) and event in by_hole:
-            lines.append(_hole_line(by_hole[event], waiting))
+        elif (PIN_ID.match(event) or QUESTION_ID.match(event)) and event in by_pin:
+            lines.append(_pin_line(by_pin[event], waiting))
         elif COMMENT_ID.match(event) and event in comments:
-            lines.append(
-                format_comment(comments[event], _number(outline), s.move_readmes(), s.read_holes())
-            )
+            lines.append(format_comment(comments[event], _number(outline), s.move_readmes(), pins))
         elif BATCH_ID.match(event):
             batch = next((b for b in batches if b["id"] == event), None)
             if batch is None:
                 raise SessionError(f"no batch {event!r}")
-            lines.append(
-                format_batch(s.slug, batch, outline, questions, s.move_readmes(), s.read_holes())
-            )
+            lines.append(format_batch(s.slug, batch, outline, questions, s.move_readmes(), pins))
         elif MESSAGE_ID.match(event) and event in messages:
             lines.append(_message_line(messages[event]))
         elif CHANGE_ID.match(event) and event in changes:
             lines.append(_change_line(changes[event]))
         elif event in number:
             lines.append(f"- section {number[event]}. {titles[event]} ({event}), below")
-        elif re.match(r"^(q|h|c|tm|m)\d+$", event):
+        elif re.match(r"^(q|h|p|c|tm|m)\d+$", event):
             raise SessionError(f"no {event!r} in this session")
         else:
             lines.append(event)
@@ -378,7 +398,7 @@ def _change_history(s: Session) -> list[str]:
     and every change not implemented yet, even one older than the recent ones."""
     changes = s.read_changes()
     lines = _recent("Change history", changes, _change_line)
-    if not s.coordinated or not s.model_approved():
+    if not s.is_feature or not s.model_approved():
         return lines
     through = s.implemented_through()
     pending = s.unimplemented_changes()
@@ -487,37 +507,54 @@ def _questions(questions: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def _hole_line(h: dict[str, Any], waiting: set[str]) -> str:
-    """One hole record: its id, kind, state, element and sentence; once closed, the note
-    that says how it was settled."""
-    state = "open, waiting for the scoper" if h["id"] in waiting else h["status"]
-    element = f" (element: {h['element']})" if h.get("element") else " (no element)"
-    line = f"- {h['id']} [{h['kind']} · {state}]{element} {h['text']}"
-    if h.get("question"):
-        line += f" (was question {h['question']})"
-    if h["status"] == "closed" and h.get("note"):
-        line += f" → {h['note']}"
+def _pin_line(p: dict[str, Any], waiting: set[str]) -> str:
+    """One pin: its id, kind, state, elements and sentence, a lead's sources; once closed,
+    the note that says how it was settled."""
+    state = "open, waiting for the scoper" if p["id"] in waiting else p["status"]
+    on = pin_elements(p)
+    element = f" (element{'s' * (len(on) > 1)}: {', '.join(on)})" if on else " (no element)"
+    line = f"- {p['id']} [{p['kind']} · {state}]{element} {p['text']}"
+    if p.get("sources"):
+        line += f" (sources: {'; '.join(p['sources'])})"
+    if p.get("question"):
+        line += f" (was question {p['question']})"
+    if p["status"] == "closed" and p.get("note"):
+        line += f" → {p['note']}"
     return line
 
 
-def _holes(s: Session) -> list[str]:
-    """Every open hole record, then the most recent closed ones with their note. An open
-    hole waits for the scoper when a sent comment attached to it, or to its element, is
-    not resolved yet."""
-    holes = s.read_holes()
-    if not holes:
-        return ["## Holes", "(none)"]
-    waiting = s.waiting_holes()
-    open_ = [h for h in holes if h["status"] == "open"]
-    closed = [h for h in holes if h["status"] != "open"]
+def _pins(s: Session) -> list[str]:
+    """Every open pin, then the most recent closed ones with their note. An open pin waits
+    for the scoper when a sent comment attached to it, or to its element, is not resolved
+    yet."""
+    pins = s.read_pins()
+    if not pins:
+        return ["## Pins", "(none)"]
+    waiting = s.waiting_pins()
+    open_ = [p for p in pins if p["status"] == "open"]
+    closed = [p for p in pins if p["status"] != "open"]
     recent, older = closed[-CONTEXT_RECENT:], closed[:-CONTEXT_RECENT]
-    lines = ["## Holes"]
-    lines += ["Open:", *(_hole_line(h, waiting) for h in open_)] if open_ else ["Open: none"]
+    lines = ["## Pins"]
+    lines += ["Open:", *(_pin_line(p, waiting) for p in open_)] if open_ else ["Open: none"]
     if recent:
-        lines += ["Closed:", *(_hole_line(h, waiting) for h in recent)]
+        lines += ["Closed:", *(_pin_line(p, waiting) for p in recent)]
     if older:
-        lines.append(f"Older closed holes: {len(older)}, in {s.holes_path}")
+        lines.append(f"Older closed pins: {len(older)}, in {s.pins_path}")
     return lines
+
+
+def _params(params: dict[str, dict[str, Any]]) -> list[str]:
+    """The parameters file, one entry per section that used the channel: what its script
+    saved (the user's answers, on the prerequisite tree) and what it received."""
+    return [
+        "## Parameters",
+        "The parameters file (params.json): per section whose script uses the channel, what"
+        " the script saved (`saved`) and the answers the channel received (`received`, by"
+        " request key). Only the page and the server write it.",
+        "```json",
+        json.dumps(params, ensure_ascii=False, indent=1),
+        "```",
+    ]
 
 
 def _sections(
@@ -526,7 +563,10 @@ def _sections(
     only: str | None,
     among: set[str] | None = None,
     html: set[str] | None = None,
+    source: set[str] | None = None,
 ) -> list[str]:
+    """The sections `only` (or all, or those `among`), each under its heading; an HTML
+    section of `html` is given as its visible text, one of `source` as its HTML source."""
     number = _number(outline)
     ids = [
         sec["id"]
@@ -543,5 +583,7 @@ def _sections(
         kind = ""
         if sid in (html or ()):
             kind = f" · HTML section, its visible text (sections/{sid}.html)"
+        elif sid in (source or ()):
+            kind = f" · HTML section, its source (sections/{sid}.html)"
         lines += [f"### {number[sid]}. {titles[sid]} ({sid}){kind}", sections[sid].strip(), ""]
     return lines

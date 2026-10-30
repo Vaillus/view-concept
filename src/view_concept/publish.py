@@ -11,7 +11,11 @@ in a section frame, as in the page (frame.py): its file is written to
 `<slug>/sections/<id>.html` with the frame's head, its media folder copied next to it, and
 the theme tokens and frame.js to `<slug>/frame/`; the page posts its theme and the lexicon
 terms to the frame, and shows the tip of the term the frame says is under the pointer.
-It leaves out the plan, comments, threads, highlights and audit underlines.
+A section whose script uses the channel (channel.py) has no server to ask once
+published: the page carries the section's entry of the parameters file (what its script
+saved and the answers it received before publishing, the JSON in #params), and answers
+the script's requests from it (reader.js), so it sends no request and shows what it
+received. It leaves out the plan, comments, threads, highlights and audit underlines.
 
 The pages repo is a public GitHub repository whose GitHub Pages site serves its `main`
 branch as-is (a `.nojekyll` at its root), together with its clone on this machine
@@ -119,6 +123,8 @@ def build(s: Session, folder: Path, published: date | None = None) -> None:
         "sections": "\n".join(blocks),
         # "<" escaped, so no text of the lexicon can close the script element.
         "lexicon": json.dumps(lexicon, ensure_ascii=False).replace("<", "\\u003c"),
+        # The parameters of the published channel sections, "<" escaped the same way.
+        "params": json.dumps(s.published_params(plan), ensure_ascii=False).replace("<", "\\u003c"),
         "script": _static("reader.js"),
     }
     page = PLACEHOLDER_RE.sub(lambda m: values[m.group(1)], _static("published.html"))

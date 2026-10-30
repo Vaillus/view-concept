@@ -193,18 +193,25 @@
   display: none !important;
 }
 
-/* The mark (frame.js, the holes message): the element of the drawing an open hole
-   record bears on, outlined dashed in its tone: orange for a hole, blue when only
-   suppositions are open on it, grey when all its open holes wait for the scoper. Under
+/* The mark (frame.js, the pins message): the element of the drawing an open pin sits
+   on, outlined dashed in its tone: the colour of the first kind among its open pins not
+   waiting (the server's order), as its box in the page (app.css): a hole --warn, a
+   supposition --info, a probe --accent, a correction --danger, a tension --flag, a choice
+   --alt, a lead --ok; grey (--muted) when all its open pins wait for the scoper. Under
    :where(), as every base rule, so a rule of the section on the same element wins. */
-:where([data-vc-hole]) {
+:where([data-vc-pin]) {
   outline: 1px dashed var(--warn);
   outline-offset: 2px;
   cursor: pointer;
 }
-:where([data-vc-hole][data-vc-tone="supposition"]) { outline-color: var(--info); }
-:where([data-vc-hole][data-vc-tone="waiting"]) { outline-color: var(--muted); }
-/* A click on it opens its hole window (the hole click): hovering says so. */
-:where([data-vc-hole]:hover) {
+:where([data-vc-pin][data-vc-tone="supposition"]) { outline-color: var(--info); }
+:where([data-vc-pin][data-vc-tone="probe"]) { outline-color: var(--accent); }
+:where([data-vc-pin][data-vc-tone="correction"]) { outline-color: var(--danger); }
+:where([data-vc-pin][data-vc-tone="tension"]) { outline-color: var(--flag); }
+:where([data-vc-pin][data-vc-tone="choice"]) { outline-color: var(--alt); }
+:where([data-vc-pin][data-vc-tone="lead"]) { outline-color: var(--ok); }
+:where([data-vc-pin][data-vc-tone="waiting"]) { outline-color: var(--muted); }
+/* A click on it opens its pin window (the pin click): hovering says so. */
+:where([data-vc-pin]:hover) {
   outline-style: solid;
 }

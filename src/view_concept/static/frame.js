@@ -3,7 +3,7 @@
    theme tokens. The page cannot read the frame, nor the frame the page: the frame has an
    origin of its own, so they talk by frame messages, each an object whose `viewConcept`
    names it. The frame script is the frame's end of every one; the section's own scripts
-   take no part.
+   take part only through the channel (below).
 
    - The theme (page -> frame): the tokens define every theme, keyed by data-theme on
      <html>. The page posts its theme at load and at every change; until then (and where
@@ -14,9 +14,10 @@
    - The selection (frame -> page): each time the reader's selection in the section
      changes (a finger's handles, as a mouse's drag), the quoted text and the few
      characters before it (the anchor a passage of a Markdown section gets), with where
-     the selection sits in the frame, and the id of the nearest marked element (see the
-     holes) holding the whole selection, if any (`element`); an empty quote when the
-     selection is gone. The page opens the same box to comment or to ask on it.
+     the selection sits in the frame, and the id of the element of the drawing holding the
+     whole selection, if any (`element`): the nearest marked element (see the pins), else
+     the nearest element whose id is a drawing's element id (e1, e2…); an empty quote when
+     the selection is gone. The page opens the same box to comment or to ask on it.
    - The anchors (page -> frame), answered by "placed" (frame -> page): the passages the
      page's drafts, sent comments and side threads quote in this section. Each is
      highlighted, and highlighted again when a script of the section redraws its text.
@@ -46,27 +47,48 @@
      it sits, or nothing once the pointer leaves it, so the page shows that term's tip.
      Under touch controls, the word tapped, or nothing on a tap elsewhere or a scroll;
      a term tapped again is posted again, since the page may have hidden its tip.
-   - The holes (page -> frame): one entry per element of the drawing bearing open hole
-     records, {element (an id in the section), holes (their ids), tone ("hole",
-     "supposition" or "waiting")}. The frame sets `data-vc-hole` (the hole ids,
-     space-separated) and `data-vc-tone` (the tone) on each element, which frame.css draws
-     as the mark (orange, blue or grey), and sets them again when a script of the section
+   - The pins (page -> frame): one entry per element of the drawing bearing open pin
+     records, {element (an id in the section), pins (their ids), tone (a kind of pin, or
+     "waiting")}. The frame sets `data-vc-pin` (the pin ids, space-separated) and
+     `data-vc-tone` (the tone) on each element, which frame.css draws as the mark (the
+     kind's colour, or grey), and sets them again when a script of the section
      redraws its text. Unlike the paint of passages, this changes attributes of the
      section's elements; its scripts never read them.
-   - The hole click (frame -> page): a click, with nothing selected and off a side
-     thread's passage: the hole ids of the innermost marked element it falls in and where
-     that element sits, so the page opens their hole window on it (a marked element inside
-     another opens only its own holes); no hole when it falls in none, even in a frame
-     with no mark, so the page closes the window.
+   - The pin click (frame -> page): a click, with nothing selected and off a side
+     thread's passage: the innermost marked element it falls in (`element`, its id), its
+     pin ids and where it sits, so the page opens their pin window on that element (a
+     marked element inside another opens only its own pins); no pin when it falls in
+     none, even in a frame with no mark, so the page closes the window.
    - The escape (frame -> page): Escape pressed in the frame, which holds the focus after
-     a click in it, so the page closes its hole window as on its own Escape.
+     a click in it, so the page closes its pin window as on its own Escape.
    - The element reveal (page -> frame), answered by "revealed" (frame -> page): the
-     element of a hole to show. The frame opens its holders (and selects it when it is a
+     element of a pin to show. The frame opens its holders (and selects it when it is a
      tab of the kit), then answers with where it sits, as for a passage.
    - The tap (frame -> page) and the tap elsewhere (page -> frame), under touch controls
      only: the frame says it was tapped, so the page clears the paint of a changed passage
      in its own text and has every other frame clear its paint; a tap on the page's own
      text has every frame clear it.
+   - The channel (frame -> page), answered by "channel-answer" (page -> frame): a request
+     of the section's own script, {id (a prefix of the frame's load, and its count), op
+     ("load", "save" or "ask"), saved (save), key, instruction and schema (ask)}. The page
+     runs it against its server (app.js) and answers {id, ok, data} or {id, ok: false,
+     error}. The published page answers from the published files instead (reader.js),
+     with no server behind it, and adds `reason: "not-received"` to the answer to a
+     request never received before publishing.
+
+   The channel is the section's script's way to ask an agent for data and draw the answer
+   itself, without its section being redrawn: the frame script gives every section a
+   global `viewConcept` object, whose three calls each return a Promise.
+   - `viewConcept.load()` -> {saved, received}: the section's entry of the parameters file,
+     what its script saved last and the answers it received (each {} when none).
+   - `viewConcept.save(saved)`: replace what the section's script saved (an object), kept
+     by the server across every redraw of the section.
+   - `viewConcept.ask(key, instruction, schema)` -> the answer: a small agent answers the
+     instruction with data held to the JSON schema, kept as `received[key]`. It takes the
+     seconds of a model call; it rejects with an Error when the agent fails, times out or
+     breaks the schema, or when no page answers (a frame opened alone, a vault note). On
+     a published page, a request never received before publishing rejects with an Error
+     named "NotReceivedError": no failure, only nothing to draw.
 
    The frame script also runs the component kit's tabs (`.tabs`, see frame.css): a click
    on a `.tab` selects it and shows its panel, the n-th `.tab-panel` child of its `.tabs`,
@@ -93,6 +115,50 @@
   // Touch controls: the device's main pointer cannot hover (a finger), as the page reads it.
   var touch = window.matchMedia ? matchMedia("(hover: none)").matches : false;
   function post(message) { if (framed) parent.postMessage(message, "*"); }
+
+  /* ---- the channel ---- */
+  var LOAD_WAIT = 15000, ASK_WAIT = 200000; // ms before a request with no answer rejects
+  // A call's id: this load's own prefix and its count. The page may reload the frame
+  // while an ask runs; the answer to a call of the previous load then finds no call here
+  // and is dropped, instead of resolving the call of this load that has its count.
+  var calls = {}, callCount = 0, loadId = Math.random().toString(36).slice(2, 10);
+  function request(op, fields, wait) {
+    return new Promise(function (resolve, reject) {
+      if (!framed) { reject(new Error("viewConcept: no page to ask")); return; }
+      var id = loadId + ":" + ++callCount;
+      var timer = setTimeout(function () {
+        delete calls[id];
+        reject(new Error("viewConcept: no answer from the page"));
+      }, wait);
+      calls[id] = { resolve: resolve, reject: reject, timer: timer };
+      var message = { viewConcept: "channel", id: id, op: op };
+      for (var k in fields) message[k] = fields[k];
+      post(message);
+    });
+  }
+  function answered(d) {
+    var c = calls[d.id];
+    if (!c) return;
+    delete calls[d.id];
+    clearTimeout(c.timer);
+    if (d.ok) { c.resolve(d.data); return; }
+    var error = new Error(String(d.error || "viewConcept: the request failed"));
+    if (d.reason === "not-received") error.name = "NotReceivedError";
+    c.reject(error);
+  }
+  window.viewConcept = {
+    load: function () { return request("load", {}, LOAD_WAIT); },
+    save: function (saved) {
+      if (!saved || typeof saved !== "object" || Array.isArray(saved)) return Promise.reject(new Error("viewConcept.save takes an object"));
+      return request("save", { saved: saved }, LOAD_WAIT);
+    },
+    ask: function (key, instruction, schema) {
+      if (!key || !instruction || !schema || typeof schema !== "object") {
+        return Promise.reject(new Error("viewConcept.ask takes a key, an instruction and a JSON schema"));
+      }
+      return request("ask", { key: String(key), instruction: String(instruction), schema: schema }, ASK_WAIT);
+    },
+  };
 
   /* ---- the height ---- */
   var last = -1;
@@ -231,10 +297,16 @@
     var r = range.getBoundingClientRect();
     var common = range.commonAncestorContainer;
     if (common.nodeType !== 1) common = common.parentElement;
-    var marked = common && common.closest ? common.closest("[data-vc-hole]") : null;
+    var marked = common && common.closest ? common.closest("[data-vc-pin]") : null;
     return { quote: quote, prefix: collapse(index.text.slice(0, k)).slice(-32),
              rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom },
-             element: marked ? marked.id : "" };
+             element: marked ? marked.id : drawnElement(common) };
+  }
+  // The nearest element holding `node` whose id is a drawing's element id (e1, e2…), "".
+  var ELEMENT_ID = /^e[0-9]+$/;
+  function drawnElement(node) {
+    for (var n = node; n && n.nodeType === 1; n = n.parentElement) if (ELEMENT_ID.test(n.id || "")) return n.id;
+    return "";
   }
   // Posted on every change of the selection: a finger releases no mouse button.
   var lastQuote = null;
@@ -266,7 +338,7 @@
   var changes = []; // { quote, prefix }
   var terms = [];   // { term, kind: term | def | audit, key }
   var focus = null; // { quote, prefix } of the passage being revealed
-  var holes = [];   // { element, holes: [hole ids], tone }: the marked elements of the drawing
+  var pins = [];    // { element, pins: [pin ids], tone }: the marked elements of the drawing
   var threadRanges = [], termRanges = []; // [anchor, range], [term, range] as last painted
   var changeRanges = []; // [blocks holding the change's start and end, range] as last found
   var pointer = null;    // { x, y } of the pointer over the frame, null once it left
@@ -392,9 +464,9 @@
   // the passages and the terms again once the change is done.
   var pending = false;
   function rehighlight() {
-    if (pending || (!anchors.length && !changes.length && !terms.length && !focus && !holes.length)) return;
+    if (pending || (!anchors.length && !changes.length && !terms.length && !focus && !pins.length)) return;
     pending = true;
-    requestAnimationFrame(function () { pending = false; highlight(); markHoles(); });
+    requestAnimationFrame(function () { pending = false; highlight(); markPins(); });
   }
   new MutationObserver(rehighlight).observe(root, { childList: true, characterData: true, subtree: true });
 
@@ -409,15 +481,15 @@
     setTimeout(function () { focus = null; highlight(); }, 1500);
   }
 
-  /* ---- the holes ---- */
-  function markHoles() {
-    var marked = document.querySelectorAll("[data-vc-hole]");
-    for (var i = 0; i < marked.length; i++) { marked[i].removeAttribute("data-vc-hole"); marked[i].removeAttribute("data-vc-tone"); }
-    holes.forEach(function (h) {
+  /* ---- the pins ---- */
+  function markPins() {
+    var marked = document.querySelectorAll("[data-vc-pin]");
+    for (var i = 0; i < marked.length; i++) { marked[i].removeAttribute("data-vc-pin"); marked[i].removeAttribute("data-vc-tone"); }
+    pins.forEach(function (h) {
       var n = h.element && document.getElementById(h.element);
-      if (!n || !Array.isArray(h.holes) || !h.holes.length) return;
-      n.setAttribute("data-vc-hole", h.holes.join(" "));
-      n.setAttribute("data-vc-tone", h.tone || "hole");
+      if (!n || !Array.isArray(h.pins) || !h.pins.length) return;
+      n.setAttribute("data-vc-pin", h.pins.join(" "));
+      n.setAttribute("data-vc-tone", h.tone || "waiting");
     });
   }
   function revealElement(id) {
@@ -447,21 +519,21 @@
     return null;
   }
 
-  /* ---- the thread click and the hole click ----
-     A click outside every marked element posts an empty hole click even when the frame
-     bears no mark: the page closes a hole window opened from its index line. */
+  /* ---- the thread click and the pin click ----
+     A click outside every marked element posts an empty pin click even when the frame
+     bears no mark: the page closes a pin window opened from its index line. */
   function clickAt(target, x, y) {
     var h = hit(threadRanges, x, y);
     if (h) { post({ viewConcept: "thread-click", thread: h[0].thread, rect: rectOf(h[1]) }); return; }
-    var n = target && target.closest ? target.closest("[data-vc-hole]") : null;
-    post(n ? { viewConcept: "hole-click", holes: n.getAttribute("data-vc-hole").split(" "),
-               rect: rectOf(n.getBoundingClientRect()) }
-           : { viewConcept: "hole-click", holes: [] });
+    var n = target && target.closest ? target.closest("[data-vc-pin]") : null;
+    post(n ? { viewConcept: "pin-click", pins: n.getAttribute("data-vc-pin").split(" "),
+               element: n.id, rect: rectOf(n.getBoundingClientRect()) }
+           : { viewConcept: "pin-click", pins: [] });
   }
 
   /* ---- Escape ----
      A click in the frame gives it the focus, so the page never sees the key: the frame
-     passes Escape on, and the page closes its hole window as on its own Escape. */
+     passes Escape on, and the page closes its pin window as on its own Escape. */
   addEventListener("keydown", function (e) {
     if (e.key === "Escape") post({ viewConcept: "escape" });
   });
@@ -509,8 +581,9 @@
     else if (d.viewConcept === "changes" && Array.isArray(d.changes)) { changes = d.changes; highlight(); }
     else if (d.viewConcept === "terms" && Array.isArray(d.terms)) { terms = d.terms; hover(null); highlight(); }
     else if (d.viewConcept === "reveal") reveal(d.quote, d.prefix);
-    else if (d.viewConcept === "holes" && Array.isArray(d.holes)) { holes = d.holes; markHoles(); }
+    else if (d.viewConcept === "pins" && Array.isArray(d.pins)) { pins = d.pins; markPins(); }
     else if (d.viewConcept === "reveal-element") revealElement(d.element);
     else if (d.viewConcept === "tap-elsewhere" && touch) { pointer = null; paintChanges(null); }
+    else if (d.viewConcept === "channel-answer") answered(d);
   });
 })();

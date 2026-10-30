@@ -232,3 +232,23 @@ def test_build_draws_an_html_section_in_a_frame(session, tmp_path):
     assert framed.startswith(f"<head>{pub.FRAME_HEAD}</head>")
     assert (out / "sections" / "s2" / "a.mp4").read_bytes() == b"mp4"
     assert (out / "frame" / "tokens.css").exists() and (out / "frame" / "frame.js").exists()
+
+
+def test_a_published_channel_section_carries_its_parameters(session, tmp_path):
+    (session.sections_dir / "s2.html").write_text("<p>tree</p>")
+    before = session.fingerprint()
+    session.save_params("s2", {"answers": {"dot product": "yes"}})
+    session.set_received("s2", "dot product", {"concepts": ["vector</script>"]})
+    assert session.published_params() == {
+        "s2": {
+            "saved": {"answers": {"dot product": "yes"}},
+            "received": {"dot product": {"concepts": ["vector</script>"]}},
+        }
+    }
+    assert session.fingerprint() != before  # what the published section shows changed
+    out = tmp_path / "out"
+    pub.build(session, out)
+    page = (out / "index.html").read_text()
+    raw = page.split('<script type="application/json" id="params">')[1].split("</script>")[0]
+    assert json.loads(raw) == session.published_params()
+    assert "frameChannel" in page and 'reason: "not-received"' in page
