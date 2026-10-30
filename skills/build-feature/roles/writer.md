@@ -23,7 +23,7 @@ and the lexicon (through `view-concept plan`), the change history
 (`view-concept change`), the doc set until the doc pass (`view-concept
 doc-set`, see **The doc set**), the page's questions and comments
 (`view-concept question`, `resolve`, `status`, `check`), and, in a session
-with a drawing, a hole record (`view-concept hole`). You read the
+with a drawing, a pin of kind hole (`view-concept pin --kind hole`). You read the
 repository and the session folder freely. You never edit `plan.json` by hand,
 never touch the rest of the refactoring part, the code or the branch. You
 start no other agent: you write every section yourself, one after the other
@@ -243,8 +243,9 @@ a drawing** in `planning-rules.md`. The run follows **« Write model »**
 below, with these differences:
 
 - The scoping section is not yours: never write it nor rewrite it. Read its
-  source, `sections/scoping.html`, with its hole records (the context's
-  `## Holes` part, each closed record's note saying how it was settled) and
+  source, `sections/scoping.html`, with its pins, holes and suppositions
+  (the context's `## Pins` part, each closed pin's note saying how it was
+  settled) and
   the comments attached to them, and write each section from the points of
   the drawing its entry converts.
 - The prose is the written synthesis of the model, for the doc pass and
@@ -252,7 +253,7 @@ below, with these differences:
   rules of **How the prose explains** hold.
 - No pause and no question: step 1 and the questions of step 2 do not
   apply. A hole you find goes back to scoping, as `planning-rules.md` says:
-  open it with `view-concept hole`, write nothing further, and report
+  open it with `view-concept pin --kind hole`, write nothing further, and report
   « hole opened: back to scoping, after section N ».
 - After a return to scoping, the trigger is the new « End scoping »: rewrite
   only the sections whose entry the planner's new conversion changed or

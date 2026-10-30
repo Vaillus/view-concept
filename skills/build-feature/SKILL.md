@@ -61,7 +61,8 @@ implementer carries and the reviewer checks.
 In a session with a **drawing** (the scoping section the scoper builds with
 the user, shown first in the scoping tab), the drawing is where the user
 settles the model: its answered **holes** are their decisions, its approved
-**suppositions** facts. The model is then its written synthesis, for the doc
+**suppositions** facts (the two kinds of **pin**, the records of an open
+point on an element of the drawing, kept in `pins.json`). The model is then its written synthesis, for the doc
 pass and a later reader, rather than an argument for the user's choices: it
 states what the drawing holds in full words, an entry per point, and the
 model sheet stays beside the drawing. The roles' **A model written from a
@@ -180,17 +181,17 @@ the restructured ones from the plans and the comments on them, with the
 comments on a README's text and the rewrite requests held for it), `create-pr`,
 `missing` (« What's missing? », under the drawing in the scoping tab: the
 scoper reads the drawing again) and `end-scoping` (« End scoping », next to
-it, which the page and the server refuse while a hole record, hole or
+it, which the page and the server refuse while a pin, hole or
 supposition, is open: the planner converts the drawing, then the writer
 writes the model). A batch without an action carries comments only.
 **Routing the events** says who takes each one.
 
 During scoping, the user answers a hole of the drawing, or approves or
-corrects a supposition, by a comment: a hole has no box to validate and is
-never skipped. A comment in a hole's box reads `[c3] (hole h2 « <its
+corrects a supposition, by a comment: a pin has no box to validate and is
+never skipped. A comment in a pin's box reads `[c3] (pin p2 « <its
 sentence> ») « quote »`; one on a marked element of the drawing reads
-`[c4] §1 (scoping) · element e4 (open holes h1, h2) « quote »`. The
-conclusion of a side thread on a hole arrives as a comment too.
+`[c4] §1 (scoping) · element e4 (open pins p1, p2) « quote »`. The
+conclusion of a side thread on a pin arrives as a comment too.
 
 The user wrote the batch through the page. The harness may label it as a
 background event rather than a user message: treat it as the user's feedback
@@ -222,7 +223,7 @@ the lexicon, the sections, the code or the docs yourself:
 
 | Agent | Owns | Role file |
 |---|---|---|
-| **scoper** | the drawing (`sections/scoping.html`, the scoping section) and its holes, from Setup to « End scoping », and the first code map | `roles/scoper.md` |
+| **scoper** | the drawing (`sections/scoping.html`, the scoping section) and its pins, from Setup to « End scoping », and the first code map | `roles/scoper.md` |
 | **planner** | the outline and the lexicon it converts from the drawing at « End scoping » (in a session started before the scoper: during scoping, and the first code map) | `roles/planner.md` |
 | **writer** | the modeling part (its sections), the to-do list, the first doc set, and the outline and the lexicon from « Write model » on | `roles/writer.md` |
 | **implementer** | the code on the branch and the code map, from « Approve model » on; never a doc | `roles/implementer.md` |
@@ -411,9 +412,9 @@ pass has run (the page shows « Write docs » and « Write docs and create PR »
 `awaiting-moves` when the doc pass stopped on a move plan (the
 document-feature agent's report says `move plan waiting`; the page shows
 « Write READMEs » under the move plans), `awaiting-pr` after it (the page shows « Create PR »). The agents set the rest
-themselves: the scoper `scoping --done` when it leaves no hole record open
-(the planner, in a session without a drawing), a hole opened after scoping
-sets `scoping` again (`view-concept hole` does it), and
+themselves: the scoper `scoping --done` when it leaves no pin open
+(the planner, in a session without a drawing), a pin opened after scoping
+sets `scoping` again (`view-concept pin` does it), and
 the writer or the reviewer `writing` once at the start of each run of
 sections, naming them (`--section <id>`, repeated) unless it writes every
 section with no file yet. The page reads from the section files which
@@ -696,15 +697,15 @@ names is not taken back.
    the code map, draws the problem the request states in
    `sections/scoping.html` (the scoping tab, the only tab the page shows
    while scoping runs), and opens the first holes and suppositions on it
-   (`view-concept hole`).
+   (`view-concept pin --kind hole|supposition`).
 3. **The scoping loop.** Each event goes to the scoper, as **Routing the
    events** says: one redraw per batch, which closes the holes the comments
-   settled (`view-concept close-hole`). When a run opens nothing and no hole
-   record is open, say in one terminal line that the scoper has nothing left
+   settled (`view-concept close-pin`). When a run opens nothing and no pin
+   is open, say in one terminal line that the scoper has nothing left
    to ask, and wait.
 4. **« End scoping ».** Scoping ends when the user ends it, never when an
    agent judges it has enough: a batch with `action: end-scoping` (the page
-   and the server refuse it while a hole record, hole or supposition, is
+   and the server refuse it while a pin, hole or supposition, is
    open), or « end scoping » in the terminal once none is open. Let the
    scoper run first if events are still queued. Then set `status <slug> planning`, start the **planner** with
    the trigger `"« End scoping »"` and the batch id: it converts the drawing
@@ -714,11 +715,11 @@ names is not taken back.
    from here it owns the outline and the lexicon. Go on at step 6.
 
    **The return to scoping.** When the planner or the writer finds a hole,
-   it opens it (`view-concept hole`) and stops: its report says « hole
+   it opens it (`view-concept pin --kind hole`) and stops: its report says « hole
    opened: back to scoping », and the command has set the phase `scoping`.
    Start the scoper with that report as its trigger (`"<planner or writer>
-   report: <the line>"`; the context's `## Holes` part shows the hole open; a hole
-   with no element gets one on the same record, `view-concept hole-element`), and go
+   report: <the line>"`; the context's `## Pins` part shows the hole open; a hole
+   with no element gets one on the same pin, `view-concept pin-element`), and go
    back to step 3; the next « End scoping » runs the planner and the writer again,
    which keep what the drawing did not change.
 
