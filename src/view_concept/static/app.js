@@ -1098,7 +1098,7 @@ function postPins(id, f = frames.get(id)) {
 function revealElement(id, element, pins, line) {
   setTab(tabOf(id));
   const f = frames.get(id);
-  if (!f || !f.contentWindow) { openPinOnLine(id, pins, line); return; }
+  if (!f || !f.contentWindow) { openPinOnLine(id, pins, line, element); return; }
   revealing.set(id, { element, pins, line });
   f.contentWindow.postMessage({ viewConcept: "reveal-element", element }, "*");
 }
@@ -1154,15 +1154,16 @@ function showPin(hid) {
   else { setTab(tabOf(id)); openPinOnLine(id, pinsOn(h), h.id); }
 }
 
-function openPinOnLine(section, pins, line) {
-  openPinPop(section, pins, { line });
+function openPinOnLine(section, pins, line, element) {
+  openPinPop(section, pins, { line }, element);
   const b = document.querySelector(`.pin-line[data-pin="${CSS.escape(line || "")}"]`);
   if (b) pageScroll(b.closest(".view"), () => b.scrollIntoView({ block: "center", behavior: "smooth" }));
 }
 
-function openPinPop(section, pins, anchor) {
-  const first = openPins().find((h) => pins.includes(h.id));
-  pinPop = { section, pins, element: first ? pinElements(first)[0] : undefined, anchor };
+// `element`: the element of the drawing the window opens on (the one clicked or
+// revealed), whose open pins it shows with `pins`; none for a window on a pin alone.
+function openPinPop(section, pins, anchor, element) {
+  pinPop = { section, pins, element: element ? String(element) : undefined, anchor };
   renderPinPop();
   document.querySelectorAll(".pin-line").forEach((b) => b.classList.toggle("open", !!pinPop && pinPop.pins.includes(b.dataset.pin)));
 }
@@ -1239,12 +1240,13 @@ function positionPinPop() {
   pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
 }
 
-/* The pin click message: the pin ids of the marked element clicked and where it sits,
-   or none for a click elsewhere in the drawing. */
+/* The pin click message: the marked element clicked (`element`, its id), its pin ids
+   and where it sits, or no pin for a click elsewhere in the drawing. The window opens on
+   that element, so a pin on two elements (a tension) opens on the one clicked. */
 function framePinClick(id, f, d) {
   const pins = Array.isArray(d.pins) ? d.pins.map(String) : [];
   if (!pins.length || !d.rect) { closePinPop(); return; }
-  openPinPop(id, pins, { f, rect: d.rect });
+  openPinPop(id, pins, { f, rect: d.rect }, d.element);
 }
 
 document.querySelectorAll(".view").forEach((v) => v.addEventListener("scroll", positionPinPop, { passive: true }));
@@ -2288,8 +2290,8 @@ function frameRevealed(id, f, d) {
   // A line of the pin index: the pin window opens on the element, or on the line when
   // the drawing no longer has it.
   if (asked.pins) {
-    if (!d.found) { openPinOnLine(id, asked.pins, asked.line); return; }
-    openPinPop(id, asked.pins, { f, rect: { left: d.left ?? 0, right: d.right ?? 0, top: d.top, bottom: d.bottom } });
+    if (!d.found) { openPinOnLine(id, asked.pins, asked.line, asked.element); return; }
+    openPinPop(id, asked.pins, { f, rect: { left: d.left ?? 0, right: d.right ?? 0, top: d.top, bottom: d.bottom } }, asked.element);
   }
   if (!d.found) { scrollToSection(id); return; }
   const r = pageRect(f, { left: 0, right: 0, top: d.top, bottom: d.bottom });

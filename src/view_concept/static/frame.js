@@ -55,10 +55,10 @@
      redraws its text. Unlike the paint of passages, this changes attributes of the
      section's elements; its scripts never read them.
    - The pin click (frame -> page): a click, with nothing selected and off a side
-     thread's passage: the pin ids of the innermost marked element it falls in and where
-     that element sits, so the page opens their pin window on it (a marked element inside
-     another opens only its own pins); no pin when it falls in none, even in a frame
-     with no mark, so the page closes the window.
+     thread's passage: the innermost marked element it falls in (`element`, its id), its
+     pin ids and where it sits, so the page opens their pin window on that element (a
+     marked element inside another opens only its own pins); no pin when it falls in
+     none, even in a frame with no mark, so the page closes the window.
    - The escape (frame -> page): Escape pressed in the frame, which holds the focus after
      a click in it, so the page closes its pin window as on its own Escape.
    - The element reveal (page -> frame), answered by "revealed" (frame -> page): the
@@ -518,7 +518,7 @@
     if (h) { post({ viewConcept: "thread-click", thread: h[0].thread, rect: rectOf(h[1]) }); return; }
     var n = target && target.closest ? target.closest("[data-vc-pin]") : null;
     post(n ? { viewConcept: "pin-click", pins: n.getAttribute("data-vc-pin").split(" "),
-               rect: rectOf(n.getBoundingClientRect()) }
+               element: n.id, rect: rectOf(n.getBoundingClientRect()) }
            : { viewConcept: "pin-click", pins: [] });
   }
 
