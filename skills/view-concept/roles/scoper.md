@@ -69,7 +69,10 @@ take, refined one batch at a time.
   user's exact words sit behind the point's **source tag**: the tag on the
   point naming the pin, comment or side thread it comes from (`p3`, `c12`,
   `t4`), which holds those words on hover, or in a fold that opens on a
-  click. A quote stands inline in two cases only: the wording is itself the
+  click. A point taken by « agreed » (from the agree button, typed, or in a
+  side thread) or by a choice among options (« option 1 ») holds behind its
+  tag the user's words and the correction, lead or option they took, since
+  « agreed » alone traces nothing. A quote stands inline in two cases only: the wording is itself the
   decision (a name the user chose), or your rephrasing interprets what they
   said, in which case their words and yours stand side by side, so a drift
   shows. One exception: a probe's answer stays in the user's words, quoted
@@ -117,9 +120,10 @@ term.
   term a repo lexicon defines keeps that entry's name and definition.
 - **Write it** on every run that draws a new term or changes one, with
   `view-concept plan <slug> -` and `{"lexicon": [...]}` on stdin. The key
-  replaces the whole lexicon: start from the lexicon in your context, add
-  or change the entries this run needs, and send every entry, the others as
-  they are. The command refuses an entry whose section is not in the
+  replaces the whole lexicon: start from the `lexicon` of `plan.json` in
+  the session folder, which holds every field of each entry (its home
+  section's id, its `tip`), add or change the entries this run needs, and
+  send every entry, the others as they are. The command refuses an entry whose section is not in the
   outline: the first run writes the drawing's outline entry before its
   first lexicon.
 - **The drawing uses the lexicon's terms**, each in the sense its entry
@@ -392,16 +396,18 @@ their report says why).
    needs, the parameters file. A **sent thread**, a side thread whose
    conclusion the user sent to the batch with « → batch » (the comment ends
    with `(from side thread t4: threads/t4.json)`, with or without a text of
-   its own), is read whole, and drawn at its precision: every definition,
-   rule and case it holds enters the drawing, each element citing the
-   thread by its source tag (`t4`).
-   - What the user took in it (an answer, « option 1 », an explicit
-     « agreed »), and its conclusion when sent with no comment, are drawn
-     solid: a thread sent with no text is the user's agreement.
-   - A decision the thread agent proposed that the user never answered is
-     not drawn: it becomes a **lead** citing the thread (« … (t4) »), since
-     you draw no part the user did not take. Left open at « End scoping »,
-     it is left out like any open lead.
+   its own), is read whole, and carried over at its precision: every
+   definition, rule and case it holds reaches the drawing, citing the
+   thread (`t4`), either drawn or as a lead.
+   - Only what the user took in it (an answer, « option 1 », an explicit
+     « agreed »), and its conclusion when sent with no comment, enter the
+     drawing, solid, each element citing the thread by its source tag: a
+     thread sent with no text is the user's agreement.
+   - Whatever the thread agent put forward that the user did not take, a
+     definition, a fact, a framing or a decision, is not drawn: it becomes
+     a **lead** citing the thread (« … (t4) »), with the sources the thread
+     gave (`--source`), since you draw no part the user did not take. Left
+     open at « End scoping », it is left out like any open lead.
    - A detail that would lengthen the main view goes in a fold of the
      element it bears on.
 2. Redraw once (see **The drawing**): what each comment settled is drawn,
@@ -416,10 +422,11 @@ their report says why).
      close it with the note « withdrawn: <the decision> »
      (`view-concept close-pin <slug> <pin id> --note "withdrawn: <the
      decision>"`);
-   - a **replaced pin** is an open pin a later decision contradicts: close
-     it (`view-concept close-pin`, its note naming the decision) and open a
-     new pin in its new form (`view-concept pin`), with an id of its own,
-     since a pin's sentence is never edited.
+   - a **replaced pin** is an open pin a later decision contradicts: open
+     a new pin in its new form (`view-concept pin`, on the element the old
+     one bore on), then close the old one, `view-concept close-pin <slug>
+     <pin id> --note "replaced by <new pin id>: <the decision>"`. A pin's
+     sentence is never edited: the new pin has an id of its own.
 
    Name each withdrawn and each replaced pin in the drawing's first line
    (« p4 withdrawn, p6 replaced by p9 »), so the user sees which pins left
