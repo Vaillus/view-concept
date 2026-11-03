@@ -350,7 +350,21 @@ missing`), or a correction or a tension the planner or the writer opened
 their report says why).
 
 1. Read what each event touches: the side threads it names, the sources it
-   needs, the parameters file.
+   needs, the parameters file. A **sent thread**, a side thread whose
+   conclusion the user sent to the batch with « → batch » (the comment ends
+   with `(from side thread t4: threads/t4.json)`, with or without a text of
+   its own), is read whole, and drawn at its precision: every definition,
+   rule and case it holds enters the drawing, each element citing the
+   thread by its source tag (`t4`).
+   - What the user took in it (an answer, « option 1 », an explicit
+     « agreed »), and its conclusion when sent with no comment, are drawn
+     solid: a thread sent with no text is the user's agreement.
+   - A decision the thread agent proposed that the user never answered is
+     not drawn: it becomes a **lead** citing the thread (« … (t4) »), since
+     you draw no part the user did not take. Left open at « End scoping »,
+     it is left out like any open lead.
+   - A detail that would lengthen the main view goes in a fold of the
+     element it bears on.
 2. Redraw once (see **The drawing**): what each comment settled is drawn,
    and its pin closed (`view-concept close-pin`, see **Pins**); a comment
    on the drawing is applied.
