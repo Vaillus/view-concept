@@ -53,8 +53,14 @@ where they form a sequence (a timeline of « today » next to one of
   the problem: no layout is imposed.
 - **The user's words.** What the user said is drawn solid, in their words,
   quoted when it is a quote. Stay close to their **apparent understanding**:
-  draw what they said and what it plainly implies, nothing more.
-- **Holes and suppositions.** Everything you would add beyond that enters
+  draw what they said and what it plainly implies, and the facts below,
+  nothing more.
+- **Facts.** What you read in the code or the docs about today (what the
+  code does, what a doc states, and what plainly follows from it) is drawn
+  solid, with its file and line beside it (`benchmark/README.md l.3-5`),
+  and gets no pin: the user reads it, and corrects it by a comment like
+  any solid element.
+- **Holes and suppositions.** Everything else you would add enters
   as a **pin**, a record of an open point on an element of the drawing, in
   the pin file (`pins.json` in the session folder), never as a fact drawn.
   You place two kinds of pin:
@@ -63,12 +69,14 @@ where they form a sequence (a timeline of « today » next to one of
     known>" --kind hole --element <id>`. The sentence says what is not
     known, and nothing else: no options, no recommended answer, no
     background (the drawing shows the mechanism the hole bears on);
-  - a **supposition** is what you can answer yourself from the code and the
-    docs, beyond the user's apparent understanding: `view-concept pin
-    <slug> "<your answer, as a statement in one sentence>" --kind
-    supposition --element <id>`. The page shows it in blue, with no label
-    to approve: the colour says it is a supposition. It is a fact of the
-    drawing only once the user approved it.
+  - a **supposition** is a decision you make in the user's place about
+    tomorrow (a part of the solution, a value, a format, a name), drawn for
+    them to approve or correct: `view-concept pin <slug> "<the decision,
+    as a statement in one sentence>" --kind supposition --element <id>`.
+    The page shows it in blue, with no label: the colour says it is a
+    supposition. It is a decision of the drawing only once the user
+    approved it. A fact the code or the docs state is never a supposition:
+    draw it solid, with its source.
 
   Each command prints the pin's id (`p1`, `p2`…; a pin carried over from an
   older session keeps its `h…` id). A pin bears on an
@@ -106,8 +114,9 @@ where they form a sequence (a timeline of « today » next to one of
   drawing's first line. The ids stay either way: they are how the user
   follows a redraw, and what the pins name.
 - **The drawing's first line** says the turn and what this redraw did
-  (« turn 4 · two answers, built over »), with a legend of the marks the
-  drawing uses.
+  (« turn 4 · two answers, built over »), what solid means (what the user
+  said, or what the code or the docs do today, with its source), and a
+  legend of the marks the drawing uses.
 
 ## A first run (no trigger)
 
@@ -129,8 +138,8 @@ where they form a sequence (a timeline of « today » next to one of
    "earns": "<one sentence: what the drawing shows>"}]}`
    through `view-concept plan <slug> -`.
 4. Draw `sections/scoping.html` from the request: what the user said, with
-   their words, and the parts of today's code it touches, as far as the user
-   showed they know them.
+   their words, and the parts of today's code it touches, each fact solid
+   with its file and line.
 5. Open the first holes and suppositions, each on an element of the
    drawing.
 6. Log one change: « first drawing », `--by scoper`.

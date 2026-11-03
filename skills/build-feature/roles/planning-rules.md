@@ -59,8 +59,9 @@ them), is the source of the model, settled with the user. Four rules of this fil
   the drawing defines it: the material the doc pass turns into READMEs and
   the PR, and what a later reader of the repository needs. What the drawing
   holds is written out in full words: « never explain back what is known »
-  does not apply to it. An answered hole is a decision to state, an approved
-  supposition a fact to state, without saying who settled it. What is known
+  does not apply to it. An answered hole and an approved supposition are
+  decisions of the model to state, and a fact the drawing shows solid with
+  its source a fact to state, without saying who settled them. What is known
   only from comments and answers outside the drawing follows **The reader**
   above.
 - **The outline.** Its aim is to explain the model clearly, not to guide
