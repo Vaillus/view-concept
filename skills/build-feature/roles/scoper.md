@@ -55,10 +55,19 @@ where they form a sequence (a timeline of « today » next to one of
   `.tab-row`, `.tab` and `.tab-panel`). Interactive where it helps the user
   see: points to click open, timelines to step through. The form depends on
   the problem: no layout is imposed.
-- **The user's words.** What the user said is drawn solid, in their words,
-  quoted when it is a quote. Stay close to their **apparent understanding**:
-  draw what they said and what it plainly implies, and the facts below,
-  nothing more.
+- **Your words, the user's behind the tag.** What the user said is drawn
+  solid, each point stated in your words and the lexicon's terms, the
+  user's exact words behind the point's **source tag**: the tag that names
+  the pin, comment or side thread the point comes from (`p32`, `c12`,
+  `t15`), holding their words on hover or in a fold that opens on a
+  click, out of the main view. A decision taken by « agreed » (from the
+  agree button, typed, or in a side thread) holds behind its tag the
+  user's words and the proposal they agreed to, since « agreed » alone
+  traces nothing. Quote the user inline in two cases only: the wording is
+  itself the decision (a name they chose), or your rephrasing interprets
+  what they said (their words and yours side by side, so they catch a
+  drift). Stay close to their **apparent understanding**: draw what they
+  said and what it plainly implies, and the facts below, nothing more.
 - **Facts.** What you read in the code or the docs about today (what the
   code does, what a doc states, and what plainly follows from it) is drawn
   solid, with its file and line beside it (`benchmark/README.md l.3-5`),
@@ -184,8 +193,8 @@ where they form a sequence (a timeline of « today » next to one of
    `{"outline": [{"id": "scoping", "title": "Scoping", "part": "scoping",
    "earns": "<one sentence: what the drawing shows>"}]}`
    through `view-concept plan <slug> -`.
-4. Draw `sections/scoping.html` from the request: what the user said, with
-   their words, and the parts of today's code it touches, each fact solid
+4. Draw `sections/scoping.html` from the request: what the user said, in
+   your words with theirs behind its source tag, and the parts of today's code it touches, each fact solid
    with its file and line.
 5. Write the scoping lexicon: an entry per term of the drawing that is
    not plain language (see **The scoping lexicon**).
@@ -205,13 +214,15 @@ open).
    concerns, starting from the code map; add to the map what you found.
 2. Redraw once (see **The drawing**): an answered hole and an approved
    supposition (a comment « agreed », from the agree button or typed)
-   become solid, in the user's words; a correction is drawn as
-   the user gave it; a comment on the drawing is applied, and a comment on
+   become solid, in your words, the user's behind the source tag; a
+   correction is drawn as the user gave it; a comment on the drawing is applied, and a comment on
    a term rewrites its entry (a rename in every element that used the old
    word, see **A comment on a term**). Write the lexicon again when the
    redraw drew a new term or changed one. Close each hole
-   or supposition a comment settled, with how it was settled: `view-concept
-   close-pin <slug> <pin id>... --note "<the answer, in the user's words>"`.
+   or supposition a comment settled, with how it was settled in its
+   **close note**: the decision in your words, then the user's words
+   quoted with their source, `view-concept close-pin <slug> <pin id>...
+   --note "<the decision> · « <the user's words> » (<their source: c17, t4>)"`.
    A comment that does not settle its pin (« I don't see what it
    changes ») leaves it open: redraw what the user needs to decide it.
 3. Read every pin still open, hole or supposition, against the decisions
