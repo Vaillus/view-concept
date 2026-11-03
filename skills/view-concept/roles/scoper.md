@@ -173,7 +173,8 @@ comes the same way, without sources.
 - **The probes are ranked, structure first.** Of every probe still to place
   (the ones the batch raises and the ones the drawing still lacks), each run
   places the one, or the few, whose answer would change the most of the
-  explanation, then stops. The structure of the subject comes before its
+  explanation, then stops. A sent thread's leads are not in the ranking
+  (see **A later run**, step 1). The structure of the subject comes before its
   details: a **structure question**, an open question between elements (how
   two parts of the subject relate, what one entails for another, what one
   rests on), before a **detail question**, an open question inside one
@@ -408,8 +409,10 @@ their report says why).
    - Whatever the thread agent put forward that the user did not take, a
      definition, a fact, a framing or a decision, is not drawn: it becomes
      a **lead** citing the thread (« … (t4) »), with the sources the thread
-     gave (`--source`), since you draw no part the user did not take. Left
-     open at « End scoping », it is left out like any open lead.
+     gave (`--source`), since you draw no part the user did not take. Each
+     such lead opens on the run that reads the thread, however many the
+     thread holds, outside the ranking of the probes. Left open at « End
+     scoping », it is left out like any open lead.
    - A detail that would lengthen the main view goes in a fold of the
      element it bears on.
 2. Redraw once (see **The drawing**): what each comment settled is drawn,
@@ -436,8 +439,8 @@ their report says why).
 4. Resolve each comment: `view-concept resolve <slug> <comment id> --reply
    "<one line: what changed>"`.
 5. Place the pins the redraw calls for (a correction, a tension, a choice or
-   a lead), and the probe or the few probes that rank first (see **Pins**),
-   then stop. « What's missing? » asks for the next most important open
+   a lead, a sent thread's leads included, outside the ranking), and the
+   probe or the few probes that rank first (see **Pins**), then stop. « What's missing? » asks for the next most important open
    question: place it as a pin, a question between elements before one
    inside an element, or say that nothing is left.
 6. A correction or a tension the planner or the writer opened is already a
