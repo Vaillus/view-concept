@@ -153,17 +153,18 @@ elements? (the ids, when it sits on several: a tension between two elements), so
 (where a lead's finding was looked up), status: "open" | "closed", asked, closed?, note?
 (how it was settled), question? (the id of the question an old session's pin was moved
 from)}. Each skill places its own kinds of pin (PIN_KINDS, by workflow; `add_pin` refuses
-another): /build-feature a hole (what only the user can settle) or a supposition (the
-statement the agent already drew from the code, which the user approves or corrects);
-/view-concept a probe, a correction, a tension, a choice or a lead. The page draws each
-kind in its own colour: it marks the pin's elements, opens its box beside the element on a
-click, and lists it at the end of the scoping tab while it is open. The user answers by a
-comment, anchored to the box (`pin:<id>`; `hole:<id>`, written before the rename, is read
-the same way, `pin_anchor`) or carrying the marked element a selection in the drawing
-falls in (`element`), or by a side thread on the box; the scoper closes it (`close_pins`)
-when it redraws. An open pin with a sent comment not resolved yet is waiting
-(`waiting_pins`): nothing stores it; `pin_tones` gives the colour of each open pin and of
-each marked element, which the page draws. A session with a scoping section ends its
+another): /build-feature a hole (what only the user can settle) or a supposition (a
+decision the agent makes in the user's place, which the user approves or corrects; a fact
+read in the code is drawn solid, not pinned); /view-concept a probe, a correction, a
+tension, a choice or a lead. The page draws each kind in its own colour: it marks the
+pin's elements, opens its box beside the element on a click, and lists it at the end of
+the scoping tab while it is open. The user answers by a comment, anchored to the box
+(`pin:<id>`; `hole:<id>`, written before the rename, is read the same way, `pin_anchor`)
+or carrying the marked element a selection in the drawing falls in (`element`), or by a
+side thread on the box; the scoper closes it (`close_pins`) when it redraws. An open pin
+with a sent comment not resolved yet is waiting (`waiting_pins`): nothing stores it;
+`pin_tones` gives the colour of each open pin and of each marked element, which the page
+draws. A session with a scoping section ends its
 scoping with « End scoping »: a batch whose action is "end-scoping", refused while a
 correction, a tension, a hole or a supposition is open (`blocking_pins`), an open probe,
 choice or lead being left out of the report; « What's missing? » sends one whose action is
@@ -422,11 +423,12 @@ PIN_KEY = "pin:"
 LEGACY_PIN_KEY = "hole:"
 # The kinds of pin each skill places, by session workflow: the pin command refuses another.
 # /build-feature's user knows the feature: a hole is what only they can settle, a
-# supposition the agent's answer from the code for them to approve. /view-concept's user
-# is learning the subject: a probe asks what they believe on an element they drew, a
-# correction states that one is wrong and gives the fix, a tension sits on two elements
-# that do not hold together (or one against the goal), a choice asks which framing the
-# explanation follows, a lead offers what the agent found, with its sources when looked up.
+# supposition a decision the agent makes in their place, for them to approve or correct.
+# /view-concept's user is learning the subject: a probe asks what they believe on an
+# element they drew, a correction states that one is wrong and gives the fix, a tension
+# sits on two elements that do not hold together (or one against the goal), a choice asks
+# which framing the explanation follows, a lead offers what the agent found, with its
+# sources when looked up.
 PIN_KINDS = {
     "build-feature": ("hole", "supposition"),
     "view-concept": ("probe", "correction", "tension", "choice", "lead"),
