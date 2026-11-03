@@ -93,7 +93,10 @@ them), is the source of the model, settled with the user. Four rules of this fil
   and its definition stay as the scoper wrote them. It adds an entry for
   each term the drawing uses that the scoper left out. A return to scoping
   keeps the home section a conversion set; a term the redraw adds enters
-  the scoping section, and the next conversion sets its home section. Then the lexicon is kept as below.
+  the scoping section, and the next conversion sets its home section. A
+  later conversion keeps each entry's home section, but for an entry whose
+  section that conversion removes from the outline: it gets the section
+  that now introduces its term. Then the lexicon is kept as below.
 
 ## Writing the outline and the lexicon
 

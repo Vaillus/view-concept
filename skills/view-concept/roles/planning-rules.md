@@ -225,7 +225,9 @@ The rules of a plan written from a drawing:
   the drawing). It adds an entry for each term the drawing uses that the
   scoper left out. A return to scoping keeps the home section a conversion
   set; a term the redraw adds enters the scoping section, and the next
-  conversion sets its home section. Then
+  conversion sets its home section. A later conversion keeps each entry's
+  home section, but for an entry whose section that conversion removes
+  from the outline: it gets the section that now introduces its term. Then
   the lexicon is kept as **The lexicon** says.
 - **No question to the user**, no « Approve plan » stop, no `revision` line.
   A drawing element you find wrong or imprecise, or two elements you find at

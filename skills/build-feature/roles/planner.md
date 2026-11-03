@@ -57,7 +57,9 @@ from a drawing** in `planning-rules.md`:
    conversion after a return to scoping (an earlier conversion exists) keeps
    each outline entry whose point the change history does not show as
    changed since that conversion, and replans the others; in the lexicon,
-   an entry keeps the home section the earlier conversion set. An entry whose section is
+   an entry keeps the home section the earlier conversion set, but for an
+   entry whose section this conversion removes from the outline: give it
+   the section that now introduces its term. An entry whose section is
    `scoping` is a term the redraw added: give it its home section as
    above.
 3. Log one change: « converted the drawing », `--by planner`, its cause the
