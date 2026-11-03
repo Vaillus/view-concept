@@ -112,7 +112,8 @@ spelled like a common word counts as used wherever the word appears. Two
 breaches have names: a **forward reference** (a `definition` or `tip` uses a
 term whose home section comes later) and an **early use** (a term appears in
 the prose of a section placed before its home section). `view-concept check
-<slug>` lists both.
+<slug>` lists both. The check skips the scoping section: the drawing uses
+every term of the report before the term's home section.
 
 **The hover text.** Three hard constraints on a `tip`, which bind
 `definition` too:
@@ -190,7 +191,9 @@ The rules of a plan written from a drawing:
   settled choice fixes the framing, a taken lead is part of the subject.
   A **withdrawn pin** (the scoper closed it as moot, with the note
   « withdrawn: <the decision> ») adds nothing of its own: the decision its
-  note names is drawn already.
+  note names is drawn already. A **replaced pin** (the scoper closed it as
+  contradicted, with the note « replaced by <new pin id>: <the decision> »)
+  is read through the pin that replaced it.
 - **What was left open is left out.** A probe, a choice or a lead still open
   at « End scoping », or a lead the user left (closed with the note
   « left »), is one the user ignored: write as if it had never been placed.
