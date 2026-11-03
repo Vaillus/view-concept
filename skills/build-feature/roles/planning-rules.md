@@ -83,8 +83,14 @@ them), is the source of the model, settled with the user. Four rules of this fil
   same pin).
   Then stop the run, and report « hole opened: back to scoping ». What you
   settle from the code is a decision made for the user: write it as such.
-- **The lexicon** is born at the conversion: the planner writes it from the
-  words of the drawing, then it is kept as below.
+- **The lexicon** starts in the scoping: the scoper keeps the **scoping
+  lexicon** from its first drawing on, an entry per term of the drawing
+  that is not plain language, each entry's home section the scoping
+  section, its term and its definition changed by the user's comments. At
+  the conversion the planner moves each entry to its home section of the
+  model, keeping its term and its definition, and adds an entry for each
+  term the drawing uses that the scoper left out; then it is kept as
+  below.
 
 ## Writing the outline and the lexicon
 
@@ -206,10 +212,11 @@ plain words; never point ahead. A **forward reference** is a `definition` or
 section placed before its home section. `view-concept check <slug>` lists
 both.
 
-The model sheet is the one exception: it lays out what the sections after it
+The model sheet is an exception: it lays out what the sections after it
 discuss, so it may name a core concept whose home section comes later, and
 that section defines it. Its outline entry carries `"overview": true`, so the
-check reports no early use in it.
+check reports no early use in it. The check skips the scoping section too:
+the drawing uses every term of the model before the term's home section.
 
 No location details in a `definition` or a `tip` (a file, a key, a section
 number): a file the reader needs goes in the home section's prose. A `tip`

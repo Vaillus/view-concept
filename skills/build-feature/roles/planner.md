@@ -47,7 +47,12 @@ from a drawing** in `planning-rules.md`:
    the map what you found and where each concept will live.
 2. Write the outline and the lexicon with `view-concept plan`: the scoping
    entry first, unchanged, then the model sheet, then an entry per point of
-   the drawing (or a few points together), the to-do list last. A
+   the drawing (or a few points together), the to-do list last. The
+   lexicon starts from the scoping lexicon, the scoper's entries whose
+   section is `scoping`: move each entry to its home section, the section
+   of the model that introduces its term, keeping its term and its
+   definition (the user controlled both by comment), and add an entry for
+   each term the drawing uses that the scoper left out. A
    conversion after a return to scoping (an earlier conversion exists) keeps
    each entry whose point the change history does not show as changed since
    that conversion, and replans the others.
