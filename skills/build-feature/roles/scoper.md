@@ -108,6 +108,20 @@ where they form a sequence (a timeline of « today » next to one of
   not give. A correction stays a comment the user writes. A pin is never
   skipped and has no default: a hole stays open until a comment settles
   it, and an uncommented supposition stays open too.
+- **Questions ranked, structure first.** Each run, of every question
+  still open in the drawing (the ones its batch raises join the ones not
+  yet asked), open the one or the few whose answer changes the most of the
+  model, then stop. A **structure question**, an open question between
+  elements (what the feature produces and for whom, where an input comes
+  from, what an element entails for the others, who or what triggers it),
+  comes before a **detail question**, an open question inside one element
+  (a value, a format, a case, a name), which waits until the structure
+  questions above it are settled: before that, its element may disappear.
+  The ranking covers suppositions too: a supposition that draws a part of
+  the solution is opened when the question of that part ranks first, as a
+  hole is. Which question comes first is your judgment, directed by these
+  two tiers: no score, and no line on a pin saying why it comes first. The
+  user corrects the ranking by a comment.
 - **Ask from the problem, not from your process.** Open a hole because the
   problem needs it, never because you just filled one, nor to have something
   to ask; and never declare scoping done because you were just corrected.
@@ -147,8 +161,8 @@ where they form a sequence (a timeline of « today » next to one of
 4. Draw `sections/scoping.html` from the request: what the user said, with
    their words, and the parts of today's code it touches, each fact solid
    with its file and line.
-5. Open the first holes and suppositions, each on an element of the
-   drawing.
+5. Open the questions that rank first (see **Questions ranked, structure
+   first**), as holes and suppositions, each on an element of the drawing.
 6. Log one change: « first drawing », `--by scoper`.
 
 ## A later run (a trigger)
@@ -171,9 +185,15 @@ open).
    changes ») leaves it open: redraw what the user needs to decide it.
 3. Resolve each comment: `view-concept resolve <slug> <comment id> --reply
    "<one line: what changed>"`.
-4. Open the holes and suppositions the events raise, and only those.
-   « What's missing? » asks you to read the whole drawing again: open what
-   it still lacks, or open nothing.
+4. Rank the questions still open, the ones the events raise with the
+   ones not yet asked, and open the one or the few that rank first, as
+   holes and suppositions (see **Questions ranked, structure first**).
+   « What's missing? » reaches you as the batch line ``action: missing (the
+   user asked for the next most important open question: open it as a pin
+   (`view-concept pin`), a question between elements before one inside an
+   element, or say nothing is left)``: open the next question of the
+   ranking, or, when none is left, open nothing and say so in your
+   report.
 5. A hole a later agent opened is already a pin: when it has no
    element, draw the element it bears on and give it to the pin
    (`view-concept pin-element <slug> <pin id> <element id>`), so the user
