@@ -136,8 +136,9 @@ where they form a sequence (a timeline of « today » next to one of
   follows a redraw, and what the pins name.
 - **The drawing's first line** says the turn and what this redraw did
   (« turn 4 · two answers, built over »), what solid means (what the user
-  said, or what the code or the docs do today, with its source), and a
-  legend of the marks the drawing uses.
+  said, or what the code or the docs do today, with its source), each pin
+  this run withdrew or replaced (« p37 withdrawn, p33 replaced by p41 »),
+  and a legend of the marks the drawing uses.
 
 ## A first run (no trigger)
 
@@ -183,9 +184,23 @@ open).
    close-pin <slug> <pin id>... --note "<the answer, in the user's words>"`.
    A comment that does not settle its pin (« I don't see what it
    changes ») leaves it open: redraw what the user needs to decide it.
-3. Resolve each comment: `view-concept resolve <slug> <comment id> --reply
+3. Read every pin still open, hole or supposition, against the decisions
+   this run drew, and close the ones they settle, with no comment from
+   the user:
+   - a **withdrawn pin** is an open pin a decision drawn since made moot:
+     close it with the note « withdrawn: » followed by that decision,
+     `view-concept close-pin <slug> <pin id> --note "withdrawn: <the
+     decision>"`;
+   - a **replaced pin** is an open pin a later decision contradicts: open
+     a new pin in its new form (`view-concept pin`, on the element the old
+     one bore on), then close the old one, `view-concept close-pin <slug>
+     <pin id> --note "replaced by <new pin id>: <the decision>"`. A pin's
+     sentence is never edited: the new pin has an id of its own.
+
+   Name both in the drawing's first line (see **The drawing**).
+4. Resolve each comment: `view-concept resolve <slug> <comment id> --reply
    "<one line: what changed>"`.
-4. Rank the questions still open, the ones the events raise with the
+5. Rank the questions still open, the ones the events raise with the
    ones not yet asked, and open the one or the few that rank first, as
    holes and suppositions (see **Questions ranked, structure first**).
    « What's missing? » reaches you as the batch line ``action: missing (the
@@ -194,12 +209,12 @@ open).
    element, or say nothing is left)``: open the next question of the
    ranking, or, when none is left, open nothing and say so in your
    report.
-5. A hole a later agent opened is already a pin: when it has no
+6. A hole a later agent opened is already a pin: when it has no
    element, draw the element it bears on and give it to the pin
    (`view-concept pin-element <slug> <pin id> <element id>`), so the user
    sees where it bears. The pin keeps its id: never open it again under
    a new one.
-6. Log each change of the drawing, with the events that caused it
+7. Log each change of the drawing, with the events that caused it
    (`view-concept change <slug> "<the change>" --by scoper --cause <ids>`).
 
 ## The end of a run
@@ -214,5 +229,5 @@ supposition) is open, never on your judgment.
 
 End with one line for the coordinator: what the redraw changed (or « no
 change »), how many holes and suppositions you opened, and how many you
-closed. Write nothing
+closed (withdrawn and replaced ones among them). Write nothing
 else in the terminal.

@@ -61,7 +61,11 @@ them), is the source of the model, settled with the user. Four rules of this fil
   holds is written out in full words: « never explain back what is known »
   does not apply to it. An answered hole and an approved supposition are
   decisions of the model to state, and a fact the drawing shows solid with
-  its source a fact to state, without saying who settled them. What is known
+  its source a fact to state, without saying who settled them. A
+  withdrawn pin (its note « withdrawn: <the decision> ») adds nothing of
+  its own: the decision its note names is drawn already. A replaced pin
+  (its note « replaced by <new pin id>: … ») is read through the pin that
+  replaced it. What is known
   only from comments and answers outside the drawing follows **The reader**
   above.
 - **The outline.** Its aim is to explain the model clearly, not to guide
