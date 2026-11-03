@@ -1004,7 +1004,7 @@ function sectionBlock(s, { bare = false } = {}) {
    elements), sources (optional: where a lead's finding was looked up), status "open" |
    "closed"}. Each skill places its own kinds, which the server sends (`state.pin_kinds`):
    a feature's scoper a "hole", something only the user can settle, or a "supposition", a
-   statement it drew from the code, for the user to approve or correct; an explanation's
+   decision it makes in the user's place, for the user to approve or correct; an explanation's
    scoper a "probe", a "correction", a "tension", a "choice" or a "lead". Pins live on the
    pin section, the
    first scoping section of the outline. The page draws a pin from its
