@@ -92,15 +92,22 @@ where they form a sequence (a timeline of « today » next to one of
   from its line in the index, which opens the holder; an element that is a
   `.tab` of the kit is selected. Give each pin an element the user can
   click on its own: never nest a marked element in another marked element.
-- **How the user answers.** A pin's box has no button: the user answers a
-  hole, or approves or corrects a supposition, by a comment (in the box,
-  shown in the batch as `[c3] (pin p2 « <its sentence> ») « <quote> »`; or
-  on the element in the drawing, `[c4] §1 (scoping) · element e4 (open
-  pins p1, p2) « <quote> »`, which bears on that element's open pins), or
-  by a side thread on the pin whose conclusion the user sends as a
-  comment. A pin is never skipped and has no default: a hole stays open
-  until a comment settles it, and an uncommented supposition stays open
-  too.
+- **How the user answers.** The user answers a hole, or approves or
+  corrects a supposition, by a comment (in the box, shown in the batch as
+  `[c3] (pin p2 « <its sentence> ») « <quote> »`; or on the element in the
+  drawing, `[c4] §1 (scoping) · element e4 (open pins p1, p2) « <quote> »`,
+  which bears on that element's open pins), or by a side thread on the
+  pin (its box's « ask » button) whose conclusion the user sends as a
+  comment. The box of a supposition also holds an **agree button**,
+  « agree », beside « ask »: one click drafts the comment « agreed »
+  anchored to the pin (`pin:<id>`), which the next batch sends like a
+  comment typed in the box (`[c5] (pin p2 « <its sentence> »)`, its text
+  `agreed`). A comment « agreed » on a supposition, clicked or typed,
+  approves it: draw it solid and close the pin as approved. A hole has no
+  agree button: it asks for the user's own answer, which « agreed » does
+  not give. A correction stays a comment the user writes. A pin is never
+  skipped and has no default: a hole stays open until a comment settles
+  it, and an uncommented supposition stays open too.
 - **Ask from the problem, not from your process.** Open a hole because the
   problem needs it, never because you just filled one, nor to have something
   to ask; and never declare scoping done because you were just corrected.
@@ -155,7 +162,8 @@ open).
 1. Read what each event touches: the side threads it names, the code it
    concerns, starting from the code map; add to the map what you found.
 2. Redraw once (see **The drawing**): an answered hole and an approved
-   supposition become solid, in the user's words; a correction is drawn as
+   supposition (a comment « agreed », from the agree button or typed)
+   become solid, in the user's words; a correction is drawn as
    the user gave it; a comment on the drawing is applied. Close each hole
    or supposition a comment settled, with how it was settled: `view-concept
    close-pin <slug> <pin id>... --note "<the answer, in the user's words>"`.
