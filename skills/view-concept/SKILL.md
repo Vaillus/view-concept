@@ -168,8 +168,11 @@ A quote of the form `« plan · <section title> »` is a comment on that
 section's line in the Plan tab, not on its prose. On the scoping path, a
 comment in a pin's box reads `[c3] (pin p2 « <its sentence> ») « quote »`,
 and one on a marked element of the drawing `[c4] §1 (scoping) · element e4
-(open pins p1, p2) « quote »`. A comment can end with `(from side thread t3:
-threads/t3.json)`: the user discussed the passage in a side thread first.
+(open pins p1, p2) « quote »`. The « agree » button of a correction's or a
+lead's box drafts the comment `agreed` on that pin, which the batch carries
+like one the user typed: `[c5] (pin p3 « <its sentence> »)`. A comment can
+end with `(from side thread t3: threads/t3.json)`: the user discussed the
+passage in a side thread first.
 
 The `action` line names the button:
 

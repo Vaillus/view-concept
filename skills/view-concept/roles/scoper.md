@@ -131,13 +131,19 @@ comes the same way, without sources.
   something to ask; and never declare scoping done because you were just
   corrected.
 
-**How the user settles a pin.** A pin's box has no button: the user answers
-by a comment, in the box (the batch prints `[c3] (pin p2 « <its sentence> »)
-« <quote> »`) or on the marked element in the drawing (`[c4] §1 (scoping) ·
-element e4 (open pins p1, p2) « <quote> »`, which bears on that element's
-open pins), or by a side thread on the box whose conclusion the user sends
-as a comment. At your next redraw, draw what was settled and close the pin
-with how it was settled:
+**How the user settles a pin.** The user answers by a comment, in the box
+(the batch prints `[c3] (pin p2 « <its sentence> ») « <quote> »`) or on the
+marked element in the drawing (`[c4] §1 (scoping) · element e4 (open pins
+p1, p2) « <quote> »`, which bears on that element's open pins), or by a side
+thread on the box (its « ask » button) whose conclusion the user sends as a
+comment. The box of a correction and of a lead also holds an **agree
+button**, beside « ask »: one click drafts the comment « agreed » anchored
+to that pin (`pin:<id>`), which the next batch sends like a comment the user
+typed (`[c5] (pin p3 « <its sentence> »)`, its text `agreed`). On a
+correction it accepts the fix, on a lead it takes the lead: one statement
+each, accepted as written. A probe, a tension and a choice have no agree
+button, since each asks for the user's own answer. At your next redraw,
+draw what was settled and close the pin with how it was settled:
 
 ```bash
 view-concept close-pin <slug> <pin id>... --note "<how it was settled, in the user's words>"
@@ -145,18 +151,20 @@ view-concept close-pin <slug> <pin id>... --note "<how it was settled, in the us
 
 - **A probe answered**: draw the user's answer on the element, in their
   words. An answer that shows a misconception gets a correction on it.
-- **A correction** accepted: draw the fix. Defended: close it all the same,
-  keep their element in their words, and say in the note that they kept
-  their point. An open correction holds « End scoping » back, and the
-  button is the user's alone: never keep one open because you disagree.
+- **A correction** accepted (« agreed », typed or sent by the agree
+  button): draw the fix. Defended: close it all the same, keep their
+  element in their words, and say in the note that they kept their point.
+  An open correction holds « End scoping » back, and the button is the
+  user's alone: never keep one open because you disagree.
 - **A tension**: draw the side that held, and change the other.
 - **A choice**: the drawing follows the framing picked.
-- **A lead** taken: draw it into the drawing, as an element of its own with
-  its prerequisite tree (see **The prerequisite tree**), so the user learns
-  it there. What it adds keeps its sources: show them on the element, where
-  the planner and the writer read them, so the report cites them. A lead the
-  user declines in a comment: close it with the note « left ». A lead no
-  comment names stays open, beside its element.
+- **A lead** taken (by a comment, or « agreed » sent by the agree button):
+  draw it into the drawing, as an element of its own with its prerequisite
+  tree (see **The prerequisite tree**), so the user learns it there. What
+  it adds keeps its sources: show them on the element, where the planner
+  and the writer read them, so the report cites them. A lead the user
+  declines in a comment: close it with the note « left ». A lead no comment
+  names stays open, beside its element.
 
 A comment that does not settle its pin (« I don't see what it changes »)
 leaves it open: redraw what the user needs to decide it.
