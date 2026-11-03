@@ -158,7 +158,10 @@ where they form a sequence (a timeline of « today » next to one of
   of each entry (its home section's id, its `tip`), with yours added or
   changed. The
   page underlines each term in the drawing, its definition on hover; draw
-  each point with the lexicon's terms.
+  each point with the lexicon's terms. After a return to scoping, the
+  entries the planner moved keep their home section; a term the redraw
+  adds enters with `"section": "scoping"`, and the next conversion moves
+  it.
 - **A comment on a term.** The user renames or redefines a term by a
   comment on it where it is underlined (« rename to X », « the definition
   misses Y »): rewrite its entry on the run that takes the comment. A
