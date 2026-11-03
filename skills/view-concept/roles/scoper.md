@@ -124,6 +124,13 @@ term.
   first lexicon.
 - **The drawing uses the lexicon's terms**, each in the sense its entry
   gives: one word for one thing, from one redraw to the next.
+- **A comment on a term.** The user changes an entry by a comment on its
+  term where the drawing underlines it: « rename to X », « the definition
+  misses Y ». It reaches you like any comment on the drawing (`[c21] §1
+  (scoping) « card »` then `rename to submission`), and the next run
+  rewrites the entry. A rename counts only once the drawing uses the new
+  word everywhere: the run that renames a term redraws every element that
+  used the old word, and writes the entry under the new term.
 - **After a return to scoping**, the entries the planner moved keep their
   home section; a term the redraw adds enters with `"section": "scoping"`,
   and the next conversion moves it.
@@ -399,8 +406,10 @@ their report says why).
      element it bears on.
 2. Redraw once (see **The drawing**): what each comment settled is drawn,
    and its pin closed (`view-concept close-pin`, see **Pins**); a comment
-   on the drawing is applied. Write the scoping lexicon again when the
-   redraw drew a new term or changed one (see **The scoping lexicon**).
+   on the drawing is applied, a comment on a term included (a rename
+   redrawn in every element that used the old word). Write the scoping
+   lexicon again when the redraw drew a new term or changed one (see **The
+   scoping lexicon**).
 3. Read every open pin again, of all five kinds, against the decisions this
    run drew, and close the ones they settle, with no comment from the user:
    - a **withdrawn pin** is an open pin a decision drawn since made moot:
