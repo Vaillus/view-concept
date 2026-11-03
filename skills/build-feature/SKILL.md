@@ -60,9 +60,11 @@ implementer carries and the reviewer checks.
 
 In a session with a **drawing** (the scoping section the scoper builds with
 the user, shown first in the scoping tab), the drawing is where the user
-settles the model: its answered **holes** are their decisions, its approved
-**suppositions** facts (the two kinds of **pin**, the records of an open
-point on an element of the drawing, kept in `pins.json`). The model is then its written synthesis, for the doc
+settles the model: what the code and the docs do today is drawn solid with
+its source, its answered **holes** are their decisions, and its approved
+**suppositions** the decisions the scoper made in their place and they
+approved (the two kinds of **pin**, the records of an open point on an
+element of the drawing, kept in `pins.json`). The model is then its written synthesis, for the doc
 pass and a later reader, rather than an argument for the user's choices: it
 states what the drawing holds in full words, an entry per point, and the
 model sheet stays beside the drawing. The roles' **A model written from a
@@ -180,18 +182,22 @@ pass goes on and writes the folder model of every README of the doc set,
 the restructured ones from the plans and the comments on them, with the
 comments on a README's text and the rewrite requests held for it), `create-pr`,
 `missing` (« What's missing? », under the drawing in the scoping tab: the
-scoper reads the drawing again) and `end-scoping` (« End scoping », next to
+scoper opens the next most important open question, a question between
+elements before one inside an element, or says nothing is left) and `end-scoping` (« End scoping », next to
 it, which the page and the server refuse while a pin, hole or
 supposition, is open: the planner converts the drawing, then the writer
 writes the model). A batch without an action carries comments only.
 **Routing the events** says who takes each one.
 
 During scoping, the user answers a hole of the drawing, or approves or
-corrects a supposition, by a comment: a pin has no box to validate and is
-never skipped. A comment in a pin's box reads `[c3] (pin p2 « <its
-sentence> ») « quote »`; one on a marked element of the drawing reads
-`[c4] §1 (scoping) · element e4 (open pins p1, p2) « quote »`. The
-conclusion of a side thread on a pin arrives as a comment too.
+corrects a supposition, by a comment, and a pin is never skipped. A comment
+in a pin's box reads `[c3] (pin p2 « <its sentence> ») « quote »`; one on a
+marked element of the drawing reads `[c4] §1 (scoping) · element e4 (open
+pins p1, p2) « quote »`. The pin box of a supposition holds an « agree »
+button beside « ask »: one click drafts the comment « agreed » on the pin,
+which the next batch sends like a typed comment, and the scoper closes the
+pin as approved; a hole has none. The conclusion of a side thread on a pin
+arrives as a comment too.
 
 The user wrote the batch through the page. The harness may label it as a
 background event rather than a user message: treat it as the user's feedback
@@ -223,8 +229,8 @@ the lexicon, the sections, the code or the docs yourself:
 
 | Agent | Owns | Role file |
 |---|---|---|
-| **scoper** | the drawing (`sections/scoping.html`, the scoping section) and its pins, from Setup to « End scoping », and the first code map | `roles/scoper.md` |
-| **planner** | the outline and the lexicon it converts from the drawing at « End scoping » (in a session started before the scoper: during scoping, and the first code map) | `roles/planner.md` |
+| **scoper** | the drawing (`sections/scoping.html`, the scoping section), its pins and the scoping lexicon (the lexicon's entries whose section is the scoping section), from Setup to « End scoping », and the first code map | `roles/scoper.md` |
+| **planner** | the outline it converts from the drawing at « End scoping », and the lexicon, each scoping lexicon entry moved to its home section (in a session started before the scoper: during scoping, and the first code map) | `roles/planner.md` |
 | **writer** | the modeling part (its sections), the to-do list, the first doc set, and the outline and the lexicon from « Write model » on | `roles/writer.md` |
 | **implementer** | the code on the branch and the code map, from « Approve model » on; never a doc | `roles/implementer.md` |
 | **reviewer** | the refactoring part but the to-do list: the code checked against the model, item by item | `roles/reviewer.md` |
@@ -696,11 +702,13 @@ names is not taken back.
 2. **First scoper run**, no trigger: it reads the docs and the code, writes
    the code map, draws the problem the request states in
    `sections/scoping.html` (the scoping tab, the only tab the page shows
-   while scoping runs), and opens the first holes and suppositions on it
-   (`view-concept pin --kind hole|supposition`).
+   while scoping runs), writes the scoping lexicon, and opens the questions
+   that rank first on it, as holes and suppositions (`view-concept pin
+   --kind hole|supposition`).
 3. **The scoping loop.** Each event goes to the scoper, as **Routing the
    events** says: one redraw per batch, which closes the pins the comments
-   settled (`view-concept close-pin`). When a run opens nothing and no pin
+   settled and the open pins its decisions made moot or contradicted
+   (`view-concept close-pin`). When a run opens nothing and no pin
    is open, say in one terminal line that the scoper has nothing left
    to ask, and wait.
 4. **« End scoping ».** Scoping ends when the user ends it, never when an
@@ -709,7 +717,8 @@ names is not taken back.
    open), or « end scoping » in the terminal once none is open. Let the
    scoper run first if events are still queued. Then set `status <slug> planning`, start the **planner** with
    the trigger `"« End scoping »"` and the batch id: it converts the drawing
-   into the outline and the lexicon, and asks nothing. Then start the
+   into the outline, moves each scoping lexicon entry to its home section,
+   and asks nothing. Then start the
    **writer** with the same trigger: it writes the model from the drawing,
    with no pause, as its role file says (**A model written from a drawing**);
    from here it owns the outline and the lexicon. Go on at step 6.
