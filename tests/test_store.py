@@ -935,6 +935,20 @@ def test_check_reports_no_early_use_in_an_overview_section(ordered):
     assert ("forward", "rule") in issues
 
 
+def test_check_reports_no_early_use_in_a_scoping_section(ordered):
+    # The drawing names « KKT conditions », whose entry the planner moved from the
+    # scoping section to its home, section 2: the drawing may, section 1 may not.
+    plan = ordered.read_plan()
+    plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
+    ordered.plan_path.write_text(json.dumps(plan))
+    (ordered.sections_dir / "scoping.html").write_text(
+        '<p id="e1">The KKT conditions test a convex problem.</p>'
+    )
+    early = {(p["term"], p["section"]) for p in ordered.check_precedence(write=False)
+             if p["issue"] == "early"}  # fmt: skip
+    assert early == {("KKT conditions", "a")}
+
+
 def test_plan_refuses_an_overview_that_is_not_a_boolean(session):
     with pytest.raises(SessionError, match="overview"):
         session.write_plan(outline=[{"id": "a", "title": "A", "overview": "yes"}])

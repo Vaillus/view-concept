@@ -72,7 +72,8 @@ section is an explanation section, shown in the Explanation tab. A scoping secti
 `part: "scoping"`, is the drawing a scoper builds with the user before any model or prose
 is written (an HTML section, sections/scoping.html by convention): a feature's problem, or
 the subject of an explanation on the scoping path (a view-concept session with a scoping
-section; the path is stored nowhere else). The page shows it in a tab of its own, the
+section; the path is stored nowhere else). The precedence check reports no early use in
+it, as in an overview section. The page shows it in a tab of its own, the
 scoping tab, first; an explanation's report, its export and its published page, leaves it
 out (`in_report`). A refactor section about one item of the diff carries its item fields
 under `item`: {files, verdict (one of the keys of the session workflow's list in
@@ -1027,7 +1028,10 @@ class Session:
         whose section is not in the outline is skipped. A forward reference is an
         entry's definition or tip using another term whose home section comes later;
         an early use is a term found in the prose of a section before its home
-        section, other than an overview section (`"overview": true`). Returns one
+        section, other than an overview section (`"overview": true`) or a scoping
+        section (`"part": "scoping"`): the drawing uses the terms of the model before
+        its sections exist, and keeps using them once the planner moves their entries
+        from the scoping section to their home sections. Returns one
         problem per finding: {issue, term, section (the id the audit entry points at),
         home (1-based position of the term's home section), at (position of the later
         home section, or of the early section), field, other}. With `write`, replaces
@@ -1036,7 +1040,11 @@ class Session:
         plan = self.read_plan()
         pos = {sec["id"]: i + 1 for i, sec in enumerate(plan["outline"])}
         order = [sec["id"] for sec in plan["outline"]]
-        overviews = {sec["id"] for sec in plan["outline"] if sec.get("overview") is True}
+        exempt = {
+            sec["id"]
+            for sec in plan["outline"]
+            if sec.get("overview") is True or sec.get("part") == SCOPING_PART
+        }
         entries = [
             e for e in plan["lexicon"] if e.get("term", "").strip() and e.get("section") in pos
         ]
@@ -1056,7 +1064,7 @@ class Session:
                         "other": f["term"],
                     })  # fmt: skip
             for sid in order[: home - 1]:
-                if sid not in overviews and _uses(prose.get(sid, ""), e["term"]):
+                if sid not in exempt and _uses(prose.get(sid, ""), e["term"]):
                     problems.append({
                         "issue": "early", "term": e["term"], "section": sid,
                         "home": home, "at": pos[sid], "field": "", "other": "",
