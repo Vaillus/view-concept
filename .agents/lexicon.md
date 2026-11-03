@@ -42,7 +42,7 @@ A record of an open point on an element of the drawing, kept in the pin file, th
 A pin of `/build-feature`: something of the drawing only you can settle.
 
 **Supposition**:
-A pin of `/build-feature`: the scoper's answer from the code, for you to approve or correct.
+A pin of `/build-feature`: a decision the scoper makes in your place, drawn for you to approve or correct.
 
 **Probe**:
 A pin of `/view-concept` on an element you drew, asking what you actually believe on that point.
