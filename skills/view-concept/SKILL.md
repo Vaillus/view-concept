@@ -214,7 +214,7 @@ The work is done by fresh role agents, each started from the session folder:
 
 | Role agent | direct path | scoping path | Role file |
 |---|---|---|---|
-| **scoper** | no part | the drawing and its pins, from Setup to « End scoping », and again whenever the session goes back to scoping | `roles/scoper.md` |
+| **scoper** | no part | the drawing, its pins and the scoping lexicon (an entry for each term of the drawing), from Setup to « End scoping », and again whenever the session goes back to scoping | `roles/scoper.md` |
 | **planner** | Scope, Outline and lexicon, Calibrate, Revise the plan: the outline, the lexicon and the questions, until « Approve plan » | the outline and the lexicon, converted from the drawing at each « End scoping » | `roles/planner.md` |
 | **writer** | Explain and the Vocabulary audit, and the outline and the lexicon from « Approve plan » on | the report and the Vocabulary audit, and the outline and the lexicon from the conversion on | `roles/writer.md` |
 
@@ -358,8 +358,8 @@ rest themselves:
 1. **Setup**, as above, and the comment channel.
 2. **First scoper run**, no trigger: it writes the drawing's outline entry,
    draws the subject from the request in `sections/scoping.html` (the
-   scoping tab, the only tab the page shows while scoping runs), and places
-   the first pins on it.
+   scoping tab, the only tab the page shows while scoping runs), writes the
+   lexicon of the drawing's terms, and places the first pins on it.
 3. **The scoping loop.** Each event goes to the scoper: one redraw per
    batch, which closes the pins the comments settled. When a run places
    nothing and no correction or tension is open, say in one terminal line

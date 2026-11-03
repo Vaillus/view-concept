@@ -218,9 +218,13 @@ drawing** in `planning-rules.md` says:
 2. Write the outline and the lexicon with `view-concept plan`: the drawing's
    entry first, unchanged, then a section per part of the drawing (or a few
    parts together), in the order a first reading needs, by the precedence
-   rule. Leave out what a pin left open does not settle. The lexicon is
-   written from the words of the drawing (`definition` only: the writer adds
-   the `tip`). A conversion after a return to scoping (an earlier conversion
+   rule. Leave out what a pin left open does not settle. The lexicon starts
+   from the scoping lexicon, the entries the scoper wrote with the scoping
+   section as their home section: move each entry to the section that
+   introduces its term, keeping its term and its definition, which the user
+   controlled by comment, and add an entry for each term the drawing uses
+   that the scoper left out (`definition` only: the writer adds the `tip`).
+   A conversion after a return to scoping (an earlier conversion
    exists) keeps each entry whose part the change history does not show as
    changed since that conversion, and replans the others.
 3. Log one change: « converted the drawing », `--by planner`, its cause the

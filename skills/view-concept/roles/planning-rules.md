@@ -212,8 +212,14 @@ The rules of a plan written from a drawing:
   drawing already shows it. The drawing's entry stays first and unchanged.
   The report holds only the sections written from the drawing: export and
   publishing leave the drawing out.
-- **The lexicon** is born at the conversion: the planner writes it from the
-  words of the drawing, then it is kept as **The lexicon** says.
+- **The lexicon** is born with the drawing: the scoper keeps the **scoping
+  lexicon** from its first drawing on, an entry for each term of the
+  drawing that is not plain language, each with the scoping section as its
+  home section and no `tip`. At the conversion the planner moves each entry
+  to the section that introduces its term, keeping its term and its
+  definition (the user controlled them by comment on the drawing), and adds
+  an entry for each term the drawing uses that the scoper left out; then
+  the lexicon is kept as **The lexicon** says.
 - **No question to the user**, no « Approve plan » stop, no `revision` line.
   A drawing element you find wrong or imprecise, or two elements you find at
   odds (or one at odds with the goal the user stated), goes back to
