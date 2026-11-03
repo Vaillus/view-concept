@@ -167,9 +167,9 @@ each marked element, which the page draws. A session with a scoping section ends
 scoping with « End scoping »: a batch whose action is "end-scoping", refused while a
 correction, a tension, a hole or a supposition is open (`blocking_pins`), an open probe,
 choice or lead being left out of the report; « What's missing? » sends one whose action is
-"missing", asking the scoper to read the drawing again. A pin opened after scoping ended
-(by an agent that found one while converting or writing) sends the session back to
-scoping: the phase becomes "scoping"; when it has no element, the scoper draws one and
+"missing", asking the scoper for the next most important open question. A pin opened after
+scoping ended (by an agent that found one while converting or writing) sends the session
+back to scoping: the phase becomes "scoping"; when it has no element, the scoper draws one and
 gives it to the record (`set_pin_element`), which keeps its id. A scoping section takes no
 agent question. An old session's holes.json is moved to pins.json at first read, and one
 whose questions.json still holds questions anchored on a scoping section sees them moved
@@ -2702,7 +2702,8 @@ class Session:
         write-readme, "write-lexicon" that they asked for the repo lexicon
         (REPO_LEXICON), refused once the file exists, "write-readmes" that they read
         the move plans and asked the doc pass to write the folder models it held, "missing"
-        that they asked the scoper what the drawing still misses, and "end-scoping" that
+        that they asked the scoper for the next most important open question, and
+        "end-scoping" that
         they ended the scoping of a drawing (refused while a correction, a tension, a hole or a
         supposition is open, `blocking_pins`). `path`
         goes with "rewrite-readme" only, which needs it."""
@@ -3370,8 +3371,9 @@ def format_batch(
         )
     if batch.get("action") == "missing":
         lines.append(
-            "action: missing (the user asked what the drawing still misses: read it again, "
-            "and open pins (`view-concept pin`), or say nothing is left)"
+            "action: missing (the user asked for the next most important open question: "
+            "open it as a pin (`view-concept pin`), a question between elements before one "
+            "inside an element, or say nothing is left)"
         )
     if batch.get("action") == "end-scoping":
         lines.append(

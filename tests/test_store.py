@@ -624,7 +624,11 @@ def test_end_scoping_waits_until_no_pin_is_open(session):
     assert "action: end-scoping (the user ended the scoping, no correction, tension" in text
     missing = session.add_batch([], action="missing")
     text = format_batch("kv-cache", missing, session.read_plan()["outline"])
-    assert "action: missing (the user asked what the drawing still misses:" in text
+    assert (
+        "action: missing (the user asked for the next most important open question: open it "
+        "as a pin (`view-concept pin`), a question between elements before one inside an "
+        "element, or say nothing is left)"
+    ) in text
 
 
 def test_end_scoping_waits_on_corrections_and_tensions_only(session):
