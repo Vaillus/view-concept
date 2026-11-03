@@ -120,7 +120,8 @@ where they form a sequence (a timeline of « today » next to one of
   agree button: it asks for the user's own answer, which « agreed » does
   not give. A correction stays a comment the user writes. A pin is never
   skipped and has no default: a hole stays open until a comment settles
-  it, and an uncommented supposition stays open too.
+  it, and an uncommented supposition stays open too, unless a decision
+  drawn since withdraws or replaces it (see **A later run**).
 - **Questions ranked, structure first.** Each run, of every question
   still open in the drawing (the ones its batch raises join the ones not
   yet asked), open the one or the few whose answer changes the most of the
@@ -153,7 +154,9 @@ where they form a sequence (a timeline of « today » next to one of
   entries on every run that draws a new term, or changes one, through
   `view-concept plan <slug> -` with `{"lexicon": [...]}` alone: the key
   replaces the whole list, so send every entry, starting from the
-  context's `## Lexicon (as it is now)`, with yours added or changed. The
+  `lexicon` of `plan.json` in the session folder, which holds every field
+  of each entry (its home section's id, its `tip`), with yours added or
+  changed. The
   page underlines each term in the drawing, its definition on hover; draw
   each point with the lexicon's terms.
 - **A comment on a term.** The user renames or redefines a term by a
@@ -227,7 +230,8 @@ open).
 2. Redraw once (see **The drawing**): an answered hole and an approved
    supposition (a comment « agreed », from the agree button or typed)
    become solid, in your words, the user's behind the source tag; a
-   correction is drawn as the user gave it; a comment on the drawing is applied, and a comment on
+   correction is drawn as the user gave it, in your words, the user's
+   behind the source tag; a comment on the drawing is applied, and a comment on
    a term rewrites its entry (a rename in every element that used the old
    word, see **A comment on a term**). Write the lexicon again when the
    redraw drew a new term or changed one. Close each hole
