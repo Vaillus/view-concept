@@ -86,8 +86,8 @@ take, refined one batch at a time.
   line. The ids stay either way: they are how the user follows a redraw, and
   what the pins name.
 - **The drawing's first line** says the turn and what this redraw did
-  (« turn 4 · two answers, built over »), with a legend of the marks the
-  drawing uses.
+  (« turn 4 · two answers, built over »), the pins it withdrew or replaced
+  (see **A later run**), and a legend of the marks the drawing uses.
 
 ## Pins
 
@@ -338,22 +338,36 @@ their report says why).
 2. Redraw once (see **The drawing**): what each comment settled is drawn,
    and its pin closed (`view-concept close-pin`, see **Pins**); a comment
    on the drawing is applied.
-3. Resolve each comment: `view-concept resolve <slug> <comment id> --reply
+3. Read every open pin again, of all five kinds, against the decisions this
+   run drew, and close the ones they settle, with no comment from the user:
+   - a **withdrawn pin** is an open pin a decision drawn since made moot:
+     close it with the note « withdrawn: <the decision> »
+     (`view-concept close-pin <slug> <pin id> --note "withdrawn: <the
+     decision>"`);
+   - a **replaced pin** is an open pin a later decision contradicts: close
+     it (`view-concept close-pin`, its note naming the decision) and open a
+     new pin in its new form (`view-concept pin`), with an id of its own,
+     since a pin's sentence is never edited.
+
+   Name each withdrawn and each replaced pin in the drawing's first line
+   (« p4 withdrawn, p6 replaced by p9 »), so the user sees which pins left
+   the list without a comment of theirs.
+4. Resolve each comment: `view-concept resolve <slug> <comment id> --reply
    "<one line: what changed>"`.
-4. Place the pins the redraw calls for (a correction, a tension, a choice or
+5. Place the pins the redraw calls for (a correction, a tension, a choice or
    a lead), and the probe or the few probes that rank first (see **Pins**),
    then stop. « What's missing? » asks for the next most important open
    question: place it as a pin, a question between elements before one
    inside an element, or say that nothing is left.
-5. A correction or a tension the planner or the writer opened is already a
+6. A correction or a tension the planner or the writer opened is already a
    pin: when it has no element, draw the element it bears on and give it to
    the pin (`view-concept pin-element <slug> <pin id> <element id>`), so the
    user sees where it bears. The pin keeps its id: never open it again
    under a new one.
-6. A comment on the drawing or on a pin's box after « End scoping » takes
+7. A comment on the drawing or on a pin's box after « End scoping » takes
    the session back to scoping: run `view-concept status <slug> scoping`
    before you redraw.
-7. Log each change of the drawing, with the events that caused it
+8. Log each change of the drawing, with the events that caused it
    (`view-concept change <slug> "<the change>" --by scoper --cause <ids>`).
 
 ## The end of a run

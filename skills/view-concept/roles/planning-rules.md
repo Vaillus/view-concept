@@ -188,6 +188,9 @@ The rules of a plan written from a drawing:
   settled: an answered probe is what the user believes, an accepted
   correction is the fact, a settled tension states the side that held, a
   settled choice fixes the framing, a taken lead is part of the subject.
+  A **withdrawn pin** (the scoper closed it as moot, with the note
+  « withdrawn: <the decision> ») adds nothing of its own: the decision its
+  note names is drawn already.
 - **What was left open is left out.** A probe, a choice or a lead still open
   at « End scoping », or a lead the user left (closed with the note
   « left »), is one the user ignored: write as if it had never been placed.
