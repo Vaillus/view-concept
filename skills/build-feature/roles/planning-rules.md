@@ -83,14 +83,17 @@ them), is the source of the model, settled with the user. Four rules of this fil
   same pin).
   Then stop the run, and report « hole opened: back to scoping ». What you
   settle from the code is a decision made for the user: write it as such.
-- **The lexicon** starts in the scoping: the scoper keeps the **scoping
-  lexicon** from its first drawing on, an entry per term of the drawing
-  that is not plain language, each entry's home section the scoping
-  section, its term and its definition changed by the user's comments. At
-  the conversion the planner moves each entry to its home section of the
-  model, keeping its term and its definition, and adds an entry for each
-  term the drawing uses that the scoper left out; then it is kept as
-  below.
+- **The lexicon** starts in the scoping, and stays one list from then on:
+  the scoper writes it from its first drawing on, an entry per term of the
+  drawing that is not plain language, its term and its definition changed
+  by the user's comments. The **scoping lexicon** is the lexicon's entries
+  while their home section is the scoping section. The conversion sets
+  each such entry's home section to the section of the model that
+  introduces its term, and changes nothing else of it: its term, its kind
+  and its definition stay as the scoper wrote them. It adds an entry for
+  each term the drawing uses that the scoper left out. A return to scoping
+  keeps the home section a conversion set; a term the redraw adds enters
+  the scoping section, and the next conversion sets its home section. Then the lexicon is kept as below.
 
 ## Writing the outline and the lexicon
 

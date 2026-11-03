@@ -230,7 +230,7 @@ the lexicon, the sections, the code or the docs yourself:
 | Agent | Owns | Role file |
 |---|---|---|
 | **scoper** | the drawing (`sections/scoping.html`, the scoping section), its pins and the scoping lexicon (the lexicon's entries whose section is the scoping section), from Setup to « End scoping », and the first code map | `roles/scoper.md` |
-| **planner** | the outline it converts from the drawing at « End scoping », and the lexicon, each scoping lexicon entry moved to its home section (in a session started before the scoper: during scoping, and the first code map) | `roles/planner.md` |
+| **planner** | the outline it converts from the drawing at « End scoping », and the lexicon, each scoping lexicon entry given the section of the model that introduces its term as its home section (in a session started before the scoper: during scoping, and the first code map) | `roles/planner.md` |
 | **writer** | the modeling part (its sections), the to-do list, the first doc set, and the outline and the lexicon from « Write model » on | `roles/writer.md` |
 | **implementer** | the code on the branch and the code map, from « Approve model » on; never a doc | `roles/implementer.md` |
 | **reviewer** | the refactoring part but the to-do list: the code checked against the model, item by item | `roles/reviewer.md` |
@@ -717,8 +717,8 @@ names is not taken back.
    open), or « end scoping » in the terminal once none is open. Let the
    scoper run first if events are still queued. Then set `status <slug> planning`, start the **planner** with
    the trigger `"« End scoping »"` and the batch id: it converts the drawing
-   into the outline, moves each scoping lexicon entry to its home section,
-   and asks nothing. Then start the
+   into the outline, gives each scoping lexicon entry its home section of
+   the model, and asks nothing. Then start the
    **writer** with the same trigger: it writes the model from the drawing,
    with no pause, as its role file says (**A model written from a drawing**);
    from here it owns the outline and the lexicon. Go on at step 6.

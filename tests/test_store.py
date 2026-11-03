@@ -940,8 +940,8 @@ def test_check_reports_no_early_use_in_an_overview_section(ordered):
 
 
 def test_check_reports_no_early_use_in_a_scoping_section(ordered):
-    # The drawing names « KKT conditions », whose entry the planner moved from the
-    # scoping section to its home, section 2: the drawing may, section 1 may not.
+    # The drawing names « KKT conditions », whose entry's home section the planner set
+    # from the scoping section to section 2: the drawing may, section 1 may not.
     plan = ordered.read_plan()
     plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
     ordered.plan_path.write_text(json.dumps(plan))

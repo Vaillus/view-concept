@@ -48,14 +48,18 @@ from a drawing** in `planning-rules.md`:
 2. Write the outline and the lexicon with `view-concept plan`: the scoping
    entry first, unchanged, then the model sheet, then an entry per point of
    the drawing (or a few points together), the to-do list last. The
-   lexicon starts from the scoping lexicon, the scoper's entries whose
-   section is `scoping`: move each entry to its home section, the section
-   of the model that introduces its term, keeping its term and its
-   definition (the user controlled both by comment), and add an entry for
-   each term the drawing uses that the scoper left out. A
+   lexicon is the one the scoper wrote, carried through: give each entry
+   of the scoping lexicon (the entries whose section is `scoping`) its home
+   section, the section of the model that introduces its term, and change
+   nothing else of it: its term, its kind and its definition stay (the
+   user controlled them by comment). Add an entry for each term the
+   drawing uses that the scoper left out. A
    conversion after a return to scoping (an earlier conversion exists) keeps
-   each entry whose point the change history does not show as changed since
-   that conversion, and replans the others.
+   each outline entry whose point the change history does not show as
+   changed since that conversion, and replans the others; in the lexicon,
+   an entry keeps the home section the earlier conversion set. An entry whose section is
+   `scoping` is a term the redraw added: give it its home section as
+   above.
 3. Log one change: « converted the drawing », `--by planner`, its cause the
    « End scoping » batch.
 4. Ask nothing. A hole you find goes back to scoping, as

@@ -215,7 +215,7 @@ The work is done by fresh role agents, each started from the session folder:
 | Role agent | direct path | scoping path | Role file |
 |---|---|---|---|
 | **scoper** | no part | the drawing, its pins and the scoping lexicon (an entry for each term of the drawing), from Setup to « End scoping », and again whenever the session goes back to scoping | `roles/scoper.md` |
-| **planner** | Scope, Outline and lexicon, Calibrate, Revise the plan: the outline, the lexicon and the questions, until « Approve plan » | the outline it converts from the drawing at each « End scoping », and the lexicon, each scoping lexicon entry moved to its home section | `roles/planner.md` |
+| **planner** | Scope, Outline and lexicon, Calibrate, Revise the plan: the outline, the lexicon and the questions, until « Approve plan » | the outline it converts from the drawing at each « End scoping », and the lexicon, each scoping lexicon entry given the section that introduces its term as its home section | `roles/planner.md` |
 | **writer** | Explain and the Vocabulary audit, and the outline and the lexicon from « Approve plan » on | the report and the Vocabulary audit, and the outline and the lexicon from the conversion on | `roles/writer.md` |
 
 The role files are in `~/Documents/code/view-concept/skills/view-concept/`.
@@ -374,7 +374,7 @@ rest themselves:
    scoper run first if events are still queued. Then set `view-concept
    status <slug> planning`, start the **planner** with the trigger
    `"« End scoping »"` and the batch id: it converts the drawing into the
-   outline, moves each scoping lexicon entry to its home section, and asks
+   outline, gives each scoping lexicon entry its home section, and asks
    nothing. Then start the **writer** with
    the same trigger: it writes the report from the drawing, with no
    « Approve plan » stop, and runs the Vocabulary audit.

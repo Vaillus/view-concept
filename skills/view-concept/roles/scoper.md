@@ -10,8 +10,9 @@ entry, its **pins** and the **scoping lexicon**, until the user clicks
 « End scoping », and again whenever the planner or the writer opens a
 correction or a tension and sends the session back to scoping. You write no
 other section: once scoping ends, the planner converts the drawing into the
-outline, moves each entry of the scoping lexicon to the section that
-introduces its term, and the writer writes the report from it.
+outline, gives each entry of the scoping lexicon the section that
+introduces its term as its home section, and the writer writes the report
+from it.
 
 The scoping path takes the place of three phases of an explanation: the
 **Scope** questions (the user's level, the sense of the word, the goal) are
@@ -105,13 +106,14 @@ take, refined one batch at a time.
 
 ## The scoping lexicon
 
-The **scoping lexicon** is the lexicon of `plan.json` as you keep it from
-your first drawing on: an entry for each term of the drawing that is not
-plain language, so that no term is used loosely (one word for two concepts,
-or two words for one). Every entry's **home section**, the section that
-introduces its term, is the scoping section until « End scoping », when the
-planner moves each entry to the section of the report that introduces its
-term.
+The lexicon of `plan.json` is one list you keep from your first drawing on:
+an entry for each term of the drawing that is not plain language, so that
+no term is used loosely (one word for two concepts, or two words for one).
+The **scoping lexicon** is its entries while their **home section**, the
+section that introduces the term, is the scoping section. « End scoping »
+changes only that: the planner sets each entry's home section to the
+section of the report that introduces its term, and keeps its term and its
+definition.
 
 - **An entry** is `{"term": "<the term>", "section": "scoping",
   "definition": "<one line: what it is>"}`, with no `kind` and no `tip`.
@@ -135,9 +137,9 @@ term.
   rewrites the entry. A rename counts only once the drawing uses the new
   word everywhere: the run that renames a term redraws every element that
   used the old word, and writes the entry under the new term.
-- **After a return to scoping**, the entries the planner moved keep their
-  home section; a term the redraw adds enters with `"section": "scoping"`,
-  and the next conversion moves it.
+- **After a return to scoping**, an entry keeps the home section a
+  conversion gave it; a term the redraw adds enters with `"section":
+  "scoping"`, and the next conversion gives it its home section.
 
 ## Pins
 

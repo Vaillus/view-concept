@@ -1032,8 +1032,8 @@ class Session:
         an early use is a term found in the prose of a section before its home
         section, other than an overview section (`"overview": true`) or a scoping
         section (`"part": "scoping"`): the drawing uses the terms of the model before
-        its sections exist, and keeps using them once the planner moves their entries
-        from the scoping section to their home sections. Returns one
+        its sections exist, and keeps using them once the planner sets their entries'
+        home sections from the scoping section to the model's. Returns one
         problem per finding: {issue, term, section (the id the audit entry points at),
         home (1-based position of the term's home section), at (position of the later
         home section, or of the early section), field, other}. With `write`, replaces
