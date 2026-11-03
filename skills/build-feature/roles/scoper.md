@@ -122,18 +122,19 @@ where they form a sequence (a timeline of « today » next to one of
   skipped and has no default: a hole stays open until a comment settles
   it, and an uncommented supposition stays open too, unless a decision
   drawn since withdraws or replaces it (see **A later run**).
-- **Questions ranked, structure first.** Each run, of every question
-  still open in the drawing (the ones its batch raises join the ones not
-  yet asked), open the one or the few whose answer changes the most of the
-  model, then stop. A **structure question**, an open question between
+- **Questions ranked, structure first.** Each run, of every question you
+  raise yourself that is still open in the drawing (the ones its batch
+  raises join the ones not yet asked), open the one or the few whose
+  answer changes the most of the model, then stop. A sent thread's
+  unanswered proposals are not in the ranking (see **A sent thread**). A **structure question**, an open question between
   elements (what the feature produces and for whom, where an input comes
   from, what an element entails for the others, who or what triggers it),
   comes before a **detail question**, an open question inside one element
   (a value, a format, a case, a name), which waits until the structure
   questions above it are settled: before that, its element may disappear.
-  The ranking covers suppositions too: a supposition that draws a part of
-  the solution is opened when the question of that part ranks first, as a
-  hole is. Which question comes first is your judgment, directed by these
+  The ranking covers the suppositions you raise too: a supposition that
+  draws a part of the solution is opened when the question of that part
+  ranks first, as a hole is. Which question comes first is your judgment, directed by these
   two tiers: no score, and no line on a pin saying why it comes first. The
   user corrects the ranking by a comment.
 - **Ask from the problem, not from your process.** Open a hole because the
@@ -180,7 +181,11 @@ where they form a sequence (a timeline of « today » next to one of
   pin, and so is its conclusion when sent with no comment: a thread sent
   with no text is the user's agreement. A decision the thread agent
   proposed that the user never answered is a supposition citing the
-  thread. A detail that would lengthen the main view goes in a fold of
+  thread. Every such proposal opens as a supposition on the run that
+  reads the thread, however many the thread holds: the ranking (see
+  **Questions ranked, structure first**) orders only the questions you
+  raise yourself, so no part of a sent thread waits outside the drawing
+  until it ranks first. A detail that would lengthen the main view goes in a fold of
   the element it bears on.
 - **One redraw per batch.** Each run redraws the drawing once, with
   everything its trigger brings. Build over the last drawing when it holds:
@@ -263,9 +268,12 @@ open).
    Name both in the drawing's first line (see **The drawing**).
 4. Resolve each comment: `view-concept resolve <slug> <comment id> --reply
    "<one line: what changed>"`.
-5. Rank the questions still open, the ones the events raise with the
-   ones not yet asked, and open the one or the few that rank first, as
-   holes and suppositions (see **Questions ranked, structure first**).
+5. Open a supposition for each proposal of a sent thread the user never
+   answered, citing the thread (see **A sent thread**), outside the
+   ranking. Then rank the questions you raise yourself that are still
+   open, the ones the events raise with the ones not yet asked, and open
+   the one or the few that rank first, as holes and suppositions (see
+   **Questions ranked, structure first**).
    « What's missing? » reaches you as the batch line ``action: missing (the
    user asked for the next most important open question: open it as a pin
    (`view-concept pin`), a question between elements before one inside an
