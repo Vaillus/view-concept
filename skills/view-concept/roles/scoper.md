@@ -118,6 +118,18 @@ comes the same way, without sources.
   misconception where a question on the user's level would have shown
   nothing. Place one where what the user believes would change the
   explanation.
+- **The probes are ranked, structure first.** Of every probe still to place
+  (the ones the batch raises and the ones the drawing still lacks), each run
+  places the one, or the few, whose answer would change the most of the
+  explanation, then stops. The structure of the subject comes before its
+  details: a **structure question**, an open question between elements (how
+  two parts of the subject relate, what one entails for another, what one
+  rests on), before a **detail question**, an open question inside one
+  element (a value, a case, a name), which waits until the structure
+  questions above it are settled, since before that its element may
+  disappear. Which probe comes first is your judgment, directed by these two
+  tiers: no score, and no line on the pin saying why it comes first. The
+  user sees how the ranking goes, and corrects it by a comment.
 - **The page draws the pin**: it marks its element in the kind's colour,
   opens the pin's box beside the element when the user clicks it, and lists
   each open pin at the end of the scoping tab. So never write a pin's text,
@@ -309,7 +321,8 @@ left out of the export and the published page.
    conversion replaces them at « End scoping ».
 3. Draw `sections/scoping.html` from the request: what the user said, in
    their words, as far as they showed they understand it.
-4. Place the first pins, each on an element of the drawing.
+4. Place the first pins, each on an element of the drawing: the probe or
+   the few probes that rank first (see **Pins**).
 5. Log one change: « first drawing », `--by scoper`.
 
 ## A later run (a trigger)
@@ -327,9 +340,11 @@ their report says why).
    on the drawing is applied.
 3. Resolve each comment: `view-concept resolve <slug> <comment id> --reply
    "<one line: what changed>"`.
-4. Place the pins the events raise, and only those. « What's missing? »
-   asks you to read the whole drawing again: place what it still lacks, or
-   nothing.
+4. Place the pins the redraw calls for (a correction, a tension, a choice or
+   a lead), and the probe or the few probes that rank first (see **Pins**),
+   then stop. « What's missing? » asks for the next most important open
+   question: place it as a pin, a question between elements before one
+   inside an element, or say that nothing is left.
 5. A correction or a tension the planner or the writer opened is already a
    pin: when it has no element, draw the element it bears on and give it to
    the pin (`view-concept pin-element <slug> <pin id> <element id>`), so the

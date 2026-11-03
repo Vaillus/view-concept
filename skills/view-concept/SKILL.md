@@ -182,7 +182,7 @@ The `action` line names the button:
 | `plan` | « Write plan » in the scope block, which ends the questions (the page marks the open ones skipped); « Rewrite plan » once a plan exists, the line then says « rewrite the plan » |
 | `approve-plan` | « Approve plan », on the direct path |
 | `grill`, `stop-grill` | « Grill me » and « Stop grill » in the scope block |
-| `missing` | « What's missing? », under the drawing: the scoper reads the drawing again |
+| `missing` | « What's missing? », under the drawing: the user asks for the next most important open question, which the scoper opens as a pin (a question between elements before one inside an element), or says nothing is left |
 | `end-scoping` | « End scoping », next to it, which the page and the server refuse while a correction or a tension is open |
 
 A batch without an action carries comments only.
