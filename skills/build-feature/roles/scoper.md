@@ -161,6 +161,18 @@ where they form a sequence (a timeline of « today » next to one of
   misses Y »): rewrite its entry on the run that takes the comment. A
   rename counts only once the drawing uses the new word everywhere: the
   run that renames a term redraws every element that used the old word.
+- **A sent thread.** A **sent thread** is a side thread whose conclusion
+  the user sent to the batch with « → batch », with or without a comment:
+  a comment followed by `(from side thread t16: threads/t16.json)`, its
+  text possibly empty. Read it whole, and draw it at its precision: every
+  definition, rule and case it holds enters the drawing, each element
+  citing the thread (`t16`) in its source tag. What the user took in it
+  (an answer, « option 1 », an explicit « agreed ») is drawn solid, no
+  pin, and so is its conclusion when sent with no comment: a thread sent
+  with no text is the user's agreement. A decision the thread agent
+  proposed that the user never answered is a supposition citing the
+  thread. A detail that would lengthen the main view goes in a fold of
+  the element it bears on.
 - **One redraw per batch.** Each run redraws the drawing once, with
   everything its trigger brings. Build over the last drawing when it holds:
   keep the ids and the places, and mark what changed this run (an accent
@@ -210,8 +222,8 @@ messages, « What's missing? » (`action: missing`), or a hole a later agent
 opened (the session went back to scoping: the `## Pins` part shows it
 open).
 
-1. Read what each event touches: the side threads it names, the code it
-   concerns, starting from the code map; add to the map what you found.
+1. Read what each event touches: each sent thread it names, whole (see
+   **A sent thread**), the code it concerns, starting from the code map; add to the map what you found.
 2. Redraw once (see **The drawing**): an answered hole and an approved
    supposition (a comment « agreed », from the agree button or typed)
    become solid, in your words, the user's behind the source tag; a
