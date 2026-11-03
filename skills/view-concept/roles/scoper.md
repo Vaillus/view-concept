@@ -62,9 +62,18 @@ take, refined one batch at a time.
   only the three named font sizes (`var(--fs-body)`, `var(--fs-small)`,
   `var(--fs-label)`). It reads in a frame up to about 1000px wide and down
   to 340px, with no sideways scroll but a table's own. Under 2 MB.
-- **The user's words.** What the user said is drawn solid, in their words,
-  quoted when it is a quote. Stay close to their **apparent understanding**:
-  draw what they said and what it plainly implies, nothing more.
+- **Your words, the user's behind the tag.** What the user said is drawn
+  solid, each point stated in your words and the lexicon's terms. The
+  user's exact words sit behind the point's **source tag**: the tag on the
+  point naming the pin, comment or side thread it comes from (`p3`, `c12`,
+  `t4`), which holds those words on hover, or in a fold that opens on a
+  click. A quote stands inline in two cases only: the wording is itself the
+  decision (a name the user chose), or your rephrasing interprets what they
+  said, in which case their words and yours stand side by side, so a drift
+  shows. One exception: a probe's answer stays in the user's words, quoted
+  (see **Pins**), since its wording is what shows a misconception. Stay
+  close to their **apparent understanding**: draw what they said and what
+  it plainly implies, nothing more.
 - **Facts are looked up on the way**: on the web, and in the code and the
   docs when the subject has them (a code session names a repository: read
   its lexicons, `.agents/lexicon.md` at the root and in the folders the
@@ -158,14 +167,21 @@ button, since each asks for the user's own answer. At your next redraw,
 draw what was settled and close the pin with how it was settled:
 
 ```bash
-view-concept close-pin <slug> <pin id>... --note "<how it was settled, in the user's words>"
+view-concept close-pin <slug> <pin id>... --note "<the decision> · « <the user's words> » (<source>)"
 ```
 
-- **A probe answered**: draw the user's answer on the element, in their
-  words. An answer that shows a misconception gets a correction on it.
+The **close note** says how the pin was settled, and the planner reads it at
+the conversion: the decision in your words, then the user's words quoted
+with their source: `Each word looks at itself too · « yes, itself
+included » (c7)`.
+
+- **A probe answered**: draw the user's answer on the element in their
+  words, quoted, and quote them in the note: the wording of the answer is
+  what shows a misconception. An answer that shows one gets a correction
+  on it.
 - **A correction** accepted (« agreed », typed or sent by the agree
   button): draw the fix. Defended: close it all the same, keep their
-  element in their words, and say in the note that they kept their point.
+  element as they hold it, and say in the note that they kept their point.
   An open correction holds « End scoping » back, and the button is the
   user's alone: never keep one open because you disagree.
 - **A tension**: draw the side that held, and change the other.
@@ -319,8 +335,8 @@ left out of the export and the published page.
    the outline already holds entries (the session started on the direct
    path), put the drawing's entry first and keep the others: the planner's
    conversion replaces them at « End scoping ».
-3. Draw `sections/scoping.html` from the request: what the user said, in
-   their words, as far as they showed they understand it.
+3. Draw `sections/scoping.html` from the request: what the user said (see
+   **The drawing**), as far as they showed they understand it.
 4. Place the first pins, each on an element of the drawing: the probe or
    the few probes that rank first (see **Pins**).
 5. Log one change: « first drawing », `--by scoper`.
