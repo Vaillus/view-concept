@@ -112,7 +112,8 @@ spelled like a common word counts as used wherever the word appears. Two
 breaches have names: a **forward reference** (a `definition` or `tip` uses a
 term whose home section comes later) and an **early use** (a term appears in
 the prose of a section placed before its home section). `view-concept check
-<slug>` lists both.
+<slug>` lists both. The check skips the scoping section: the drawing uses
+every term of the report before the term's home section.
 
 **The hover text.** Three hard constraints on a `tip`, which bind
 `definition` too:
@@ -188,6 +189,11 @@ The rules of a plan written from a drawing:
   settled: an answered probe is what the user believes, an accepted
   correction is the fact, a settled tension states the side that held, a
   settled choice fixes the framing, a taken lead is part of the subject.
+  A **withdrawn pin** (the scoper closed it as moot, with the note
+  « withdrawn: <the decision> ») adds nothing of its own: the decision its
+  note names is drawn already. A **replaced pin** (the scoper closed it as
+  contradicted, with the note « replaced by <new pin id>: <the decision> »)
+  is read through the pin that replaced it.
 - **What was left open is left out.** A probe, a choice or a lead still open
   at « End scoping », or a lead the user left (closed with the note
   « left »), is one the user ignored: write as if it had never been placed.
@@ -209,8 +215,20 @@ The rules of a plan written from a drawing:
   drawing already shows it. The drawing's entry stays first and unchanged.
   The report holds only the sections written from the drawing: export and
   publishing leave the drawing out.
-- **The lexicon** is born at the conversion: the planner writes it from the
-  words of the drawing, then it is kept as **The lexicon** says.
+- **The lexicon** is born with the drawing, and stays one list from then
+  on: the scoper writes it from its first drawing on, an entry for each
+  term of the drawing that is not plain language, with no `tip`. The
+  **scoping lexicon** is the lexicon's entries while their home section is
+  the scoping section. The conversion sets each such entry's home section
+  to the section that introduces its term, and changes nothing else of it:
+  its term and its definition stay (the user controlled them by comment on
+  the drawing). It adds an entry for each term the drawing uses that the
+  scoper left out. A return to scoping keeps the home section a conversion
+  set; a term the redraw adds enters the scoping section, and the next
+  conversion sets its home section. A later conversion keeps each entry's
+  home section, but for an entry whose section that conversion removes
+  from the outline: it gets the section that now introduces its term. Then
+  the lexicon is kept as **The lexicon** says.
 - **No question to the user**, no « Approve plan » stop, no `revision` line.
   A drawing element you find wrong or imprecise, or two elements you find at
   odds (or one at odds with the goal the user stated), goes back to

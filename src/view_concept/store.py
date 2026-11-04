@@ -72,7 +72,8 @@ section is an explanation section, shown in the Explanation tab. A scoping secti
 `part: "scoping"`, is the drawing a scoper builds with the user before any model or prose
 is written (an HTML section, sections/scoping.html by convention): a feature's problem, or
 the subject of an explanation on the scoping path (a view-concept session with a scoping
-section; the path is stored nowhere else). The page shows it in a tab of its own, the
+section; the path is stored nowhere else). The precedence check reports no early use in
+it, as in an overview section. The page shows it in a tab of its own, the
 scoping tab, first; an explanation's report, its export and its published page, leaves it
 out (`in_report`). A refactor section about one item of the diff carries its item fields
 under `item`: {files, verdict (one of the keys of the session workflow's list in
@@ -152,23 +153,24 @@ elements? (the ids, when it sits on several: a tension between two elements), so
 (where a lead's finding was looked up), status: "open" | "closed", asked, closed?, note?
 (how it was settled), question? (the id of the question an old session's pin was moved
 from)}. Each skill places its own kinds of pin (PIN_KINDS, by workflow; `add_pin` refuses
-another): /build-feature a hole (what only the user can settle) or a supposition (the
-statement the agent already drew from the code, which the user approves or corrects);
-/view-concept a probe, a correction, a tension, a choice or a lead. The page draws each
-kind in its own colour: it marks the pin's elements, opens its box beside the element on a
-click, and lists it at the end of the scoping tab while it is open. The user answers by a
-comment, anchored to the box (`pin:<id>`; `hole:<id>`, written before the rename, is read
-the same way, `pin_anchor`) or carrying the marked element a selection in the drawing
-falls in (`element`), or by a side thread on the box; the scoper closes it (`close_pins`)
-when it redraws. An open pin with a sent comment not resolved yet is waiting
-(`waiting_pins`): nothing stores it; `pin_tones` gives the colour of each open pin and of
-each marked element, which the page draws. A session with a scoping section ends its
+another): /build-feature a hole (what only the user can settle) or a supposition (a
+decision the agent makes in the user's place, which the user approves or corrects; a fact
+read in the code is drawn solid, not pinned); /view-concept a probe, a correction, a
+tension, a choice or a lead. The page draws each kind in its own colour: it marks the
+pin's elements, opens its box beside the element on a click, and lists it at the end of
+the scoping tab while it is open. The user answers by a comment, anchored to the box
+(`pin:<id>`; `hole:<id>`, written before the rename, is read the same way, `pin_anchor`)
+or carrying the marked element a selection in the drawing falls in (`element`), or by a
+side thread on the box; the scoper closes it (`close_pins`) when it redraws. An open pin
+with a sent comment not resolved yet is waiting (`waiting_pins`): nothing stores it;
+`pin_tones` gives the colour of each open pin and of each marked element, which the page
+draws. A session with a scoping section ends its
 scoping with « End scoping »: a batch whose action is "end-scoping", refused while a
 correction, a tension, a hole or a supposition is open (`blocking_pins`), an open probe,
 choice or lead being left out of the report; « What's missing? » sends one whose action is
-"missing", asking the scoper to read the drawing again. A pin opened after scoping ended
-(by an agent that found one while converting or writing) sends the session back to
-scoping: the phase becomes "scoping"; when it has no element, the scoper draws one and
+"missing", asking the scoper for the next most important open question. A pin opened after
+scoping ended (by an agent that found one while converting or writing) sends the session
+back to scoping: the phase becomes "scoping"; when it has no element, the scoper draws one and
 gives it to the record (`set_pin_element`), which keeps its id. A scoping section takes no
 agent question. An old session's holes.json is moved to pins.json at first read, and one
 whose questions.json still holds questions anchored on a scoping section sees them moved
@@ -421,11 +423,12 @@ PIN_KEY = "pin:"
 LEGACY_PIN_KEY = "hole:"
 # The kinds of pin each skill places, by session workflow: the pin command refuses another.
 # /build-feature's user knows the feature: a hole is what only they can settle, a
-# supposition the agent's answer from the code for them to approve. /view-concept's user
-# is learning the subject: a probe asks what they believe on an element they drew, a
-# correction states that one is wrong and gives the fix, a tension sits on two elements
-# that do not hold together (or one against the goal), a choice asks which framing the
-# explanation follows, a lead offers what the agent found, with its sources when looked up.
+# supposition a decision the agent makes in their place, for them to approve or correct.
+# /view-concept's user is learning the subject: a probe asks what they believe on an
+# element they drew, a correction states that one is wrong and gives the fix, a tension
+# sits on two elements that do not hold together (or one against the goal), a choice asks
+# which framing the explanation follows, a lead offers what the agent found, with its
+# sources when looked up.
 PIN_KINDS = {
     "build-feature": ("hole", "supposition"),
     "view-concept": ("probe", "correction", "tension", "choice", "lead"),
@@ -1027,7 +1030,10 @@ class Session:
         whose section is not in the outline is skipped. A forward reference is an
         entry's definition or tip using another term whose home section comes later;
         an early use is a term found in the prose of a section before its home
-        section, other than an overview section (`"overview": true`). Returns one
+        section, other than an overview section (`"overview": true`) or a scoping
+        section (`"part": "scoping"`): the drawing uses the terms of the model before
+        its sections exist, and keeps using them once the planner sets their entries'
+        home sections from the scoping section to the model's. Returns one
         problem per finding: {issue, term, section (the id the audit entry points at),
         home (1-based position of the term's home section), at (position of the later
         home section, or of the early section), field, other}. With `write`, replaces
@@ -1036,7 +1042,11 @@ class Session:
         plan = self.read_plan()
         pos = {sec["id"]: i + 1 for i, sec in enumerate(plan["outline"])}
         order = [sec["id"] for sec in plan["outline"]]
-        overviews = {sec["id"] for sec in plan["outline"] if sec.get("overview") is True}
+        exempt = {
+            sec["id"]
+            for sec in plan["outline"]
+            if sec.get("overview") is True or sec.get("part") == SCOPING_PART
+        }
         entries = [
             e for e in plan["lexicon"] if e.get("term", "").strip() and e.get("section") in pos
         ]
@@ -1056,7 +1066,7 @@ class Session:
                         "other": f["term"],
                     })  # fmt: skip
             for sid in order[: home - 1]:
-                if sid not in overviews and _uses(prose.get(sid, ""), e["term"]):
+                if sid not in exempt and _uses(prose.get(sid, ""), e["term"]):
                     problems.append({
                         "issue": "early", "term": e["term"], "section": sid,
                         "home": home, "at": pos[sid], "field": "", "other": "",
@@ -2694,7 +2704,8 @@ class Session:
         write-readme, "write-lexicon" that they asked for the repo lexicon
         (REPO_LEXICON), refused once the file exists, "write-readmes" that they read
         the move plans and asked the doc pass to write the folder models it held, "missing"
-        that they asked the scoper what the drawing still misses, and "end-scoping" that
+        that they asked the scoper for the next most important open question, and
+        "end-scoping" that
         they ended the scoping of a drawing (refused while a correction, a tension, a hole or a
         supposition is open, `blocking_pins`). `path`
         goes with "rewrite-readme" only, which needs it."""
@@ -3362,8 +3373,9 @@ def format_batch(
         )
     if batch.get("action") == "missing":
         lines.append(
-            "action: missing (the user asked what the drawing still misses: read it again, "
-            "and open pins (`view-concept pin`), or say nothing is left)"
+            "action: missing (the user asked for the next most important open question: "
+            "open it as a pin (`view-concept pin`), a question between elements before one "
+            "inside an element, or say nothing is left)"
         )
     if batch.get("action") == "end-scoping":
         lines.append(

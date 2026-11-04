@@ -624,7 +624,11 @@ def test_end_scoping_waits_until_no_pin_is_open(session):
     assert "action: end-scoping (the user ended the scoping, no correction, tension" in text
     missing = session.add_batch([], action="missing")
     text = format_batch("kv-cache", missing, session.read_plan()["outline"])
-    assert "action: missing (the user asked what the drawing still misses:" in text
+    assert (
+        "action: missing (the user asked for the next most important open question: open it "
+        "as a pin (`view-concept pin`), a question between elements before one inside an "
+        "element, or say nothing is left)"
+    ) in text
 
 
 def test_end_scoping_waits_on_corrections_and_tensions_only(session):
@@ -933,6 +937,20 @@ def test_check_reports_no_early_use_in_an_overview_section(ordered):
     issues = {(p["issue"], p["term"]) for p in ordered.check_precedence(write=False)}
     assert ("early", "KKT conditions") not in issues
     assert ("forward", "rule") in issues
+
+
+def test_check_reports_no_early_use_in_a_scoping_section(ordered):
+    # The drawing names « KKT conditions », whose entry's home section the planner set
+    # from the scoping section to section 2: the drawing may, section 1 may not.
+    plan = ordered.read_plan()
+    plan["outline"].insert(0, {"id": "scoping", "title": "Scoping", "part": "scoping"})
+    ordered.plan_path.write_text(json.dumps(plan))
+    (ordered.sections_dir / "scoping.html").write_text(
+        '<p id="e1">The KKT conditions test a convex problem.</p>'
+    )
+    early = {(p["term"], p["section"]) for p in ordered.check_precedence(write=False)
+             if p["issue"] == "early"}  # fmt: skip
+    assert early == {("KKT conditions", "a")}
 
 
 def test_plan_refuses_an_overview_that_is_not_a_boolean(session):

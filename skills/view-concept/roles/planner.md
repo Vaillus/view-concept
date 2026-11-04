@@ -219,10 +219,20 @@ drawing** in `planning-rules.md` says:
    entry first, unchanged, then a section per part of the drawing (or a few
    parts together), in the order a first reading needs, by the precedence
    rule. Leave out what a pin left open does not settle. The lexicon is
-   written from the words of the drawing (`definition` only: the writer adds
-   the `tip`). A conversion after a return to scoping (an earlier conversion
-   exists) keeps each entry whose part the change history does not show as
-   changed since that conversion, and replans the others.
+   the one the scoper wrote, carried through: give each entry of the
+   scoping lexicon (the entries whose section is `scoping`) its home
+   section, the section that introduces its term, and change nothing else
+   of it: its term and its definition stay (the user controlled them by
+   comment). Add an entry for each term the drawing uses that the scoper
+   left out (`definition` only: the writer adds the `tip`).
+   A conversion after a return to scoping (an earlier conversion
+   exists) keeps each outline entry whose part the change history does not
+   show as changed since that conversion, and replans the others; in the
+   lexicon, an entry keeps the home section the earlier conversion set,
+   but for an entry whose section this conversion removes from the
+   outline: give it the section that now introduces its term. An entry
+   whose section is `scoping` is a term the redraw added: give it its home
+   section as above.
 3. Log one change: « converted the drawing », `--by planner`, its cause the
    « End scoping » batch.
 4. Ask nothing, and write no `revision`: there is no « Approve plan » on

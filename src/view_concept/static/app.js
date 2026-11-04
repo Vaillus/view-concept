@@ -1004,7 +1004,7 @@ function sectionBlock(s, { bare = false } = {}) {
    elements), sources (optional: where a lead's finding was looked up), status "open" |
    "closed"}. Each skill places its own kinds, which the server sends (`state.pin_kinds`):
    a feature's scoper a "hole", something only the user can settle, or a "supposition", a
-   statement it drew from the code, for the user to approve or correct; an explanation's
+   decision it makes in the user's place, for the user to approve or correct; an explanation's
    scoper a "probe", a "correction", a "tension", a "choice" or a "lead". Pins live on the
    pin section, the
    first scoping section of the outline. The page draws a pin from its
@@ -1176,6 +1176,25 @@ function closePinPop() {
   document.querySelectorAll(".pin-line.open").forEach((b) => b.classList.remove("open"));
 }
 
+/* The agree button: on the box of a pin whose statement the user can accept as written (a
+   supposition of /build-feature; a correction or a lead of /view-concept), a click drafts
+   the comment « agreed » anchored to the pin, the comment typed in its box otherwise, which
+   the next batch sends. None while such a draft already sits on the pin. */
+const AGREE_KINDS = new Set(["supposition", "correction", "lead"]);
+const AGREED = "agreed";
+
+function agreePin(p) {
+  const anchor = PIN_PREFIX + p.id;
+  if (drafts.some((d) => d.section === anchor && (d.text || "").trim().toLowerCase() === AGREED)) {
+    toast(`« ${AGREED} » is already drafted on ${p.id}`);
+    return;
+  }
+  const d = { id: crypto.randomUUID(), section: anchor, quote: "", prefix: "", text: AGREED, thread: "" };
+  drafts.push(d);
+  saveDraft(d);
+  afterDrafts();
+}
+
 function pinBox(p) {
   const tone = pinTone(p);
   const kept = pinBoxes.get(p.id);
@@ -1188,6 +1207,11 @@ function pinBox(p) {
     sources.length ? el("div", { class: "pin-sources dim", text: `source${sources.length > 1 ? "s" : ""}: ${sources.join(" · ")}` }) : null,
     el("div", { class: "pin-actions" },
        el("span", { class: "t-chips", "data-section": anchor }),
+       AGREE_KINDS.has(p.kind)
+         ? el("button", { class: "btn pin-agree", text: "agree",
+                          title: "Draft the comment « agreed » on this pin; your next batch sends it",
+                          onclick: (e) => { e.stopPropagation(); agreePin(p); } })
+         : null,
        el("button", { class: "btn pin-ask", text: "ask",
                       title: "Open a side thread about this pin; « → batch » sends its conclusion to the scoper",
                       onclick: (e) => openComposer({ section: anchor, quote: "", prefix: "",

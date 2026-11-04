@@ -365,7 +365,7 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .pin-q { color: var(--pin); }
 .pin-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
 .pin-actions .t-chips { margin-right: auto; }
-.pin-ask { font-size: 12px; }
+.pin-ask, .pin-agree { font-size: 12px; }
 #scope-questions .questions-waiting { width: 100%; }
 #scope-answered { margin-top: 8px; }
 #scope-answered summary { cursor: pointer; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; padding: 4px 0; }

@@ -59,8 +59,13 @@ them), is the source of the model, settled with the user. Four rules of this fil
   the drawing defines it: the material the doc pass turns into READMEs and
   the PR, and what a later reader of the repository needs. What the drawing
   holds is written out in full words: « never explain back what is known »
-  does not apply to it. An answered hole is a decision to state, an approved
-  supposition a fact to state, without saying who settled it. What is known
+  does not apply to it. An answered hole and an approved supposition are
+  decisions of the model to state, and a fact the drawing shows solid with
+  its source a fact to state, without saying who settled them. A
+  withdrawn pin (its note « withdrawn: <the decision> ») adds nothing of
+  its own: the decision its note names is drawn already. A replaced pin
+  (its note « replaced by <new pin id>: … ») is read through the pin that
+  replaced it. What is known
   only from comments and answers outside the drawing follows **The reader**
   above.
 - **The outline.** Its aim is to explain the model clearly, not to guide
@@ -78,8 +83,20 @@ them), is the source of the model, settled with the user. Four rules of this fil
   same pin).
   Then stop the run, and report « hole opened: back to scoping ». What you
   settle from the code is a decision made for the user: write it as such.
-- **The lexicon** is born at the conversion: the planner writes it from the
-  words of the drawing, then it is kept as below.
+- **The lexicon** starts in the scoping, and stays one list from then on:
+  the scoper writes it from its first drawing on, an entry per term of the
+  drawing that is not plain language, its term and its definition changed
+  by the user's comments. The **scoping lexicon** is the lexicon's entries
+  while their home section is the scoping section. The conversion sets
+  each such entry's home section to the section of the model that
+  introduces its term, and changes nothing else of it: its term, its kind
+  and its definition stay as the scoper wrote them. It adds an entry for
+  each term the drawing uses that the scoper left out. A return to scoping
+  keeps the home section a conversion set; a term the redraw adds enters
+  the scoping section, and the next conversion sets its home section. A
+  later conversion keeps each entry's home section, but for an entry whose
+  section that conversion removes from the outline: it gets the section
+  that now introduces its term. Then the lexicon is kept as below.
 
 ## Writing the outline and the lexicon
 
@@ -201,10 +218,11 @@ plain words; never point ahead. A **forward reference** is a `definition` or
 section placed before its home section. `view-concept check <slug>` lists
 both.
 
-The model sheet is the one exception: it lays out what the sections after it
+The model sheet is an exception: it lays out what the sections after it
 discuss, so it may name a core concept whose home section comes later, and
 that section defines it. Its outline entry carries `"overview": true`, so the
-check reports no early use in it.
+check reports no early use in it. The check skips the scoping section too:
+the drawing uses every term of the model before the term's home section.
 
 No location details in a `definition` or a `tip` (a file, a key, a section
 number): a file the reader needs goes in the home section's prose. A `tip`
