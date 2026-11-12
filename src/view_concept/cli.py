@@ -17,6 +17,7 @@ from pathlib import Path
 
 from .agents import AGENTS, detect
 from .context import ROLES, build
+from .notes import notes_dir, write_note
 from .store import (
     FACT_PARTS,
     FACT_PROPOSALS,
@@ -111,12 +112,52 @@ def bind_agent(s: Session, a: argparse.Namespace) -> None:
 
 def cmd_new(a: argparse.Namespace) -> None:
     slug = a.slug or slugify(a.title)
+    if a.link and notes_dir():
+        _linked_sessions(slug, a.link)
     s = Session(slug)
     created = s.create(
         a.title, a.initial_request or "", a.kind, a.repo or "", a.workflow or "", a.base or ""
     )
     bind_agent(s, a)
-    print(json.dumps({"slug": slug, "dir": str(s.dir), "created": created}))
+    out: dict = {"slug": slug, "dir": str(s.dir), "created": created}
+    folder = notes_dir()
+    if folder and (created or (folder / f"{slug}.md").exists()):
+        out["note"] = str(_write_session_note(s, folder, a.link or []))
+    print(json.dumps(out))
+
+
+def _linked_sessions(slug: str, links: list[str]) -> list[str]:
+    """The sessions `links` names, refused when one does not exist or is `slug` itself."""
+    for other in links:
+        if other == slug:
+            raise SessionError(f"session {slug!r} cannot link to itself")
+        if not Session(other).exists():
+            raise SessionError(f"no session {other!r} to link to")
+    return links
+
+
+def _write_session_note(s: Session, folder: Path, links: list[str]) -> Path:
+    plan = s.read_plan()
+    path, _ = write_note(
+        folder,
+        s.slug,
+        plan.get("title", s.slug),
+        plan.get("workflow", ""),
+        f"{_base_url()}/s/{s.slug}",
+        links,
+    )
+    return path
+
+
+def cmd_note(a: argparse.Namespace) -> None:
+    folder = notes_dir()
+    if not folder:
+        raise SessionError("session notes are off: set VIEW_CONCEPT_SESSION_NOTES to a folder")
+    s = Session(a.slug)
+    if not s.exists():
+        raise SessionError(f"no session {a.slug!r}")
+    links = _linked_sessions(a.slug, a.link or [])
+    print(_write_session_note(s, folder, links))
 
 
 def cmd_open(a: argparse.Namespace) -> None:
@@ -744,8 +785,25 @@ def main() -> None:
         help="the skill driving the session; picks its verdict set "
         "(default: view-concept, or build-feature for a code session)",
     )
+    q.add_argument(
+        "--link",
+        action="append",
+        metavar="SLUG",
+        help="a session this one is linked to, by its slug (repeatable); written to the "
+        "session note, ignored when session notes are off",
+    )
     _add_agent_flags(q)
     q.set_defaults(fn=cmd_new)
+
+    q = sub.add_parser(
+        "note",
+        help="write the session's note in VIEW_CONCEPT_SESSION_NOTES, or add links to it",
+    )
+    q.add_argument("slug")
+    q.add_argument(
+        "--link", action="append", metavar="SLUG", help="a session to link to (repeatable)"
+    )
+    q.set_defaults(fn=cmd_note)
 
     q = sub.add_parser("open", help="start the server if needed and open the page")
     q.add_argument("slug")

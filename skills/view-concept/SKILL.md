@@ -98,11 +98,19 @@ The slug is a short kebab-case name of the concept.
 
 ```bash
 view-concept new "<title>" --slug <slug> --initial-request "<the user's request, verbatim>" \
-    --workflow view-concept [--kind code --repo <repo root>]
+    --workflow view-concept [--kind code --repo <repo root>] [--link <other slug> ...]
 view-concept request <slug> <file>   # when the explanation follows a conversation
 view-concept open <slug>             # starts the server if needed, shows the page
 view-concept status <slug> scoping
 ```
+
+`--link <slug>`, once per other session the user's request names (by its slug
+or its page address, `/s/<slug>`), links this session to it: when session
+notes are on (`VIEW_CONCEPT_SESSION_NOTES` names a folder of the user's
+Obsidian vault), `new` writes this session's note there, with a wikilink to
+each linked session. When they are off, `--link` does nothing. A session the
+user asks to link later is linked by you, not a role agent: see **Linking
+sessions** under **Routing the events**.
 
 `--workflow view-concept` makes the session a coordinated one, whose side
 threads start from the session folder; always pass it (a code session would
@@ -299,6 +307,18 @@ Record a terminal message about the explanation with `view-concept message
 agents never see the terminal. Process messages (« go ahead », « stop »)
 are not recorded. A terminal message that changes what the explanation is
 for may also call for a rescoping question: the agent it goes to asks it.
+
+**Linking sessions.** An event that asks to link this session to another
+session is yours, before any routing: a terminal message, a comment, or the
+side thread a comment comes from (the comment ends with `(from side thread
+t3: threads/t3.json)`; read that file when the comment points to the
+discussion rather than saying it). Find the other session's slug
+(`view-concept list` when the user names it by its title), run `view-concept
+note <slug> --link <other slug>`, and resolve a comment that asks nothing
+else: `view-concept resolve <slug> <comment id> --reply "linked to <other
+slug>"`. A comment that also asks for something else goes on to its agent as
+usual, the link already made. With session notes off, `note` refuses: tell
+the user so in your reply, and link nothing.
 
 **One agent at a time.** While an agent runs, queue the events that arrive.
 When it ends, start the next run with every queued event in its trigger, not

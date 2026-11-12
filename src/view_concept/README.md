@@ -16,6 +16,7 @@ agents.py      # the agent backends side threads and the channel's small agents 
 frame.py       # the section frame an HTML section is drawn in: its injected head and sandbox flags
 render.py      # the Markdown renderer shared by the page and the published page
 publish.py     # publishing an explanation as a read-only page in a GitHub pages repo
+notes.py       # session notes: one Obsidian note per session, linked to other sessions' notes
 metrics.py     # run metrics of a feature, read from Claude Code transcripts and the session files
 gate.py        # the tailnet gate on the remote port: only the owner's Tailscale login gets through
 push.py        # web push notices to a phone when a session starts waiting for the user

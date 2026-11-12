@@ -69,10 +69,23 @@ worktree next to the repo, the folder `<repo>-<slug>` (for the repo
 ```bash
 git -C <repo root> worktree add -b docs/<slug> <repo root>-<slug> main
 view-concept new "<title>" --slug <slug> --initial-request "<the user's request, verbatim>" \
-    --kind code --repo <the worktree> --base main --workflow review-docs
+    --kind code --repo <the worktree> --base main --workflow review-docs \
+    [--link <other slug> ...]
 view-concept reference <slug> <other slug> --reason "<one line>"   # when the request names one
 view-concept open <slug>   # starts the server if needed, shows the page
 ```
+
+`--link <slug>`, once per other session the user's request names (by its slug
+or its page address, `/s/<slug>`), links this session to it: when session
+notes are on (`VIEW_CONCEPT_SESSION_NOTES` names a folder of the user's
+Obsidian vault), `new` writes this session's note there, with a wikilink to
+each linked session. When they are off, `--link` does nothing. A session the
+user asks to link later takes `view-concept note <slug> --link <other slug>`:
+in a terminal message, in a comment, or in the side thread a comment comes
+from (the comment ends with `(from side thread t3: threads/t3.json)`; read
+that file when the comment points to the discussion rather than saying it).
+A user who names the other session by its title rather than its slug: find
+the slug with `view-concept list`.
 
 `--repo` is the worktree, not the main checkout: the page reads each doc
 there, and compares it with `main` for the base mark. Every file you change
