@@ -58,9 +58,21 @@ The slug is a short kebab-case name of the scope.
 
 ```bash
 view-concept new "<title>" --slug <slug> --initial-request "<the user's request, verbatim>" \
-    --kind code --repo <repo root> --workflow triage-code
+    --kind code --repo <repo root> --workflow triage-code [--link <other slug> ...]
 view-concept open <slug>          # starts the server if needed, shows the page
 ```
+
+`--link <slug>`, once per other session the user's request names (by its slug
+or its page address, `/s/<slug>`), links this session to it: when session
+notes are on (`VIEW_CONCEPT_SESSION_NOTES` names a folder of the user's
+Obsidian vault), `new` writes this session's note there, with a wikilink to
+each linked session. When they are off, `--link` does nothing. A session the
+user asks to link later takes `view-concept note <slug> --link <other slug>`:
+in a terminal message, in a comment, or in the side thread a comment comes
+from (the comment ends with `(from side thread t3: threads/t3.json)`; read
+that file when the comment points to the discussion rather than saying it).
+A user who names the other session by its title rather than its slug: find
+the slug with `view-concept list`.
 
 The workflow makes the page use triage-code's verdicts. The page runs side
 threads on the agent you are. Claude Code and Codex are detected; any other

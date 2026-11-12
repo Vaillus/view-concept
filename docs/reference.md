@@ -10,7 +10,8 @@ The skill runs these commands. You don't need to run them yourself.
 
 | Command | What it does |
 |---|---|
-| `view-concept new "<title>" --slug <slug> [--initial-request "…"] [--kind code --repo … --base … --workflow …]` | creates `~/.view-concept/sessions/<slug>/`; `--initial-request` keeps the user's first message verbatim, `--base` the branch a feature compares with |
+| `view-concept new "<title>" --slug <slug> [--initial-request "…"] [--kind code --repo … --base … --workflow …] [--link <other slug> …]` | creates `~/.view-concept/sessions/<slug>/`; `--initial-request` keeps the user's first message verbatim, `--base` the branch a feature compares with, `--link` each session this one is linked to in its **session note** (see below) |
+| `view-concept note <slug> [--link <other slug> …]` | writes the **session note** of an existing session, or adds wikilinks to the one that exists; refused when session notes are off |
 | `view-concept open <slug>` | starts the server (port 5080) if needed and shows the session: in each browser with a page open, the phone's included, the page you used last goes to it (its **focus**); a new tab opens on the Mac only when no page is open anywhere. A phone whose screen is locked or whose browser is in the background usually misses the focus and stays on its session |
 | | `new` and `open` also record the agent that runs them and its conversation (`agent.json`), which side threads run on and fork from; `conversations` lists every conversation the session ran in, oldest first, so the Metrics tab finds the runs of a conversation left behind after `/clear` or on another day; `--agent claude\|codex\|jazz\|command` and `--agent-name` say which when it is not detected |
 | `view-concept status <slug> <phase> [--section <id> ...] [--done]` | tells the page what the agent is doing (`status.json`); `awaiting-approval`, `awaiting-model`, `awaiting-docs` and `awaiting-pr` show the button the user answers with (`awaiting-docs`: « Write docs » and « Write docs and create PR », in a feature whose code carries the model and whose doc pass has not run), and `scoping` (the questions asked before the plan is written) shows « Write plan » in the scope block (« Write model » in a feature or a refactor); in a feature, `awaiting-answer` while sections of the model are left to write is the writer's **pause**, set by the coordinator when the writer reports one, and shows « Go on ». `writing` starts a **writing run**, which lasts until another phase: the call that starts it names its **run set**, the sections it will write, with `--section` once per section; naming none means every section with no file yet (the whole outline on a first pass, or when every section has a file). A later `writing` call in the same run keeps the run's start and adds the sections it names to the set. `scoping --done` sets the **scoping done** mark, once the agent has no question left; a new question or a batch from the page clears it. The page computes the rest of the status banner from the session files (see **Status banner**). Each call that changes the phase appends it, with its time to the millisecond, to `phase-history.jsonl`, which the Metrics tab reads to tell when the page waited for you |
@@ -224,6 +225,7 @@ The page works from a phone through [Tailscale](https://tailscale.com), the priv
 |---|---|
 | `VIEW_CONCEPT_HOME` | `~/.view-concept` |
 | `VIEW_CONCEPT_VAULT` | `~/Documents/Vault/explanations` |
+| `VIEW_CONCEPT_SESSION_NOTES` | unset: no session notes |
 | `VIEW_CONCEPT_PORT` | `5080` (the local port) |
 | `VIEW_CONCEPT_REMOTE_PORT` | `5081` (the remote port, behind the tailnet gate; see **From the phone**) |
 | `VIEW_CONCEPT_OWNER_LOGIN` | unset: the remote port refuses everyone; your Tailscale login |
@@ -235,6 +237,8 @@ The page works from a phone through [Tailscale](https://tailscale.com), the priv
 | `VIEW_CONCEPT_PAGES` | `~/.view-concept/pages` (the clone of the pages repo) |
 | `VIEW_CONCEPT_PAGES_URL` | unset; the address of the pages repo's site, else derived from the clone's `origin` remote |
 | `VIEW_CONCEPT_PAGES_REPO` | `explanations` (the name of the GitHub repository the first publish creates or clones) |
+
+A **session note** is a session's node in the user's Obsidian vault, off unless `VIEW_CONCEPT_SESSION_NOTES` names a folder of the vault. `view-concept new` then writes `<folder>/<slug>.md` for each session it creates: a frontmatter holding `type: view-concept-session`, the title as an alias, the workflow and the session's page address (`url`), then a line `Liens :` with a wikilink to each session passed with `--link`, which the vault's graph draws as an edge. The note holds no text of the session. A note that exists is never written again: a later `--link` appends its wikilink to that line, so what the user wrote in the note stays. An existing session gets its note only from `view-concept note`.
 
 ## Agents
 
