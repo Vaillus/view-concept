@@ -5,9 +5,8 @@
    lexicon, change history), the explanation (one block per explanation section; the Model
    tab of a feature), in a feature that has reached the refactoring step the
    code tab (the refactor sections, the refactoring part), and once a doc set exists the
-   Doc tab (the repo docs the branch concerns, see "the Doc tab"); the review pane (a conversation: sent batches and answered agent
-   questions, a line counting the open ones, then the draft comments) stays on the
-   right. The page never edits the explanation: the agent writes the files, the server
+   Doc tab (the repo docs the branch concerns, see "the Doc tab"); the batch box (the batch indicator, a line counting the open agent
+   questions, then the draft comments) floats in the bottom-right corner. The page never edits the explanation: the agent writes the files, the server
    streams "changed", the page re-fetches. The page writes batches of comments, and side
    threads: separate read-only agent conversations run by the server, streamed through
    "threads" events. A thread shows in a popover on its passage (see "side threads"
@@ -25,7 +24,7 @@ const SLUG = decodeURIComponent(location.pathname.split("/").pop());
 const DRAFTS_KEY = `view-concept:drafts:${SLUG}`;
 const NOTE_KEY = `view-concept:note:${SLUG}`;
 const POSITION_KEY = `view-concept:position:${SLUG}`; // the saved position (see "saved position")
-const WIDTH_KEY = "view-concept:review-width"; // per browser, for every session
+const BATCH_COLLAPSED_KEY = "view-concept:batch-collapsed"; // per browser, for every session
 const THREAD_SIZE_KEY = "view-concept:thread-size"; // the same: {width, height} of a thread
 
 let state = null;        // last payload from /api/s/<slug>
@@ -143,7 +142,7 @@ const tabOf = (id) => (pinOf(id) || inScoping(id) ? "scoping"
 const hasRefactorTab = () => state.plan.outline.some(isRefactorSection);
 /* The narrow layout: the page in one column whenever its window is under 700px wide
    (app.css holds the same threshold), whatever the device. The metrics tab is gone from
-   it, and the review pane is the review tab, after code. */
+   it, and the batch box is the batch tab, after code. */
 const NARROW = matchMedia("(max-width: 699.98px)");
 const isNarrow = () => NARROW.matches;
 /* Touch controls: the device's main pointer cannot hover (a finger on a phone or a
@@ -324,7 +323,6 @@ NARROW.addEventListener("change", () => {
   closeMenu();
   $('.tab[data-tab="metrics"]').hidden = !hasMetricsTab();
   if ((tab === "review" && !isNarrow()) || (tab === "metrics" && isNarrow())) setTab(homeTab());
-  setReviewWidth(isNarrow() ? null : loadJSON(WIDTH_KEY, null));
 });
 
 /* The ⋯ menu of the narrow layout: the header's buttons, open on a tap of ⋯, closed by
@@ -362,6 +360,7 @@ function renderListening() {
   // The narrow layout shows the dot alone (the listening dot).
   l.replaceChildren(el("span", { class: "l-dot", text: state.listening ? "●" : "○" }),
     el("span", { class: "l-text", text: state.listening ? " Agent listening" : " Agent not listening" }));
+  renderBatchIndicator();
 }
 // What a successful send says when no watch reads it: the batch waits in the inbox.
 const NOT_LISTENING = "The agent isn't listening: write anything in the terminal and it will read this batch";
@@ -493,28 +492,6 @@ function approvalPending() {
   return state.comments.batches.some((b) => b.action === approval.action && b.sent >= since);
 }
 
-/* Batch progress: where your last batch stands, in every phase. The server sends its
-   stage: "sent" (it waits in the inbox), "received" (the delivery mark passed it: the
-   agent has it), "acted" (the agent wrote a session file after receiving it). Until it
-   is acted on, the banner names what you sent and where it stands, in place of the
-   phase's wording; then the phase takes over, and the wordings the page used to fix at
-   the click (« model approved · the agent is implementing »…) are true. */
-const BATCH_WHAT = { answer: "answered", "go-on": "going on", "approve-plan": "plan approved",
-                     "approve-model": "model approved", "write-docs": "docs requested", "create-pr": "PR requested", plan: "scoping ended",
-                     grill: "grill", "stop-grill": "grill stopped",
-                     "rewrite-readme": "README rewrite requested", "write-lexicon": "repo lexicon requested",
-                     "write-readmes": "READMEs requested", missing: "asked what's missing", "end-scoping": "scoping ended" };
-const BATCH_STAGE = { sent: "in the inbox", received: "the agent has it" };
-
-function batchProgress() {
-  const b = state.batch;
-  if (!b || !BATCH_STAGE[b.stage]) return "";
-  // A « Write docs and create PR » batch carries then_pr (the batch in comments.json).
-  const chained = b.action === "write-docs" && state.comments.batches.some((x) => x.id === b.id && x.then_pr);
-  const what = chained ? "docs and PR requested" : b.action ? BATCH_WHAT[b.action] || b.action : "comments";
-  return `${what} · ${BATCH_STAGE[b.stage]}`;
-}
-
 /* The inactivity notice: a phase at work keeps its moving label until another phase is
    declared, so an agent that stopped mid-run would look busy for good. Once the agent has
    written no session file for ten minutes (`state.activity`, the time of the last one;
@@ -536,13 +513,12 @@ setInterval(() => { if (state) renderStatus(); }, 30000);
 const AT_WORK = ["planning", "writing", "audit", "revising"];
 
 /* What the banner says, and whether it shows the agent at work (`active`) or waits for
-   the user (`ask`). Batch progress comes first, in every phase. A derived phase (writing, planning or the audit, read from a trace
+   the user (`ask`). Where the last batch stands is the batch indicator's, in the review
+   pane, never the banner's. A derived phase (writing, planning or the audit, read from a trace
    later than the agent's last status call) takes the wording of that phase; the declared
    phase's message is dropped with it, since it described the step the trace ended. */
 function banner() {
   const { phase, message } = state.status;
-  const progress = batchProgress();
-  if (progress) return { text: progress, active: true, ask: false };
   const shown = shownPhase();
   if (shown !== phase) {
     const text = shown === "writing" ? writingLabel() : { planning: "drafting the plan", audit: "vocabulary audit" }[shown] || shown;
@@ -1147,7 +1123,7 @@ function pinIndex(id) {
 }
 
 // Open the pin window of pin `pid`, on its element or on its index line; a pin closed
-// since (a comment on it revealed from the review pane) only shows the scoping tab.
+// since (a comment on it revealed from the batch box) only shows the scoping tab.
 function showPin(pid) {
   const p = openPins().find((x) => x.id === pid);
   const id = pinSection();
@@ -1192,6 +1168,7 @@ function agreePin(p) {
   const d = { id: crypto.randomUUID(), section: anchor, quote: "", prefix: "", text: AGREED, thread: "" };
   drafts.push(d);
   saveDraft(d);
+  setBatchCollapsed(false); // a new draft is in sight
   afterDrafts();
 }
 
@@ -2840,6 +2817,7 @@ function addDraft() {
   const d = { id: crypto.randomUUID(), section, quote, prefix, text, ...(fact ? { fact } : {}), ...(element ? { element } : {}) };
   drafts.push(d);
   saveDraft(d);
+  setBatchCollapsed(false); // a new draft is in sight
   closeComposer();
   getSelection().removeAllRanges();
   renderReview();
@@ -2864,7 +2842,7 @@ $("#composer textarea").addEventListener("keydown", (e) => {
    always a free-text field, and maybe a recommended answer (`recommended`). Every agent
    question lives in the scope block, at the top of the Plan tab: one box per open
    question, oldest first, then the answered and skipped ones folded under « answered ».
-   The review pane only counts the open ones (see renderWaiting).
+   The batch box only counts the open ones (see renderWaiting).
    A box is built once and kept while its question is open, so a re-render never takes
    the user's choice or text. A recommended answer that is one of the options is
    preselected; any other is pre-filled in the text field; either is marked « suggested ».
@@ -3056,7 +3034,7 @@ $("#grill").addEventListener("click", (e) => send(state.grilling ? "stop-grill" 
 $("#scope-plan").addEventListener("click", (e) => send("plan", e.currentTarget));
 $("#scope-go-on").addEventListener("click", (e) => send("go-on", e.currentTarget));
 
-/* The review pane keeps one line for what waits for the user: the open agent questions,
+/* The batch box keeps one line for what waits for the user: the open agent questions,
    and on a drawing during scoping the open pins not waiting for the scoper (pinsForYou),
    « N pins waiting ». A click opens the first question's place (its section, or the Plan
    tab at the scope block), or, with no question open, the pin index at the end of the
@@ -3085,13 +3063,12 @@ $("#questions-waiting").addEventListener("click", () => {
   $("#scope").scrollIntoView({ block: "start", behavior: "smooth" });
 });
 
-/* ---------------- review pane ----------------
-   The pane reads like a conversation, oldest at the top: the sent batches in time order
-   (a batch answering an agent question shows the question, then the answer or « skipped »),
-   then a line counting the open agent questions (they live in the scope block) and, on a
-   drawing during scoping, the open pins waiting for the user, then the
-   drafts, the note and « Send » at the bottom. It stays
-   scrolled to the bottom as content arrives, unless the user scrolled up. */
+/* ---------------- batch box ----------------
+   A box floating in the bottom-right corner of the window, over the workspace (the batch
+   tab in the narrow layout), its header « batch » followed by the batch indicator: then a line counting the open agent questions (they
+   live in the scope block) and, on a drawing during scoping, the open pins waiting for
+   the user, then the drafts, the note and « Send » at the bottom. It stays scrolled to
+   the bottom as content arrives, unless the user scrolled up. */
 
 let reviewAtEnd = true;
 $(".review").addEventListener("scroll", (e) => {
@@ -3126,35 +3103,53 @@ function quoteLine(c) {
     c.thread ? el("span", { class: "badge alt", text: `↳ ${c.thread}` }) : null);
 }
 
+/* The batch indicator, in the batch box's header next to « batch »: whether the last
+   batch you sent is still being processed or done.
+   It turns « done » only from the end-of-run record, which the coordinator writes once
+   the last run it started for the batch has ended (`state.batch.state`). While it reads
+   « processing » with no watch listening, no record can come: it says so. Empty until
+   a batch is sent. */
+function batchIndicator() {
+  const b = state && state.batch;
+  if (!b) return null;
+  const stalled = b.state === "processing" && !state.listening;
+  return { state: b.state, text: stalled ? "processing · agent not listening" : b.state };
+}
+
+function renderBatchIndicator() {
+  const ind = batchIndicator();
+  const summary = $("#batch-summary");
+  summary.className = `batch-summary ${ind ? ind.state : ""}`;
+  summary.textContent = ind ? `· ${ind.text}` : "";
+  // The batch tab of the narrow layout (the batch box's place there) carries the count of
+  // drafts and the indicator's state, in sight from every tab.
+  const label = ["batch", drafts.length ? `(${drafts.length})` : "", ind ? `· ${ind.state}` : ""];
+  $('.tab[data-tab="review"]').textContent = label.filter(Boolean).join(" ");
+}
+
+/* The batch box collapses to its header on a click of it, and expands on the next one;
+   the choice is kept in this browser. A draft you add expands it, so it is in sight.
+   The narrow layout ignores it: there the box is a tab of its own. */
+function setBatchCollapsed(collapsed) {
+  $(".review").classList.toggle("collapsed", collapsed);
+  $("#batch-head").setAttribute("aria-expanded", String(!collapsed));
+  saveJSON(BATCH_COLLAPSED_KEY, collapsed);
+}
+setBatchCollapsed(!!loadJSON(BATCH_COLLAPSED_KEY, false));
+$("#batch-head").addEventListener("click", () => {
+  if (!isNarrow()) setBatchCollapsed(!$(".review").classList.contains("collapsed"));
+});
 function renderReview() {
   renderWaiting();
   $("#draft-count").textContent = drafts.length ? `· ${drafts.length} draft${drafts.length > 1 ? "s" : ""}` : "";
-  // The review tab of the narrow layout carries the count of drafts, in sight from every tab.
-  $('.tab[data-tab="review"]').textContent = drafts.length ? `review (${drafts.length})` : "review";
+  renderBatchIndicator();
   renderDrafts();
   updateSend();
-
-  const batches = state ? state.comments.batches : [];
-  $("#history").replaceChildren(...(batches.length ? batches.map((b) =>
-    el("div", { class: "batch" },
-      el("div", { class: "b-head dim", text: `${b.id} · ${new Date(b.sent).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` }),
-      b.note ? el("div", { class: "b-note", text: b.note }) : null,
-      ...(b.answers || []).map((a) => answeredQuestion(a, b)),
-      ...b.comments.map((c) => el("div", { class: `comment ${c.status}` },
-        quoteLine(c),
-        c.text || !c.thread ? el("div", { class: "c-text", text: c.text })
-          : el("div", { class: "c-text dim", text: "the thread's conclusion" }),
-        el("div", { class: "c-status" },
-          el("span", { class: c.status === "resolved" ? "badge ok" : "badge", text: c.status === "resolved" ? "✓ resolved" : "waiting" }),
-          c.reply ? el("span", { class: "c-reply", text: ` ${c.reply}` }) : null))))
-  ) : [el("p", { class: "dim", text: "Nothing sent yet." })]));
-  if (state) annotateQuestions($("#history"));
   const pane = $(".review");
   if (reviewAtEnd) pane.scrollTop = pane.scrollHeight;
 }
 
-/* An answered agent question in the history: its text, the answer (« skipped » for a
-   skipped one), the agent's reply. */
+/* The text of an agent question's answer (« skipped » for a skipped one). */
 const answerText = (a) => (a.skipped ? "skipped"
   : a.unclear ? ["I don't understand", a.note].filter(Boolean).join(" — ")
   : [(a.choices || []).join(", "), a.text].filter(Boolean).join(" — "));
@@ -3164,18 +3159,6 @@ const deferredText = (q) => {
   const where = q.section ? `asked again after section ${numberOf(q.section)}` : "asked again once the model explains it";
   return [answerText({ unclear: true, note: last.note }), where].join(" · ");
 };
-
-function answeredQuestion(a, b) {
-  const q = (state.questions || []).find((x) => x.id === a.question) || { id: a.question, text: "" };
-  return el("div", { class: "question answered" },
-    el("div", { class: "q-head" }, "Question from the agent ", el("span", { class: "dim", text: q.id })),
-    q.text ? el("div", { class: "q-text", text: q.text }) : null,
-    el("div", { class: `q-reply ${a.skipped || a.unclear ? "dim" : ""}`, text: answerText(a) },
-       ...(a.threads || []).map((tid) => el("span", { class: "badge alt t-link", text: `↳ ${tid}`,
-                                                       onclick: () => threadOf(tid) && openPopover(tid) }))),
-    b.reply ? el("div", { class: "c-status" }, el("span", { class: "badge ok", text: "✓ resolved" }),
-                 el("span", { class: "c-reply", text: ` ${b.reply}` })) : null);
-}
 
 function updateSend() {
   const note = $("#note").value.trim();
@@ -3363,42 +3346,6 @@ async function send(action = "", button = null, extra = {}) {
   const toastText = approval && extra.then_pr && approval.also ? approval.also.toast : approval ? approval.toast : "";
   sentToast(toastText || SCOPE_TOASTS[action] || DOC_TOASTS[action]?.(extra) || `Sent ${b.id} to the session`);
 }
-
-/* ---------------- divider ----------------
-   The border between the workspace and the review pane is a divider: dragging it sets
-   the pane's width, from 300 px to 70 % of the window, remembered in this browser.
-   A double-click goes back to the default width. */
-
-const divider = $("#divider");
-const clampWidth = (px) => Math.round(Math.max(300, Math.min(px, innerWidth * 0.7)));
-
-function setReviewWidth(px) {
-  const layout = $(".layout");
-  if (px == null) layout.style.removeProperty("--review-width");
-  else layout.style.setProperty("--review-width", `${clampWidth(px)}px`);
-  positionPopover();
-}
-
-setReviewWidth(isNarrow() ? null : loadJSON(WIDTH_KEY, null));
-divider.addEventListener("pointerdown", (e) => {
-  e.preventDefault();
-  divider.setPointerCapture(e.pointerId);
-  divider.classList.add("dragging");
-  document.body.classList.add("resizing");
-});
-divider.addEventListener("pointermove", (e) => {
-  if (divider.hasPointerCapture(e.pointerId)) setReviewWidth($(".layout").getBoundingClientRect().right - e.clientX);
-});
-divider.addEventListener("pointerup", (e) => {
-  if (!divider.hasPointerCapture(e.pointerId)) return;
-  divider.releasePointerCapture(e.pointerId);
-  divider.classList.remove("dragging");
-  document.body.classList.remove("resizing");
-  saveJSON(WIDTH_KEY, $(".review").getBoundingClientRect().width);
-});
-divider.addEventListener("dblclick", () => { saveJSON(WIDTH_KEY, null); setReviewWidth(null); });
-// A smaller window keeps the pane within 70 % of it.
-addEventListener("resize", () => { if (!isNarrow()) setReviewWidth(loadJSON(WIDTH_KEY, null)); });
 
 /* ---------------- side threads ----------------
    A thread opens in a popover on its passage. One is shown at a time; its × button, Esc
@@ -3712,6 +3659,7 @@ function threadToBatch(tid) {
               ...(t.fact ? { fact: t.fact } : {}) };
   drafts.push(d);
   saveDraft(d);
+  setBatchCollapsed(false); // a new draft is in sight
   renderReview();
   applyHighlights();
   renderPopover();

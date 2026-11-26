@@ -29,6 +29,8 @@ reach the agent session through the inbox.
         inbox.jsonl     one line per batch, appended by the server  (read by `watch`)
         .watch_cursor   byte offset of the inbox already delivered  (written by `watch`)
         deliveries.jsonl  when each batch was handed to the agent  (`watch`, `wait`)
+        batch-done.json the end-of-run record: the last batch the coordinator finished
+                        processing, and when                  (written by `done`)
         watch.json      the watch's heartbeat: pid, time of its last check  (written by `watch`)
         agent.json     the agent session driving this one     (written by `new`, `open`)
         seen.json       the highlight baseline: each section's text, each doc's under
@@ -709,6 +711,10 @@ class Session:
     @property
     def deliveries_path(self) -> Path:
         return self.dir / "deliveries.jsonl"
+
+    @property
+    def batch_done_path(self) -> Path:
+        return self.dir / "batch-done.json"
 
     @property
     def watch_path(self) -> Path:
@@ -2456,30 +2462,32 @@ class Session:
 
     def batch_progress(self) -> dict[str, Any] | None:
         """Where the last batch sent from the page stands: {id, sent, action, comments,
-        answers, stage}, `stage` being "sent" while it waits in the inbox, "received" once
-        the delivery mark (the watch's cursor) passed it, "acted" once the agent wrote a
-        session file after receiving it. None when no batch was sent."""
+        answers, state}, `state` being "done" once the end-of-run record names this batch
+        or a later one, "processing" until then. None when no batch was sent."""
         batches = self.read_comments()["batches"]
         if not batches:
             return None
         b = batches[-1]
-        out = {
+        ids = [x["id"] for x in batches]
+        finished = str(_read_json(self.batch_done_path, {}).get("batch", ""))
+        done = finished in ids and ids.index(finished) == len(ids) - 1
+        return {
             "id": b["id"],
             "sent": b["sent"],
             "action": b.get("action", ""),
             "comments": len(b["comments"]),
             "answers": len(b.get("answers", [])),
-            "stage": "sent",
+            "state": "done" if done else "processing",
         }
-        try:
-            cursor = int(self.cursor_path.read_text())
-        except (FileNotFoundError, ValueError):
-            cursor = 0
-        size = _mtime(self.inbox_path) and self.inbox_path.stat().st_size
-        delivered = _mtime(self.cursor_path)
-        if size and cursor >= size and delivered:
-            out["stage"] = "acted" if self.last_activity() > iso_time(delivered) else "received"
-        return out
+
+    def record_batch_done(self, batch_id: str) -> dict[str, str]:
+        """The end-of-run record: the coordinator finished processing batch `batch_id`
+        (the last run it started for it ended). Refuses a batch the session never sent."""
+        if batch_id not in {b["id"] for b in self.read_comments()["batches"]}:
+            raise SessionError(f"no batch {batch_id!r} in session {self.slug!r}")
+        record = {"batch": batch_id, "at": now_iso()}
+        _write_json(self.batch_done_path, record)
+        return record
 
     def record_delivery(self, batch_id: str) -> None:
         """Record that the watch or a wait handed batch `batch_id` to the agent now."""
@@ -2520,6 +2528,7 @@ class Session:
             self.questions_path,
             self.pins_path,
             self.published_path,
+            self.batch_done_path,
         ]
         if self.sections_dir.is_dir():
             paths += sorted([*self.sections_dir.glob("*.md"), *self.sections_dir.glob("*.html")])

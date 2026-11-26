@@ -5,7 +5,7 @@ The browser side of the page, the local web page that renders a session's files 
 ## Files
 
 ```
-session.html      # the session page: tabs, review pane, side threads
+session.html      # the session page: tabs, batch box, side threads
 home.html         # the list of sessions
 app.js            # the session page's script: rendering, comments, batches, the scoping tab, the Doc tab
 app.css           # the session page's rules, semantic colour tokens only

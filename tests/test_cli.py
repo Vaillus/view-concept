@@ -557,3 +557,15 @@ def test_doc_set_records_the_old_path_of_a_moved_readme(tmp_path):
     assert r.returncode == 0 and r.stdout.strip() == "core/README.md — why"
     r = view_concept(tmp_path, "doc-set", "gate", "add", "README.md", "why", "--clear")
     assert r.returncode == 1 and "--clear goes with failing or moved" in r.stderr
+
+
+def test_done_writes_the_end_of_run_record(tmp_path):
+    assert view_concept(tmp_path, "new", "Done").returncode == 0
+    s = Session("done", root=tmp_path / "sessions")
+    b = s.add_batch([{"text": "hi"}])
+    r = view_concept(tmp_path, "done", "done", b["id"])
+    assert r.returncode == 0, r.stderr
+    progress = s.batch_progress()
+    assert progress and progress["state"] == "done"
+    r = view_concept(tmp_path, "done", "done", "b9")
+    assert r.returncode != 0
