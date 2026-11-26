@@ -768,3 +768,14 @@ def test_the_base_mark_reads_a_moved_doc_at_its_old_path(client, doc_review):
     assert view["base_html"] == "<h1>Reference</h1>\n<p>The keys 1 to 4.</p>\n"
     assert view["new"] is False
     assert docs["set"][1]["from"] == "docs/reference.md" and "from" not in docs["set"][0]
+
+
+def test_the_page_and_its_static_files_are_revalidated_on_each_load(client, session):
+    for url in ["/", "/s/kv-cache", "/static/app.js", "/static/app.css"]:
+        r = client.get(url)
+        assert r.status_code == 200 and r.headers["cache-control"] == "no-cache", url
+
+
+def test_the_page_stamps_its_script_and_style_links(client, session):
+    html = client.get("/s/kv-cache").text
+    assert "/static/app.js?v=" in html and "/static/app.css?v=" in html

@@ -7,6 +7,7 @@ import asyncio
 import contextlib
 import hashlib
 import json
+import re
 import sys
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -66,8 +67,24 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         task.cancel()
 
 
+# The page and its static files: a browser revalidates them on each load (see below).
+REVALIDATE = {"Cache-Control": "no-cache"}
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    """The page's static files, sent with `Cache-Control: no-cache`: a browser asks the
+    server again on each load (a 304 when the file did not change). Without it, a
+    browser may reuse a stale copy on its own (Obsidian's web viewer does), and an old
+    app.js on a new session.html breaks the page."""
+
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers.update(REVALIDATE)
+        return response
+
+
 app = FastAPI(title="view-concept", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=STATIC), name="static")
+app.mount("/static", RevalidatedStaticFiles(directory=STATIC), name="static")
 
 
 def get_session(slug: str) -> Session:
@@ -85,9 +102,22 @@ def health() -> dict[str, bool]:
     return {"ok": True}
 
 
+_ASSET_LINK = re.compile(r'(["\'])(/static/[^"\'?#]+\.(?:js|css))\1')
+
+
+def page_html(name: str) -> HTMLResponse:
+    """A page of the app, its script and style links stamped with the static files'
+    latest change (`?v=<mtime>`): a browser that kept an old copy of a file under its
+    bare address loads the new one, since its address changed."""
+    stamp = max(int(f.stat().st_mtime) for f in STATIC.iterdir() if f.is_file())
+    html = (STATIC / name).read_text()
+    html = _ASSET_LINK.sub(lambda m: f"{m[1]}{m[2]}?v={stamp}{m[1]}", html)
+    return HTMLResponse(html, headers=REVALIDATE)
+
+
 @app.get("/")
-def home() -> FileResponse:
-    return FileResponse(STATIC / "home.html")
+def home() -> HTMLResponse:
+    return page_html("home.html")
 
 
 # The home-screen app: the page added to a phone's home screen opens from its own icon,
@@ -158,9 +188,9 @@ def push_unsubscribe(body: UnsubscribeIn) -> dict[str, bool]:
 
 
 @app.get("/s/{slug}")
-def session_page(slug: str) -> FileResponse:
+def session_page(slug: str) -> HTMLResponse:
     get_session(slug)
-    return FileResponse(STATIC / "session.html")
+    return page_html("session.html")
 
 
 @app.get("/api/sessions")
