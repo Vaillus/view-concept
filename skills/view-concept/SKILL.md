@@ -160,6 +160,15 @@ Both write a heartbeat (`watch.json`) from which the page shows whether you
 are listening, and both resume from a persisted cursor, so switching from
 one to the other loses and repeats nothing.
 
+**The end-of-run record.** The page's batch indicator reads « processing »
+from the moment the user sends a batch until you record that you finished
+it, then « done ». Once you have finished processing a batch (the last run
+you started for it has ended and you gave its report, or your own work on
+it is done), run `view-concept done <slug> <batch id>`, the id its header
+printed (`b4`). Batches queued and handled by one run: name the last of
+them. Record it for every batch, also one that starts no run (« Stop
+grill », a batch you answer yourself), and never before the run ends.
+
 ### Batches
 
 A batch is shaped like:

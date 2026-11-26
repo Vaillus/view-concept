@@ -1263,20 +1263,28 @@ def test_last_activity_counts_only_what_the_agent_writes(session):
     assert session.last_activity() > "2000"
 
 
-def test_batch_progress_follows_the_delivery_mark(session):
+def test_batch_progress_turns_done_from_the_end_of_run_record(session):
     assert session.batch_progress() is None
-    for p in [*session.sections_dir.glob("*.md"), session.plan_path]:
-        _touch(p, 1_000_000)
-    b = session.add_batch([{"text": "hi"}])
+    b1 = session.add_batch([{"text": "hi"}])
     progress = session.batch_progress()
-    assert progress and progress["id"] == b["id"] and progress["stage"] == "sent"
+    assert progress and progress["id"] == b1["id"] and progress["state"] == "processing"
+    # The watch delivering it, or the agent writing a file, does not end it.
     session.cursor_path.write_text(str(session.inbox_path.stat().st_size))
+    (session.sections_dir / "s1.md").write_text("new")
+    assert session.batch_progress()["state"] == "processing"
+    session.record_batch_done(b1["id"])
+    assert session.batch_progress()["state"] == "done"
+    # A new batch is processing again, the record naming an earlier one.
+    b2 = session.add_batch([{"text": "again"}])
     progress = session.batch_progress()
-    assert progress and progress["stage"] == "received"
-    _touch(session.cursor_path, 2_000_000)
-    _touch(session.sections_dir / "s1.md", 3_000_000)
-    progress = session.batch_progress()
-    assert progress and progress["stage"] == "acted"
+    assert progress and progress["id"] == b2["id"] and progress["state"] == "processing"
+    session.record_batch_done(b2["id"])
+    assert session.batch_progress()["state"] == "done"
+
+
+def test_record_batch_done_refuses_an_unknown_batch(session):
+    with pytest.raises(SessionError):
+        session.record_batch_done("b9")
 
 
 # ---- the Doc tab ----

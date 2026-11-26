@@ -292,8 +292,9 @@ def state(slug: str) -> dict[str, Any]:
         "sections": {
             k: section_view(v, seen[k], html=k in html_sections) for k, v in sections.items()
         },
-        # What the banner adds to the status: the last session file the agent wrote, and
-        # where the last batch sent stands.
+        # The last session file the agent wrote (the banner's quiet notice), and where the
+        # last batch sent stands (the batch indicator: processing, or done once the
+        # end-of-run record names it).
         "activity": activity,
         "batch": batch,
         "audit": audit,

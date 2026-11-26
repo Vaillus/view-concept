@@ -277,6 +277,11 @@ def cmd_status(a: argparse.Namespace) -> None:
     print(" ".join([st["phase"], *st.get("run", {}).get("set", [])]))
 
 
+def cmd_done(a: argparse.Namespace) -> None:
+    record = Session(a.slug).record_batch_done(a.batch)
+    print(f"batch {record['batch']} done")
+
+
 def cmd_question(a: argparse.Namespace) -> None:
     s = Session(a.slug)
     if not s.exists():
@@ -829,6 +834,15 @@ def main() -> None:
         help="seconds to wait for a batch (default: %(default)s)",
     )
     q.set_defaults(fn=cmd_wait)
+
+    q = sub.add_parser(
+        "done",
+        help="the end-of-run record: the coordinator finished processing a batch (the last "
+        "run it started for it ended); the page's batch indicator turns to « done »",
+    )
+    q.add_argument("slug")
+    q.add_argument("batch", help="the batch id, as its header printed it (b4)")
+    q.set_defaults(fn=cmd_done)
 
     q = sub.add_parser("status", help="tell the page what the agent is doing now")
     q.add_argument("slug")

@@ -51,7 +51,7 @@
       <button class="tab" data-tab="model" title="Explanation (2)">explanation</button>
       <button class="tab" data-tab="refactor" title="Code (3)" hidden>code</button>
       <button class="tab" data-tab="doc" title="Doc (4)" hidden>doc</button>
-      <button class="tab narrow-only" data-tab="review" title="Review">review</button>
+      <button class="tab narrow-only" data-tab="review" title="Batch">batch</button>
       <button class="tab" data-tab="metrics" title="Metrics (5)" hidden>metrics</button>
     </nav>
     <div id="plan-view" class="view plan" data-view="plan">
@@ -85,12 +85,9 @@
     <article id="metrics" class="view metrics" data-view="metrics"></article>
   </section>
 
-  <div id="divider" class="divider" title="Drag to resize the review pane; double-click to reset"></div>
   <aside class="review">
-    <div class="pane-head">review <span id="draft-count" class="dim"></span></div>
-    <div id="history"></div>
+    <button id="batch-head" class="pane-head batch-head" title="Collapse or expand the batch box" aria-expanded="true">batch <span id="batch-summary" class="batch-summary"></span><span id="draft-count" class="dim"></span><span class="bh-toggle" aria-hidden="true"></span></button>
     <button id="questions-waiting" class="questions-waiting" hidden></button>
-    <p class="hint dim">Select text in the explanation, or use « + comment » on an item of the plan. Comments stay here until you send them together.</p>
     <div id="drafts"></div>
     <textarea id="note" class="note" rows="3" placeholder="General note for the whole batch (optional)"></textarea>
     <button id="send" class="btn primary" disabled>Send</button>
