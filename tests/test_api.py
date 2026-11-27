@@ -782,3 +782,44 @@ def test_the_base_mark_reads_a_moved_doc_at_its_old_path(client, doc_review):
     assert view["base_html"] == "<h1>Reference</h1>\n<p>The keys 1 to 4.</p>\n"
     assert view["new"] is False
     assert docs["set"][1]["from"] == "docs/reference.md" and "from" not in docs["set"][0]
+
+
+# ---- inline edits ----
+
+
+def test_an_inline_edit_is_saved_and_listed_pending(client, session):
+    base = (session.sections_dir / "s1.md").read_text()
+    blocks = client.get("/api/s/kv-cache").json()["sections"]["s1"]["blocks"]
+    assert blocks == {"L0-1": "L'attention."}
+    body = {"section": "s1", "base": base, "span": "L0-1", "text": "L'attention, **masquée**."}
+    r = client.post("/api/s/kv-cache/edit", json=body)
+    assert r.status_code == 200 and r.json()["edit"]["id"] == "ie1"
+    state = client.get("/api/s/kv-cache").json()
+    assert state["edits"] == [{"id": "ie1", "section": "s1", "after": "L'attention, **masquée**."}]
+    assert state["sections"]["s1"]["updated"] is False  # no green on the user's words
+
+
+def test_an_inline_edit_is_refused_with_a_status_the_page_tells_apart(client, session):
+    base = (session.sections_dir / "s1.md").read_text()
+    url = "/api/s/kv-cache/edit"
+    edit = {"section": "s1", "base": base, "span": "L0-1", "text": "Mine."}
+    assert client.post(url, json={**edit, "base": "other"}).status_code == 409
+    assert client.post(url, json={**edit, "span": "L5-6"}).status_code == 409
+    assert client.post(url, json={**edit, "section": "s9"}).status_code == 400
+    html = {"section": "s1", "base": base, "block": 1, "before": ["x"], "after": ["y"]}
+    assert client.post(url, json=html).status_code == 400  # an HTML body on a Markdown section
+    b = client.post("/api/s/kv-cache/batch", json={"comments": [{"section": "s1", "text": "x"}]})
+    assert client.post(url, json=edit).status_code == 423
+    session.record_batch_done(b.json()["id"])
+    assert client.post(url, json=edit).status_code == 200
+
+
+def test_an_html_inline_edit_that_changes_the_number_of_runs_is_malformed(client, session):
+    doc = "<p>A <em>gate</em>.</p>"
+    (session.sections_dir / "s1.md").unlink()
+    (session.sections_dir / "s1.html").write_text(doc)
+    url = "/api/s/kv-cache/edit"
+    body = {"section": "s1", "base": doc, "block": 1, "before": ["A ", "gate", "."]}
+    assert client.post(url, json={**body, "after": ["A gate."]}).status_code == 400
+    r = client.post(url, json={**body, "after": ["The ", "gate", " drops."]})
+    assert r.status_code == 200 and r.json()["edit"]["after"] == "The <em>gate</em> drops."

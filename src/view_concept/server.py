@@ -27,6 +27,8 @@ from .store import (
     MOVES_KEY,
     TRIAGE_KEY,
     DocConflict,
+    EditConflict,
+    InlineEditLocked,
     Session,
     SessionError,
     format_fact,
@@ -278,6 +280,7 @@ def state(slug: str) -> dict[str, Any]:
         seen = s.read_seen({**sections, **doc_texts, **s.baseline_texts()})
         published = published_view(s)
         doc_tab = docs_view(s, docs, seen)
+        edits = s.pending_edits()
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
     # The hover text of a term: its developed `tip` when the agent wrote one, else the
@@ -299,6 +302,8 @@ def state(slug: str) -> dict[str, Any]:
         # end-of-run record names it).
         "activity": activity,
         "batch": batch,
+        # The pending inline edits, which the next batch carries: the batch box lists them.
+        "edits": [{k: e[k] for k in ("id", "section", "after")} for e in edits],
         "audit": audit,
         "comments": comments,
         "changes": changes,
@@ -538,6 +543,45 @@ def write_doc(slug: str, body: DocIn) -> dict[str, bool]:
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
     return {"ok": True}
+
+
+class EditIn(BaseModel):
+    section: str
+    # The section's whole file as the block opened: the file must still hold it.
+    base: str
+    # A Markdown block: its source span and its new editable text.
+    span: str = ""
+    text: str | None = None
+    # An HTML block: its block mark and its runs of text at open and at save.
+    block: int = 0
+    before: list[str] | None = None
+    after: list[str] | None = None
+
+
+@app.post("/api/s/{slug}/edit")
+def save_inline_edit(slug: str, body: EditIn) -> dict[str, Any]:
+    """Save an inline edit of one block of an explanation section (store.py
+    `save_inline_edit`). 423 while the last batch reads « processing », 409 when the file
+    or the block changed since the block opened, 400 for a body that does not fit the
+    section. `edit` is the edit record's entry, null when nothing changed or the edit went
+    back to its before."""
+    try:
+        edit = get_session(slug).save_inline_edit(
+            body.section,
+            body.base,
+            span=body.span,
+            text=body.text,
+            block=body.block,
+            before=body.before,
+            after=body.after,
+        )
+    except InlineEditLocked as e:
+        raise HTTPException(423, str(e)) from e
+    except EditConflict as e:
+        raise HTTPException(409, str(e)) from e
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True, "edit": edit}
 
 
 @app.get("/api/s/{slug}/events")

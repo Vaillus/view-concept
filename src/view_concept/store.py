@@ -38,6 +38,8 @@ reach the agent session through the inbox.
                         concept triage under `triage:`, a README's move plan under
                         `moves:<path>`  (server)
         drafts.json     the drafts and the general note, shared by every page (server)
+        inline-edits.json  the edit record: every inline edit of the session (section,
+                        text before, text after) and the batch that carried it  (server)
         params.json     the parameters file: what each channel section's script saved
                         and the answers it received (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
@@ -203,6 +205,21 @@ the highlights show what it changed for that batch. The first text of a section 
 first baseline, recorded when the page first loads it, so a first write is never an
 update.
 
+An inline edit is a change the user makes to the text of an explanation section in the
+page, saved straight into its file with no agent rewriting it (`save_inline_edit`): one
+block at a time, a paragraph, a list item, a heading or a table cell, found by its source
+span in a Markdown section (render.py) or by its block mark in an HTML section (frame.py).
+The save is refused while the last batch reads "processing" (InlineEditLocked: an agent
+may be rewriting any section) and when the file is no longer the text the block opened on
+(EditConflict); it moves the section's highlight baseline to the user's text, as a hand
+edit of a doc does. inline-edits.json, the edit record, lists every inline edit, oldest
+first: {id (ie1…), section, before, after (the text as the file holds it: a Markdown
+block's lines with their markers, an HTML block's content with its inline tags), at,
+batch ("" while pending, then the id of the batch that carried it)}. A pending inline
+edit (no batch yet) goes out with the next batch (`add_batch`); a new save of the same
+block before it changes its `after`, and one that takes it back to its `before` drops
+it. The record keeps every edit after its batch, and the writer reads it on every run.
+
 drafts.json holds the drafts of the session (the comments written in the page that wait
 for Send) and the general note, so every page open on the session, on any device, shows
 the same ones. Each change a page makes (a draft added, edited or deleted, the note)
@@ -361,7 +378,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from . import frame
-from .render import md
+from .render import blocks as markdown_blocks
+from .render import md, replace_block
 
 HOME = Path(os.environ.get("VIEW_CONCEPT_HOME", Path.home() / ".view-concept"))
 SESSIONS = HOME / "sessions"
@@ -474,6 +492,8 @@ DRAFT_FIELDS = ("section", "quote", "prefix", "text", "thread", "fact", "element
 DRAFT_OPTIONAL = ("thread", "fact", "element")
 # The pages of every session write the drafts file from the server's threadpool.
 _DRAFTS_LOCK = threading.Lock()
+# Serializes the saves of inline edits: each reads, checks and writes a section's file.
+_EDITS_LOCK = threading.Lock()
 # The pages and the channel's small agents write the parameters file from the same pool.
 _PARAMS_LOCK = threading.Lock()
 # The largest entry of the parameters file a section may keep, its JSON text in bytes.
@@ -534,6 +554,14 @@ class SessionError(Exception):
 
 class DocConflict(SessionError):
     """A doc edited in the page changed in the worktree since the edit started."""
+
+
+class EditConflict(SessionError):
+    """An inline edit's section is no longer the text its block opened on."""
+
+
+class InlineEditLocked(SessionError):
+    """An inline edit saved while the last batch reads "processing"."""
 
 
 def slugify(text: str) -> str:
@@ -736,6 +764,10 @@ class Session:
     @property
     def drafts_path(self) -> Path:
         return self.dir / "drafts.json"
+
+    @property
+    def inline_edits_path(self) -> Path:
+        return self.dir / "inline-edits.json"
 
     @property
     def params_path(self) -> Path:
@@ -1879,6 +1911,112 @@ class Session:
             seen[DOC_KEY + path] = text
             _write_json(self.seen_path, seen)
 
+    # ---- inline edits ----
+    def read_inline_edits(self) -> list[dict[str, Any]]:
+        """The edit record: every inline edit of the session, oldest first."""
+        return _read_json(self.inline_edits_path, [])
+
+    def pending_edits(self) -> list[dict[str, Any]]:
+        """The pending inline edits: saved since the last batch, which carries none yet."""
+        return [e for e in self.read_inline_edits() if not e.get("batch")]
+
+    def save_inline_edit(
+        self,
+        section: str,
+        base: str,
+        span: str = "",
+        text: str | None = None,
+        block: int = 0,
+        before: list[str] | None = None,
+        after: list[str] | None = None,
+    ) -> dict[str, Any] | None:
+        """Save an inline edit of one block of explanation section `section`, opened on
+        its file `base`: a Markdown block by its source span and new editable text
+        (`span`, `text`), an HTML block by its block mark and its runs of text at open and
+        at save (`block`, `before`, `after`). Refused with InlineEditLocked while the
+        last batch reads "processing", with EditConflict when the file is not `base` any
+        more, the span or the mark names no block, or the HTML block's runs in the file
+        are not `before`. Only the block's text changes: its markers, or its tags, are
+        written back as they were. The highlight baseline moves to the new text when it
+        was the old file, and the edit record gets the edit, merged with a pending edit
+        of the same block. Returns its entry, or None when nothing changed or the edit
+        went back to its before and was dropped."""
+        files = self.section_files()
+        if section not in self.explanation_sections() or section not in files:
+            raise SessionError(f"{section!r} is no written explanation section")
+        html = files[section].suffix == ".html"
+        if html and (span or text is not None or before is None or after is None or block < 1):
+            raise SessionError(f"{section} is an HTML section: save a block by its mark")
+        if not html and (not span or text is None or block or before or after):
+            raise SessionError(f"{section} is a Markdown section: save a block by its span")
+        if html and len(after or []) != len(before or []):
+            raise SessionError("an inline edit changes the words of a block, not its tags")
+        with _EDITS_LOCK:
+            if (progress := self.batch_progress()) and progress["state"] == "processing":
+                raise InlineEditLocked(
+                    f"batch {progress['id']} is processing: no inline edit until it is done"
+                )
+            now = files[section].read_text(encoding="utf-8")
+            if now != base:
+                raise EditConflict(f"{section} changed since the block was opened")
+            if html:
+                runs = frame.block_runs(base, block)
+                if runs is None:
+                    raise EditConflict(f"{section} has no block {block} any more")
+                if runs.texts != before:
+                    raise EditConflict(f"block {block} of {section} is not the text it opened on")
+                if after == before:
+                    return None
+                new, old_raw, new_raw = frame.replace_runs(base, block, after or [])
+            else:
+                found = markdown_blocks(base).get(span)
+                if found is None:
+                    raise EditConflict(f"{span} names no block of {section} any more")
+                if text == found.text:
+                    return None
+                new, old_raw, new_raw = replace_block(base, found, text or "")
+            if new == base:
+                return None
+            files[section].write_text(new, encoding="utf-8")
+            seen = _read_json(self.seen_path, {})
+            if seen.get(section) == base:
+                seen[section] = new
+                _write_json(self.seen_path, seen)
+            return self._record_edit(section, old_raw, new_raw)
+
+    def _record_edit(self, section: str, before: str, after: str) -> dict[str, Any] | None:
+        """Add an edit to the edit record, or change the pending edit of the same block
+        (the one whose after is this edit's before), dropped when back to its before."""
+        edits = self.read_inline_edits()
+        pending = next(
+            (
+                e
+                for e in reversed(edits)
+                if not e.get("batch") and e["section"] == section and e["after"] == before
+            ),
+            None,
+        )
+        entry: dict[str, Any] | None
+        if pending is not None:
+            pending.update(after=after, at=now_iso())
+            entry = pending
+            if pending["after"] == pending["before"]:
+                edits.remove(pending)
+                entry = None
+        else:
+            n = max((int(e["id"][2:]) for e in edits if e.get("id", "")[2:].isdigit()), default=0)
+            entry = {
+                "id": f"ie{n + 1}",
+                "section": section,
+                "before": before,
+                "after": after,
+                "at": now_iso(),
+                "batch": "",
+            }
+            edits.append(entry)
+        _write_json(self.inline_edits_path, edits)
+        return entry
+
     def doc_texts(self) -> dict[str, str]:
         """The docs that exist, keyed as their highlight baseline is: `doc:<path>`."""
         return {DOC_KEY + p: t for p, t in self.read_docs().items() if t is not None}
@@ -2538,6 +2676,7 @@ class Session:
             self.pins_path,
             self.published_path,
             self.batch_done_path,
+            self.inline_edits_path,
         ]
         if self.sections_dir.is_dir():
             paths += sorted([*self.sections_dir.glob("*.md"), *self.sections_dir.glob("*.html")])
