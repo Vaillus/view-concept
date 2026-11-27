@@ -38,7 +38,9 @@ the server writes a block mark on each one as it serves the file to the frame
 templates), never in the file; a block a script draws has none and does not open. The
 text an edit changes is the block's runs of text, the text nodes between its tags (a
 nested block's left out), and the save finds block n again in the file with the same
-parser (`block_runs`, `replace_runs`), so the tags stay as they are.
+parser (`block_runs`, `replace_runs`), so the tags stay as they are. The same marks
+name the blocks that hold the writer's rewrite of an inline edit (`marks_over`), which the
+page sends the frame with the changes, for the rewrite highlight.
 """
 
 from __future__ import annotations
