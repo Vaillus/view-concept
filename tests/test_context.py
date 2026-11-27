@@ -374,3 +374,18 @@ def test_the_writer_gets_the_edit_record_marked_by_whether_it_is_still_in(sessio
         "  after: Le cache des clés."
     ) in text
     assert "## Inline edits" not in build(session, "planner")
+
+
+def test_the_writer_gets_each_rewrite_of_an_edit_with_its_reason(session):
+    session.read_seen(session.read_sections())
+    session.save_inline_edit("s1", "L'attention.", span="L0-1", text="L'attention, masquée.")
+    session.record_batch_done(session.add_batch([])["id"])
+    (session.sections_dir / "s1.md").write_text("L'attention,\nmasquée et causale.")
+    session.record_rewrite("ie1", "L'attention,\nmasquée et causale.", "the mask is causal now")
+    assert (
+        "- ie1 · section 1 « Attention » · batch b1 · gone from its section\n"
+        "  after: L'attention, masquée.\n"
+        "  rewritten (b1): the mask is causal now\n"
+        "         L'attention,\n"
+        "         masquée et causale."
+    ) in build(session, "writer")

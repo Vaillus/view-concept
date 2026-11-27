@@ -223,7 +223,8 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
 
 def _inline_edits(s: Session, outline: list[dict[str, Any]]) -> list[str]:
     """Every inline edit of the edit record, oldest first: its section, its batch (or
-    pending), whether its text is still in its section, and that text."""
+    pending), whether its text is still in its section, and that text, then each rewrite
+    the writer recorded of it, oldest first: its batch, its reason and its text."""
     lines = ["## Inline edits (the user's words: the keep rule)"]
     edits = s.read_inline_edits()
     if not edits:
@@ -237,6 +238,9 @@ def _inline_edits(s: Session, outline: list[dict[str, Any]]) -> list[str]:
         lines.append(f"- {e['id']} · {edit_place(e, _number(outline), titles)} · {batch} · {where}")
         first, *rest = e["after"].split("\n")
         lines += [f"  after: {first}".rstrip(), *(f"         {line}".rstrip() for line in rest)]
+        for r in e.get("rewrites", []):
+            lines.append(f"  rewritten ({r.get('batch') or 'no batch'}): {r['reason']}")
+            lines += [f"         {line}".rstrip() for line in r["text"].split("\n")]
     return lines
 
 
