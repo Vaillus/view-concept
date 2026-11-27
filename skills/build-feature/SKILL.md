@@ -162,19 +162,29 @@ you started for it has ended and you gave its report, or your own work on
 it is done), run `view-concept done <slug> <batch id>`, the id its header
 printed (`b4`). Batches queued and handled by one run: name the last of
 them. Record it for every batch, also one that starts no run (« Stop
-grill », a batch you answer yourself), and never before the run ends.
+grill », a batch you answer yourself), and never before the run ends. While
+the indicator reads « processing », the page locks the user's inline edits:
+a batch you never record keeps them locked.
 
 ### Batches
 
 A batch is shaped like:
 
 ```
-view-concept · <slug> · batch b2 · 2 comments
+view-concept · <slug> · batch b2 · 2 comments · 1 inline edit
 action: <the button the user clicked, if any>
 note: <optional note for the whole batch>
+inline edit ie1 · section 3 « <its title> » (the user's text: keep it word for word)
+  before: <the section's text before the edit>
+  after:  <the user's text>
 [c4] §3 (s3) « quoted passage »
     comment text
 ```
+
+An `inline edit` line is a change the user made to a section's text in the
+page, saved straight into the section's file with no agent; a batch can hold
+inline edits alone (`0 comments`, no action). The writer keeps the user's
+words, as its role file says.
 
 The `action` line names the button: `answer` (an agent question answered,
 skipped, or not understood: `answer to q1 « … »: …`, `q3 skipped « … »` or
@@ -374,6 +384,7 @@ starts one pass. Who takes it depends on the stage:
 | an unclear answer | planner, in a session with no drawing (a hole is answered by comment) | writer | the agent that asked it |
 | comments with no action | scoper | writer; a comment on a doc's text waits for the doc pass | by section: the modeling part and the to-do list to the writer, the rest of the refactoring part to the reviewer; the doc set list to the writer before the doc pass, to the documenter after; the text of a doc that is not a README, or a missing fact, to the documenter; a README's text to the skill agent holding the passage, then to the documenter (see **The docs after the doc pass**); a row of the concept triage to a document-feature agent, then to the documenter; a doc's text waits for the doc pass when it has not run; a row of a move plan or a README's text is held for « Write READMEs » while the phase is `awaiting-moves` |
 | a terminal message about the feature | record it, then scoper | record it, then writer | record it, then the writer if it is about the model, the implementer if it asks for a code change |
+| inline edits (`inline edit` lines), alone or with the rest of the batch | writer | writer | writer |
 | an answer to a page question typed in the terminal | `view-concept answered`, then planner, in a session with no drawing (a hole is answered by comment) | the same, then writer | the same, then the agent that asked it |
 | « Rewrite model » (`action: plan`, the line says rewrite) | — | writer | writer |
 | « Go on » (`action: go-on`) | — | writer | — |
@@ -387,6 +398,10 @@ starts one pass. Who takes it depends on the stage:
 | « write repo lexicon » (`action: write-lexicon`) | — | held for the doc pass | documenter, held for the doc pass when it has not run |
 | a rewrite request (`action: rewrite-readme <path>`, a comment asking for a README to be rewritten, or `/write-readme <folder> rewrite` in the terminal) | — | held for the doc pass | a write-readme agent with `rewrite`, then the documenter; held for the doc pass when it has not run, for « Write READMEs » while the phase is `awaiting-moves` |
 | « Create PR » (`action: create-pr`) | — | — | see **Closing** |
+
+Inline edits go to the writer in every phase, whatever else the batch
+holds: a batch whose other events go to another agent starts both, one
+after the other (see **One agent at a time**).
 
 The agent that asked a question is the one whose report counted it; when you
 cannot tell, give it to the writer. A session started before the scoper
@@ -798,8 +813,8 @@ names is not taken back.
 7. **« Approve model ».** Model consolidation ends when the user approves the
    model: a batch with `action: approve-model`, or saying so in the terminal.
    Approving also means « start the implementation »: when the batch carries
-   comments, run the writer on them first, then go to **Implementation** in
-   the same turn, without asking again. Approving ends a grill still running.
+   comments or inline edits, run the writer on them first, then go to
+   **Implementation** in the same turn, without asking again. Approving ends a grill still running.
 
 ### Implementation — the code and the refactoring part
 
@@ -807,8 +822,8 @@ After « Approve model », each pass runs the agents in this order, skipping
 those with nothing to do:
 
 1. **The writer**, on the events about the model (comments on the modeling
-   part, answers to its questions, « Rewrite model »). Each change of the
-   model it logs is a change not implemented yet.
+   part, answers to its questions, « Rewrite model », inline edits). Each
+   change of the model it logs is a change not implemented yet.
 2. **The implementer**, when there is code to change. Its trigger holds:
    - « Approve model », on its first run: make the code carry the whole
      model;
