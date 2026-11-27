@@ -650,16 +650,17 @@ the session under « Inline edits (the user's words: the keep rule) », each
 longer have the batches that carried them.
 
 **The keep rule.** Every rewrite of a section keeps an edit still in its
-section word for word, the audit included: write around it. Rewrite one
-only when the batch you work on makes it wrong: a comment of the batch on
-that passage, or a change in the code or the triage the passage describes.
-Style, flow and the lexicon never make it wrong. When you rewrite one, name
-the edit and say why (« ie1 rewritten: the file moved to `src/gate.py` »):
-in your `resolve` reply to the comment that made it wrong, or, when the code
-or the triage did, in your reply to the batch. Never cut the passage in
-pieces, nor move it to another section. An edit gone from its section (you
-rewrote it under this rule, or the user edited the block again) binds
-nothing.
+section word for word, the audit included: write around it. Rewrite one only
+when the batch you work on makes it wrong: a comment of the batch on that
+passage, or a change in the code or the triage the passage describes. Style,
+flow and the lexicon never make it wrong. When you rewrite one, whatever
+made it wrong, record it in the edit record: `view-concept rewrite <slug>
+<edit id> --reason "<one line>" --file -`, its new text as the file holds it
+on stdin (`--text "<text>"` for a single line). The page shows the rewrite
+on the user's words, with your reason on hover: no reply, the batch's or a
+comment's, names it. Never cut the passage in pieces, nor move it to another
+section. An edit gone from its section (you rewrote it under this rule, or
+the user edited the block again) binds nothing.
 
 **A batch of edits alone** (`0 comments`, no action) writes no section and
 passes no checkpoint. Take the edits in:
