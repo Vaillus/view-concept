@@ -3485,7 +3485,8 @@ $("#questions-waiting").addEventListener("click", () => {
    A box floating in the bottom-right corner of the window, over the workspace (the batch
    tab in the narrow layout), its header « batch » followed by the batch indicator: then a line counting the open agent questions (they
    live in the scope block) and, on a drawing during scoping, the open pins waiting for
-   the user, then the drafts, the note and « Send » at the bottom. It stays scrolled to
+   the user, then the pending inline edits (saved since the last « Send », which carries
+   them: see "inline edit"), the drafts, the note and « Send » at the bottom. It stays scrolled to
    the bottom as content arrives, unless the user scrolled up. */
 
 let reviewAtEnd = true;
@@ -3561,6 +3562,7 @@ function renderReview() {
   renderWaiting();
   $("#draft-count").textContent = drafts.length ? `· ${drafts.length} draft${drafts.length > 1 ? "s" : ""}` : "";
   renderBatchIndicator();
+  renderInlineEdits();
   renderDrafts();
   updateSend();
   const pane = $(".review");
@@ -3578,12 +3580,33 @@ const deferredText = (q) => {
   return [answerText({ unclear: true, note: last.note }), where].join(" · ");
 };
 
+// The pending inline edits, {id, section, after}: the next batch carries them.
+const pendingEdits = () => (state && state.edits) || [];
+
+/* Each pending inline edit, by its section's title and its first words; a click shows
+   the section. */
+function renderInlineEdits() {
+  const firstWords = (text) => {
+    const words = collapse(String(text || "").replace(/<[^>]*>/g, " ")).split(" ");
+    return words.slice(0, 8).join(" ") + (words.length > 8 ? "…" : "");
+  };
+  $("#inline-edits").replaceChildren(...pendingEdits().map((e) =>
+    el("div", { class: "comment inline-edit", "data-edit": e.id },
+      el("div", { class: "c-quote", onclick: () => scrollToSection(e.section) },
+        el("span", { class: "num", text: whereOf(e.section) }), ` inline edit · ${titleOf(e.section)}`),
+      el("div", { class: "ie-words", text: `« ${firstWords(e.after)} »` }))));
+}
+
+/* « Send » counts the comments and the inline edits it carries: pending edits alone
+   enable it. */
 function updateSend() {
   const note = $("#note").value.trim();
   const n = drafts.filter(ready).length;
+  const k = pendingEdits().length;
   const btn = $("#send");
-  btn.disabled = !n && !note;
-  btn.textContent = n ? `Send ${n} comment${n > 1 ? "s" : ""}` : note ? "Send note" : "Send";
+  btn.disabled = !n && !note && !k;
+  const parts = [n ? plural(n, "comment") : "", k ? plural(k, "inline edit") : ""].filter(Boolean);
+  btn.textContent = parts.length ? `Send ${parts.join(" · ")}` : note ? "Send note" : "Send";
   if (state) renderStatus();
 }
 

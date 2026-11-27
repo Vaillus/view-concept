@@ -334,6 +334,11 @@ a.cite code { color: var(--info); background: var(--infobg); }
 @media (max-width: 699.98px) { .batch-head { cursor: default; } .batch-head .bh-toggle { display: none; } }
 .comment { position: relative; border: 1px solid var(--line); padding: 6px 8px; background: var(--bg); }
 .comment.draft { border-color: var(--flag); }
+/* a pending inline edit: your words, sent with the next batch */
+#inline-edits { display: flex; flex-direction: column; gap: 6px; }
+#inline-edits:empty { display: none; }
+.comment.inline-edit { border-color: var(--accentline); }
+.comment.inline-edit .ie-words { font-size: 12px; line-height: 17px; color: var(--ink); }
 .c-quote { font-size: 12px; line-height: 17px; color: var(--ink-dim); font-style: italic; cursor: pointer; margin-bottom: 4px; padding-right: 16px; }
 @media (hover: hover) { .c-quote:hover { color: var(--accent); } }
 .c-text { font-size: 13px; white-space: pre-wrap; }
