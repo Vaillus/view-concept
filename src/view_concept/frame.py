@@ -266,8 +266,9 @@ class _Blocks(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self.unread or self.run is not None:
             return  # a script's text, or the rest of the run being read
+        # A block's runs stop at its first nested block: text after it is in no run.
         block = next((b for _, b, _ in reversed(self.stack) if b is not None), None)
-        if block is not None:
+        if block is not None and block.content_end is None:
             self.run = (block, self.here())
 
     def handle_comment(self, data: str) -> None:  # a comment node ends a text node
@@ -282,17 +283,22 @@ class _Blocks(HTMLParser):
 
 
 def _blocks(document: str) -> list[Block]:
+    """The blocks of a document that hold written text: a block whose runs are empty or
+    blank (an element the file holds empty, which a script may fill) is none."""
     parser = _Blocks(document)
     parser.feed(document)
     parser.close()
-    return parser.blocks
+    return [
+        b for b in parser.blocks if any(html.unescape(document[x:y]).strip() for x, y in b.runs)
+    ]
 
 
 def mark_blocks(document: str) -> str:
     """The document a section frame receives: `data-block="<n>"` (n = 1, 2, … in document
     order) written on the start tag of every paragraph, list item, heading and table cell
-    outside its scripts, styles and templates. The file never holds the marks: a block a
-    script draws has none, and does not open."""
+    outside its scripts, styles and templates that holds written text. The file never
+    holds the marks: a block a script draws, or fills from empty, has none, and does not
+    open."""
     out, last = [], 0
     for n, block in enumerate(_blocks(document), 1):
         out += [document[last : block.name_end], f' data-block="{n}"']
@@ -312,8 +318,8 @@ class BlockRuns:
 
 def block_runs(document: str, n: int) -> BlockRuns | None:
     """Block n of the document (counted as `mark_blocks` counts), or None when it has
-    fewer blocks. Its runs of text are its text nodes in order, the content of a nested
-    block, a script, a style or a template left out."""
+    fewer blocks. Its runs of text are its text nodes in order up to its first nested
+    block, the content of a script, a style or a template left out."""
     found = _blocks(document)
     if not 1 <= n <= len(found):
         return None

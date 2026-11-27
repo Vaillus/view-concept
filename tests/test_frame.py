@@ -102,10 +102,10 @@ def _texts(n: int) -> list[str]:
     return runs.texts
 
 
-def test_a_blocks_runs_of_text_leave_its_nested_block_out():
+def test_a_blocks_runs_of_text_stop_at_its_nested_block():
     runs = frame.block_runs(GATE, 3)
     assert runs is not None
-    assert runs.texts == ["the ratio ", "r", " per segment"]
+    assert runs.texts == ["the ratio ", "r"]  # " per segment", after the nested list, is none
     assert GATE[slice(*runs.content)] == "the ratio <em>r</em>"
     assert _texts(2) == [  # entities decoded, as the frame reads them
         "A gate removes segments that are mostly ",
@@ -125,3 +125,17 @@ def test_replacing_runs_keeps_the_tags_and_escapes_the_new_text():
         "A gate drops a segment when its <strong>silence</strong> ratio &lt; 1 &amp; more."
     )
     assert new == GATE.replace(before, written)
+
+
+def test_an_element_the_file_holds_empty_gets_no_mark():
+    doc = '<table><tr><td>a</td><td id="n">  </td><td></td></tr></table><p>b</p>'
+    marked = frame.mark_blocks(doc)
+    assert re.findall(r'<(\w+) data-block="(\d+)"', marked) == [("td", "1"), ("p", "2")]
+    assert '<td id="n">  </td><td></td>' in marked
+    assert _runs(doc, 2) == ["b"]
+
+
+def _runs(doc: str, n: int) -> list[str]:
+    runs = frame.block_runs(doc, n)
+    assert runs is not None
+    return runs.texts

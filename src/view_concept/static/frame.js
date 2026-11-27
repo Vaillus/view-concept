@@ -123,16 +123,17 @@
    underlined.
 
    Inline edit: the server writes a block mark, `data-block="<n>"`, on each paragraph,
-   list item, heading and table cell of the section's file as it serves it (text a
-   script draws has none). While the page leaves editing unlocked, pointing at a marked
-   element (or tapping it, under touch controls) shows « edit » beside it; a click opens
-   it in place as editable text, its inline tags locked: only its runs of text change
-   (the text nodes of the element, leaving out those inside a nested marked element,
-   which stays closed, and inside a script or a style). Enter adds no line; a pasted line
-   break becomes a space. ⌘↵ checks the tag lock (the same elements in the same places,
-   and the same number of runs as at open): broken, the save is refused under the block
-   and the block stays open; held, the runs before and after go to the page (the edit
-   save). Esc puts the block's text back as it was and closes it. One block opens at a
+   list item, heading and table cell of the section's file that holds written text as it
+   serves it (text a script draws, or fills into an element the file holds empty, has
+   none). While the page leaves editing unlocked, pointing at a marked element (or
+   tapping it, under touch controls) shows « edit » beside it; a click opens it in place
+   as editable text, its inline tags locked: only its runs of text change (the text
+   nodes of the element up to its first nested block, which stays closed, leaving out
+   those inside a script or a style; the element's text after a nested block is in no
+   run and must stay as it is). Enter adds no line; a pasted line break becomes a space.
+   ⌘↵ checks the tag lock (the same elements in the same places, and the same number of
+   runs as at open): broken, the save is refused under the block and the block stays
+   open; held, the runs before and after go to the page (the edit save). Esc puts the block's text back as it was and closes it. One block opens at a
    time in a frame: while one is open no other shows its mark. The mark and the notice
    live in a shadow root on <html>, out of the section's text and styles. */
 (function () {
@@ -566,22 +567,34 @@
   /* ---- inline edit ---- */
   var editLocked = true; // until the page unlocks it: a frame no page talks to opens nothing
   var editing = null;    // the open block: { el, n, before (its runs at open), shape, original, off, had, saving }
-  var RUN_SKIP = { SCRIPT: 1, STYLE: 1 };
+  var RUN_SKIP = { SCRIPT: 1, STYLE: 1, TEMPLATE: 1 };
+  // The block tags, as frame.py counts them: a nested one is a block of its own.
+  var BLOCK_SEL = "p, li, h1, h2, h3, h4, h5, h6, td, th";
 
-  // The runs of text of a block: its text nodes, outside nested marked elements, scripts and styles.
-  function runNodes(el) {
-    var out = [];
+  // The text nodes of a block outside scripts and styles, as [before its first nested
+  // block, from that block on] (the nested blocks' own text left out of the second).
+  function splitNodes(el) {
+    var first = el.querySelector(BLOCK_SEL), runs = [], rest = [];
     var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
       acceptNode: function (n) {
         for (var p = n.parentElement; p && p !== el; p = p.parentElement) {
-          if (RUN_SKIP[p.tagName] || p.hasAttribute("data-block")) return NodeFilter.FILTER_REJECT;
+          if (RUN_SKIP[p.tagName]) return NodeFilter.FILTER_REJECT;
         }
         return NodeFilter.FILTER_ACCEPT;
       },
     });
-    while (walker.nextNode()) out.push(walker.currentNode);
-    return out;
+    while (walker.nextNode()) {
+      var n = walker.currentNode;
+      if (!first || first.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_PRECEDING) runs.push(n);
+      else if (n.parentElement.closest(BLOCK_SEL) === el) rest.push(n);
+    }
+    return [runs, rest];
   }
+  // The runs of text of a block: its text nodes up to its first nested block, outside
+  // scripts and styles, as frame.py's block_runs counts them.
+  function runNodes(el) { return splitNodes(el)[0]; }
+  // The block's own text after its first nested block: in no run, so it must not change.
+  function restOf(el) { return textsOf(splitNodes(el)[1]).join(""); }
   function textsOf(nodes) { return nodes.map(function (n) { return n.data; }); }
   // The elements of a block, their text left out: the tag lock compares it at open and at save.
   function shapeOf(el) {
@@ -666,11 +679,11 @@
   function openBlock(el) {
     if (editLocked || editing || !el.hasAttribute("data-block")) return;
     var nodes = runNodes(el);
-    editing = { el: el, n: Number(el.getAttribute("data-block")), before: textsOf(nodes), shape: shapeOf(el),
+    editing = { el: el, n: Number(el.getAttribute("data-block")), before: textsOf(nodes), rest: restOf(el), shape: shapeOf(el),
                 original: Array.prototype.map.call(el.childNodes, function (c) { return c.cloneNode(true); }),
                 off: [], had: el.getAttribute("contenteditable"), saving: false };
-    // A nested marked element is a block of its own: it stays closed.
-    Array.prototype.forEach.call(el.querySelectorAll("[data-block]"), function (n) {
+    // A nested block is a block of its own: it stays closed.
+    Array.prototype.forEach.call(el.querySelectorAll(BLOCK_SEL), function (n) {
       if (n.hasAttribute("contenteditable")) return;
       n.setAttribute("contenteditable", "false");
       editing.off.push(n);
@@ -714,6 +727,10 @@
     var nodes = runNodes(e.el);
     if (shapeOf(e.el) !== e.shape || nodes.length !== e.before.length) {
       notice("Refused: only the words can change, and a tag or a run of text was added or removed. Undo it (⌘Z), or press Esc to drop your edit.");
+      return;
+    }
+    if (restOf(e.el) !== e.rest) {
+      notice("Refused: the text after the nested list is not part of this block. Undo it (⌘Z), or press Esc to drop your edit.");
       return;
     }
     var after = textsOf(nodes);
