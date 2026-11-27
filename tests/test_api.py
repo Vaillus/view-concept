@@ -274,6 +274,19 @@ def test_an_html_section_is_drawn_in_a_frame(client, session):
     assert client.get("/s/kv-cache/sections/s1.html").status_code == 404
 
 
+def test_an_explanation_sections_frame_gets_its_block_marks(client, session):
+    doc = "<p>Fig</p><script>document.body.append('<p>drawn</p>')</script>"
+    (session.sections_dir / "s1.md").unlink()
+    (session.sections_dir / "s1.html").write_text(doc)
+    served = client.get("/s/kv-cache/sections/s1.html").text
+    assert '<p data-block="1">Fig</p>' in served and 'data-block="2"' not in served
+    assert (session.sections_dir / "s1.html").read_text() == doc  # the file holds none
+    plan = session.read_plan()
+    plan["outline"][0]["part"] = "scoping"  # the drawing opens nothing
+    session.plan_path.write_text(json.dumps(plan))
+    assert "data-block" not in client.get("/s/kv-cache/sections/s1.html").text
+
+
 def test_an_updated_html_section_carries_its_baseline_file(client, session):
     (session.sections_dir / "s3.html").write_text("<p>Fig</p>")
     view = client.get("/api/s/kv-cache").json()["sections"]["s3"]

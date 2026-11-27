@@ -492,12 +492,16 @@ def frame_tokens() -> Response:
 @app.get("/s/{slug}/sections/{name}")
 def section_document(slug: str, name: str) -> HTMLResponse:
     """The document a section frame loads: the HTML section's file, with the frame's head
-    (frame.py) written in. Its relative addresses resolve against /s/<slug>/sections/."""
+    (frame.py) written in. Its relative addresses resolve against /s/<slug>/sections/.
+    An explanation section's blocks also get their block marks (`frame.mark_blocks`),
+    written on the served copy only: the drawing and a refactor section open nothing."""
     s = get_session(slug)
     sid = name.removesuffix(".html")
     if not name.endswith(".html") or sid not in s.html_sections():
         raise HTTPException(404, f"no HTML section {name!r}")
     text = s.section_files()[sid].read_text(encoding="utf-8")
+    if sid in s.explanation_sections():
+        text = frame.mark_blocks(text)
     return HTMLResponse(
         frame.inject(text, FRAME_HEAD),
         headers={"Cache-Control": "no-store", **FRAME_SANDBOX_HEADER},
