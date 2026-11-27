@@ -385,6 +385,19 @@ def cmd_implemented(a: argparse.Namespace) -> None:
     print(f"not implemented yet: {', '.join(pending)}" if pending else "nothing left to implement")
 
 
+def cmd_rewrite(a: argparse.Namespace) -> None:
+    """Record the writer's rewrite of an inline edit in the edit record."""
+    s = _existing(a.slug)
+    if a.file is not None:
+        text = sys.stdin.read() if a.file == "-" else Path(a.file).read_text(encoding="utf-8")
+        text = text.removesuffix("\n")
+    else:
+        text = a.text
+    entry = s.record_rewrite(a.edit_id, text, a.reason, a.batch)
+    batch = entry["rewrites"][-1]["batch"] or "none"
+    print(f"{entry['id']} rewrite recorded (batch {batch})")
+
+
 def cmd_plan(a: argparse.Namespace) -> None:
     raw = sys.stdin.read() if a.file == "-" else Path(a.file).read_text(encoding="utf-8")
     try:
@@ -968,6 +981,19 @@ def main() -> None:
     q.add_argument("slug")
     q.add_argument("change_id", nargs="?", help="the last change taken into account, e.g. m8")
     q.set_defaults(fn=cmd_implemented)
+
+    q = sub.add_parser(
+        "rewrite",
+        help="record that the writer rewrote an inline edit: its new text and why",
+    )
+    q.add_argument("slug")
+    q.add_argument("edit_id", help="the inline edit's id, e.g. ie1")
+    q.add_argument("--reason", required=True, help="one line: what made the edit's text wrong")
+    given = q.add_mutually_exclusive_group(required=True)
+    given.add_argument("--text", help="the new text, exactly as the section's file holds it")
+    given.add_argument("--file", help="a file holding the new text, or - to read it from stdin")
+    q.add_argument("--batch", help="the batch the run works on (default: the last batch sent)")
+    q.set_defaults(fn=cmd_rewrite)
 
     q = sub.add_parser("plan", help="replace the outline and/or the lexicon, nothing else")
     q.add_argument("slug")

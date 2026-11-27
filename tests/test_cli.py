@@ -569,3 +569,29 @@ def test_done_writes_the_end_of_run_record(tmp_path):
     assert progress and progress["state"] == "done"
     r = view_concept(tmp_path, "done", "done", "b9")
     assert r.returncode != 0
+
+
+def test_rewrite_records_the_writer_s_rewrite_of_an_inline_edit(tmp_path):
+    assert view_concept(tmp_path, "new", "Gate").returncode == 0
+    s = Session("gate", tmp_path / "sessions")
+    s.sections_dir.mkdir(parents=True, exist_ok=True)
+    s.plan_path.write_text(json.dumps({"outline": [{"id": "s1", "title": "Gate"}], "lexicon": []}))
+    (s.sections_dir / "s1.md").write_text("A gate removes segments.\n")
+    assert s.save_inline_edit("s1", "A gate removes segments.\n", span="L0-1", text="Mine.")
+    (s.sections_dir / "s1.md").write_text("Mine, on frames.\nOn 20 ms\nframes.\n")
+    r = view_concept(tmp_path, "rewrite", "gate", "ie1", "--reason", "frames", "--text", "Mine,")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "ie1 rewrite recorded (batch none)"
+    env = {**os.environ, "VIEW_CONCEPT_HOME": str(tmp_path)}
+    cmd = [sys.executable, "-m", "view_concept.cli", "rewrite", "gate", "ie1"]
+    cmd += ["--reason", "two lines", "--file", "-"]
+    r = subprocess.run(cmd, env=env, input="On 20 ms\nframes.\n", capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    rewrites = s.read_inline_edits()[0]["rewrites"]
+    assert [(w["text"], w["reason"]) for w in rewrites] == [
+        ("Mine,", "frames"),
+        ("On 20 ms\nframes.", "two lines"),
+    ]
+    r = view_concept(tmp_path, "rewrite", "gate", "ie1", "--reason", "x", "--text", "Theirs.")
+    assert r.returncode != 0 and "not in section s1" in r.stderr
+    assert view_concept(tmp_path, "rewrite", "gate", "ie1", "--reason", "x").returncode != 0
