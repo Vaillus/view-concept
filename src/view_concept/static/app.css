@@ -102,6 +102,14 @@ a.btn { color: var(--ink); text-decoration: none; text-align: center; }
 .sec .body li li.changed::before { left: -94px; }
 .sec .body :is(td, th).changed { position: static; box-shadow: inset 3px 0 var(--ok); }
 .sec .body :is(td, th).changed::before { content: none; }
+/* a block holding the writer's rewrite of your inline edit: the bar in the info colour, in
+   place of the green one, and the rewritten words painted always (app.js markRewrites) */
+.sec .body .rewritten { position: relative; }
+.sec .body .rewritten::before { content: ""; position: absolute; left: -14px; top: 0; bottom: 0; width: 3px; background: var(--info); }
+.sec .body li.rewritten::before { left: -54px; }
+.sec .body li li.rewritten::before { left: -94px; }
+.sec .body :is(td, th).rewritten { position: static; box-shadow: inset 3px 0 var(--info); }
+.sec .body :is(td, th).rewritten::before { content: none; }
 .sec h2 { font-size: 15px; margin: 16px 0 8px; display: flex; align-items: baseline; gap: 6px; }
 .sec h2 .num { min-width: 1.5em; }
 .sec.unwritten h2 { color: var(--muted); }
@@ -141,6 +149,7 @@ a.btn { color: var(--ink); text-decoration: none; text-align: center; }
 ::highlight(ev-sent) { background-color: var(--accentbg); }
 ::highlight(ev-thread) { background-color: var(--altbg); }
 ::highlight(ev-updated) { background-color: var(--okbg); text-decoration: underline 2px var(--ok); text-underline-offset: 3px; }
+::highlight(ev-rewrite) { background-color: var(--infobg); text-decoration: underline 2px var(--info); text-underline-offset: 3px; }
 ::highlight(ev-focus) { background-color: var(--accent); color: var(--on-accent); }
 
 /* ---- code sessions: citations, model changes ---- */

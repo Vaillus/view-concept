@@ -2466,8 +2466,9 @@ function annotateQuestions(root) {
    The page's tools reach a passage inside it through frame messages (static/frame.js):
    the frame posts the reader's selection, a click on a side thread's passage and the
    underlined term under the pointer; the page posts the passages to highlight (anchors),
-   the one to reveal, the words added since the highlight baseline (changes) and the
-   terms to underline (terms), which the frame paints over the words. A block of the
+   the one to reveal, the words added since the highlight baseline (changes, with the
+   writer's rewrites of an inline edit the section shows: see "the rewrite highlight")
+   and the terms to underline (terms), which the frame paints over the words. A block of the
    section opens for an inline edit in the frame itself (see "inline edit"), through the
    edit messages; while one is open there, the frame is kept even when its file changes,
    so your words stay until you close it. */
@@ -2682,7 +2683,10 @@ function addedPassages(sec) {
 function postChanges(id, f = frames.get(id)) {
   const sec = state && state.sections[id];
   if (!f || !f.contentWindow || !sec) return;
-  f.contentWindow.postMessage({ viewConcept: "changes", changes: addedPassages(sec) }, "*");
+  // The rewrites shown, each by the block marks that hold it, your after to diff against,
+  // and the hover text the frame posts back with the term hover message.
+  const rewrites = (sec.rewrites || []).map((rw) => ({ marks: rw.marks || [], after: rw.after || "", tip: rewriteNote(rw) }));
+  f.contentWindow.postMessage({ viewConcept: "changes", changes: addedPassages(sec), rewrites }, "*");
 }
 
 /* The terms message: what the page underlines in a Markdown section, for the frame to
@@ -2809,7 +2813,8 @@ function applyHighlights() {
    over their block; a block marked only for deleted words shows nothing on hover.
    « updated · mark read » in the section heading marks the section as read. A doc of the
    Doc tab is compared the same way (its view in `state.docs`, the key "doc:<path>"), and
-   gets the base mark too (markBase). */
+   gets the base mark too (markBase). A block holding the writer's rewrite of an inline
+   edit gets the rewrite highlight instead of the green (markRewrites). */
 
 const BLOCKS = "p, li, td, th, pre, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, .math.block, .mermaid";
 
@@ -2947,12 +2952,92 @@ function markUpdates() {
       }
     });
   }
+  markRewrites();
   // The blocks were redrawn: paint the one under the pointer now, if any (a tap's paint
   // goes with the block it was on).
   const under = isTouch() ? null : [...document.querySelectorAll(":hover")].pop();
   paintChange(changedBlock(under));
   frames.forEach((f, id) => postChanges(id, f));
   markBase();
+}
+
+/* The rewrite highlight: a block of a Markdown section that holds the writer's rewrite
+   of one of your inline edits (`sec.rewrites`: the server sends each edit's last rewrite
+   while the section's file holds it and its highlight baseline does not) gets a bar in
+   the info colour (.rewritten) in place of the green bar, and its words that are not in
+   your after ("ev-rewrite": the block's own words, a nested block's left out, diffed
+   against your after rendered) are painted always, not only under the pointer; the green
+   leaves those blocks. Pointing at the coloured words or at the bar (left of the block's
+   box) shows the writer's reason in the tip; a lexicon term inside keeps its own tip. A
+   rewrite that only removed words has the bar alone, and its reason shows over the whole
+   block. An HTML section's frame paints the same from the changes message (postChanges).
+   The published page (reader.js) has none of it, as it has no green. */
+let rewriteRanges = []; // [rewrite, range] of each run of rewritten words painted
+let rewriteBlocks = new Map(); // block -> { rw, removal }: the rewrite it holds, and whether it only removed words
+
+const rewriteNote = (rw) => `your words, rewritten by the writer${rw.batch ? ` (${rw.batch})` : ""}: ${rw.reason || ""}`;
+
+function markRewrites() {
+  document.querySelectorAll(".rewritten").forEach((n) => n.classList.remove("rewritten"));
+  rewriteRanges = [];
+  rewriteBlocks = new Map();
+  for (const [id, sec] of Object.entries(state.sections)) {
+    if (sec.kind === "html" || !(sec.rewrites || []).length) continue;
+    const body = document.querySelector(`#sec-${CSS.escape(id)} .body`);
+    if (!body) continue;
+    for (const rw of sec.rewrites) {
+      const blocks = (rw.spans || []).map((s) => body.querySelector(`[data-span="${CSS.escape(s)}"]`)).filter(Boolean);
+      if (!blocks.length) continue;
+      const own = blocks.flatMap((b) => words(b).filter((w) => w.block === b));
+      const mine = document.createElement("div");
+      mine.innerHTML = rw.after_html || "";
+      const { inserted } = diffWords(words(mine).map((w) => w.text), own.map((w) => w.text));
+      const removal = inserted.size === 0;
+      for (const b of blocks) {
+        b.classList.remove("changed");
+        changeRanges.delete(b);
+        b.classList.add("rewritten");
+        rewriteBlocks.set(b, { rw, removal });
+      }
+      // One range per run of rewritten words in a block, so the spaces between them are painted too.
+      let run = null;
+      own.forEach((w, k) => {
+        if (!inserted.has(k)) { run = null; return; }
+        if (run && run.block === w.block) run.range.setEnd(w.range.endContainer, w.range.endOffset);
+        else {
+          run = { block: w.block, range: w.range.cloneRange() };
+          rewriteRanges.push([rw, run.range]);
+        }
+      });
+    }
+  }
+  if (window.CSS && CSS.highlights) CSS.highlights.set("ev-rewrite", new Highlight(...rewriteRanges.map(([, r]) => r)));
+}
+
+// The rewrite whose reason shows at (x, y), with the box the tip goes under: its coloured
+// words, its bar, or anywhere over a block whose rewrite only removed words.
+function rewriteAt(target, x, y) {
+  for (const [rw, r] of rewriteRanges) {
+    for (const b of r.getClientRects()) {
+      if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) return [rw, b];
+    }
+  }
+  const block = target && target.closest ? target.closest(".sec .body .rewritten") : null;
+  const mark = block && rewriteBlocks.get(block);
+  if (!mark) return null;
+  const box = block.getBoundingClientRect();
+  // The bar is drawn left of the block's box (inside a cell's): the pointer on it is left of its text.
+  return mark.removal || x < box.left + 4 ? [mark.rw, box] : null;
+}
+
+let rewriteTip = false; // the tip shows a rewrite's reason
+for (const view of docViews()) {
+  view.addEventListener("mousemove", (e) => {
+    if (isTouch() || e.target.closest("[data-tip], [data-term]")) return;
+    const hit = rewriteAt(e.target, e.clientX, e.clientY);
+    if (hit) { showTip(rewriteNote(hit[0]), null, hit[1]); rewriteTip = true; }
+    else if (rewriteTip) { $("#tip").hidden = true; rewriteTip = false; }
+  });
 }
 
 /* The base mark of the doc shown: each block (its own words, as the change highlights cut
@@ -3149,7 +3234,8 @@ $("#sel-actions .ask").addEventListener("click", () => {
 
 /* ---------------- taps ----------------
    Under touch controls a tap does what a resting pointer does with a mouse: on an
-   underlined term, its tip (a tap elsewhere or a scroll hides it); on a changed block,
+   underlined term, its tip (a tap elsewhere or a scroll hides it); on a rewritten
+   block's coloured words or bar, the writer's reason; on a changed block,
    its new words, until a tap elsewhere; on a side thread's passage, the thread. A term
    inside a thread's passage shows its tip; the rest of the passage opens the thread; a
    block that opens for an inline edit shows its « edit » mark.
@@ -3161,8 +3247,10 @@ document.addEventListener("click", (e) => {
   if (sel.rangeCount && !sel.isCollapsed) return;
   const t = e.target.closest && e.target.closest("[data-tip], [data-term]");
   const stale = !t && staleAt(e.clientX, e.clientY);
+  const rewrite = !t && !stale && rewriteAt(e.target, e.clientX, e.clientY);
   if (t) showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect(), lexiconOf(t));
   else if (stale) showTip(staleNote(stale[0]), null, stale[1]);
+  else if (rewrite) showTip(rewriteNote(rewrite[0]), null, rewrite[1]);
   else $("#tip").hidden = true;
   const b = changedBlock(e.target);
   if (b !== hoveredChange) paintChange(b);
