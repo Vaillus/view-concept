@@ -938,7 +938,7 @@ function renderSections() {
   }
   anchorWatch.disconnect();
   for (const view of docViews()) for (const child of view.children) anchorWatch.observe(child);
-  frames.forEach((f, id) => { postTerms(id, f); postPins(id, f); });
+  frames.forEach((f, id) => { postTerms(id, f); postPins(id, f); postEditLock(id, f); });
   applyHighlights();
   renderThreadChips();
   positionPopover();
@@ -1746,10 +1746,19 @@ function liveEditor(lib, parent, text, { oneLine = false, save, cancel }) {
    save (409: the file is no longer the one the block opened on) leaves the editor open
    with your words under a notice: there is no « save anyway », since the span may now
    point at other text. The editor is one element kept across renders (placed again by
-   placeBlockEditor), so a re-render while you type keeps your words. */
+   placeBlockEditor), so a re-render while you type keeps your words.
+   A block of an HTML section is an element carrying `data-block`, its block mark,
+   written by the server on the copy it serves the frame: it opens in the frame itself
+   (frame.js), as its visible text with its inline tags locked. The page's part goes
+   through the edit messages: it tells each frame whether its blocks open (edit-lock),
+   hears a block open (edit-open: the section is marked read, and the one-block rule
+   applies; a block open in a frame counts as holding unsaved words, which the page
+   cannot see), sends its save (edit-save: the runs of text before and after, with the
+   section's file at open as base) and answers with the result (edit-saved). */
 let blockEdit = null;
 // { kind: "md", section, span, base (the section's file at open), text (the block's text at open), oneLine,
 //   box, host, note, save, view (its EditorView once CodeMirror is loaded), error (the last refusal), saving }
+// | { kind: "html", section, block (its mark), f (its frame), base (the section's file at open) }
 
 // A section whose blocks open: an explanation section, neither the drawing nor a refactor section.
 const editableSection = (id) => !!state && id in state.sections && tabOf(id) === "model";
@@ -1805,8 +1814,15 @@ editMark.addEventListener("click", () => {
 
 /* Closes the open block before another opens: false when you keep it. */
 function dropOpenBlock() {
-  if (!blockEdit) return true;
-  if (blockDirty() && !confirm(`Drop your unsaved edit of a block of section ${numberOf(blockEdit.section)}?`)) return false;
+  const e = blockEdit;
+  if (!e) return true;
+  if (e.kind === "html") {
+    if (!confirm(`Close the block you are editing in section ${numberOf(e.section)}? Its unsaved words are lost.`)) return false;
+    blockEdit = null;
+    if (e.f.contentWindow) e.f.contentWindow.postMessage({ viewConcept: "edit-close" }, "*");
+    return true;
+  }
+  if (blockDirty() && !confirm(`Drop your unsaved edit of a block of section ${numberOf(e.section)}?`)) return false;
   closeMdBlock();
   return true;
 }
@@ -1914,7 +1930,7 @@ async function postEdit(body) {
 function editRefusal({ status, detail }) {
   const sentence = String(detail || "").replace(/\.$/, "");
   const why = sentence.charAt(0).toLowerCase() + sentence.slice(1);
-  if (status === 409) return `Refused: ${why}. Copy your words, cancel, and open the block again on the new text.`;
+  if (status === 409) return `Refused: ${why}. Copy your words, close the block, and open it again on the new text.`;
   return `Could not save: ${why}.`;
 }
 
@@ -1939,6 +1955,49 @@ async function saveMdBlock() {
   toast("Block saved");
   await load();
   e.view.destroy();
+}
+
+/* The edit lock message: whether the blocks of the frame's section open. */
+function postEditLock(id, f = frames.get(id)) {
+  if (!f || !f.contentWindow || !state) return;
+  f.contentWindow.postMessage({ viewConcept: "edit-lock", locked: !editableSection(id) }, "*");
+}
+
+/* The edit open message: a block of the frame opened. The page closes the block open
+   elsewhere (asking first), or has the frame close this one when you keep the other. */
+function frameEditOpen(id, f, d) {
+  const n = Number(d.block);
+  if (!editableSection(id) || !Number.isInteger(n) || !dropOpenBlock()) {
+    if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "edit-close" }, "*");
+    return;
+  }
+  blockEdit = { kind: "html", section: id, block: n, f, base: state.sections[id].md };
+  hideEditMark();
+  if (isUpdated(id)) markSeen([id]);
+}
+
+/* The edit save message: the frame checked the tag lock; the server checks the rest. */
+async function frameEditSave(id, f, d) {
+  const answer = (reply) => { if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "edit-saved", ...reply }, "*"); };
+  const e = blockEdit;
+  if (!e || e.kind !== "html" || e.f !== f || e.block !== Number(d.block)) {
+    answer({ ok: false, status: 0, error: "This block is not open in the page: press Esc and open it again." });
+    return;
+  }
+  const r = await postEdit({ section: id, base: e.base, block: e.block, before: d.before, after: d.after });
+  if (!r.ok) { answer({ ok: false, status: r.status, error: editRefusal(r) }); return; }
+  if (blockEdit === e) blockEdit = null;
+  answer({ ok: true });
+  toast("Block saved");
+  await load();
+}
+
+/* The edit closed message: the frame's block closed (Esc, the edit close, or a save). A
+   frame kept through a change of its file reloads now. */
+function frameEditClosed(id, f) {
+  if (!blockEdit || blockEdit.kind !== "html" || blockEdit.f !== f) return;
+  blockEdit = null;
+  if (state.sections[id] && f.dataset.version !== state.sections[id].version) renderSections();
 }
 
 
@@ -2388,7 +2447,10 @@ function annotateQuestions(root) {
    the frame posts the reader's selection, a click on a side thread's passage and the
    underlined term under the pointer; the page posts the passages to highlight (anchors),
    the one to reveal, the words added since the highlight baseline (changes) and the
-   terms to underline (terms), which the frame paints over the words. */
+   terms to underline (terms), which the frame paints over the words. A block of the
+   section opens for an inline edit in the frame itself (see "inline edit"), through the
+   edit messages; while one is open there, the frame is kept even when its file changes,
+   so your words stay until you close it. */
 
 // As frame.SANDBOX: scripts run, and no allow-same-origin, so the frame cannot reach the page.
 const SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms";
@@ -2411,11 +2473,14 @@ function placeFrames() {
     if (placed.has(id)) return;
     const { version } = state.sections[id];
     let f = frames.get(id);
-    if (!f || f.dataset.version !== version) {
+    const editing = !!blockEdit && blockEdit.kind === "html" && blockEdit.f === f;
+    if (!f || (f.dataset.version !== version && !editing)) {
       if (f) f.remove();
       f = el("iframe", { class: "frame", sandbox: SANDBOX, allow: "fullscreen", title: titleOf(id),
                          "data-version": version, src: `/s/${SLUG}/sections/${encodeURIComponent(id)}.html?v=${version}` });
-      f.addEventListener("load", () => { postTheme(f); postAnchors(id, f); postChanges(id, f); postTerms(id, f); postPins(id, f); });
+      f.addEventListener("load", () => {
+        postTheme(f); postAnchors(id, f); postChanges(id, f); postTerms(id, f); postPins(id, f); postEditLock(id, f);
+      });
       frames.set(id, f);
     }
     moveInto(slot, f);
@@ -2434,7 +2499,9 @@ new MutationObserver(() => frames.forEach(postTheme))
 
 /* The frame messages a frame posts: its height, the reader's selection inside it, where
    a revealed passage sits, the side threads whose passage it found (placed), the side
-   thread whose passage was clicked, and the term under the pointer (static/frame.js). */
+   thread whose passage was clicked, the term under the pointer, and the edit messages of
+   an inline edit: a block opened (edit-open), its save (edit-save, answered by
+   edit-saved) and its close (edit-closed) (static/frame.js). */
 const revealing = new Map(); // section id -> the comment whose passage its frame looks for
 
 window.addEventListener("message", (e) => {
@@ -2453,6 +2520,9 @@ window.addEventListener("message", (e) => {
   else if (d.viewConcept === "term-hover") frameTermHover(f, d);
   else if (d.viewConcept === "tap") tapElsewhere(f);
   else if (d.viewConcept === "channel") frameChannel(id, f, d);
+  else if (d.viewConcept === "edit-open") frameEditOpen(id, f, d);
+  else if (d.viewConcept === "edit-save") frameEditSave(id, f, d);
+  else if (d.viewConcept === "edit-closed") frameEditClosed(id, f);
 });
 
 /* The channel message: a request of the section's own script (frame.js's `viewConcept`):

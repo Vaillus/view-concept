@@ -75,6 +75,22 @@
      error}. The published page answers from the published files instead (reader.js),
      with no server behind it, and adds `reason: "not-received"` to the answer to a
      request never received before publishing.
+   - The edit lock (page -> frame), {locked}: whether the blocks of this section open for
+     an inline edit. The page posts it at load and whenever the batch state changes:
+     locked while the last batch is processing, and always for a section whose blocks
+     never open (the drawing, a refactor section). A frame no page unlocks (the published
+     page, a vault note, a frame opened alone) opens nothing.
+   - The edit open (frame -> page), {block}: the reader opened block n (see "inline
+     edit" below). The page marks the section read and keeps one block open in the page:
+     it answers with the edit close when the reader keeps another block open instead.
+   - The edit close (page -> frame): close the open block without saving.
+   - The edit save (frame -> page), {block, before, after}: ⌘↵ on the open block, its
+     runs of text at open and now, sent only once the tag lock holds. The page posts it
+     to its server and answers with the edit saved, {ok: true} or {ok: false, status,
+     error}: on ok the frame closes the block, else it shows the error under it and
+     keeps your words.
+   - The edit closed (frame -> page): the open block closed, by Esc, the edit close or a
+     save.
 
    The channel is the section's script's way to ask an agent for data and draw the answer
    itself, without its section being redrawn: the frame script gives every section a
@@ -104,7 +120,21 @@
    Every highlight and underline is painted again when a script of the section redraws
    its text, from the anchors, changes and terms the frame already holds. Text a script
    paints into a <canvas> is pixels, not text: it cannot be selected, highlighted nor
-   underlined. */
+   underlined.
+
+   Inline edit: the server writes a block mark, `data-block="<n>"`, on each paragraph,
+   list item, heading and table cell of the section's file as it serves it (text a
+   script draws has none). While the page leaves editing unlocked, pointing at a marked
+   element (or tapping it, under touch controls) shows « edit » beside it; a click opens
+   it in place as editable text, its inline tags locked: only its runs of text change
+   (the text nodes of the element, leaving out those inside a nested marked element,
+   which stays closed, and inside a script or a style). Enter adds no line; a pasted line
+   break becomes a space. ⌘↵ checks the tag lock (the same elements in the same places,
+   and the same number of runs as at open): broken, the save is refused under the block
+   and the block stays open; held, the runs before and after go to the page (the edit
+   save). Esc puts the block's text back as it was and closes it. One block opens at a
+   time in a frame: while one is open no other shows its mark. The mark and the notice
+   live in a shadow root on <html>, out of the section's text and styles. */
 (function () {
   var root = document.documentElement;
   if (!root.hasAttribute("data-theme")) {
@@ -290,6 +320,7 @@
     var sel = getSelection();
     if (!sel.rangeCount || sel.isCollapsed) return null;
     var range = sel.getRangeAt(0);
+    if (editing && editing.el.contains(range.commonAncestorContainer)) return null; // the words being edited
     var quote = collapse(sel.toString());
     if (!quote) return null;
     var index = textIndex(), k = 0;
@@ -329,7 +360,7 @@
   addEventListener("mouseup", function (e) {
     setTimeout(function () {
       var s = postSelection();
-      if (!s && !touch) clickAt(e.target, e.clientX, e.clientY);
+      if (!s && !touch && !inEditing(e.target)) clickAt(e.target, e.clientX, e.clientY);
     }, 0);
   });
 
@@ -354,7 +385,8 @@
     "::highlight(ev-updated) { background-color: var(--okbg); text-decoration: underline 2px var(--ok); text-underline-offset: 3px; }\n" +
     "::highlight(ev-term) { text-decoration: underline dotted var(--line-strong); text-underline-offset: 3px; }\n" +
     "::highlight(ev-def) { text-decoration: underline solid var(--accent); text-underline-offset: 3px; }\n" +
-    "::highlight(ev-audit) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }\n";
+    "::highlight(ev-audit) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }\n" +
+    "[data-vc-editing] { outline: 1px solid var(--accent); outline-offset: 2px; background-color: var(--raised); }\n";
   (document.head || root).appendChild(marks);
 
   // Letter-aware word boundaries, as the page uses: "état" does not match in "étatique".
@@ -531,10 +563,204 @@
            : { viewConcept: "pin-click", pins: [] });
   }
 
+  /* ---- inline edit ---- */
+  var editLocked = true; // until the page unlocks it: a frame no page talks to opens nothing
+  var editing = null;    // the open block: { el, n, before (its runs at open), shape, original, off, had, saving }
+  var RUN_SKIP = { SCRIPT: 1, STYLE: 1 };
+
+  // The runs of text of a block: its text nodes, outside nested marked elements, scripts and styles.
+  function runNodes(el) {
+    var out = [];
+    var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) {
+        for (var p = n.parentElement; p && p !== el; p = p.parentElement) {
+          if (RUN_SKIP[p.tagName] || p.hasAttribute("data-block")) return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    while (walker.nextNode()) out.push(walker.currentNode);
+    return out;
+  }
+  function textsOf(nodes) { return nodes.map(function (n) { return n.data; }); }
+  // The elements of a block, their text left out: the tag lock compares it at open and at save.
+  function shapeOf(el) {
+    var s = "";
+    for (var c = el.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType !== 1) continue;
+      s += "<" + c.tagName + (c.hasAttribute("data-block") ? " " + c.getAttribute("data-block") + "/>" : ">" + shapeOf(c) + "</>");
+    }
+    return s;
+  }
+
+  // The mark and the notice, in a shadow root: no text of the section, no style of it.
+  var ui = null, markedEl = null, markTimer = null;
+  function editUi() {
+    if (ui) return ui;
+    var host = document.createElement("vc-inline-edit");
+    host.style.cssText = "position: absolute; top: 0; left: 0; width: 0; height: 0; z-index: 2147483647;";
+    var shadow = host.attachShadow({ mode: "closed" });
+    shadow.innerHTML =
+      "<style>" +
+      ".mark { position: absolute; font: 11px/18px var(--mono, monospace); padding: 0 6px; color: var(--muted);" +
+      " background: var(--bg); border: 1px solid var(--line); cursor: pointer; }" +
+      ".mark:hover { color: var(--accent); border-color: var(--accent); }" +
+      ".notice { position: absolute; font: 12px/17px var(--mono, monospace); padding: 4px 8px; color: var(--warn);" +
+      " background: var(--bg); border: 1px solid var(--warn); max-width: 60ch; }" +
+      "[hidden] { display: none; }" +
+      "</style><button class=\"mark\" hidden>edit</button><div class=\"notice\" hidden></div>";
+    ui = { host: host, mark: shadow.querySelector(".mark"), notice: shadow.querySelector(".notice") };
+    ui.mark.addEventListener("mousedown", function (e) { e.preventDefault(); });
+    ui.mark.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var b = markedEl;
+      hideMark();
+      if (b) openBlock(b);
+    });
+    ui.mark.addEventListener("mouseenter", function () { clearTimeout(markTimer); });
+    ui.mark.addEventListener("mouseleave", function () { hideMark(true); });
+    root.appendChild(host);
+    return ui;
+  }
+
+  // The marked element under `target` that opens now, or null.
+  function blockAt(target) {
+    if (editLocked || editing || !target || !target.closest) return null;
+    return target.closest("[data-block]");
+  }
+  function showMark(el) {
+    var u = editUi();
+    clearTimeout(markTimer);
+    markedEl = el;
+    u.mark.hidden = false;
+    var r = el.getBoundingClientRect(), w = u.mark.offsetWidth;
+    var left = r.left - w - 8 >= 0 ? r.left - w - 8 : r.right + w + 8 <= root.clientWidth ? r.right + 8 : r.right - w;
+    u.mark.style.left = (left + scrollX) + "px";
+    u.mark.style.top = (r.top + scrollY) + "px";
+  }
+  function hideMark(later) {
+    clearTimeout(markTimer);
+    if (later) { markTimer = setTimeout(function () { hideMark(); }, 400); return; }
+    markedEl = null;
+    if (ui) ui.mark.hidden = true;
+  }
+  function hoverBlock(target) {
+    if (ui && target === ui.host) { clearTimeout(markTimer); return; }
+    var b = blockAt(target);
+    if (b) showMark(b);
+    else if (markedEl) hideMark(true);
+  }
+
+  // The notice under the open block (above it when the frame ends below); "" hides it.
+  function notice(text) {
+    var u = editUi();
+    u.notice.textContent = text;
+    u.notice.hidden = !text;
+    if (!text || !editing) return;
+    var r = editing.el.getBoundingClientRect(), h = u.notice.offsetHeight;
+    var below = r.bottom + scrollY + 4;
+    u.notice.style.top = (below + h > root.scrollHeight && r.top + scrollY - h - 4 >= 0 ? r.top + scrollY - h - 4 : below) + "px";
+    u.notice.style.left = (r.left + scrollX) + "px";
+  }
+
+  function openBlock(el) {
+    if (editLocked || editing || !el.hasAttribute("data-block")) return;
+    var nodes = runNodes(el);
+    editing = { el: el, n: Number(el.getAttribute("data-block")), before: textsOf(nodes), shape: shapeOf(el),
+                original: Array.prototype.map.call(el.childNodes, function (c) { return c.cloneNode(true); }),
+                off: [], had: el.getAttribute("contenteditable"), saving: false };
+    // A nested marked element is a block of its own: it stays closed.
+    Array.prototype.forEach.call(el.querySelectorAll("[data-block]"), function (n) {
+      if (n.hasAttribute("contenteditable")) return;
+      n.setAttribute("contenteditable", "false");
+      editing.off.push(n);
+    });
+    el.contentEditable = "plaintext-only";
+    if (el.contentEditable !== "plaintext-only") el.contentEditable = "true";
+    el.setAttribute("data-vc-editing", "");
+    hideMark();
+    el.focus();
+    var sel = getSelection(), end = nodes[nodes.length - 1];
+    if (sel && end) sel.collapse(end, end.data.length);
+    post({ viewConcept: "edit-open", block: editing.n });
+  }
+
+  // Close the open block: `restore` puts its text back as it was at open.
+  function closeBlock(restore) {
+    var e = editing;
+    if (!e) return;
+    editing = null;
+    if (restore) {
+      var nodes = runNodes(e.el);
+      if (shapeOf(e.el) === e.shape && nodes.length === e.before.length) {
+        nodes.forEach(function (n, i) { if (n.data !== e.before[i]) n.data = e.before[i]; });
+      } else {
+        while (e.el.firstChild) e.el.removeChild(e.el.firstChild);
+        e.original.forEach(function (c) { e.el.appendChild(c); });
+      }
+    }
+    e.off.forEach(function (n) { n.removeAttribute("contenteditable"); });
+    if (e.had === null) e.el.removeAttribute("contenteditable");
+    else e.el.setAttribute("contenteditable", e.had);
+    e.el.removeAttribute("data-vc-editing");
+    notice("");
+    if (document.activeElement === e.el) e.el.blur();
+    post({ viewConcept: "edit-closed" });
+  }
+
+  function saveBlock() {
+    var e = editing;
+    if (!e || e.saving) return;
+    var nodes = runNodes(e.el);
+    if (shapeOf(e.el) !== e.shape || nodes.length !== e.before.length) {
+      notice("Refused: only the words can change, and a tag or a run of text was added or removed. Undo it (⌘Z), or press Esc to drop your edit.");
+      return;
+    }
+    var after = textsOf(nodes);
+    if (after.every(function (t, i) { return t === e.before[i]; })) { closeBlock(false); return; }
+    e.saving = true;
+    notice("saving…");
+    post({ viewConcept: "edit-save", block: e.n, before: e.before, after: after });
+  }
+
+  function saved(d) {
+    if (!editing) return;
+    editing.saving = false;
+    if (d.ok) closeBlock(false);
+    else notice(String(d.error || "The save was refused."));
+  }
+
+  function setEditLock(locked) {
+    editLocked = locked;
+    if (locked) hideMark();
+  }
+
+  // The open block takes no line: Enter adds none, a pasted line break is a space, nothing is dropped in.
+  function inEditing(target) { return !!editing && !!target && editing.el.contains(target); }
+  document.addEventListener("beforeinput", function (e) {
+    if (inEditing(e.target) && (e.inputType === "insertParagraph" || e.inputType === "insertLineBreak")) e.preventDefault();
+  });
+  document.addEventListener("paste", function (e) {
+    if (!inEditing(e.target) || !e.clipboardData) return;
+    e.preventDefault();
+    document.execCommand("insertText", false, e.clipboardData.getData("text/plain").replace(/\s*[\r\n]+\s*/g, " "));
+  });
+  document.addEventListener("drop", function (e) { if (inEditing(e.target)) e.preventDefault(); });
+
   /* ---- Escape ----
      A click in the frame gives it the focus, so the page never sees the key: the frame
-     passes Escape on, and the page closes its pin window as on its own Escape. */
+     passes Escape on, and the page closes its pin window as on its own Escape. In an
+     open block, Escape closes the block instead, Enter adds no line and ⌘↵ saves. */
   addEventListener("keydown", function (e) {
+    if (editing) {
+      if (e.key === "Escape") { e.preventDefault(); closeBlock(true); return; }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (e.metaKey || e.ctrlKey) saveBlock();
+        return;
+      }
+      return;
+    }
     if (e.key === "Escape") post({ viewConcept: "escape" });
   });
 
@@ -551,20 +777,24 @@
     if (touch) return;
     pointer = { x: e.clientX, y: e.clientY };
     paintChanges(e.target);
+    hoverBlock(e.target);
     var h = hit(termRanges, e.clientX, e.clientY);
     hover(h && h[0], h && h[1]);
     // The passage of a thread is clickable: say so with the cursor.
     root.style.cursor = hit(threadRanges, e.clientX, e.clientY) ? "pointer" : "";
   });
-  document.addEventListener("mouseleave", function () { if (!touch) { hover(null); pointer = null; paintChanges(null); } });
+  document.addEventListener("mouseleave", function () { if (!touch) { hover(null); pointer = null; paintChanges(null); if (markedEl) hideMark(true); } });
   // Under touch controls a tap does what a resting pointer does: on a term, its tip; on a
   // changed block, its new words, until a tap elsewhere; on a side thread's passage (off
   // its terms), the thread.
   addEventListener("click", function (e) {
-    if (!touch) return;
+    if (!touch || inEditing(e.target)) return;
     var sel = getSelection();
     if (sel && !sel.isCollapsed) return;
     post({ viewConcept: "tap" });
+    var block = blockAt(e.target);
+    if (block) showMark(block);
+    else if (!(ui && e.target === ui.host)) hideMark();
     pointer = { x: e.clientX, y: e.clientY };
     paintChanges(e.target);
     var h = hit(termRanges, e.clientX, e.clientY);
@@ -585,5 +815,8 @@
     else if (d.viewConcept === "reveal-element") revealElement(d.element);
     else if (d.viewConcept === "tap-elsewhere" && touch) { pointer = null; paintChanges(null); }
     else if (d.viewConcept === "channel-answer") answered(d);
+    else if (d.viewConcept === "edit-lock") setEditLock(d.locked !== false);
+    else if (d.viewConcept === "edit-close") closeBlock(true);
+    else if (d.viewConcept === "edit-saved") saved(d);
   });
 })();
