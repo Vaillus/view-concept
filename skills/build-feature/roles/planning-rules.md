@@ -269,8 +269,8 @@ line. A wording fix that leaves the model as it was gets none. Say the change in
 (« gate split into silence gate and length gate »), longer only when the
 change itself is large. No implementation details: no files, no « what the
 branch does now ». `--cause` gives the ids of the events that led to it
-(questions `q3`, comments `c7`, terminal messages `tm2`); leave it out for a
-change you make on your own judgment.
+(questions `q3`, comments `c7`, terminal messages `tm2`, inline edits `ie1`);
+leave it out for a change you make on your own judgment.
 
 ## Questions to the user
 

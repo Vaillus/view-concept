@@ -295,21 +295,24 @@ with the first section, so the user can read the docs next to the model.
    4, 2 questions »). Otherwise write the next section, until no section is
    left.
 3. When every section is written, run the **writer-run audit**: you clear
-   every audit underline yourself, and none is left for the user to answer.
+   every audit underline yourself, and none is left for the user to answer,
+   but an early use in the user's words (see **Inline edits**).
    As you write, every term is already plain language or a lexicon entry
    (a core concept or a peripheral concept, with its tip); this step catches
    what slipped past.
 
    1. Run `view-concept check <slug>` and fix each forward reference and
       early use it lists by the precedence rule: reorder the outline or say
-      the idea in plain words.
+      the idea in plain words. One in an inline edit still in its section
+      stays, as **Inline edits** says.
       It also prints the section problems, which it does not write to
       `audit.json`: an HTML block in a Markdown section (move it into an HTML
       section), two files for one section, an HTML section over 2 MB, a
       waiting question anchored to a section the outline no longer has
       (re-anchor it with `view-concept anchor`). Fix each one.
-   2. Re-read every section for the words that slipped past the lexicon,
-      each with one of these issues, and fix each one yourself:
+   2. Re-read every section, but the inline edits still in their section,
+      for the words that slipped past the lexicon, each with one of these
+      issues, and fix each one yourself:
 
       | Issue | The word | Your fix |
       |---|---|---|
@@ -481,6 +484,69 @@ The trigger holds comments, answers, terminal messages, or « Rewrite model »
 - **An unclear answer** to a question asked after the model is written:
   develop the section it is about (or add the section it needs) and ask it
   again, as after a pause.
+- **Inline edits** in the batch: see **Inline edits**.
+
+## Inline edits
+
+An **inline edit** is a change the user made to a section's text in the
+page, saved straight into the section's file with no agent: a paragraph, a
+list item, a heading or a table cell. Its before and after are the text as
+the file holds it (Markdown, or an HTML block's content with its inline
+tags). It reaches you two ways:
+
+- the batch that carries it, counted in its header (`· 1 inline edit`),
+  one entry per edit:
+
+  ```
+  inline edit ie1 · section 3 « The gate » (the user's text: keep it word for word)
+    before: A gate removes segments that are mostly silence.
+    after:  A gate drops a segment when its **silence ratio** exceeds the threshold.
+  ```
+
+- every later run, through your context's « Inline edits (the user's words:
+  the keep rule) », which lists every edit of the session, each « still in
+  its section » or « gone from its section ».
+
+**The keep rule.** Every rewrite keeps an edit still in its section word for
+word, the consolidation pass and the audit included: write around it.
+Rewrite one only when the batch you work on makes it wrong: a comment of the
+batch on that passage, or a change in the code or the plan the passage
+describes. Style, flow and the lexicon never make it wrong. When you rewrite
+one, name the edit and say why (« ie1 rewritten: the gate now measures the
+ratio on 20 ms frames »): in your `resolve` reply to the comment that made
+it wrong, or, when the code or the plan did, in your reply to the batch and
+your report. Never cut the passage in pieces, nor move it to another
+section. An edit gone from its section (you rewrote it under this rule, or
+the user edited the block again) binds nothing.
+
+**A batch of edits alone** (`0 comments`, no action) writes no section. Take
+the edits in:
+
+- a term the edits bring that the lexicon lacks gets an entry, with its tip
+  (`view-concept plan`);
+- a concept or a rule the edits change is logged in the change history, the
+  edit as its cause (`--cause ie1`); past « Approve model », it then shows
+  not implemented yet, until the implementer carries it;
+- run `view-concept check <slug>` and handle what it lists on the edited
+  sections as the table below says;
+- reply to the batch with what you took in: `view-concept resolve <slug>
+  <batch id> --reply "<one line>"`.
+
+A batch with comments and edits runs as any batch, the edits binding the run
+from its start, and taken in the same way.
+
+**Your words and the precedence check.** The user's words follow no lexicon.
+In an edit still in its section:
+
+| `check` or the audit finds | You |
+|---|---|
+| an early use (or a forward reference) | leave it in `audit.json`, so its underline shows on the user's word, and name it in your reply; never reword the passage nor move a section for it |
+| a term the lexicon lacks | add the entry, with its tip; the words stay |
+| a metaphor, an ambiguous word, a bare reference | nothing: the audit skips the user's passages |
+
+The user then rewords it, or comments to have you move the sections. An
+early use left in `audit.json` does not hold « Approve model » back: the
+undefined gate counts only `undefined` entries.
 
 ## Report
 
