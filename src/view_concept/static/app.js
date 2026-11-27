@@ -1609,6 +1609,126 @@ function cancelDocEdit() {
   renderSections();
 }
 
+/* ---------------- the live-preview editor ----------------
+   A block of a Markdown section opens in the live-preview editor (see "inline edit"):
+   CodeMirror 6 on the block's Markdown, shown formatted, with the syntax of bold,
+   italics, links, inline code and inline maths (the ** around a bold word, the $ around
+   a formula) visible only in the token the cursor is in; elsewhere a formula is drawn
+   with KaTeX. What you type is Markdown: the block's text holds exactly what you typed.
+   CodeMirror loads from cdn.jsdelivr.net the first time a block opens, its modules by
+   package name: the import map of session.html points every name at one pinned file, so
+   the modules share one @codemirror/state and one @codemirror/view (two copies would not
+   recognize each other's extensions). */
+let editorLib = null; // the promise of CodeMirror's modules, once a block asked for them
+
+function loadEditorLib() {
+  editorLib = editorLib || Promise.all([import("@codemirror/state"), import("@codemirror/view"), import("@codemirror/commands")])
+    .then(([state, view, commands]) => ({ state, view, commands }))
+    .catch((e) => { editorLib = null; throw e; });
+  return editorLib;
+}
+
+/* The inline Markdown tokens of a block's text: {from, to, cls (the class its content
+   gets), marks (the [from, to] of its syntax), content, tex (a formula's TeX)}. Code
+   spans first, then maths (nothing inside either is Markdown), then a backslash's
+   escape, then links, bold and italics; each pass masks what it took, so a later one
+   does not take it again. */
+function inlineTokens(text) {
+  const out = [];
+  let work = text;
+  const mask = (a, b) => { work = work.slice(0, a) + "\u0000".repeat(b - a) + work.slice(b); };
+  const scan = (re, open, close, cls, whole = false) => {
+    for (const m of [...work.matchAll(re)]) {
+      const from = m.index, to = m.index + m[0].length;
+      const o = typeof open === "function" ? open(m) : open, c = typeof close === "function" ? close(m) : close;
+      out.push({ from, to, cls, marks: [[from, from + o], [to - c, to]], content: [from + o, to - c] });
+      if (whole) mask(from, to);
+      else { mask(from, from + o); mask(to - c, to); }
+    }
+  };
+  scan(/(`+)(?!`)([\s\S]*?[^`])\1(?!`)/g, (m) => m[1].length, (m) => m[1].length, "cm-vc-code", true);
+  for (const m of [...work.matchAll(/(?<![\\$])\$(?=[^\s$])((?:\\.|[^$\\\n])*?[^\s\\])\$(?![$\d])/g)]) {
+    out.push({ from: m.index, to: m.index + m[0].length, cls: "cm-vc-tex", tex: m[1],
+               marks: [], content: [m.index, m.index + m[0].length] });
+    mask(m.index, m.index + m[0].length);
+  }
+  for (const m of [...work.matchAll(/\\[!-/:-@[-`{-~]/g)]) mask(m.index, m.index + 2);
+  scan(/\[([^\]\n]*)\]\([^()\s]*(?:\s+"[^"\n]*")?\)/g, 1, (m) => m[0].length - 1 - m[1].length, "cm-vc-link");
+  scan(/(\*\*|__)(?=[^\s*_])([\s\S]*?\S)\1/g, 2, 2, "cm-vc-strong");
+  scan(/\*(?=[^\s*])([\s\S]*?[^\s*])\*/g, 1, 1, "cm-vc-em");
+  scan(/(?<![\p{L}\p{N}_])_(?=[^\s_])([\s\S]*?[^\s_])_(?![\p{L}\p{N}_])/gu, 1, 1, "cm-vc-em");
+  return out;
+}
+
+/* The live preview, a CodeMirror view plugin: each token's content gets its class, and
+   its syntax is hidden unless the cursor (or the selection) touches the token while the
+   editor has the focus; a formula away from the cursor is replaced by its drawing. */
+function livePreview(lib) {
+  const { Decoration, ViewPlugin, WidgetType } = lib.view;
+  class MathWidget extends WidgetType {
+    constructor(tex) { super(); this.tex = tex; }
+    eq(other) { return other.tex === this.tex; }
+    toDOM() {
+      const s = document.createElement("span");
+      s.className = "cm-vc-math";
+      try { katex.render(this.tex, s, { throwOnError: false }); } catch (e) { s.textContent = `$${this.tex}$`; }
+      return s;
+    }
+    ignoreEvent() { return false; } // a click on a formula puts the cursor in it
+  }
+  const hide = Decoration.replace({});
+  const build = (view) => {
+    const ranges = view.state.selection.ranges;
+    const decos = [];
+    for (const t of inlineTokens(view.state.doc.toString())) {
+      const active = view.hasFocus && ranges.some((r) => r.from <= t.to && r.to >= t.from);
+      if (t.tex !== undefined) {
+        decos.push(active ? Decoration.mark({ class: t.cls }).range(t.from, t.to)
+                          : Decoration.replace({ widget: new MathWidget(t.tex) }).range(t.from, t.to));
+        continue;
+      }
+      if (t.content[1] > t.content[0]) decos.push(Decoration.mark({ class: t.cls }).range(t.content[0], t.content[1]));
+      if (!active) for (const [a, b] of t.marks) if (b > a) decos.push(hide.range(a, b));
+    }
+    return Decoration.set(decos, true);
+  };
+  return ViewPlugin.fromClass(class {
+    constructor(view) { this.decorations = build(view); }
+    update(u) { if (u.docChanged || u.selectionSet || u.focusChanged) this.decorations = build(u.view); }
+  }, { decorations: (p) => p.decorations });
+}
+
+/* A live-preview editor on `text`, in `parent`: ⌘↵ calls save, Esc calls cancel. A block
+   of one line (`oneLine`: a heading, a table cell) takes no line: Enter adds none, and a
+   line break pasted in becomes a space. */
+function liveEditor(lib, parent, text, { oneLine = false, save, cancel }) {
+  const { EditorState, Prec } = lib.state;
+  const { EditorView, keymap } = lib.view;
+  const { history, defaultKeymap, historyKeymap } = lib.commands;
+  const run = (f) => () => { f(); return true; };
+  const oneLineFilter = EditorState.transactionFilter.of((tr) => {
+    if (!tr.docChanged) return tr;
+    const doc = tr.newDoc.toString(), fix = [];
+    for (let i = doc.indexOf("\n"); i >= 0; i = doc.indexOf("\n", i + 1)) fix.push({ from: i, to: i + 1, insert: " " });
+    return fix.length ? [tr, { changes: fix, sequential: true }] : tr;
+  });
+  const extensions = [
+    history(),
+    Prec.highest(keymap.of([
+      { key: "Mod-Enter", run: run(save) },
+      { key: "Ctrl-Enter", run: run(save) },
+      { key: "Escape", run: run(cancel) },
+      ...(oneLine ? [{ key: "Enter", run: () => true }, { key: "Shift-Enter", run: () => true }] : []),
+    ])),
+    keymap.of([...defaultKeymap, ...historyKeymap]),
+    EditorView.lineWrapping,
+    EditorView.contentAttributes.of({ spellcheck: "true" }),
+    livePreview(lib),
+    ...(oneLine ? [oneLineFilter] : []),
+  ];
+  return new EditorView({ parent, state: EditorState.create({ doc: text, extensions }) });
+}
+
 
 /* A doc gives its images and links by a path relative to its own folder: they load from
    the worktree through the server. An absolute URL, a root path or an anchor stays. */

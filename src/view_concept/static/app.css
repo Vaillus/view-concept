@@ -284,6 +284,21 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .doc-edit-text { min-height: 60vh; font-size: 13px; line-height: 1.5; tab-size: 2; }
 .doc-edit-note { margin: 0; font-size: 12px; color: var(--warn); }
 .doc-edit-actions { display: flex; gap: 6px; }
+/* the live-preview editor (CodeMirror 6): the block's Markdown in the block's own type,
+   its syntax shown only in the token under the cursor */
+.block-editor .cm-editor { background: var(--raised); color: var(--ink); border: 1px solid var(--accentline); font: inherit; }
+.block-editor .cm-editor.cm-focused { outline: 1px solid var(--accent); }
+.block-editor .cm-editor .cm-scroller { font-family: inherit; line-height: inherit; }
+.block-editor .cm-editor .cm-content { padding: 4px 6px; caret-color: var(--ink); }
+.block-editor .cm-editor .cm-line { padding: 0; }
+.block-editor .cm-editor .cm-cursor { border-left-color: var(--ink); }
+.block-editor .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.block-editor .cm-editor .cm-selectionLayer .cm-selectionBackground { background: var(--accentbg); }
+.cm-vc-strong { font-weight: bold; }
+.cm-vc-em { font-style: italic; }
+.cm-vc-code { background: var(--neutralbg); color: var(--neutralink); }
+.cm-vc-link { color: var(--accent); text-decoration: underline; }
+.cm-vc-tex { color: var(--alt); }
 /* a stale passage: a doc passage the model contradicts */
 ::highlight(ev-stale) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }
 
