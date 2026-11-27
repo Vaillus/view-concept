@@ -340,7 +340,7 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest("#header-menu") || e.target.closest("button, a")) closeMenu();
 });
 document.addEventListener("keydown", (e) => {
-  if (!state || e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (!state || e.target.closest("textarea, input, [contenteditable]") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "0" && hasScopingTab()) setTab("scoping");
   if (e.key === "1") setTab("plan");
   if (e.key === "2") setTab("model");
@@ -929,6 +929,7 @@ function renderSections() {
     if (keep[1] != null) keep[0].setSelectionRange(keep[1], keep[2]);
     keep[0].scrollTop = keep[3];
   }
+  placeBlockEditor(); // after the annotations, which would wrap words inside the editor
   placeFrames();
   holdAnchor();
   if (anchor && anchor.restore) {
@@ -1729,6 +1730,217 @@ function liveEditor(lib, parent, text, { oneLine = false, save, cancel }) {
   return new EditorView({ parent, state: EditorState.create({ doc: text, extensions }) });
 }
 
+/* ---------------- inline edit ----------------
+   An inline edit changes one block of an explanation section (a paragraph, a list item,
+   a heading or a table cell) in place, saved straight into the section's file with no
+   agent rewriting it. Pointing at a block that opens shows « edit » in its margin; a
+   click opens the block where it stands. A block of a Markdown section is an element
+   carrying `data-span`, its source span, written by the server's page-only renderer:
+   it opens in the live-preview editor on the block's text (`blocks[span]` of the
+   section's view, its Markdown markers left out); an item's nested list stays under it.
+   One block is open at a time in the page: opening another while yours holds unsaved
+   words asks first, as the Doc tab does for a doc. Opening a block marks its whole
+   section read (as « updated · mark read »), so your own words never show green.
+   ⌘↵ saves (POST /api/s/<slug>/edit with the whole file the block opened on), Esc
+   cancels (asking first when you changed it); no word changed writes nothing. A refused
+   save (409: the file is no longer the one the block opened on) leaves the editor open
+   with your words under a notice: there is no « save anyway », since the span may now
+   point at other text. The editor is one element kept across renders (placed again by
+   placeBlockEditor), so a re-render while you type keeps your words. */
+let blockEdit = null;
+// { kind: "md", section, span, base (the section's file at open), text (the block's text at open), oneLine,
+//   box, host, note, save, view (its EditorView once CodeMirror is loaded), error (the last refusal), saving }
+
+// A section whose blocks open: an explanation section, neither the drawing nor a refactor section.
+const editableSection = (id) => !!state && id in state.sections && tabOf(id) === "model";
+const blockDirty = () => !!blockEdit && blockEdit.kind === "md" && !!blockEdit.view
+  && blockEdit.view.state.doc.toString() !== blockEdit.text;
+
+/* The « edit » mark: one button, fixed beside the block under the pointer (or the block
+   tapped, under touch controls), hidden a moment after the pointer leaves both. */
+const editMark = el("button", { class: "edit-mark", text: "edit", title: "Edit this block in place", hidden: true });
+document.body.append(editMark);
+let markedBlock = null; // { section, span } of the block the mark stands beside
+let markTimer = null;
+
+// The block of a Markdown section that opens under `target`, or null.
+function blockAt(target) {
+  const node = target && target.closest ? target.closest(".sec > .body [data-span]") : null;
+  if (!node || node.closest(".block-editor") || node.querySelector(".block-editor")) return null;
+  return editableSection(node.closest(".sec").dataset.id) ? node : null;
+}
+
+function showEditMark(node) {
+  clearTimeout(markTimer);
+  markedBlock = { section: node.closest(".sec").dataset.id, span: node.dataset.span };
+  editMark.hidden = false;
+  const r = node.getBoundingClientRect(), view = node.closest(".view").getBoundingClientRect();
+  editMark.style.top = `${r.top}px`;
+  editMark.style.left = `${Math.max(view.left + 2, r.left - editMark.offsetWidth - 10)}px`;
+}
+
+function hideEditMark(later = false) {
+  clearTimeout(markTimer);
+  if (later) { markTimer = setTimeout(hideEditMark, 400); return; }
+  editMark.hidden = true;
+  markedBlock = null;
+}
+
+$("#model").addEventListener("mousemove", (e) => {
+  if (isTouch()) return;
+  const node = blockAt(e.target);
+  if (node) showEditMark(node);
+  else if (!editMark.hidden) hideEditMark(true);
+});
+$("#model").addEventListener("mouseleave", () => { if (!editMark.hidden) hideEditMark(true); });
+$("#model").addEventListener("scroll", () => hideEditMark(), { passive: true });
+editMark.addEventListener("mouseenter", () => clearTimeout(markTimer));
+editMark.addEventListener("mouseleave", () => hideEditMark(true));
+editMark.addEventListener("mousedown", (e) => e.preventDefault()); // keeps the selection and the focus
+editMark.addEventListener("click", () => {
+  const m = markedBlock;
+  hideEditMark();
+  if (m) openMdBlock(m.section, m.span);
+});
+
+/* Closes the open block before another opens: false when you keep it. */
+function dropOpenBlock() {
+  if (!blockEdit) return true;
+  if (blockDirty() && !confirm(`Drop your unsaved edit of a block of section ${numberOf(blockEdit.section)}?`)) return false;
+  closeMdBlock();
+  return true;
+}
+
+async function openMdBlock(id, span) {
+  if (blockEdit && blockEdit.kind === "md" && blockEdit.section === id && blockEdit.span === span) {
+    if (blockEdit.view) blockEdit.view.focus();
+    return;
+  }
+  const sec = state.sections[id];
+  const text = sec && sec.blocks ? sec.blocks[span] : undefined;
+  const node = document.querySelector(`#sec-${CSS.escape(id)} > .body [data-span="${CSS.escape(span)}"]`);
+  if (typeof text !== "string" || !node || !editableSection(id)) return;
+  if (!dropOpenBlock()) return;
+  const oneLine = /^(H[1-6]|TH|TD)$/.test(node.tagName);
+  const host = el("div", { class: "be-host" }, el("p", { class: "dim be-loading", text: "loading the editor…" }));
+  const note = el("p", { class: "doc-edit-note", hidden: true });
+  const save = el("button", { class: "btn primary", text: "save", title: "Write the block into the section's file (⌘↵)",
+                              onclick: () => saveMdBlock() });
+  const cancel = el("button", { class: "btn", text: "cancel", title: "Drop your edit (Esc)", onclick: () => cancelMdBlock() });
+  const box = el("div", { class: `block-editor${oneLine ? " one-line" : ""}` }, host, note,
+                 el("div", { class: "doc-edit-actions" }, save, cancel));
+  const edit = { kind: "md", section: id, span, base: sec.md, text, oneLine, box, host, note, save, view: null, error: "", saving: false };
+  blockEdit = edit;
+  hideEditMark();
+  placeBlockEditor();
+  if (isUpdated(id)) markSeen([id]);
+  let lib;
+  try { lib = await loadEditorLib(); } catch (e) {
+    if (blockEdit === edit) closeMdBlock();
+    toast(`Could not load the editor: ${e.message}`);
+    return;
+  }
+  if (blockEdit !== edit) return;
+  host.replaceChildren();
+  edit.view = liveEditor(lib, host, text, { oneLine, save: () => saveMdBlock(), cancel: () => cancelMdBlock() });
+  edit.view.focus();
+}
+
+/* Puts the open Markdown block's editor in place of the block's own content, after each
+   render: the block found again by its span, else the top of its section (its file
+   changed, and the notice says so). */
+function placeBlockEditor() {
+  const e = blockEdit;
+  if (!e || e.kind !== "md") return;
+  const body = document.querySelector(`#sec-${CSS.escape(e.section)} > .body`);
+  if (!body) return;
+  const focused = !!e.view && e.view.hasFocus;
+  const node = body.querySelector(`[data-span="${CSS.escape(e.span)}"]`);
+  if (node) {
+    const nested = node.tagName === "LI" ? [...node.children].find((c) => c.tagName === "UL" || c.tagName === "OL") : null;
+    for (const c of [...node.childNodes]) {
+      if (c === nested) break;
+      c.remove();
+    }
+    node.insertBefore(e.box, nested || null);
+  } else body.prepend(e.box);
+  updateBlockNotice();
+  if (focused) e.view.focus();
+}
+
+// The notice under the open editor: the last refusal, else what will refuse a save.
+function blockNotice(e) {
+  if (e.error) return e.error;
+  if ((state.sections[e.section] || {}).md !== e.base) {
+    return "The section changed since you opened this block: saving is refused. Copy your words, cancel, and open the block again.";
+  }
+  return "";
+}
+function updateBlockNotice() {
+  const e = blockEdit;
+  if (!e || e.kind !== "md") return;
+  const text = blockNotice(e);
+  e.note.textContent = text;
+  e.note.hidden = !text;
+}
+
+function closeMdBlock() {
+  const e = blockEdit;
+  if (!e || e.kind !== "md") return;
+  blockEdit = null;
+  if (e.view) e.view.destroy();
+  renderSections();
+}
+
+function cancelMdBlock() {
+  if (!blockEdit || blockEdit.kind !== "md") return;
+  if (blockDirty() && !confirm("Drop your edit?")) return;
+  closeMdBlock();
+}
+
+/* POST /api/s/<slug>/edit: {ok, status, detail (the server's sentence)}. */
+async function postEdit(body) {
+  try {
+    const r = await fetch(`/api/s/${SLUG}/edit`, { method: "POST", headers: { "content-type": "application/json" },
+                                                   body: JSON.stringify(body) });
+    const data = await r.json().catch(() => ({}));
+    const detail = typeof data.detail === "string" ? data.detail
+      : data.detail ? JSON.stringify(data.detail) : `${r.status} ${r.statusText}`;
+    return { ok: r.ok, status: r.status, detail };
+  } catch (err) { return { ok: false, status: 0, detail: String((err && err.message) || err) }; }
+}
+
+// The notice a refused save leaves under the editor.
+function editRefusal({ status, detail }) {
+  const sentence = String(detail || "").replace(/\.$/, "");
+  const why = sentence.charAt(0).toLowerCase() + sentence.slice(1);
+  if (status === 409) return `Refused: ${why}. Copy your words, cancel, and open the block again on the new text.`;
+  return `Could not save: ${why}.`;
+}
+
+async function saveMdBlock() {
+  const e = blockEdit;
+  if (!e || e.kind !== "md" || !e.view || e.saving) return;
+  const text = e.view.state.doc.toString();
+  if (text === e.text) { closeMdBlock(); return; } // no word changed: nothing is written
+  e.saving = true;
+  e.save.disabled = true;
+  const r = await postEdit({ section: e.section, base: e.base, span: e.span, text });
+  e.saving = false;
+  e.save.disabled = false;
+  if (blockEdit !== e) return;
+  if (!r.ok) {
+    e.error = editRefusal(r);
+    updateBlockNotice();
+    return;
+  }
+  // The editor keeps showing your words until the section comes back rendered with them.
+  blockEdit = null;
+  toast("Block saved");
+  await load();
+  e.view.destroy();
+}
+
 
 /* A doc gives its images and links by a path relative to its own folder: they load from
    the worktree through the server. An absolute URL, a root path or an anchor stays. */
@@ -2098,7 +2310,7 @@ function linkCitations(root) {
 
 /* ---------------- term annotation ---------------- */
 
-const SKIP = "code, pre, .katex, .mermaid, .term, .audit, h2";
+const SKIP = "code, pre, .katex, .mermaid, .term, .audit, h2, .block-editor";
 
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
@@ -2766,7 +2978,7 @@ function currentSelection() {
     return quote ? { section: box.dataset.anchor, quote, prefix: "", rect: range.getBoundingClientRect() } : null;
   }
   const sec = start.closest(".sec");
-  if (!sec || !sec.closest("#model, #refactor, #doc")) return null;
+  if (!sec || !sec.closest("#model, #refactor, #doc") || start.closest(".block-editor")) return null;
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;
@@ -2821,7 +3033,7 @@ document.addEventListener("selectionchange", () => {
 });
 
 document.addEventListener("mouseup", (e) => {
-  if (isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop, .doc-editor")) return;
+  if (isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop, .doc-editor, .block-editor, .edit-mark")) return;
   setTimeout(() => {
     const s = currentSelection();
     showSelection(s);
@@ -2845,7 +3057,8 @@ $("#sel-actions .ask").addEventListener("click", () => {
    Under touch controls a tap does what a resting pointer does with a mouse: on an
    underlined term, its tip (a tap elsewhere or a scroll hides it); on a changed block,
    its new words, until a tap elsewhere; on a side thread's passage, the thread. A term
-   inside a thread's passage shows its tip; the rest of the passage opens the thread.
+   inside a thread's passage shows its tip; the rest of the passage opens the thread; a
+   block that opens for an inline edit shows its « edit » mark.
    A tap anywhere else in the page, or in a section frame, clears the paint (the frame
    posts its taps: the tap message), and a scroll of any pane hides the tip. */
 document.addEventListener("click", (e) => {
@@ -2859,6 +3072,10 @@ document.addEventListener("click", (e) => {
   else $("#tip").hidden = true;
   const b = changedBlock(e.target);
   if (b !== hoveredChange) paintChange(b);
+  // A tap on a block that opens shows its « edit » mark (see "inline edit").
+  const block = !t && blockAt(e.target);
+  if (block) showEditMark(block);
+  else if (!e.target.closest(".edit-mark")) hideEditMark();
   tapElsewhere(null);
   if (!t && e.target.closest(".view")) {
     const th = threadAt(e.clientX, e.clientY);

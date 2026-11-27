@@ -284,6 +284,14 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .doc-edit-text { min-height: 60vh; font-size: 13px; line-height: 1.5; tab-size: 2; }
 .doc-edit-note { margin: 0; font-size: 12px; color: var(--warn); }
 .doc-edit-actions { display: flex; gap: 6px; }
+/* inline edit: the « edit » mark beside a block that opens, and the open block's editor
+   in place of the block's own text */
+.edit-mark { position: fixed; z-index: 7; padding: 0 6px; font-size: 11px; line-height: 18px; color: var(--muted);
+             background: var(--bg); border: 1px solid var(--line); cursor: pointer; }
+.edit-mark:hover { color: var(--accent); border-color: var(--accent); }
+.block-editor { display: flex; flex-direction: column; gap: 6px; margin: 2px 0; font-weight: inherit; }
+.block-editor .be-loading { margin: 0; font-size: 12px; }
+.block-editor .doc-edit-actions, .block-editor .doc-edit-note { font-size: 12px; font-weight: normal; }
 /* the live-preview editor (CodeMirror 6): the block's Markdown in the block's own type,
    its syntax shown only in the token under the cursor */
 .block-editor .cm-editor { background: var(--raised); color: var(--ink); border: 1px solid var(--accentline); font: inherit; }
