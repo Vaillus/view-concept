@@ -220,6 +220,7 @@ function render() {
   followSession();
   renderPlan();
   renderSections();
+  renderIndex();
   renderReview();
   renderPopover(); // a sent batch changes what the open thread offers
 }
@@ -262,6 +263,7 @@ function setTab(name) {
   if (name !== "review") renderMermaid($(`.view[data-view="${name}"]`));
   positionPopover();
   if (name === "metrics") refreshMetrics();
+  renderIndex();
   savePosition();
 }
 
@@ -3142,6 +3144,77 @@ function scrollToSection(id) {
   const s = openItemOf(id) || document.getElementById(`sec-${id}`);
   if (s) pageScroll(s.closest(".view"), () => s.scrollIntoView({ block: "start", behavior: "smooth" }));
 }
+
+/* ---------------- the section index ----------------
+   The explanation tab's table of contents, shown while the pointer rests on the view's
+   left margin (the space left of the sections) and slid in from the view's left edge:
+   one line per section (number, title), the section being read in the accent colour with
+   the sub-headings of its body under it, an unwritten section dimmed, an updated one with
+   a dot. A click scrolls to the section or the sub-heading. « pin » keeps it open,
+   remembered in this browser. The index sits in the margin; a margin narrower than
+   INDEX_MIN_MARGIN gets it over the text. Only where a pointer hovers, out of the narrow
+   layout. */
+const INDEX_PINNED_KEY = "view-concept:index-pinned"; // per browser, for every session
+const INDEX_MIN_MARGIN = 220; // px
+const INDEX_OPEN_DELAY = 150, INDEX_CLOSE_DELAY = 200; // ms: the pointer crossing the margin opens nothing
+const sectionIndex = { open: false, pinned: !!loadJSON(INDEX_PINNED_KEY, false), timer: 0, frame: 0 };
+const indexLayer = $("#index-layer"), indexZone = $(".index-zone"), indexPanel = $("#section-index");
+
+// The rank of the last of `nodes` whose top is above the line 60px under the view's top; -1 if none.
+const readRank = (nodes, top) => nodes.reduce((k, n, i) => (n.getBoundingClientRect().top <= top + 60 ? i : k), -1);
+
+function renderIndex() {
+  const view = $("#model");
+  indexLayer.hidden = tab !== "model" || isNarrow() || isTouch();
+  if (indexLayer.hidden) return;
+  const box = view.getBoundingClientRect();
+  Object.assign(indexLayer.style, { left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` });
+  const secs = [...view.querySelectorAll(":scope > .sec[data-id]")];
+  const margin = secs.length ? secs[0].getBoundingClientRect().left - box.left - 24 : 0;
+  const over = margin < INDEX_MIN_MARGIN;
+  const width = over ? 300 : Math.min(margin - 8, 340);
+  const left = over ? 0 : Math.max(margin - width, 8);
+  const shown = sectionIndex.open || sectionIndex.pinned;
+  indexZone.style.width = `${Math.max(margin, 18)}px`;
+  indexLayer.classList.toggle("shown", shown);
+  indexPanel.classList.toggle("open", shown);
+  indexPanel.style.cssText = `left:${left}px;width:${width}px;--off:${left + width + 12}px`;
+  if (!shown) return;
+  const cur = Math.max(readRank(secs, box.top), 0);
+  const subs = secs[cur] ? [...secs[cur].querySelectorAll(":scope > .body h3")] : [];
+  const sub = readRank(subs, box.top);
+  const scroll = indexPanel.scrollTop;
+  indexPanel.replaceChildren(
+    el("div", { class: "pane-head" }, "index",
+      el("button", { class: `index-pin${sectionIndex.pinned ? " on" : ""}`, text: sectionIndex.pinned ? "◉ pinned" : "○ pin",
+                     title: "Keep the index open", onclick: () => setIndexPinned(!sectionIndex.pinned) })),
+    ...secs.flatMap((node, k) => {
+      const id = node.dataset.id;
+      const row = el("div", { class: `index-row${k === cur ? " current" : ""}${id in state.sections ? "" : " unwritten"}${isUpdated(id) ? " updated" : ""}`,
+                              title: titleOf(id), onclick: () => { releaseAnchor(); scrollToSection(id); } },
+        el("span", { class: "num", text: numberOf(id) }), el("span", { class: "i-title", text: titleOf(id) }));
+      return [row, ...(k === cur ? subs.map((h, j) => el("div", { class: `index-sub${j === sub ? " current" : ""}`, text: h.textContent,
+        onclick: () => { releaseAnchor(); pageScroll(view, () => h.scrollIntoView({ block: "start", behavior: "smooth" })); } })) : [])];
+    }));
+  indexPanel.scrollTop = scroll;
+}
+
+function setIndexPinned(on) {
+  sectionIndex.pinned = on;
+  saveJSON(INDEX_PINNED_KEY, on);
+  renderIndex();
+}
+function setIndexOpen(on, delay) {
+  clearTimeout(sectionIndex.timer);
+  sectionIndex.timer = setTimeout(() => { sectionIndex.open = on; renderIndex(); }, delay);
+}
+const laterIndex = () => { cancelAnimationFrame(sectionIndex.frame); sectionIndex.frame = requestAnimationFrame(renderIndex); };
+indexZone.addEventListener("mouseenter", () => setIndexOpen(true, INDEX_OPEN_DELAY));
+indexZone.addEventListener("mouseleave", (e) => { if (!indexPanel.contains(e.relatedTarget)) setIndexOpen(false, INDEX_CLOSE_DELAY); });
+indexPanel.addEventListener("mouseenter", () => clearTimeout(sectionIndex.timer));
+indexPanel.addEventListener("mouseleave", (e) => { if (!indexZone.contains(e.relatedTarget)) setIndexOpen(false, INDEX_CLOSE_DELAY); });
+$("#model").addEventListener("scroll", laterIndex, { passive: true });
+new ResizeObserver(laterIndex).observe($("#model")); // the window, the sidebar shown or hidden
 
 /* ---------------- selection -> composer ---------------- */
 
