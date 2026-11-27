@@ -113,7 +113,9 @@ you started for it has ended and you gave its report, or your own work on
 it is done), run `view-concept done <slug> <batch id>`, the id its header
 printed (`b4`). Batches queued and handled by one run: name the last of
 them. Record it for every batch, also one that starts no run (« Stop
-grill », a batch you answer yourself), and never before the run ends.
+grill », a batch you answer yourself), and never before the run ends. While
+the indicator reads « processing », the page locks the user's inline edits
+(see **Inline edits**): a batch you never record keeps them locked.
 
 ## Scoping
 
@@ -409,13 +411,15 @@ Run `view-concept status <slug> audit`, then:
 
 1. `view-concept check <slug>` writes every forward reference and early use
    to `audit.json` (issues `forward` and `early`). Fix each one by the
-   precedence rule.
+   precedence rule. One in an inline edit still in its section stays, as
+   **Inline edits** says.
    It also prints the section problems, which it does not write to
    `audit.json`: an HTML block in a Markdown section (move it into an HTML
    section), two files for one section, an HTML section over 2 MB, a question
    waiting on a section the outline no longer has (`stale-anchor`: re-anchor
    it with `view-concept anchor`). Fix each one.
-2. Re-read every section for the words that slipped past the lexicon, and add
+2. Re-read every section, but the inline edits still in their section, for
+   the words that slipped past the lexicon, and add
    each one to `audit.json` (`[{"term", "section", "issue", "note"}]`, keeping
    the entries `check` wrote), with one of these issues: `undefined` (a
    domain term absent from the lexicon), `metaphor` (a word that names an
@@ -570,15 +574,20 @@ me » or « Stop grill » in the scope block, a **batch** reaches you through
 the comment channel, shaped like:
 
 ```
-view-concept · <slug> · batch b2 · 2 comments
+view-concept · <slug> · batch b2 · 2 comments · 1 inline edit
 action: <the button the user clicked, if any>
 note: <optional note for the whole batch>
+inline edit ie1 · section 3 « <its title> » (the user's text: keep it word for word)
+  before: <the section's text before the edit>
+  after:  <the user's text>
 [c4] §3 (s3) « quoted passage »
     comment text
 ```
 
-A quote of the form `« plan · <section title> »` is a comment on that
-section's line in the Plan tab, not on its prose. A comment can end with
+The `inline edit` lines appear only when the user edited a section's text
+in the page since the last batch (see **Inline edits**). A quote of the form
+`« plan · <section title> »` is a comment on that section's line in the Plan
+tab, not on its prose. A comment can end with
 `(from side thread t3: threads/t3.json)`: the user discussed the passage in a
 read-only side thread first, which you never saw. Read that file (in the
 session folder) before acting on the comment; when the thread line is the
@@ -628,6 +637,56 @@ or, when it is larger, add a section where it belongs in the outline, not at
 the end, with its new terms in the lexicon. Say where it went (« folded into
 section 3 », « added as section 5 »). An answer that only matters to the
 conversation stays in the terminal.
+
+### Inline edits
+
+An **inline edit** is a change the user made to a section's text in the
+page, saved straight into the section's file with no agent: a paragraph, a
+list item, a heading or a table cell of the modeling part. Its before and
+after are the text as the file holds it. The batch that carries it lists it
+as above; `view-concept context <slug> --role writer` lists every edit of
+the session under « Inline edits (the user's words: the keep rule) », each
+« still in its section » or « gone from its section »: read it when you no
+longer have the batches that carried them.
+
+**The keep rule.** Every rewrite of a section keeps an edit still in its
+section word for word, the audit included: write around it. Rewrite one only
+when the batch you work on makes it wrong: a comment of the batch on that
+passage, or a change in the code or the triage the passage describes. Style,
+flow and the lexicon never make it wrong. When you rewrite one, whatever
+made it wrong, record it in the edit record: `view-concept rewrite <slug>
+<edit id> --reason "<one line>" --file -`, its new text as the file holds it
+on stdin (`--text "<text>"` for a single line). The page shows the rewrite
+on the user's words, with your reason on hover: no reply, the batch's or a
+comment's, names it. Never cut the passage in pieces, nor move it to another
+section. An edit gone from its section (you rewrote it under this rule, or
+the user edited the block again) binds nothing.
+
+**A batch of edits alone** (`0 comments`, no action) writes no section and
+passes no checkpoint. Take the edits in:
+
+- a term the edits bring that the lexicon lacks gets an entry, with its tip
+  (`view-concept plan`);
+- a concept or a rule the edits change is logged in the change
+  history, the edit as its cause (`--cause ie1`);
+- run `view-concept check <slug>` and handle what it lists on the edited
+  sections as the table below says;
+- reply to the batch with what you took in: `view-concept resolve <slug>
+  <batch id> --reply "<one line>"`, and one line in the terminal.
+
+A batch with comments and edits runs as any batch, the edits binding it from
+its start, and taken in the same way.
+
+**The user's words and the precedence check.** The user's words follow no
+lexicon. In an edit still in its section:
+
+| `check` or the audit finds | You |
+|---|---|
+| an early use (or a forward reference) | leave it in `audit.json`, so its underline shows on the user's word, and name it in your reply; never reword the passage nor move a section for it |
+| a term the lexicon lacks | add the entry, with its tip; the words stay |
+| a metaphor, an ambiguous word, a bare reference | nothing: the audit skips the user's passages |
+
+The user then rewords it, or comments to have you move the sections.
 
 ## Agent questions
 

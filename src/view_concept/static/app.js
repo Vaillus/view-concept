@@ -340,7 +340,7 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest("#header-menu") || e.target.closest("button, a")) closeMenu();
 });
 document.addEventListener("keydown", (e) => {
-  if (!state || e.target.closest("textarea, input") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (!state || e.target.closest("textarea, input, [contenteditable]") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "0" && hasScopingTab()) setTab("scoping");
   if (e.key === "1") setTab("plan");
   if (e.key === "2") setTab("model");
@@ -896,6 +896,8 @@ function renderSections() {
   else if (anchor && anchor.restore) { /* the saved position, placed after this render */ }
   else if (!anchor || anchor.view !== shown || !anchorNode(anchor)) anchor = shown && shown.scrollTop ? readingAnchor(shown) : null;
   parkFrames();
+  // The open block's editor is detached by the rebuild below, which takes its focus: read it now.
+  const editorFocused = !!blockEdit && blockEdit.kind === "md" && !!blockEdit.view && blockEdit.view.hasFocus;
   // A question box at the end of a section is re-attached on each render: keep its focus.
   const active = document.activeElement;
   // (the scope block too: a docs review shows it at the top of the Doc tab, re-attached)
@@ -929,6 +931,8 @@ function renderSections() {
     if (keep[1] != null) keep[0].setSelectionRange(keep[1], keep[2]);
     keep[0].scrollTop = keep[3];
   }
+  placeBlockEditor(editorFocused); // after the annotations, which would wrap words inside the editor
+  if (editLocked()) hideEditMark();
   placeFrames();
   holdAnchor();
   if (anchor && anchor.restore) {
@@ -937,7 +941,7 @@ function renderSections() {
   }
   anchorWatch.disconnect();
   for (const view of docViews()) for (const child of view.children) anchorWatch.observe(child);
-  frames.forEach((f, id) => { postTerms(id, f); postPins(id, f); });
+  frames.forEach((f, id) => { postTerms(id, f); postPins(id, f); postEditLock(id, f); });
   applyHighlights();
   renderThreadChips();
   positionPopover();
@@ -1609,6 +1613,413 @@ function cancelDocEdit() {
   renderSections();
 }
 
+/* ---------------- the live-preview editor ----------------
+   A block of a Markdown section opens in the live-preview editor (see "inline edit"):
+   CodeMirror 6 on the block's Markdown, shown formatted, with the syntax of bold,
+   italics, links, inline code and inline maths (the ** around a bold word, the $ around
+   a formula) visible only in the token the cursor is in; elsewhere a formula is drawn
+   with KaTeX. What you type is Markdown: the block's text holds exactly what you typed.
+   CodeMirror loads from cdn.jsdelivr.net the first time a block opens, its modules by
+   package name: the import map of session.html points every name at one pinned file, so
+   the modules share one @codemirror/state and one @codemirror/view (two copies would not
+   recognize each other's extensions). */
+let editorLib = null; // the promise of CodeMirror's modules, once a block asked for them
+
+function loadEditorLib() {
+  editorLib = editorLib || Promise.all([import("@codemirror/state"), import("@codemirror/view"), import("@codemirror/commands")])
+    .then(([state, view, commands]) => ({ state, view, commands }))
+    .catch((e) => { editorLib = null; throw e; });
+  return editorLib;
+}
+
+/* The inline Markdown tokens of a block's text: {from, to, cls (the class its content
+   gets), marks (the [from, to] of its syntax), content, tex (a formula's TeX)}. Code
+   spans first, then maths (nothing inside either is Markdown), then a backslash's
+   escape, then links, bold and italics; each pass masks what it took, so a later one
+   does not take it again. */
+function inlineTokens(text) {
+  const out = [];
+  let work = text;
+  const mask = (a, b) => { work = work.slice(0, a) + "\u0000".repeat(b - a) + work.slice(b); };
+  const scan = (re, open, close, cls, whole = false) => {
+    for (const m of [...work.matchAll(re)]) {
+      const from = m.index, to = m.index + m[0].length;
+      const o = typeof open === "function" ? open(m) : open, c = typeof close === "function" ? close(m) : close;
+      out.push({ from, to, cls, marks: [[from, from + o], [to - c, to]], content: [from + o, to - c] });
+      if (whole) mask(from, to);
+      else { mask(from, from + o); mask(to - c, to); }
+    }
+  };
+  scan(/(`+)(?!`)([\s\S]*?[^`])\1(?!`)/g, (m) => m[1].length, (m) => m[1].length, "cm-vc-code", true);
+  for (const m of [...work.matchAll(/(?<![\\$])\$(?=[^\s$])((?:\\.|[^$\\\n])*?[^\s\\])\$(?![$\d])/g)]) {
+    out.push({ from: m.index, to: m.index + m[0].length, cls: "cm-vc-tex", tex: m[1],
+               marks: [], content: [m.index, m.index + m[0].length] });
+    mask(m.index, m.index + m[0].length);
+  }
+  for (const m of [...work.matchAll(/\\[!-/:-@[-`{-~]/g)]) mask(m.index, m.index + 2);
+  scan(/\[([^\]\n]*)\]\([^()\s]*(?:\s+"[^"\n]*")?\)/g, 1, (m) => m[0].length - 1 - m[1].length, "cm-vc-link");
+  scan(/(\*\*|__)(?=[^\s*_])([\s\S]*?\S)\1/g, 2, 2, "cm-vc-strong");
+  scan(/\*(?=[^\s*])([\s\S]*?[^\s*])\*/g, 1, 1, "cm-vc-em");
+  scan(/(?<![\p{L}\p{N}_])_(?=[^\s_])([\s\S]*?[^\s_])_(?![\p{L}\p{N}_])/gu, 1, 1, "cm-vc-em");
+  return out;
+}
+
+/* The live preview, a CodeMirror view plugin: each token's content gets its class, and
+   its syntax is hidden unless the cursor (or the selection) touches the token while the
+   editor has the focus; a formula away from the cursor is replaced by its drawing. */
+function livePreview(lib) {
+  const { Decoration, ViewPlugin, WidgetType } = lib.view;
+  class MathWidget extends WidgetType {
+    constructor(tex) { super(); this.tex = tex; }
+    eq(other) { return other.tex === this.tex; }
+    toDOM() {
+      const s = document.createElement("span");
+      s.className = "cm-vc-math";
+      try { katex.render(this.tex, s, { throwOnError: false }); } catch (e) { s.textContent = `$${this.tex}$`; }
+      return s;
+    }
+    ignoreEvent() { return false; } // a click on a formula puts the cursor in it
+  }
+  const hide = Decoration.replace({});
+  const build = (view) => {
+    const ranges = view.state.selection.ranges;
+    const decos = [];
+    for (const t of inlineTokens(view.state.doc.toString())) {
+      const active = view.hasFocus && ranges.some((r) => r.from <= t.to && r.to >= t.from);
+      if (t.tex !== undefined) {
+        decos.push(active ? Decoration.mark({ class: t.cls }).range(t.from, t.to)
+                          : Decoration.replace({ widget: new MathWidget(t.tex) }).range(t.from, t.to));
+        continue;
+      }
+      if (t.content[1] > t.content[0]) decos.push(Decoration.mark({ class: t.cls }).range(t.content[0], t.content[1]));
+      if (!active) for (const [a, b] of t.marks) if (b > a) decos.push(hide.range(a, b));
+    }
+    return Decoration.set(decos, true);
+  };
+  return ViewPlugin.fromClass(class {
+    constructor(view) { this.decorations = build(view); }
+    update(u) { if (u.docChanged || u.selectionSet || u.focusChanged) this.decorations = build(u.view); }
+  }, { decorations: (p) => p.decorations });
+}
+
+/* A live-preview editor on `text`, in `parent`: ⌘↵ calls save, Esc calls cancel. A block
+   of one line (`oneLine`: a heading, a table cell) takes no line: Enter adds none, and a
+   line break pasted in becomes a space. */
+function liveEditor(lib, parent, text, { oneLine = false, save, cancel }) {
+  const { EditorState, Prec } = lib.state;
+  const { EditorView, keymap } = lib.view;
+  const { history, defaultKeymap, historyKeymap } = lib.commands;
+  const run = (f) => () => { f(); return true; };
+  const oneLineFilter = EditorState.transactionFilter.of((tr) => {
+    if (!tr.docChanged) return tr;
+    const doc = tr.newDoc.toString(), fix = [];
+    for (let i = doc.indexOf("\n"); i >= 0; i = doc.indexOf("\n", i + 1)) fix.push({ from: i, to: i + 1, insert: " " });
+    return fix.length ? [tr, { changes: fix, sequential: true }] : tr;
+  });
+  const extensions = [
+    history(),
+    Prec.highest(keymap.of([
+      { key: "Mod-Enter", run: run(save) },
+      { key: "Ctrl-Enter", run: run(save) },
+      { key: "Escape", run: run(cancel) },
+      ...(oneLine ? [{ key: "Enter", run: () => true }, { key: "Shift-Enter", run: () => true }] : []),
+    ])),
+    keymap.of([...defaultKeymap, ...historyKeymap]),
+    EditorView.lineWrapping,
+    EditorView.contentAttributes.of({ spellcheck: "true" }),
+    livePreview(lib),
+    ...(oneLine ? [oneLineFilter] : []),
+  ];
+  return new EditorView({ parent, state: EditorState.create({ doc: text, extensions }) });
+}
+
+/* ---------------- inline edit ----------------
+   An inline edit changes one block of an explanation section (a paragraph, a list item,
+   a heading or a table cell) in place, saved straight into the section's file with no
+   agent rewriting it. Pointing at a block that opens shows « edit » in its margin; a
+   click opens the block where it stands. A block of a Markdown section is an element
+   carrying `data-span`, its source span, written by the server's page-only renderer:
+   it opens in the live-preview editor on the block's text (`blocks[span]` of the
+   section's view, its Markdown markers left out); an item's nested list stays under it.
+   One block is open at a time in the page: opening another while yours holds unsaved
+   words asks first, as the Doc tab does for a doc. Opening a block marks its whole
+   section read (as « updated · mark read »), so your own words never show green.
+   ⌘↵ saves (POST /api/s/<slug>/edit with the whole file the block opened on), Esc
+   cancels (asking first when you changed it); no word changed writes nothing. A refused
+   save (409: the file is no longer the one the block opened on) leaves the editor open
+   with your words under a notice: there is no « save anyway », since the span may now
+   point at other text. The editor is one element kept across renders (placed again by
+   placeBlockEditor), so a re-render while you type keeps your words.
+   A block of an HTML section is an element carrying `data-block`, its block mark,
+   written by the server on the copy it serves the frame: it opens in the frame itself
+   (frame.js), as its visible text with its inline tags locked. The page's part goes
+   through the edit messages: it tells each frame whether its blocks open (edit-lock),
+   hears a block open (edit-open: the section is marked read, and the one-block rule
+   applies, asking first only when the frame last said the block holds unsaved words,
+   edit-dirty), forgets it when its frame reloads, sends its save (edit-save: the runs of text before and after, with the
+   section's file at open as base) and answers with the result (edit-saved).
+   The lock: while the batch indicator reads « processing » (the last batch sent is not
+   recorded done), a role agent may be rewriting any section, so no « edit » mark shows
+   and no block opens, in the page or in a frame. A block left open when you press
+   « Send » stays open with a notice; its save, sent anyway, is refused by the server
+   (423) and the editor keeps your words. */
+let blockEdit = null;
+// { kind: "md", section, span, base (the section's file at open), text (the block's text at open), oneLine,
+//   box, host, note, save, view (its EditorView once CodeMirror is loaded), error (the last refusal), saving }
+// | { kind: "html", section, block (its mark), f (its frame), base (the section's file at open),
+//     dirty (the frame's last edit dirty: it holds unsaved words) }
+
+// Editing is locked while the last batch is processing (see "the batch indicator").
+const editLocked = () => !!state && !!state.batch && state.batch.state === "processing";
+// A section whose blocks open: an explanation section, neither the drawing nor a refactor section.
+const editableSection = (id) => !!state && id in state.sections && tabOf(id) === "model";
+const blockDirty = () => !!blockEdit && blockEdit.kind === "md" && !!blockEdit.view
+  && blockEdit.view.state.doc.toString() !== blockEdit.text;
+
+/* The « edit » mark: one button, fixed beside the block under the pointer (or the block
+   tapped, under touch controls), hidden a moment after the pointer leaves both. */
+const editMark = el("button", { class: "edit-mark", text: "edit", title: "Edit this block in place", hidden: true });
+document.body.append(editMark);
+let markedBlock = null; // { section, span } of the block the mark stands beside
+let markTimer = null;
+
+// The block of a Markdown section that opens under `target`, or null.
+function blockAt(target) {
+  const node = target && target.closest ? target.closest(".sec > .body [data-span]") : null;
+  if (!node || editLocked() || node.closest(".block-editor") || node.querySelector(".block-editor")) return null;
+  return editableSection(node.closest(".sec").dataset.id) ? node : null;
+}
+
+function showEditMark(node) {
+  clearTimeout(markTimer);
+  markedBlock = { section: node.closest(".sec").dataset.id, span: node.dataset.span };
+  editMark.hidden = false;
+  const r = node.getBoundingClientRect(), view = node.closest(".view").getBoundingClientRect();
+  editMark.style.top = `${r.top}px`;
+  editMark.style.left = `${Math.max(view.left + 2, r.left - editMark.offsetWidth - 10)}px`;
+}
+
+function hideEditMark(later = false) {
+  clearTimeout(markTimer);
+  if (later) { markTimer = setTimeout(hideEditMark, 400); return; }
+  editMark.hidden = true;
+  markedBlock = null;
+}
+
+$("#model").addEventListener("mousemove", (e) => {
+  if (isTouch()) return;
+  const node = blockAt(e.target);
+  if (node) showEditMark(node);
+  else if (!editMark.hidden) hideEditMark(true);
+});
+$("#model").addEventListener("mouseleave", () => { if (!editMark.hidden) hideEditMark(true); });
+$("#model").addEventListener("scroll", () => hideEditMark(), { passive: true });
+editMark.addEventListener("mouseenter", () => clearTimeout(markTimer));
+editMark.addEventListener("mouseleave", () => hideEditMark(true));
+editMark.addEventListener("mousedown", (e) => e.preventDefault()); // keeps the selection and the focus
+editMark.addEventListener("click", () => {
+  const m = markedBlock;
+  hideEditMark();
+  if (m) openMdBlock(m.section, m.span);
+});
+
+/* Closes the open block before another opens: false when you keep it. */
+function dropOpenBlock() {
+  const e = blockEdit;
+  if (!e) return true;
+  if (e.kind === "html") {
+    if (e.dirty && !confirm(`Close the block you are editing in section ${numberOf(e.section)}? Its unsaved words are lost.`)) return false;
+    blockEdit = null;
+    if (e.f.contentWindow) e.f.contentWindow.postMessage({ viewConcept: "edit-close" }, "*");
+    return true;
+  }
+  if (blockDirty() && !confirm(`Drop your unsaved edit of a block of section ${numberOf(e.section)}?`)) return false;
+  closeMdBlock();
+  return true;
+}
+
+async function openMdBlock(id, span) {
+  if (blockEdit && blockEdit.kind === "md" && blockEdit.section === id && blockEdit.span === span) {
+    if (blockEdit.view) blockEdit.view.focus();
+    return;
+  }
+  const sec = state.sections[id];
+  const text = sec && sec.blocks ? sec.blocks[span] : undefined;
+  const node = document.querySelector(`#sec-${CSS.escape(id)} > .body [data-span="${CSS.escape(span)}"]`);
+  if (typeof text !== "string" || !node || !editableSection(id)) return;
+  if (editLocked()) { toast("A batch is processing: no block opens until it is done"); return; }
+  if (!dropOpenBlock()) return;
+  const oneLine = /^(H[1-6]|TH|TD)$/.test(node.tagName);
+  const host = el("div", { class: "be-host" }, el("p", { class: "dim be-loading", text: "loading the editor…" }));
+  const note = el("p", { class: "doc-edit-note", hidden: true });
+  const save = el("button", { class: "btn primary", text: "save", title: "Write the block into the section's file (⌘↵)",
+                              onclick: () => saveMdBlock() });
+  const cancel = el("button", { class: "btn", text: "cancel", title: "Drop your edit (Esc)", onclick: () => cancelMdBlock() });
+  const box = el("div", { class: `block-editor${oneLine ? " one-line" : ""}` }, host, note,
+                 el("div", { class: "doc-edit-actions" }, save, cancel));
+  const edit = { kind: "md", section: id, span, base: sec.md, text, oneLine, box, host, note, save, view: null, error: "", saving: false };
+  blockEdit = edit;
+  hideEditMark();
+  placeBlockEditor();
+  if (isUpdated(id)) markSeen([id]);
+  let lib;
+  try { lib = await loadEditorLib(); } catch (e) {
+    if (blockEdit === edit) closeMdBlock();
+    toast(`Could not load the editor: ${e.message}`);
+    return;
+  }
+  if (blockEdit !== edit) return;
+  host.replaceChildren();
+  edit.view = liveEditor(lib, host, text, { oneLine, save: () => saveMdBlock(), cancel: () => cancelMdBlock() });
+  edit.view.focus();
+}
+
+/* Puts the open Markdown block's editor in place of the block's own content, after each
+   render: the block found again by its span, else the top of its section (its file
+   changed, and the notice says so). */
+function placeBlockEditor(wasFocused) {
+  const e = blockEdit;
+  if (!e || e.kind !== "md") return;
+  const body = document.querySelector(`#sec-${CSS.escape(e.section)} > .body`);
+  if (!body) return;
+  // A render passes whether the editor had the focus before it detached the editor.
+  const focused = !!e.view && (wasFocused ?? e.view.hasFocus);
+  const node = body.querySelector(`[data-span="${CSS.escape(e.span)}"]`);
+  if (node) {
+    const nested = node.tagName === "LI" ? [...node.children].find((c) => c.tagName === "UL" || c.tagName === "OL") : null;
+    for (const c of [...node.childNodes]) {
+      if (c === nested) break;
+      c.remove();
+    }
+    node.insertBefore(e.box, nested || null);
+  } else body.prepend(e.box);
+  updateBlockNotice();
+  if (focused) e.view.focus();
+}
+
+// The notice under the open editor: the last refusal, else what will refuse a save.
+function blockNotice(e) {
+  if (e.error) return e.error;
+  if ((state.sections[e.section] || {}).md !== e.base) {
+    return "The section changed since you opened this block: saving is refused. Copy your words, cancel, and open the block again.";
+  }
+  if (editLocked()) return "A batch is processing: saving is refused until the batch indicator reads « done ». Your words stay here.";
+  return "";
+}
+function updateBlockNotice() {
+  const e = blockEdit;
+  if (!e || e.kind !== "md") return;
+  const text = blockNotice(e);
+  e.note.textContent = text;
+  e.note.hidden = !text;
+}
+
+function closeMdBlock() {
+  const e = blockEdit;
+  if (!e || e.kind !== "md") return;
+  blockEdit = null;
+  if (e.view) e.view.destroy();
+  renderSections();
+}
+
+function cancelMdBlock() {
+  if (!blockEdit || blockEdit.kind !== "md") return;
+  if (blockDirty() && !confirm("Drop your edit?")) return;
+  closeMdBlock();
+}
+
+/* POST /api/s/<slug>/edit: {ok, status, detail (the server's sentence)}. */
+async function postEdit(body) {
+  try {
+    const r = await fetch(`/api/s/${SLUG}/edit`, { method: "POST", headers: { "content-type": "application/json" },
+                                                   body: JSON.stringify(body) });
+    const data = await r.json().catch(() => ({}));
+    const detail = typeof data.detail === "string" ? data.detail
+      : data.detail ? JSON.stringify(data.detail) : `${r.status} ${r.statusText}`;
+    return { ok: r.ok, status: r.status, detail };
+  } catch (err) { return { ok: false, status: 0, detail: String((err && err.message) || err) }; }
+}
+
+// The notice a refused save leaves under the editor.
+function editRefusal({ status, detail }) {
+  const sentence = String(detail || "").replace(/\.$/, "");
+  const why = sentence.charAt(0).toLowerCase() + sentence.slice(1);
+  if (status === 423) return `Refused: ${why}. A batch is processing: save again once the batch indicator reads « done ». Your words stay here.`;
+  if (status === 409) return `Refused: ${why}. Copy your words, close the block, and open it again on the new text.`;
+  return `Could not save: ${why}.`;
+}
+
+async function saveMdBlock() {
+  const e = blockEdit;
+  if (!e || e.kind !== "md" || !e.view || e.saving) return;
+  const text = e.view.state.doc.toString();
+  if (text === e.text) { closeMdBlock(); return; } // no word changed: nothing is written
+  e.saving = true;
+  e.save.disabled = true;
+  const r = await postEdit({ section: e.section, base: e.base, span: e.span, text });
+  e.saving = false;
+  e.save.disabled = false;
+  if (blockEdit !== e) return;
+  if (!r.ok) {
+    e.error = editRefusal(r);
+    updateBlockNotice();
+    return;
+  }
+  // The editor keeps showing your words until the section comes back rendered with them.
+  blockEdit = null;
+  toast("Block saved");
+  await load();
+  e.view.destroy();
+}
+
+/* The edit lock message: whether the blocks of the frame's section open. */
+function postEditLock(id, f = frames.get(id)) {
+  if (!f || !f.contentWindow || !state) return;
+  f.contentWindow.postMessage({ viewConcept: "edit-lock", locked: !editableSection(id) || editLocked() }, "*");
+}
+
+/* The edit open message: a block of the frame opened. The page closes the block open
+   elsewhere (asking first), or has the frame close this one when you keep the other. */
+function frameEditOpen(id, f, d) {
+  const n = Number(d.block);
+  if (!editableSection(id) || editLocked() || !Number.isInteger(n) || !dropOpenBlock()) {
+    if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "edit-close" }, "*");
+    return;
+  }
+  blockEdit = { kind: "html", section: id, block: n, f, base: state.sections[id].md, dirty: false };
+  hideEditMark();
+  if (isUpdated(id)) markSeen([id]);
+}
+
+/* The edit save message: the frame checked the tag lock; the server checks the rest. */
+async function frameEditSave(id, f, d) {
+  const answer = (reply) => { if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "edit-saved", ...reply }, "*"); };
+  const e = blockEdit;
+  if (!e || e.kind !== "html" || e.f !== f || e.block !== Number(d.block)) {
+    answer({ ok: false, status: 0, error: "This block is not open in the page: press Esc and open it again." });
+    return;
+  }
+  const r = await postEdit({ section: id, base: e.base, block: e.block, before: d.before, after: d.after });
+  if (!r.ok) { answer({ ok: false, status: r.status, error: editRefusal(r) }); return; }
+  if (blockEdit === e) blockEdit = null;
+  answer({ ok: true });
+  toast("Block saved");
+  await load();
+}
+
+/* The edit dirty message: whether the frame's open block holds unsaved words. */
+function frameEditDirty(f, d) {
+  if (blockEdit && blockEdit.kind === "html" && blockEdit.f === f) blockEdit.dirty = !!d.dirty;
+}
+
+/* The edit closed message: the frame's block closed (Esc, the edit close, or a save). A
+   frame kept through a change of its file reloads now. */
+function frameEditClosed(id, f) {
+  if (!blockEdit || blockEdit.kind !== "html" || blockEdit.f !== f) return;
+  blockEdit = null;
+  if (state.sections[id] && f.dataset.version !== state.sections[id].version) renderSections();
+}
+
 
 /* A doc gives its images and links by a path relative to its own folder: they load from
    the worktree through the server. An absolute URL, a root path or an anchor stays. */
@@ -1978,7 +2389,7 @@ function linkCitations(root) {
 
 /* ---------------- term annotation ---------------- */
 
-const SKIP = "code, pre, .katex, .mermaid, .term, .audit, h2";
+const SKIP = "code, pre, .katex, .mermaid, .term, .audit, h2, .block-editor";
 
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
@@ -2055,8 +2466,12 @@ function annotateQuestions(root) {
    The page's tools reach a passage inside it through frame messages (static/frame.js):
    the frame posts the reader's selection, a click on a side thread's passage and the
    underlined term under the pointer; the page posts the passages to highlight (anchors),
-   the one to reveal, the words added since the highlight baseline (changes) and the
-   terms to underline (terms), which the frame paints over the words. */
+   the one to reveal, the words added since the highlight baseline (changes, with the
+   writer's rewrites of an inline edit the section shows: see "the rewrite highlight")
+   and the terms to underline (terms), which the frame paints over the words. A block of the
+   section opens for an inline edit in the frame itself (see "inline edit"), through the
+   edit messages; while one is open there, the frame is kept even when its file changes,
+   so your words stay until you close it. */
 
 // As frame.SANDBOX: scripts run, and no allow-same-origin, so the frame cannot reach the page.
 const SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms";
@@ -2079,11 +2494,16 @@ function placeFrames() {
     if (placed.has(id)) return;
     const { version } = state.sections[id];
     let f = frames.get(id);
-    if (!f || f.dataset.version !== version) {
+    const editing = !!blockEdit && blockEdit.kind === "html" && blockEdit.f === f;
+    if (!f || (f.dataset.version !== version && !editing)) {
       if (f) f.remove();
       f = el("iframe", { class: "frame", sandbox: SANDBOX, allow: "fullscreen", title: titleOf(id),
                          "data-version": version, src: `/s/${SLUG}/sections/${encodeURIComponent(id)}.html?v=${version}` });
-      f.addEventListener("load", () => { postTheme(f); postAnchors(id, f); postChanges(id, f); postTerms(id, f); postPins(id, f); });
+      f.addEventListener("load", () => {
+        // A frame reloaded (moved where moveBefore is missing) lost its open block, unannounced.
+        frameEditClosed(id, f);
+        postTheme(f); postAnchors(id, f); postChanges(id, f); postTerms(id, f); postPins(id, f); postEditLock(id, f);
+      });
       frames.set(id, f);
     }
     moveInto(slot, f);
@@ -2102,7 +2522,10 @@ new MutationObserver(() => frames.forEach(postTheme))
 
 /* The frame messages a frame posts: its height, the reader's selection inside it, where
    a revealed passage sits, the side threads whose passage it found (placed), the side
-   thread whose passage was clicked, and the term under the pointer (static/frame.js). */
+   thread whose passage was clicked, the term under the pointer, and the edit messages of
+   an inline edit: a block opened (edit-open), whether it holds unsaved words
+   (edit-dirty), its save (edit-save, answered by edit-saved) and its close
+   (edit-closed) (static/frame.js). */
 const revealing = new Map(); // section id -> the comment whose passage its frame looks for
 
 window.addEventListener("message", (e) => {
@@ -2121,6 +2544,10 @@ window.addEventListener("message", (e) => {
   else if (d.viewConcept === "term-hover") frameTermHover(f, d);
   else if (d.viewConcept === "tap") tapElsewhere(f);
   else if (d.viewConcept === "channel") frameChannel(id, f, d);
+  else if (d.viewConcept === "edit-open") frameEditOpen(id, f, d);
+  else if (d.viewConcept === "edit-save") frameEditSave(id, f, d);
+  else if (d.viewConcept === "edit-dirty") frameEditDirty(f, d);
+  else if (d.viewConcept === "edit-closed") frameEditClosed(id, f);
 });
 
 /* The channel message: a request of the section's own script (frame.js's `viewConcept`):
@@ -2256,7 +2683,10 @@ function addedPassages(sec) {
 function postChanges(id, f = frames.get(id)) {
   const sec = state && state.sections[id];
   if (!f || !f.contentWindow || !sec) return;
-  f.contentWindow.postMessage({ viewConcept: "changes", changes: addedPassages(sec) }, "*");
+  // The rewrites shown, each by the block marks that hold it, your after to diff against,
+  // and the hover text the frame posts back with the term hover message.
+  const rewrites = (sec.rewrites || []).map((rw) => ({ marks: rw.marks || [], after: rw.after || "", tip: rewriteNote(rw) }));
+  f.contentWindow.postMessage({ viewConcept: "changes", changes: addedPassages(sec), rewrites }, "*");
 }
 
 /* The terms message: what the page underlines in a Markdown section, for the frame to
@@ -2383,7 +2813,8 @@ function applyHighlights() {
    over their block; a block marked only for deleted words shows nothing on hover.
    « updated · mark read » in the section heading marks the section as read. A doc of the
    Doc tab is compared the same way (its view in `state.docs`, the key "doc:<path>"), and
-   gets the base mark too (markBase). */
+   gets the base mark too (markBase). A block holding the writer's rewrite of an inline
+   edit gets the rewrite highlight instead of the green (markRewrites). */
 
 const BLOCKS = "p, li, td, th, pre, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, .math.block, .mermaid";
 
@@ -2521,12 +2952,92 @@ function markUpdates() {
       }
     });
   }
+  markRewrites();
   // The blocks were redrawn: paint the one under the pointer now, if any (a tap's paint
   // goes with the block it was on).
   const under = isTouch() ? null : [...document.querySelectorAll(":hover")].pop();
   paintChange(changedBlock(under));
   frames.forEach((f, id) => postChanges(id, f));
   markBase();
+}
+
+/* The rewrite highlight: a block of a Markdown section that holds the writer's rewrite
+   of one of your inline edits (`sec.rewrites`: the server sends each edit's last rewrite
+   while the section's file holds it and its highlight baseline does not) gets a bar in
+   the info colour (.rewritten) in place of the green bar, and its words that are not in
+   your after ("ev-rewrite": the block's own words, a nested block's left out, diffed
+   against your after rendered) are painted always, not only under the pointer; the green
+   leaves those blocks. Pointing at the coloured words or at the bar (left of the block's
+   box) shows the writer's reason in the tip; a lexicon term inside keeps its own tip. A
+   rewrite that only removed words has the bar alone, and its reason shows over the whole
+   block. An HTML section's frame paints the same from the changes message (postChanges).
+   The published page (reader.js) has none of it, as it has no green. */
+let rewriteRanges = []; // [rewrite, range] of each run of rewritten words painted
+let rewriteBlocks = new Map(); // block -> { rw, removal }: the rewrite it holds, and whether it only removed words
+
+const rewriteNote = (rw) => `your words, rewritten by the writer${rw.batch ? ` (${rw.batch})` : ""}: ${rw.reason || ""}`;
+
+function markRewrites() {
+  document.querySelectorAll(".rewritten").forEach((n) => n.classList.remove("rewritten"));
+  rewriteRanges = [];
+  rewriteBlocks = new Map();
+  for (const [id, sec] of Object.entries(state.sections)) {
+    if (sec.kind === "html" || !(sec.rewrites || []).length) continue;
+    const body = document.querySelector(`#sec-${CSS.escape(id)} .body`);
+    if (!body) continue;
+    for (const rw of sec.rewrites) {
+      const blocks = (rw.spans || []).map((s) => body.querySelector(`[data-span="${CSS.escape(s)}"]`)).filter(Boolean);
+      if (!blocks.length) continue;
+      const own = blocks.flatMap((b) => words(b).filter((w) => w.block === b));
+      const mine = document.createElement("div");
+      mine.innerHTML = rw.after_html || "";
+      const { inserted } = diffWords(words(mine).map((w) => w.text), own.map((w) => w.text));
+      const removal = inserted.size === 0;
+      for (const b of blocks) {
+        b.classList.remove("changed");
+        changeRanges.delete(b);
+        b.classList.add("rewritten");
+        rewriteBlocks.set(b, { rw, removal });
+      }
+      // One range per run of rewritten words in a block, so the spaces between them are painted too.
+      let run = null;
+      own.forEach((w, k) => {
+        if (!inserted.has(k)) { run = null; return; }
+        if (run && run.block === w.block) run.range.setEnd(w.range.endContainer, w.range.endOffset);
+        else {
+          run = { block: w.block, range: w.range.cloneRange() };
+          rewriteRanges.push([rw, run.range]);
+        }
+      });
+    }
+  }
+  if (window.CSS && CSS.highlights) CSS.highlights.set("ev-rewrite", new Highlight(...rewriteRanges.map(([, r]) => r)));
+}
+
+// The rewrite whose reason shows at (x, y), with the box the tip goes under: its coloured
+// words, its bar, or anywhere over a block whose rewrite only removed words.
+function rewriteAt(target, x, y) {
+  for (const [rw, r] of rewriteRanges) {
+    for (const b of r.getClientRects()) {
+      if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) return [rw, b];
+    }
+  }
+  const block = target && target.closest ? target.closest(".sec .body .rewritten") : null;
+  const mark = block && rewriteBlocks.get(block);
+  if (!mark) return null;
+  const box = block.getBoundingClientRect();
+  // The bar is drawn left of the block's box (inside a cell's): the pointer on it is left of its text.
+  return mark.removal || x < box.left + 4 ? [mark.rw, box] : null;
+}
+
+let rewriteTip = false; // the tip shows a rewrite's reason
+for (const view of docViews()) {
+  view.addEventListener("mousemove", (e) => {
+    if (isTouch() || e.target.closest("[data-tip], [data-term]")) return;
+    const hit = rewriteAt(e.target, e.clientX, e.clientY);
+    if (hit) { showTip(rewriteNote(hit[0]), null, hit[1]); rewriteTip = true; }
+    else if (rewriteTip) { $("#tip").hidden = true; rewriteTip = false; }
+  });
 }
 
 /* The base mark of the doc shown: each block (its own words, as the change highlights cut
@@ -2646,7 +3157,7 @@ function currentSelection() {
     return quote ? { section: box.dataset.anchor, quote, prefix: "", rect: range.getBoundingClientRect() } : null;
   }
   const sec = start.closest(".sec");
-  if (!sec || !sec.closest("#model, #refactor, #doc")) return null;
+  if (!sec || !sec.closest("#model, #refactor, #doc") || start.closest(".block-editor")) return null;
   const body = $(".body", sec);
   const quote = collapse(sel.toString());
   if (!quote) return null;
@@ -2701,7 +3212,7 @@ document.addEventListener("selectionchange", () => {
 });
 
 document.addEventListener("mouseup", (e) => {
-  if (isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop, .doc-editor")) return;
+  if (isTouch() || e.target.closest("#composer, #sel-actions, #thread-pop, .doc-editor, .block-editor, .edit-mark")) return;
   setTimeout(() => {
     const s = currentSelection();
     showSelection(s);
@@ -2723,9 +3234,11 @@ $("#sel-actions .ask").addEventListener("click", () => {
 
 /* ---------------- taps ----------------
    Under touch controls a tap does what a resting pointer does with a mouse: on an
-   underlined term, its tip (a tap elsewhere or a scroll hides it); on a changed block,
+   underlined term, its tip (a tap elsewhere or a scroll hides it); on a rewritten
+   block's coloured words or bar, the writer's reason; on a changed block,
    its new words, until a tap elsewhere; on a side thread's passage, the thread. A term
-   inside a thread's passage shows its tip; the rest of the passage opens the thread.
+   inside a thread's passage shows its tip; the rest of the passage opens the thread; a
+   block that opens for an inline edit shows its « edit » mark.
    A tap anywhere else in the page, or in a section frame, clears the paint (the frame
    posts its taps: the tap message), and a scroll of any pane hides the tip. */
 document.addEventListener("click", (e) => {
@@ -2734,11 +3247,17 @@ document.addEventListener("click", (e) => {
   if (sel.rangeCount && !sel.isCollapsed) return;
   const t = e.target.closest && e.target.closest("[data-tip], [data-term]");
   const stale = !t && staleAt(e.clientX, e.clientY);
+  const rewrite = !t && !stale && rewriteAt(e.target, e.clientX, e.clientY);
   if (t) showTip(t.dataset.tip, t.dataset.term !== undefined ? Number(t.dataset.term) : null, t.getBoundingClientRect(), lexiconOf(t));
   else if (stale) showTip(staleNote(stale[0]), null, stale[1]);
+  else if (rewrite) showTip(rewriteNote(rewrite[0]), null, rewrite[1]);
   else $("#tip").hidden = true;
   const b = changedBlock(e.target);
   if (b !== hoveredChange) paintChange(b);
+  // A tap on a block that opens shows its « edit » mark (see "inline edit").
+  const block = !t && blockAt(e.target);
+  if (block) showEditMark(block);
+  else if (!e.target.closest(".edit-mark")) hideEditMark();
   tapElsewhere(null);
   if (!t && e.target.closest(".view")) {
     const th = threadAt(e.clientX, e.clientY);
@@ -3067,7 +3586,8 @@ $("#questions-waiting").addEventListener("click", () => {
    A box floating in the bottom-right corner of the window, over the workspace (the batch
    tab in the narrow layout), its header « batch » followed by the batch indicator: then a line counting the open agent questions (they
    live in the scope block) and, on a drawing during scoping, the open pins waiting for
-   the user, then the drafts, the note and « Send » at the bottom. It stays scrolled to
+   the user, then the pending inline edits (saved since the last « Send », which carries
+   them: see "inline edit"), the drafts, the note and « Send » at the bottom. It stays scrolled to
    the bottom as content arrives, unless the user scrolled up. */
 
 let reviewAtEnd = true;
@@ -3143,6 +3663,7 @@ function renderReview() {
   renderWaiting();
   $("#draft-count").textContent = drafts.length ? `· ${drafts.length} draft${drafts.length > 1 ? "s" : ""}` : "";
   renderBatchIndicator();
+  renderInlineEdits();
   renderDrafts();
   updateSend();
   const pane = $(".review");
@@ -3160,12 +3681,33 @@ const deferredText = (q) => {
   return [answerText({ unclear: true, note: last.note }), where].join(" · ");
 };
 
+// The pending inline edits, {id, section, after}: the next batch carries them.
+const pendingEdits = () => (state && state.edits) || [];
+
+/* Each pending inline edit, by its section's title and its first words; a click shows
+   the section. */
+function renderInlineEdits() {
+  const firstWords = (text) => {
+    const words = collapse(String(text || "").replace(/<[^>]*>/g, " ")).split(" ");
+    return words.slice(0, 8).join(" ") + (words.length > 8 ? "…" : "");
+  };
+  $("#inline-edits").replaceChildren(...pendingEdits().map((e) =>
+    el("div", { class: "comment inline-edit", "data-edit": e.id },
+      el("div", { class: "c-quote", onclick: () => scrollToSection(e.section) },
+        el("span", { class: "num", text: whereOf(e.section) }), ` inline edit · ${titleOf(e.section)}`),
+      el("div", { class: "ie-words", text: `« ${firstWords(e.after)} »` }))));
+}
+
+/* « Send » counts the comments and the inline edits it carries: pending edits alone
+   enable it. */
 function updateSend() {
   const note = $("#note").value.trim();
   const n = drafts.filter(ready).length;
+  const k = pendingEdits().length;
   const btn = $("#send");
-  btn.disabled = !n && !note;
-  btn.textContent = n ? `Send ${n} comment${n > 1 ? "s" : ""}` : note ? "Send note" : "Send";
+  btn.disabled = !n && !note && !k;
+  const parts = [n ? plural(n, "comment") : "", k ? plural(k, "inline edit") : ""].filter(Boolean);
+  btn.textContent = parts.length ? `Send ${parts.join(" · ")}` : note ? "Send note" : "Send";
   if (state) renderStatus();
 }
 

@@ -62,3 +62,88 @@ def test_kit_classes_are_defined() -> None:
     tabs = (".tab-row", ".tab", '.tab[aria-selected="true"]', ".tab-panel[hidden]")
     for cls in kit + tabs:
         assert cls in selectors, cls
+
+
+# ---- block marks and runs of text ----
+
+GATE = """<html><head><style>p { color: red }</style></head><body>
+<h2>The gate</h2>
+<p>A gate removes segments that are mostly <strong>silence</strong> &amp; noise.</p>
+<ul><li>the ratio <em>r</em><ul><li>on 20 ms frames</li></ul> per segment</li><li>two
+<li>three</ul>
+<table><tr><td>a<td>b &lt; c</tr></table>
+<template><p>kept for later</p></template>
+<script>
+chart.append(Object.assign(document.createElement("p"), {textContent: "<p>42</p>"}));
+</script>
+</body></html>"""
+
+
+def test_block_marks_number_the_blocks_written_in_the_file():
+    marked = frame.mark_blocks(GATE)
+    assert re.sub(r' data-block="\d+"', "", marked) == GATE
+    assert re.findall(r'<(\w+) data-block="(\d+)"', marked) == [
+        ("h2", "1"),
+        ("p", "2"),
+        ("li", "3"),
+        ("li", "4"),
+        ("li", "5"),
+        ("li", "6"),
+        ("td", "7"),
+        ("td", "8"),
+    ]
+    # The paragraph the script draws, and the template's, have none.
+    assert "<p>kept for later</p>" in marked and '"<p>42</p>"' in marked
+
+
+def _texts(n: int) -> list[str]:
+    runs = frame.block_runs(GATE, n)
+    assert runs is not None
+    return runs.texts
+
+
+def test_a_blocks_runs_of_text_stop_at_its_nested_block():
+    runs = frame.block_runs(GATE, 3)
+    assert runs is not None
+    assert runs.texts == ["the ratio ", "r"]  # " per segment", after the nested list, is none
+    assert GATE[slice(*runs.content)] == "the ratio <em>r</em>"
+    assert _texts(2) == [  # entities decoded, as the frame reads them
+        "A gate removes segments that are mostly ",
+        "silence",
+        " & noise.",
+    ]
+    assert _texts(5) == ["two\n"]  # closed by the next <li>
+    assert _texts(8) == ["b < c"]
+    assert frame.block_runs(GATE, 9) is None
+
+
+def test_replacing_runs_keeps_the_tags_and_escapes_the_new_text():
+    after = ["A gate drops a segment when its ", "silence", " ratio < 1 & more."]
+    new, before, written = frame.replace_runs(GATE, 2, after)
+    assert before == "A gate removes segments that are mostly <strong>silence</strong> &amp; noise."
+    assert written == (
+        "A gate drops a segment when its <strong>silence</strong> ratio &lt; 1 &amp; more."
+    )
+    assert new == GATE.replace(before, written)
+
+
+def test_an_element_the_file_holds_empty_gets_no_mark():
+    doc = '<table><tr><td>a</td><td id="n">  </td><td></td></tr></table><p>b</p>'
+    marked = frame.mark_blocks(doc)
+    assert re.findall(r'<(\w+) data-block="(\d+)"', marked) == [("td", "1"), ("p", "2")]
+    assert '<td id="n">  </td><td></td>' in marked
+    assert _runs(doc, 2) == ["b"]
+
+
+def _runs(doc: str, n: int) -> list[str]:
+    runs = frame.block_runs(doc, n)
+    assert runs is not None
+    return runs.texts
+
+
+def test_a_passage_of_the_file_is_found_in_the_blocks_it_overlaps():
+    doc = "<p>Fig</p><ul><li>A <em>gate</em>.<p>nested</p></li></ul>"
+    at = doc.index("A <em>")
+    assert frame.marks_over(doc, at, at + len("A <em>gate</em>.")) == [2]
+    at = doc.index("nested")
+    assert frame.marks_over(doc, at, at + 6) == [3]

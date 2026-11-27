@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import channel, frame, gate, launch, metrics, publish, push, threads
-from .render import md
+from .render import md, render_page, spans_over
 from .store import (
     BLOCKING_PINS,
     DOC_KEY,
@@ -27,6 +27,8 @@ from .store import (
     MOVES_KEY,
     TRIAGE_KEY,
     DocConflict,
+    EditConflict,
+    InlineEditLocked,
     Session,
     SessionError,
     format_fact,
@@ -260,6 +262,7 @@ def state(slug: str) -> dict[str, Any]:
         plan = s.read_plan()
         sections = s.read_sections()
         html_sections = s.html_sections()
+        editable = s.explanation_sections()
         audit = s.read_audit()
         comments = s.read_comments()
         status = s.shown_status()
@@ -277,6 +280,8 @@ def state(slug: str) -> dict[str, Any]:
         seen = s.read_seen({**sections, **doc_texts, **s.baseline_texts()})
         published = published_view(s)
         doc_tab = docs_view(s, docs, seen)
+        edits = s.pending_edits()
+        record = s.read_inline_edits()
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
     # The hover text of a term: its developed `tip` when the agent wrote one, else the
@@ -290,13 +295,22 @@ def state(slug: str) -> dict[str, Any]:
         "workflow": plan.get("workflow", ""),
         "status": status,
         "sections": {
-            k: section_view(v, seen[k], html=k in html_sections) for k, v in sections.items()
+            k: section_view(
+                v,
+                seen[k],
+                html=k in html_sections,
+                editable=k in editable,
+                edits=[e for e in record if e.get("section") == k],
+            )
+            for k, v in sections.items()
         },
         # The last session file the agent wrote (the banner's quiet notice), and where the
         # last batch sent stands (the batch indicator: processing, or done once the
         # end-of-run record names it).
         "activity": activity,
         "batch": batch,
+        # The pending inline edits, which the next batch carries: the batch box lists them.
+        "edits": [{k: e[k] for k in ("id", "section", "after")} for e in edits],
         "audit": audit,
         "comments": comments,
         "changes": changes,
@@ -436,7 +450,13 @@ def published_record(slug: str) -> dict[str, Any]:
     return {"published": published_view(get_session(slug))}
 
 
-def section_view(text: str, seen: str, html: bool = False) -> dict[str, Any]:
+def section_view(
+    text: str,
+    seen: str,
+    html: bool = False,
+    editable: bool = False,
+    edits: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """A section as the page renders it. An updated section (its text differs from its
     highlight baseline, the text at the last batch or « mark read ») also carries the
     HTML of the baseline, which the page diffs against to highlight what changed.
@@ -445,17 +465,86 @@ def section_view(text: str, seen: str, html: bool = False) -> dict[str, Any]:
     (`section_document`): its view carries no rendered HTML but `version`, a hash of its
     text, so the page reloads the frame only when the file changed. An updated one
     carries its baseline file as `seen`: the page compares the visible text of both and
-    sends the frame the passages added (the changes frame message)."""
+    sends the frame the passages added (the changes frame message).
+
+    An explanation section (`editable`) opens for an inline edit: a Markdown one's `html`
+    is the page's copy (`render_page`), each block carrying its source span, and `blocks`
+    gives each span's editable text. A doc, the drawing and a refactor section carry none.
+    `seen_html` keeps the shared renderer: the green highlight compares rendered words,
+    which the spans do not change.
+
+    An explanation section also carries `rewrites`, the writer's rewrites of your inline
+    edits the page shows on them (`rewrites_shown`, from `edits`, the section's entries
+    of the edit record)."""
     if html:
         version = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         view = {"md": text, "kind": "html", "version": version, "updated": text != seen}
         if view["updated"]:
             view["seen"] = seen
+        if editable:
+            view["rewrites"] = rewrites_shown(text, seen, edits or [], html=True)
         return view
-    view: dict[str, Any] = {"md": text, "html": md.render(text), "updated": text != seen}
+    page, spans = render_page(text) if editable else (md.render(text), {})
+    view: dict[str, Any] = {"md": text, "html": page, "updated": text != seen}
+    if editable:
+        view["blocks"] = spans
+        view["rewrites"] = rewrites_shown(text, seen, edits or [])
     if view["updated"]:
         view["seen_html"] = md.render(seen)
     return view
+
+
+def _find_near(text: str, part: str, near: int | None) -> int:
+    """Where `part` starts in `text`, the occurrence nearest to `near` when it is given;
+    -1 when `text` does not hold it."""
+    found, i = -1, text.find(part)
+    while i >= 0:
+        if near is None:
+            return i
+        if found < 0 or abs(i - near) < abs(found - near):
+            found = i
+        i = text.find(part, i + 1)
+    return found
+
+
+def rewrites_shown(
+    text: str, seen: str, edits: list[dict[str, Any]], html: bool = False
+) -> list[dict[str, Any]]:
+    """The rewrite highlight of a section: for each of its inline edits the writer
+    rewrote, its last rewrite, shown while the section's file holds the rewrite's text
+    and its highlight baseline (`seen`) does not (« mark read », opening a block of the
+    section or the next « Send » ends it). Each one gives the edit's `id`, the rewrite's
+    `reason` and `batch`, the blocks that hold its text, and your text to diff its words
+    against: in a Markdown section the spans of the blocks (`spans`) and your after
+    rendered (`after_html`); in an HTML section the block marks (`marks`, as the frame's
+    `data-block`) and your after as the file held it (`after`, a block's content with
+    its inline tags)."""
+    out: list[dict[str, Any]] = []
+    for e in edits:
+        rewrites = e.get("rewrites") or []
+        if not rewrites:
+            continue
+        last = rewrites[-1]
+        new = str(last.get("text") or "")
+        if not new.strip() or new in seen:
+            continue
+        at = _find_near(text, new, e.get("offset"))
+        if at < 0:
+            continue
+        shown: dict[str, Any] = {
+            "id": e.get("id", ""),
+            "reason": str(last.get("reason") or ""),
+            "batch": str(last.get("batch") or ""),
+        }
+        after = str(e.get("after") or "")
+        if html:
+            shown["marks"] = frame.marks_over(text, at, at + len(new))
+            shown["after"] = after
+        else:
+            shown["spans"] = spans_over(text, at, at + len(new))
+            shown["after_html"] = md.render(after)
+        out.append(shown)
+    return out
 
 
 # The head the page writes into an HTML section: its theme tokens, then frame.js.
@@ -479,12 +568,16 @@ def frame_tokens() -> Response:
 @app.get("/s/{slug}/sections/{name}")
 def section_document(slug: str, name: str) -> HTMLResponse:
     """The document a section frame loads: the HTML section's file, with the frame's head
-    (frame.py) written in. Its relative addresses resolve against /s/<slug>/sections/."""
+    (frame.py) written in. Its relative addresses resolve against /s/<slug>/sections/.
+    An explanation section's blocks also get their block marks (`frame.mark_blocks`),
+    written on the served copy only: the drawing and a refactor section open nothing."""
     s = get_session(slug)
     sid = name.removesuffix(".html")
     if not name.endswith(".html") or sid not in s.html_sections():
         raise HTTPException(404, f"no HTML section {name!r}")
     text = s.section_files()[sid].read_text(encoding="utf-8")
+    if sid in s.explanation_sections():
+        text = frame.mark_blocks(text)
     return HTMLResponse(
         frame.inject(text, FRAME_HEAD),
         headers={"Cache-Control": "no-store", **FRAME_SANDBOX_HEADER},
@@ -521,6 +614,45 @@ def write_doc(slug: str, body: DocIn) -> dict[str, bool]:
     except SessionError as e:
         raise HTTPException(400, str(e)) from e
     return {"ok": True}
+
+
+class EditIn(BaseModel):
+    section: str
+    # The section's whole file as the block opened: the file must still hold it.
+    base: str
+    # A Markdown block: its source span and its new editable text.
+    span: str = ""
+    text: str | None = None
+    # An HTML block: its block mark and its runs of text at open and at save.
+    block: int = 0
+    before: list[str] | None = None
+    after: list[str] | None = None
+
+
+@app.post("/api/s/{slug}/edit")
+def save_inline_edit(slug: str, body: EditIn) -> dict[str, Any]:
+    """Save an inline edit of one block of an explanation section (store.py
+    `save_inline_edit`). 423 while the last batch reads « processing », 409 when the file
+    or the block changed since the block opened, 400 for a body that does not fit the
+    section. `edit` is the edit record's entry, null when nothing changed or the edit went
+    back to its before."""
+    try:
+        edit = get_session(slug).save_inline_edit(
+            body.section,
+            body.base,
+            span=body.span,
+            text=body.text,
+            block=body.block,
+            before=body.before,
+            after=body.after,
+        )
+    except InlineEditLocked as e:
+        raise HTTPException(423, str(e)) from e
+    except EditConflict as e:
+        raise HTTPException(409, str(e)) from e
+    except SessionError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True, "edit": edit}
 
 
 @app.get("/api/s/{slug}/events")

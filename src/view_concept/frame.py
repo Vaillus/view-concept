@@ -30,10 +30,22 @@ audited words, which frame.js underlines by painting over the words, never wrapp
 them; the term under the pointer goes back to the page, which shows its tip. The
 published page and the vault note add the same head. Kept apart from the server so
 publishing and exporting do not import FastAPI.
+
+An inline edit opens one block of an explanation section: a paragraph, a list item, a
+heading or a table cell. The page cannot find an HTML section's block by its lines, so
+the server writes a block mark on each one as it serves the file to the frame
+(`mark_blocks`: `data-block="<n>"`, counted in document order outside scripts, styles and
+templates), never in the file; a block a script draws has none and does not open. The
+text an edit changes is the block's runs of text, the text nodes between its tags (a
+nested block's left out), and the save finds block n again in the file with the same
+parser (`block_runs`, `replace_runs`), so the tags stay as they are. The same marks
+name the blocks that hold the writer's rewrite of an inline edit (`marks_over`), which the
+page sends the frame with the changes, for the rewrite highlight.
 """
 
 from __future__ import annotations
 
+import html
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -122,3 +134,224 @@ def visible_text(document: str) -> str:
     parser.feed(document)
     parser.close()
     return " ".join(" ".join(parser.parts).split())
+
+
+# ---- block marks: the blocks of an HTML section an inline edit opens ----
+
+# The elements that are blocks: a paragraph, a list item, a heading, a table cell.
+BLOCK_TAGS = frozenset({"p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "td", "th"})
+# Elements whose content is no text of the section: neither marked nor a run.
+_UNREAD = frozenset({"script", "style", "template"})
+# Elements with no end tag.
+_VOID = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source"}
+    | {"track", "wbr", "param"}
+)
+# A start tag that closes an open <p>, as the browser does.
+_CLOSES_P = frozenset(
+    {"address", "article", "aside", "blockquote", "details", "dialog", "div", "dl", "dd"}
+    | {"dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4"}
+    | {"h5", "h6", "header", "hgroup", "hr", "li", "main", "menu", "nav", "ol", "p", "pre"}
+    | {"section", "table", "ul"}
+)
+# The elements a closing search stops at, by the tag that searches.
+_STOPS = {
+    "p": frozenset({"table", "td", "th", "button", "template", "caption"}),
+    "li": frozenset({"ul", "ol", "table", "td", "th"}),
+    "cell": frozenset({"table"}),
+}
+
+
+class Block:
+    """Block n of an HTML section as its file holds it: where its start tag's name ends
+    (the mark goes there), its content (from the end of its start tag to its end tag or
+    its first nested block), and its runs of text, each as a raw range of the file."""
+
+    def __init__(self, name_end: int, open_end: int) -> None:
+        self.name_end = name_end
+        self.open_end = open_end
+        self.content_end: int | None = None
+        self.runs: list[list[int]] = []
+
+
+class _Blocks(HTMLParser):
+    """Finds the blocks of a document in order, outside its scripts, styles and
+    templates, closing the elements the browser closes without an end tag (a <p> before
+    a block, a <li> before the next, a cell before the next cell or row)."""
+
+    def __init__(self, document: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self.size = len(document)
+        self.starts = [0] + [i + 1 for i, ch in enumerate(document) if ch == "\n"]
+        self.blocks: list[Block] = []
+        # The open elements: tag, its block when it is one, where its start tag starts.
+        self.stack: list[tuple[str, Block | None, int]] = []
+        self.unread = 0
+        self.run: tuple[Block, int] | None = None  # the run being read: its block, start
+
+    def here(self) -> int:
+        line, col = self.getpos()
+        return self.starts[line - 1] + col
+
+    def end_run(self, at: int) -> None:
+        if self.run is not None:
+            block, start = self.run
+            if at > start:
+                block.runs.append([start, at])
+            self.run = None
+
+    def pop_through(self, i: int, at: int) -> None:
+        """Close the open elements from the top of the stack down to index i."""
+        while len(self.stack) > i:
+            _, block, _ = self.stack.pop()
+            if block is not None and block.content_end is None:
+                block.content_end = at
+
+    def find(self, tags: frozenset[str] | set[str], stops: frozenset[str]) -> int | None:
+        for i in range(len(self.stack) - 1, -1, -1):
+            tag = self.stack[i][0]
+            if tag in tags:
+                return i
+            if tag in stops:
+                return None
+        return None
+
+    def implied_ends(self, tag: str, at: int) -> None:
+        if tag in _CLOSES_P and (i := self.find({"p"}, _STOPS["p"])) is not None:
+            self.pop_through(i, at)
+        if tag == "li" and (i := self.find({"li"}, _STOPS["li"])) is not None:
+            self.pop_through(i, at)
+        if tag in ("td", "th") and (i := self.find({"td", "th"}, _STOPS["cell"])) is not None:
+            self.pop_through(i, at)
+        rows = ("tr", "tbody", "thead", "tfoot")
+        if tag in rows and (i := self.find({"tr"}, _STOPS["cell"])) is not None:
+            self.pop_through(i, at)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        at = self.here()
+        self.end_run(at)
+        if self.unread:
+            self.unread += tag in _UNREAD
+            return
+        if tag in _UNREAD:
+            self.unread = 1
+            return
+        self.implied_ends(tag, at)
+        if tag in _VOID:
+            return
+        block = None
+        if tag in BLOCK_TAGS:
+            text = self.get_starttag_text() or ""
+            block = Block(at + 1 + len(tag), at + len(text))
+            # The first nested block ends the content of every block it is in, at the
+            # start of that block's child that holds it.
+            for i, (_, outer, _) in enumerate(self.stack):
+                if outer is not None and outer.content_end is None:
+                    outer.content_end = self.stack[i + 1][2] if i + 1 < len(self.stack) else at
+            self.blocks.append(block)
+        self.stack.append((tag, block, at))
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.end_run(self.here())
+
+    def handle_endtag(self, tag: str) -> None:
+        at = self.here()
+        self.end_run(at)
+        if self.unread:
+            self.unread -= tag in _UNREAD
+            return
+        for i in range(len(self.stack) - 1, -1, -1):
+            if self.stack[i][0] == tag:
+                self.pop_through(i, at)
+                return
+
+    def handle_data(self, data: str) -> None:
+        if self.unread or self.run is not None:
+            return  # a script's text, or the rest of the run being read
+        # A block's runs stop at its first nested block: text after it is in no run.
+        block = next((b for _, b, _ in reversed(self.stack) if b is not None), None)
+        if block is not None and block.content_end is None:
+            self.run = (block, self.here())
+
+    def handle_comment(self, data: str) -> None:  # a comment node ends a text node
+        self.end_run(self.here())
+
+    handle_pi = unknown_decl = handle_comment
+
+    def close(self) -> None:
+        super().close()
+        self.end_run(self.size)
+        self.pop_through(0, self.size)
+
+
+def _blocks(document: str) -> list[Block]:
+    """The blocks of a document that hold written text: a block whose runs are empty or
+    blank (an element the file holds empty, which a script may fill) is none."""
+    parser = _Blocks(document)
+    parser.feed(document)
+    parser.close()
+    return [
+        b for b in parser.blocks if any(html.unescape(document[x:y]).strip() for x, y in b.runs)
+    ]
+
+
+def mark_blocks(document: str) -> str:
+    """The document a section frame receives: `data-block="<n>"` (n = 1, 2, … in document
+    order) written on the start tag of every paragraph, list item, heading and table cell
+    outside its scripts, styles and templates that holds written text. The file never
+    holds the marks: a block a script draws, or fills from empty, has none, and does not
+    open."""
+    out, last = [], 0
+    for n, block in enumerate(_blocks(document), 1):
+        out += [document[last : block.name_end], f' data-block="{n}"']
+        last = block.name_end
+    return "".join(out) + document[last:]
+
+
+class BlockRuns:
+    """Block n found in a document: its runs of text, raw ranges and text (entities
+    decoded, as the frame reads them), and its content's raw range."""
+
+    def __init__(self, document: str, block: Block) -> None:
+        self.ranges = [(a, b) for a, b in block.runs]
+        self.texts = [html.unescape(document[a:b]) for a, b in self.ranges]
+        self.content = (block.open_end, block.content_end or len(document))
+
+
+def block_runs(document: str, n: int) -> BlockRuns | None:
+    """Block n of the document (counted as `mark_blocks` counts), or None when it has
+    fewer blocks. Its runs of text are its text nodes in order up to its first nested
+    block, the content of a script, a style or a template left out."""
+    found = _blocks(document)
+    if not 1 <= n <= len(found):
+        return None
+    return BlockRuns(document, found[n - 1])
+
+
+def replace_runs(document: str, n: int, after: list[str]) -> tuple[str, str, str]:
+    """`document` with the runs of text of block n replaced by `after` (one text per run):
+    a run whose text changed is written with `&` and `<` escaped, the others keep their
+    raw bytes. Returns (the new document, the block's raw content before, after)."""
+    found = block_runs(document, n)
+    if found is None or len(after) != len(found.ranges):
+        raise ValueError(f"block {n} has not {len(after)} runs of text")
+    out = document
+    for (a, b), old, new in reversed(list(zip(found.ranges, found.texts, after, strict=True))):
+        if new != old:
+            out = out[:a] + new.replace("&", "&amp;").replace("<", "&lt;") + out[b:]
+    changed = block_runs(out, n)
+    assert changed is not None
+    a, b = found.content
+    c, d = changed.content
+    return out, document[a:b], out[c:d]
+
+
+def marks_over(document: str, start: int, end: int) -> list[int]:
+    """The block marks (counted as `mark_blocks` counts) of the blocks whose content
+    overlaps characters start..end-1 of `document`: where a passage of the file shows in
+    the frame."""
+    return [
+        n
+        for n, b in enumerate(_blocks(document), 1)
+        if b.open_end < end and start < (b.content_end or len(document))
+    ]

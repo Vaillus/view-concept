@@ -102,6 +102,14 @@ a.btn { color: var(--ink); text-decoration: none; text-align: center; }
 .sec .body li li.changed::before { left: -94px; }
 .sec .body :is(td, th).changed { position: static; box-shadow: inset 3px 0 var(--ok); }
 .sec .body :is(td, th).changed::before { content: none; }
+/* a block holding the writer's rewrite of your inline edit: the bar in the info colour, in
+   place of the green one, and the rewritten words painted always (app.js markRewrites) */
+.sec .body .rewritten { position: relative; }
+.sec .body .rewritten::before { content: ""; position: absolute; left: -14px; top: 0; bottom: 0; width: 3px; background: var(--info); }
+.sec .body li.rewritten::before { left: -54px; }
+.sec .body li li.rewritten::before { left: -94px; }
+.sec .body :is(td, th).rewritten { position: static; box-shadow: inset 3px 0 var(--info); }
+.sec .body :is(td, th).rewritten::before { content: none; }
 .sec h2 { font-size: 15px; margin: 16px 0 8px; display: flex; align-items: baseline; gap: 6px; }
 .sec h2 .num { min-width: 1.5em; }
 .sec.unwritten h2 { color: var(--muted); }
@@ -141,6 +149,7 @@ a.btn { color: var(--ink); text-decoration: none; text-align: center; }
 ::highlight(ev-sent) { background-color: var(--accentbg); }
 ::highlight(ev-thread) { background-color: var(--altbg); }
 ::highlight(ev-updated) { background-color: var(--okbg); text-decoration: underline 2px var(--ok); text-underline-offset: 3px; }
+::highlight(ev-rewrite) { background-color: var(--infobg); text-decoration: underline 2px var(--info); text-underline-offset: 3px; }
 ::highlight(ev-focus) { background-color: var(--accent); color: var(--on-accent); }
 
 /* ---- code sessions: citations, model changes ---- */
@@ -284,6 +293,29 @@ a.cite code { color: var(--info); background: var(--infobg); }
 .doc-edit-text { min-height: 60vh; font-size: 13px; line-height: 1.5; tab-size: 2; }
 .doc-edit-note { margin: 0; font-size: 12px; color: var(--warn); }
 .doc-edit-actions { display: flex; gap: 6px; }
+/* inline edit: the « edit » mark beside a block that opens, and the open block's editor
+   in place of the block's own text */
+.edit-mark { position: fixed; z-index: 7; padding: 0 6px; font-size: 11px; line-height: 18px; color: var(--muted);
+             background: var(--bg); border: 1px solid var(--line); cursor: pointer; }
+.edit-mark:hover { color: var(--accent); border-color: var(--accent); }
+.block-editor { display: flex; flex-direction: column; gap: 6px; margin: 2px 0; font-weight: inherit; }
+.block-editor .be-loading { margin: 0; font-size: 12px; }
+.block-editor .doc-edit-actions, .block-editor .doc-edit-note { font-size: 12px; font-weight: normal; }
+/* the live-preview editor (CodeMirror 6): the block's Markdown in the block's own type,
+   its syntax shown only in the token under the cursor */
+.block-editor .cm-editor { background: var(--raised); color: var(--ink); border: 1px solid var(--accentline); font: inherit; }
+.block-editor .cm-editor.cm-focused { outline: 1px solid var(--accent); }
+.block-editor .cm-editor .cm-scroller { font-family: inherit; line-height: inherit; }
+.block-editor .cm-editor .cm-content { padding: 4px 6px; caret-color: var(--ink); }
+.block-editor .cm-editor .cm-line { padding: 0; }
+.block-editor .cm-editor .cm-cursor { border-left-color: var(--ink); }
+.block-editor .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.block-editor .cm-editor .cm-selectionLayer .cm-selectionBackground { background: var(--accentbg); }
+.cm-vc-strong { font-weight: bold; }
+.cm-vc-em { font-style: italic; }
+.cm-vc-code { background: var(--neutralbg); color: var(--neutralink); }
+.cm-vc-link { color: var(--accent); text-decoration: underline; }
+.cm-vc-tex { color: var(--alt); }
 /* a stale passage: a doc passage the model contradicts */
 ::highlight(ev-stale) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }
 
@@ -311,6 +343,11 @@ a.cite code { color: var(--info); background: var(--infobg); }
 @media (max-width: 699.98px) { .batch-head { cursor: default; } .batch-head .bh-toggle { display: none; } }
 .comment { position: relative; border: 1px solid var(--line); padding: 6px 8px; background: var(--bg); }
 .comment.draft { border-color: var(--flag); }
+/* a pending inline edit: your words, sent with the next batch */
+#inline-edits { display: flex; flex-direction: column; gap: 6px; }
+#inline-edits:empty { display: none; }
+.comment.inline-edit { border-color: var(--accentline); }
+.comment.inline-edit .ie-words { font-size: 12px; line-height: 17px; color: var(--ink); }
 .c-quote { font-size: 12px; line-height: 17px; color: var(--ink-dim); font-style: italic; cursor: pointer; margin-bottom: 4px; padding-right: 16px; }
 @media (hover: hover) { .c-quote:hover { color: var(--accent); } }
 .c-text { font-size: 13px; white-space: pre-wrap; }

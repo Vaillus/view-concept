@@ -167,19 +167,29 @@ you started for it has ended and you gave its report, or your own work on
 it is done), run `view-concept done <slug> <batch id>`, the id its header
 printed (`b4`). Batches queued and handled by one run: name the last of
 them. Record it for every batch, also one that starts no run (« Stop
-grill », a batch you answer yourself), and never before the run ends.
+grill », a batch you answer yourself), and never before the run ends. While
+the indicator reads « processing », the page locks the user's inline edits:
+a batch you never record keeps them locked.
 
 ### Batches
 
 A batch is shaped like:
 
 ```
-view-concept · <slug> · batch b2 · 2 comments
+view-concept · <slug> · batch b2 · 2 comments · 1 inline edit
 action: <the button the user clicked, if any>
 note: <optional note for the whole batch>
+inline edit ie1 · section 3 « <its title> » (the user's text: keep it word for word)
+  before: <the section's text before the edit>
+  after:  <the user's text>
 [c4] §3 (s3) « quoted passage »
     comment text
 ```
+
+An `inline edit` line is a change the user made to a section's text in the
+page, saved straight into the section's file with no agent; a batch can hold
+inline edits alone (`0 comments`, no action). The writer keeps the user's
+words, as its role file says.
 
 A quote of the form `« plan · <section title> »` is a comment on that
 section's line in the Plan tab, not on its prose. On the scoping path, a
@@ -295,6 +305,7 @@ starts one run. Who takes it depends on the path and the stage.
 | « Write plan » or « Rewrite plan » (`action: plan`); « go ahead » in the terminal | planner (the terminal one as `"« Write plan »"`) | writer (« Rewrite plan ») |
 | « Approve plan » (`action: approve-plan`), or approving in the terminal | writer (the terminal one as `"« Approve plan »"`) | — |
 | « Grill me » (`action: grill`) | planner | writer |
+| inline edits (`inline edit` lines), alone or with the rest of the batch | writer | writer |
 
 **On the scoping path:**
 
@@ -307,9 +318,14 @@ starts one run. Who takes it depends on the path and the stage.
 | a planner or writer report « correction opened: back to scoping » (or « tension opened ») | — | scoper, with that report as its trigger |
 | « Grill me » (`action: grill`) | — (« What's missing? » takes its place) | writer |
 | an answer (`action: answer`) | — (a pin is settled by comment) | writer |
+| inline edits (`inline edit` lines), alone or with the rest of the batch | writer | writer |
 
 « Stop grill » (`action: stop-grill`) starts nothing: the next runs no longer
 see a grill in their context.
+
+Inline edits go to the writer in every phase, whatever else the batch
+holds: a batch whose other events go to another agent starts both, one
+after the other (see **One agent at a time**).
 
 Record a terminal message about the explanation with `view-concept message
 <slug> "<the message, as the user wrote it>"` before anything else: the

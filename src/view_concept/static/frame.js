@@ -38,13 +38,22 @@
      then; the frame highlights a passage only while the pointer is over a block holding
      it (the block of its start or of its end, so a passage over two blocks shows whole
      when either is hovered), or, under touch controls, from a tap on that block until a
-     tap elsewhere; the page's bar marks the whole frame.
+     tap elsewhere; the page's bar marks the whole frame. With them, `rewrites`: the
+     writer's rewrites of an inline edit this section shows, each {marks (the block
+     marks of the blocks holding it), after (your text as the file held it: the block's
+     content with its inline tags), tip (the hover text)}. The frame gives each block a
+     bar in the info colour (`data-vc-rewrite`, a shadow left of its box: no layout
+     change) and paints the words of its runs of text that are not in your after
+     ("ev-rewrite"), always, not only under the pointer; the green leaves those blocks.
    - The terms (page -> frame): the lexicon terms, the one this section is the home of,
      and the words the vocabulary audit flags in it. The frame underlines each
      occurrence by painting a style over the word, as it paints the anchors: no element
      of the section is changed, so its scripts find their text as they wrote it.
    - The term hover (frame -> page): the underlined word the pointer rests on and where
      it sits, or nothing once the pointer leaves it, so the page shows that term's tip.
+     Off a term, the pointer on a rewrite's coloured words or bar, or anywhere over a
+     block whose rewrite only removed words, posts the rewrite's hover text the same way,
+     as the key {tip}.
      Under touch controls, the word tapped, or nothing on a tap elsewhere or a scroll;
      a term tapped again is posted again, since the page may have hidden its tip.
    - The pins (page -> frame): one entry per element of the drawing bearing open pin
@@ -75,6 +84,26 @@
      error}. The published page answers from the published files instead (reader.js),
      with no server behind it, and adds `reason: "not-received"` to the answer to a
      request never received before publishing.
+   - The edit lock (page -> frame), {locked}: whether the blocks of this section open for
+     an inline edit. The page posts it at load and whenever the batch state changes:
+     locked while the last batch is processing, and always for a section whose blocks
+     never open (the drawing, a refactor section). A frame no page unlocks (the published
+     page, a vault note, a frame opened alone) opens nothing. A block open when the lock
+     arrives stays open, under a notice that its save is refused until the batch is done.
+   - The edit open (frame -> page), {block}: the reader opened block n (see "inline
+     edit" below). The page marks the section read and keeps one block open in the page:
+     it answers with the edit close when the reader keeps another block open instead.
+   - The edit dirty (frame -> page), {dirty}: whether the open block now holds unsaved
+     words, posted each time that flips as the reader types, so the page asks before
+     closing the block only when it does (it cannot ask the frame at that moment).
+   - The edit close (page -> frame): close the open block without saving.
+   - The edit save (frame -> page), {block, before, after}: ⌘↵ on the open block, its
+     runs of text at open and now, sent only once the tag lock holds. The page posts it
+     to its server and answers with the edit saved, {ok: true} or {ok: false, status,
+     error}: on ok the frame closes the block, else it shows the error under it and
+     keeps your words.
+   - The edit closed (frame -> page): the open block closed, by Esc, the edit close or a
+     save.
 
    The channel is the section's script's way to ask an agent for data and draw the answer
    itself, without its section being redrawn: the frame script gives every section a
@@ -104,7 +133,25 @@
    Every highlight and underline is painted again when a script of the section redraws
    its text, from the anchors, changes and terms the frame already holds. Text a script
    paints into a <canvas> is pixels, not text: it cannot be selected, highlighted nor
-   underlined. */
+   underlined.
+
+   Inline edit: the server writes a block mark, `data-block="<n>"`, on each paragraph,
+   list item, heading and table cell of the section's file that holds written text as it
+   serves it (text a script draws, or fills into an element the file holds empty, has
+   none). While the page leaves editing unlocked, pointing at a marked element (or
+   tapping it, under touch controls) shows « edit » beside it; a click opens it in place
+   as editable text, its inline tags locked: only its runs of text change (the text
+   nodes of the element up to its first nested block, which stays closed, leaving out
+   those inside a script or a style; the element's text after a nested block is in no
+   run and must stay as it is). Enter adds no line; a pasted line break becomes a space.
+   ⌘↵ checks the tag lock (the same elements in the same places, and the same number of
+   runs as at open): broken, the save is refused under the block and the block stays
+   open; held, the runs before and after go to the page (the edit save). A space the
+   browser wrote as a non-breaking one (U+00A0, as it does for a space typed at the end
+   of a text node) is saved as a space; a U+00A0 the run held at open is kept. Esc puts
+   the block's text back as it was and closes it. One block opens at a time in a frame:
+   while one is open no other shows its mark. The mark and the notice
+   live in a shadow root on <html>, out of the section's text and styles. */
 (function () {
   var root = document.documentElement;
   if (!root.hasAttribute("data-theme")) {
@@ -290,6 +337,7 @@
     var sel = getSelection();
     if (!sel.rangeCount || sel.isCollapsed) return null;
     var range = sel.getRangeAt(0);
+    if (editing && editing.el.contains(range.commonAncestorContainer)) return null; // the words being edited
     var quote = collapse(sel.toString());
     if (!quote) return null;
     var index = textIndex(), k = 0;
@@ -329,13 +377,15 @@
   addEventListener("mouseup", function (e) {
     setTimeout(function () {
       var s = postSelection();
-      if (!s && !touch) clickAt(e.target, e.clientX, e.clientY);
+      if (!s && !touch && !inEditing(e.target)) clickAt(e.target, e.clientX, e.clientY);
     }, 0);
   });
 
   /* ---- the anchors, the changes, the terms and the reveal ---- */
   var anchors = []; // { kind: draft | sent | thread, quote, prefix, thread? }
   var changes = []; // { quote, prefix }
+  var rewrites = []; // { marks, after, tip }: the rewrites of your inline edits shown
+  var rewriteHits = []; // { item: { key: { tip } }, blocks, ranges, removal } as last painted
   var terms = [];   // { term, kind: term | def | audit, key }
   var focus = null; // { quote, prefix } of the passage being revealed
   var pins = [];    // { element, pins: [pin ids], tone }: the marked elements of the drawing
@@ -344,7 +394,7 @@
   var pointer = null;    // { x, y } of the pointer over the frame, null once it left
   var shownChanges = null; // the indexes in changeRanges painted now, joined
   var placed = null; // the side threads' ids last posted as "placed", joined
-  var KINDS = ["draft", "sent", "thread", "focus", "updated", "term", "def", "audit"];
+  var KINDS = ["draft", "sent", "thread", "focus", "updated", "rewrite", "term", "def", "audit"];
   var marks = document.createElement("style");
   marks.textContent =
     "::highlight(ev-draft) { background-color: var(--flagbg); }\n" +
@@ -352,9 +402,12 @@
     "::highlight(ev-thread) { background-color: var(--altbg); }\n" +
     "::highlight(ev-focus) { background-color: var(--accent); color: var(--on-accent); }\n" +
     "::highlight(ev-updated) { background-color: var(--okbg); text-decoration: underline 2px var(--ok); text-underline-offset: 3px; }\n" +
+    "::highlight(ev-rewrite) { background-color: var(--infobg); text-decoration: underline 2px var(--info); text-underline-offset: 3px; }\n" +
+    "[data-vc-rewrite] { box-shadow: -3px 0 var(--bg), -6px 0 var(--info); }\n" +
     "::highlight(ev-term) { text-decoration: underline dotted var(--line-strong); text-underline-offset: 3px; }\n" +
     "::highlight(ev-def) { text-decoration: underline solid var(--accent); text-underline-offset: 3px; }\n" +
-    "::highlight(ev-audit) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }\n";
+    "::highlight(ev-audit) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }\n" +
+    "[data-vc-editing] { outline: 1px solid var(--accent); outline-offset: 2px; background-color: var(--raised); }\n";
   (document.head || root).appendChild(marks);
 
   // Letter-aware word boundaries, as the page uses: "état" does not match in "étatique".
@@ -417,11 +470,17 @@
       ranges[a.kind].push(r);
       if (a.kind === "thread" && a.thread) threadRanges.push([a, r]);
     });
+    ranges.rewrite = markRewrites();
     changeRanges = [];
     changes.forEach(function (c) {
       var r = findQuote(index, c.quote, c.prefix);
       if (!r) return;
       openOnce(c, r);
+      // A rewritten block shows the rewrite's colour, not the green: the passage stops at it.
+      var from = rewrittenBlock(r.startContainer), to = rewrittenBlock(r.endContainer);
+      if (from) r.setStartAfter(from);
+      if (to) r.setEndBefore(to);
+      if (r.collapsed || !r.toString().trim()) return;
       changeRanges.push([[blockOf(r.startContainer), blockOf(r.endContainer)], r]);
     });
     var under = pointer && document.elementFromPoint(pointer.x, pointer.y);
@@ -435,6 +494,115 @@
       CSS.highlights.set("ev-" + k, new (Function.prototype.bind.apply(Highlight, [null].concat(ranges[k])))());
     });
     postPlaced(answer);
+  }
+
+  /* The rewrite highlight: each rewrite's blocks get the bar, and the words of their runs
+     of text (a nested block's left out, as an inline edit opens them) that your after
+     does not hold are painted. Returns the ranges painted, one per run of such words. */
+  function markRewrites() {
+    var marked = document.querySelectorAll("[data-vc-rewrite]");
+    for (var i = 0; i < marked.length; i++) marked[i].removeAttribute("data-vc-rewrite");
+    rewriteHits = [];
+    var painted = [];
+    rewrites.forEach(function (rw) {
+      var els = (rw.marks || []).map(function (n) {
+        return document.querySelector('[data-block="' + Number(n) + '"]');
+      }).filter(Boolean);
+      if (!els.length) return;
+      var own = [];
+      els.forEach(function (el) { own = own.concat(runWords(el)); });
+      var inserted = insertedWords(afterWords(String(rw.after || "")), own.map(function (w) { return w.text; }));
+      var h = { item: { key: { tip: String(rw.tip || "") } }, blocks: els, ranges: [], removal: true };
+      var run = null;
+      own.forEach(function (w, k) {
+        if (!inserted[k]) { run = null; return; }
+        h.removal = false;
+        if (run && run.el === w.el) run.range.setEnd(w.range.endContainer, w.range.endOffset);
+        else { run = { el: w.el, range: w.range.cloneRange() }; h.ranges.push(run.range); }
+      });
+      els.forEach(function (el) { el.setAttribute("data-vc-rewrite", ""); });
+      painted = painted.concat(h.ranges);
+      rewriteHits.push(h);
+    });
+    return painted;
+  }
+  // The block holding the rewrite highlight whose own text holds `node`, or null.
+  function rewrittenBlock(node) {
+    var e = node && (node.nodeType === 1 ? node : node.parentElement);
+    var b = e && e.closest("[data-block]");
+    return b && b.hasAttribute("data-vc-rewrite") ? b : null;
+  }
+  // The words of a block's runs of text, each with its range: the runs are joined, so a
+  // word over two text nodes (`gate<em>s</em>`) is one, as in your after.
+  function runWords(el) {
+    var text = "", pos = [], out = [], re = /\S+/g, m;
+    runNodes(el).forEach(function (n) {
+      for (var i = 0; i < n.data.length; i++) { text += n.data[i]; pos.push([n, i]); }
+    });
+    while ((m = re.exec(text))) {
+      var s = pos[m.index], e = pos[m.index + m[0].length - 1], r = document.createRange();
+      r.setStart(s[0], s[1]);
+      r.setEnd(e[0], e[1] + 1);
+      out.push({ text: m[0], range: r, el: el });
+    }
+    return out;
+  }
+  // The words of your after, a block's content as the file held it: parsed inert (a
+  // template), its text nodes joined outside scripts and styles.
+  function afterWords(html) {
+    var t = document.createElement("template");
+    t.innerHTML = html;
+    var text = "", walker = document.createTreeWalker(t.content, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) {
+        for (var p = n.parentElement; p; p = p.parentElement) if (RUN_SKIP[p.tagName]) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    while (walker.nextNode()) text += walker.currentNode.data;
+    return text.split(/\s+/).filter(Boolean);
+  }
+  // Which words of `b` are not in `a`, as {index: true}: longest common subsequence; a
+  // pair too large to compare counts as rewritten whole.
+  function insertedWords(a, b) {
+    var n = a.length, m = b.length, out = {}, i, j;
+    if (n * m > 4e6) { for (j = 0; j < m; j++) out[j] = true; return out; }
+    var L = new Int32Array((n + 1) * (m + 1)); // L[i*(m+1)+j]: LCS of a[i..] and b[j..]
+    for (i = n - 1; i >= 0; i--) {
+      for (j = m - 1; j >= 0; j--) {
+        L[i * (m + 1) + j] = a[i] === b[j] ? L[(i + 1) * (m + 1) + j + 1] + 1
+          : Math.max(L[(i + 1) * (m + 1) + j], L[i * (m + 1) + j + 1]);
+      }
+    }
+    i = 0; j = 0;
+    while (j < m) {
+      if (i < n && a[i] === b[j]) { i++; j++; }
+      else if (i === n || L[i * (m + 1) + j + 1] >= L[(i + 1) * (m + 1) + j]) out[j++] = true;
+      else i++;
+    }
+    return out;
+  }
+  // The rewrite whose hover text shows at (x, y), with its box: its coloured words, its
+  // bar (left of a block's box), or anywhere over a block whose rewrite only removed words.
+  function rewriteAt(x, y) {
+    var i, j, k;
+    for (i = 0; i < rewriteHits.length; i++) {
+      var h = rewriteHits[i];
+      for (j = 0; j < h.ranges.length; j++) {
+        var rects = h.ranges[j].getClientRects();
+        for (k = 0; k < rects.length; k++) {
+          var r = rects[k];
+          if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return [h.item, r];
+        }
+      }
+    }
+    for (i = 0; i < rewriteHits.length; i++) {
+      for (j = 0; j < rewriteHits[i].blocks.length; j++) {
+        var b = rewriteHits[i].blocks[j].getBoundingClientRect();
+        if (y < b.top || y > b.bottom) continue;
+        if (x >= b.left - 8 && (x < b.left || (rewriteHits[i].removal && x <= b.right))) return [rewriteHits[i].item, b];
+      }
+    }
+    return null;
   }
 
   // The block a change passage's start or end sits in.
@@ -464,7 +632,7 @@
   // the passages and the terms again once the change is done.
   var pending = false;
   function rehighlight() {
-    if (pending || (!anchors.length && !changes.length && !terms.length && !focus && !pins.length)) return;
+    if (pending || (!anchors.length && !changes.length && !rewrites.length && !terms.length && !focus && !pins.length)) return;
     pending = true;
     requestAnimationFrame(function () { pending = false; highlight(); markPins(); });
   }
@@ -531,10 +699,253 @@
            : { viewConcept: "pin-click", pins: [] });
   }
 
+  /* ---- inline edit ---- */
+  var editLocked = true; // until the page unlocks it: a frame no page talks to opens nothing
+  var editing = null;    // the open block: { el, n, before (its runs at open), rest, shape, original, off, had, saving, dirty, lockNote }
+  var RUN_SKIP = { SCRIPT: 1, STYLE: 1, TEMPLATE: 1 };
+  // The block tags, as frame.py counts them: a nested one is a block of its own.
+  var BLOCK_SEL = "p, li, h1, h2, h3, h4, h5, h6, td, th";
+
+  // The text nodes of a block outside scripts and styles, as [before its first nested
+  // block, from that block on] (the nested blocks' own text left out of the second).
+  function splitNodes(el) {
+    var first = el.querySelector(BLOCK_SEL), runs = [], rest = [];
+    var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) {
+        for (var p = n.parentElement; p && p !== el; p = p.parentElement) {
+          if (RUN_SKIP[p.tagName]) return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    while (walker.nextNode()) {
+      var n = walker.currentNode;
+      if (!first || first.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_PRECEDING) runs.push(n);
+      else if (n.parentElement.closest(BLOCK_SEL) === el) rest.push(n);
+    }
+    return [runs, rest];
+  }
+  // The runs of text of a block: its text nodes up to its first nested block, outside
+  // scripts and styles, as frame.py's block_runs counts them.
+  function runNodes(el) { return splitNodes(el)[0]; }
+  // The block's own text after its first nested block: in no run, so it must not change.
+  function restOf(el) { return textsOf(splitNodes(el)[1]).join(""); }
+  function textsOf(nodes) { return nodes.map(function (n) { return n.data; }); }
+  // The elements of a block, their text left out: the tag lock compares it at open and at save.
+  function shapeOf(el) {
+    var s = "";
+    for (var c = el.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType !== 1) continue;
+      s += "<" + c.tagName + (c.hasAttribute("data-block") ? " " + c.getAttribute("data-block") + "/>" : ">" + shapeOf(c) + "</>");
+    }
+    return s;
+  }
+
+  // The mark and the notice, in a shadow root: no text of the section, no style of it.
+  var ui = null, markedEl = null, markTimer = null;
+  function editUi() {
+    if (ui) return ui;
+    var host = document.createElement("vc-inline-edit");
+    host.style.cssText = "position: absolute; top: 0; left: 0; width: 0; height: 0; z-index: 2147483647;";
+    var shadow = host.attachShadow({ mode: "closed" });
+    shadow.innerHTML =
+      "<style>" +
+      ".mark { position: absolute; font: 11px/18px var(--mono, monospace); padding: 0 6px; color: var(--muted);" +
+      " background: var(--bg); border: 1px solid var(--line); cursor: pointer; }" +
+      ".mark:hover { color: var(--accent); border-color: var(--accent); }" +
+      ".notice { position: absolute; font: 12px/17px var(--mono, monospace); padding: 4px 8px; color: var(--warn);" +
+      " background: var(--bg); border: 1px solid var(--warn); max-width: 60ch; }" +
+      "[hidden] { display: none; }" +
+      "</style><button class=\"mark\" hidden>edit</button><div class=\"notice\" hidden></div>";
+    ui = { host: host, mark: shadow.querySelector(".mark"), notice: shadow.querySelector(".notice") };
+    ui.mark.addEventListener("mousedown", function (e) { e.preventDefault(); });
+    ui.mark.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var b = markedEl;
+      hideMark();
+      if (b) openBlock(b);
+    });
+    ui.mark.addEventListener("mouseenter", function () { clearTimeout(markTimer); });
+    ui.mark.addEventListener("mouseleave", function () { hideMark(true); });
+    root.appendChild(host);
+    return ui;
+  }
+
+  // The marked element under `target` that opens now, or null.
+  function blockAt(target) {
+    if (editLocked || editing || !target || !target.closest) return null;
+    return target.closest("[data-block]");
+  }
+  function showMark(el) {
+    var u = editUi();
+    clearTimeout(markTimer);
+    markedEl = el;
+    u.mark.hidden = false;
+    var r = el.getBoundingClientRect(), w = u.mark.offsetWidth;
+    var left = r.left - w - 8 >= 0 ? r.left - w - 8 : r.right + w + 8 <= root.clientWidth ? r.right + 8 : r.right - w;
+    u.mark.style.left = (left + scrollX) + "px";
+    u.mark.style.top = (r.top + scrollY) + "px";
+  }
+  function hideMark(later) {
+    clearTimeout(markTimer);
+    if (later) { markTimer = setTimeout(function () { hideMark(); }, 400); return; }
+    markedEl = null;
+    if (ui) ui.mark.hidden = true;
+  }
+  function hoverBlock(target) {
+    if (ui && target === ui.host) { clearTimeout(markTimer); return; }
+    var b = blockAt(target);
+    if (b) showMark(b);
+    else if (markedEl) hideMark(true);
+  }
+
+  // The notice under the open block (above it when the frame ends below); "" hides it.
+  function notice(text) {
+    var u = editUi();
+    u.notice.textContent = text;
+    u.notice.hidden = !text;
+    if (editing) editing.lockNote = text === LOCK_NOTE;
+    if (!text || !editing) return;
+    var r = editing.el.getBoundingClientRect(), h = u.notice.offsetHeight;
+    var below = r.bottom + scrollY + 4;
+    u.notice.style.top = (below + h > root.scrollHeight && r.top + scrollY - h - 4 >= 0 ? r.top + scrollY - h - 4 : below) + "px";
+    u.notice.style.left = (r.left + scrollX) + "px";
+  }
+
+  function openBlock(el) {
+    if (editLocked || editing || !el.hasAttribute("data-block")) return;
+    var nodes = runNodes(el);
+    editing = { el: el, n: Number(el.getAttribute("data-block")), before: textsOf(nodes), rest: restOf(el), shape: shapeOf(el),
+                original: Array.prototype.map.call(el.childNodes, function (c) { return c.cloneNode(true); }),
+                off: [], had: el.getAttribute("contenteditable"), saving: false, dirty: false, lockNote: false };
+    // A nested block is a block of its own: it stays closed.
+    Array.prototype.forEach.call(el.querySelectorAll(BLOCK_SEL), function (n) {
+      if (n.hasAttribute("contenteditable")) return;
+      n.setAttribute("contenteditable", "false");
+      editing.off.push(n);
+    });
+    el.contentEditable = "plaintext-only";
+    if (el.contentEditable !== "plaintext-only") el.contentEditable = "true";
+    el.setAttribute("data-vc-editing", "");
+    hideMark();
+    el.focus();
+    var sel = getSelection(), end = nodes[nodes.length - 1];
+    if (sel && end) sel.collapse(end, end.data.length);
+    post({ viewConcept: "edit-open", block: editing.n });
+  }
+
+  // Close the open block: `restore` puts its text back as it was at open.
+  function closeBlock(restore) {
+    var e = editing;
+    if (!e) return;
+    editing = null;
+    if (restore) {
+      var nodes = runNodes(e.el);
+      if (shapeOf(e.el) === e.shape && nodes.length === e.before.length) {
+        nodes.forEach(function (n, i) { if (n.data !== e.before[i]) n.data = e.before[i]; });
+      } else {
+        while (e.el.firstChild) e.el.removeChild(e.el.firstChild);
+        e.original.forEach(function (c) { e.el.appendChild(c); });
+      }
+    }
+    e.off.forEach(function (n) { n.removeAttribute("contenteditable"); });
+    if (e.had === null) e.el.removeAttribute("contenteditable");
+    else e.el.setAttribute("contenteditable", e.had);
+    e.el.removeAttribute("data-vc-editing");
+    notice("");
+    if (document.activeElement === e.el) e.el.blur();
+    post({ viewConcept: "edit-closed" });
+  }
+
+  // A run's text as typed: the U+00A0 the browser writes for a typed space turned back
+  // into a space, in the part of the run that changed since open (its common start and
+  // end with the run at open kept as they were, so a U+00A0 the file held stays).
+  function typed(before, now) {
+    if (now.indexOf("\u00a0") < 0) return now;
+    var a = 0, max = Math.min(before.length, now.length);
+    while (a < max && before[a] === now[a]) a++;
+    var b = 0;
+    while (b < max - a && before[before.length - 1 - b] === now[now.length - 1 - b]) b++;
+    return now.slice(0, a) + now.slice(a, now.length - b).replace(/\u00a0/g, " ") + now.slice(now.length - b);
+  }
+  function typedTexts(e, nodes) {
+    return textsOf(nodes).map(function (t, i) { return i < e.before.length ? typed(e.before[i], t) : t; });
+  }
+  // Whether the open block holds unsaved words: posted to the page each time it flips.
+  function checkDirty() {
+    var e = editing;
+    if (!e) return;
+    var nodes = runNodes(e.el), now = typedTexts(e, nodes);
+    var dirty = shapeOf(e.el) !== e.shape || nodes.length !== e.before.length || restOf(e.el) !== e.rest
+      || now.some(function (t, i) { return t !== e.before[i]; });
+    if (dirty === e.dirty) return;
+    e.dirty = dirty;
+    post({ viewConcept: "edit-dirty", dirty: dirty });
+  }
+
+  function saveBlock() {
+    var e = editing;
+    if (!e || e.saving) return;
+    var nodes = runNodes(e.el);
+    if (shapeOf(e.el) !== e.shape || nodes.length !== e.before.length) {
+      notice("Refused: only the words can change, and a tag or a run of text was added or removed. Undo it (⌘Z), or press Esc to drop your edit.");
+      return;
+    }
+    if (restOf(e.el) !== e.rest) {
+      notice("Refused: the text after the nested list is not part of this block. Undo it (⌘Z), or press Esc to drop your edit.");
+      return;
+    }
+    var after = typedTexts(e, nodes);
+    if (after.every(function (t, i) { return t === e.before[i]; })) { closeBlock(false); return; }
+    e.saving = true;
+    notice("saving…");
+    post({ viewConcept: "edit-save", block: e.n, before: e.before, after: after });
+  }
+
+  function saved(d) {
+    if (!editing) return;
+    editing.saving = false;
+    if (d.ok) closeBlock(false);
+    else notice(String(d.error || "The save was refused."));
+  }
+
+  var LOCK_NOTE = "A batch is processing: saving is refused until the batch indicator reads « done ». Your words stay here.";
+  function setEditLock(locked) {
+    editLocked = locked;
+    if (locked) hideMark();
+    var e = editing;
+    if (!e || e.saving) return;
+    if (locked && !e.lockNote) notice(LOCK_NOTE);
+    else if (!locked && e.lockNote) notice("");
+  }
+
+  // The open block takes no line: Enter adds none, a pasted line break is a space, nothing is dropped in.
+  function inEditing(target) { return !!editing && !!target && editing.el.contains(target); }
+  document.addEventListener("beforeinput", function (e) {
+    if (inEditing(e.target) && (e.inputType === "insertParagraph" || e.inputType === "insertLineBreak")) e.preventDefault();
+  });
+  document.addEventListener("paste", function (e) {
+    if (!inEditing(e.target) || !e.clipboardData) return;
+    e.preventDefault();
+    document.execCommand("insertText", false, e.clipboardData.getData("text/plain").replace(/\s*[\r\n]+\s*/g, " "));
+  });
+  document.addEventListener("drop", function (e) { if (inEditing(e.target)) e.preventDefault(); });
+  document.addEventListener("input", function (e) { if (inEditing(e.target)) checkDirty(); });
+
   /* ---- Escape ----
      A click in the frame gives it the focus, so the page never sees the key: the frame
-     passes Escape on, and the page closes its pin window as on its own Escape. */
+     passes Escape on, and the page closes its pin window as on its own Escape. In an
+     open block, Escape closes the block instead, Enter adds no line and ⌘↵ saves. */
   addEventListener("keydown", function (e) {
+    if (editing) {
+      if (e.key === "Escape") { e.preventDefault(); closeBlock(true); return; }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (e.metaKey || e.ctrlKey) saveBlock();
+        return;
+      }
+      return;
+    }
     if (e.key === "Escape") post({ viewConcept: "escape" });
   });
 
@@ -551,24 +962,29 @@
     if (touch) return;
     pointer = { x: e.clientX, y: e.clientY };
     paintChanges(e.target);
-    var h = hit(termRanges, e.clientX, e.clientY);
+    hoverBlock(e.target);
+    // A term under the pointer wins over the rewrite around it.
+    var h = hit(termRanges, e.clientX, e.clientY) || rewriteAt(e.clientX, e.clientY);
     hover(h && h[0], h && h[1]);
     // The passage of a thread is clickable: say so with the cursor.
     root.style.cursor = hit(threadRanges, e.clientX, e.clientY) ? "pointer" : "";
   });
-  document.addEventListener("mouseleave", function () { if (!touch) { hover(null); pointer = null; paintChanges(null); } });
+  document.addEventListener("mouseleave", function () { if (!touch) { hover(null); pointer = null; paintChanges(null); if (markedEl) hideMark(true); } });
   // Under touch controls a tap does what a resting pointer does: on a term, its tip; on a
   // changed block, its new words, until a tap elsewhere; on a side thread's passage (off
   // its terms), the thread.
   addEventListener("click", function (e) {
-    if (!touch) return;
+    if (!touch || inEditing(e.target)) return;
     var sel = getSelection();
     if (sel && !sel.isCollapsed) return;
     post({ viewConcept: "tap" });
+    var block = blockAt(e.target);
+    if (block) showMark(block);
+    else if (!(ui && e.target === ui.host)) hideMark();
     pointer = { x: e.clientX, y: e.clientY };
     paintChanges(e.target);
-    var h = hit(termRanges, e.clientX, e.clientY);
-    hover(h && h[0], h && h[1], true);
+    var h = hit(termRanges, e.clientX, e.clientY), rw = !h && rewriteAt(e.clientX, e.clientY);
+    hover((h || rw) && (h || rw)[0], (h || rw) && (h || rw)[1], true);
     if (!h) clickAt(e.target, e.clientX, e.clientY);
   });
   addEventListener("scroll", function () { hover(null); });
@@ -578,12 +994,19 @@
     if (e.source !== parent || !d) return;
     if (d.viewConcept === "theme" && d.theme) root.setAttribute("data-theme", d.theme);
     else if (d.viewConcept === "anchors" && Array.isArray(d.anchors)) { anchors = d.anchors; highlight(true); }
-    else if (d.viewConcept === "changes" && Array.isArray(d.changes)) { changes = d.changes; highlight(); }
+    else if (d.viewConcept === "changes" && Array.isArray(d.changes)) {
+      changes = d.changes;
+      rewrites = Array.isArray(d.rewrites) ? d.rewrites : [];
+      highlight();
+    }
     else if (d.viewConcept === "terms" && Array.isArray(d.terms)) { terms = d.terms; hover(null); highlight(); }
     else if (d.viewConcept === "reveal") reveal(d.quote, d.prefix);
     else if (d.viewConcept === "pins" && Array.isArray(d.pins)) { pins = d.pins; markPins(); }
     else if (d.viewConcept === "reveal-element") revealElement(d.element);
     else if (d.viewConcept === "tap-elsewhere" && touch) { pointer = null; paintChanges(null); }
     else if (d.viewConcept === "channel-answer") answered(d);
+    else if (d.viewConcept === "edit-lock") setEditLock(d.locked !== false);
+    else if (d.viewConcept === "edit-close") closeBlock(true);
+    else if (d.viewConcept === "edit-saved") saved(d);
   });
 })();

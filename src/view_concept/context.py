@@ -51,6 +51,11 @@ The scoper, the planner and the writer also get the parameters file (params.json
 section's script used the channel: what each script saved and the answers it received, so
 the report gives each prerequisite the depth the user chose.
 
+The writer also gets the edit record (inline-edits.json): every inline edit the user made
+to a section's text in the page, pending or carried by a batch, each marked by whether its
+text is still in its section. The writer keeps that text word for word in every rewrite,
+unless the batch it works on makes it wrong; an edit whose text is gone binds no run.
+
 An HTML section is loaded by its visible text, the words a reader sees in it, not its HTML
 source; its heading names its file, for an agent that needs the source. A side thread on
 the drawing (a passage of a scoping section, or a pin's box) gets the drawing's HTML
@@ -94,6 +99,7 @@ from .store import (
     TRIAGE_KEY,
     Session,
     SessionError,
+    edit_place,
     format_batch,
     format_comment,
     format_doc,
@@ -125,6 +131,8 @@ PIN_ROLES = ("scoper", "planner", "writer")
 # The roles that get the parameters file: the depth the user chose on each prerequisite,
 # and what the sections' scripts received.
 PARAMS_ROLES = ("scoper", "planner", "writer")
+# The roles that get the edit record: the writer keeps the user's words.
+EDIT_ROLES = ("writer",)
 
 QUESTION_ID = re.compile(r"^q\d+$")
 PIN_ID = re.compile(r"^[ph]\d+$")
@@ -171,6 +179,8 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
     if role in PARAMS_ROLES and (params := s.read_params()):
         out += ["", *_params(params)]
     out += ["", *_recent("Terminal messages", s.read_terminal_messages(), _message_line)]
+    if role in EDIT_ROLES:
+        out += ["", *_inline_edits(s, outline)]
     html = s.html_sections()
     # An HTML section is read by its visible text, not its HTML source.
     sections = {**s.read_sections(), **{k: v for k, v in s.read_prose().items() if k in html}}
@@ -209,6 +219,29 @@ def build(s: Session, role: str, trigger: list[str] | None = None, section: str 
             sec = _sections(outline, sections, section, html=html)
             out += ["", "## Section of the passage", *sec]
     return "\n".join(out).rstrip() + "\n"
+
+
+def _inline_edits(s: Session, outline: list[dict[str, Any]]) -> list[str]:
+    """Every inline edit of the edit record, oldest first: its section, its batch (or
+    pending), whether its text is still in its section, and that text, then each rewrite
+    the writer recorded of it, oldest first: its batch, its reason and its text."""
+    lines = ["## Inline edits (the user's words: the keep rule)"]
+    edits = s.read_inline_edits()
+    if not edits:
+        return [*lines, "(none)"]
+    texts = s.read_sections()
+    titles = {sec["id"]: sec.get("title", sec["id"]) for sec in outline}
+    for e in edits:
+        batch = f"batch {e['batch']}" if e.get("batch") else "pending"
+        found = e["after"] in texts.get(e["section"], "")
+        where = "still in its section" if found else "gone from its section"
+        lines.append(f"- {e['id']} · {edit_place(e, _number(outline), titles)} · {batch} · {where}")
+        first, *rest = e["after"].split("\n")
+        lines += [f"  after: {first}".rstrip(), *(f"         {line}".rstrip() for line in rest)]
+        for r in e.get("rewrites", []):
+            lines.append(f"  rewritten ({r.get('batch') or 'no batch'}): {r['reason']}")
+            lines += [f"         {line}".rstrip() for line in r["text"].split("\n")]
+    return lines
 
 
 def doc_passage(s: Session, anchor: str) -> list[str]:

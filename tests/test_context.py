@@ -352,3 +352,40 @@ def test_a_thread_on_the_drawing_gets_its_html_source(session):
     # The roles keep the visible text.
     scoper = build(session, "scoper")
     assert "each word looks" in scoper and '<p id="e7">' not in scoper
+
+
+def test_the_writer_gets_the_edit_record_marked_by_whether_it_is_still_in(session):
+    assert "## Inline edits (the user's words: the keep rule)\n(none)" in build(session, "writer")
+    session.read_seen(session.read_sections())
+    base = (session.sections_dir / "s1.md").read_text()
+    session.save_inline_edit("s1", base, span="L0-1", text="L'attention,\nmasquée.")
+    b = session.add_batch([])
+    session.record_batch_done(b["id"])
+    base = (session.sections_dir / "s2.md").read_text()
+    session.save_inline_edit("s2", base, span="L0-1", text="Le cache des clés.")
+    (session.sections_dir / "s2.md").write_text("Le cache, réécrit.")  # the writer rewrote it
+    text = build(session, "writer")
+    assert (
+        "## Inline edits (the user's words: the keep rule)\n"
+        "- ie1 · section 1 « Attention » · batch b1 · still in its section\n"
+        "  after: L'attention,\n"
+        "         masquée.\n"
+        "- ie2 · section 2 « Cache » · pending · gone from its section\n"
+        "  after: Le cache des clés."
+    ) in text
+    assert "## Inline edits" not in build(session, "planner")
+
+
+def test_the_writer_gets_each_rewrite_of_an_edit_with_its_reason(session):
+    session.read_seen(session.read_sections())
+    session.save_inline_edit("s1", "L'attention.", span="L0-1", text="L'attention, masquée.")
+    session.record_batch_done(session.add_batch([])["id"])
+    (session.sections_dir / "s1.md").write_text("L'attention,\nmasquée et causale.")
+    session.record_rewrite("ie1", "L'attention,\nmasquée et causale.", "the mask is causal now")
+    assert (
+        "- ie1 · section 1 « Attention » · batch b1 · gone from its section\n"
+        "  after: L'attention, masquée.\n"
+        "  rewritten (b1): the mask is causal now\n"
+        "         L'attention,\n"
+        "         masquée et causale."
+    ) in build(session, "writer")

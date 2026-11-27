@@ -8,6 +8,8 @@ import pytest
 from view_concept.store import (
     EARNS_MAX,
     LISTENING_FOR,
+    EditConflict,
+    InlineEditLocked,
     Session,
     SessionError,
     format_batch,
@@ -1958,3 +1960,240 @@ def test_an_explanation_s_report_leaves_the_drawing_out(session, tmp_path):
     session.plan_path.write_text(json.dumps(plan))
     assert [s["id"] for s in session.published_sections()] == ["scoping", "s1", "s2"]
     assert "## Scoping" in session.export(tmp_path / "vault").read_text()
+
+
+# ---- inline edits ----
+
+GATE_MD = "\n".join(
+    [
+        "## The gate",
+        "",
+        "A gate removes segments",
+        "that are mostly silence.",
+        "",
+        "| a | b |",
+        "|---|---|",
+        "| x | y |",
+        "",
+    ]
+)
+GATE_HTML = (
+    "<h2>The gate</h2>\n<p>A gate removes segments that are mostly <strong>silence</strong>.</p>\n"
+)
+
+
+@pytest.fixture
+def gate(session):
+    """s1, a Markdown section, and s2, an HTML section, of the gate."""
+    (session.sections_dir / "s1.md").write_text(GATE_MD)
+    (session.sections_dir / "s2.md").unlink()
+    (session.sections_dir / "s2.html").write_text(GATE_HTML)
+    session.read_seen(session.read_sections())  # the page loaded them: their baselines
+    return session
+
+
+def test_a_markdown_inline_edit_writes_its_span_and_moves_the_baseline(gate):
+    edit = gate.save_inline_edit("s1", GATE_MD, span="L2-4", text="A gate drops a segment.")
+    after = GATE_MD.replace(
+        "A gate removes segments\nthat are mostly silence.", "A gate drops a segment."
+    )
+    assert (gate.sections_dir / "s1.md").read_text() == after
+    assert edit == {
+        "id": "ie1",
+        "section": "s1",
+        "before": "A gate removes segments\nthat are mostly silence.",
+        "after": "A gate drops a segment.",
+        "at": edit["at"],
+        "batch": "",
+        "offset": len("## The gate\n\n"),
+    }
+    assert gate.read_inline_edits() == [edit] and gate.pending_edits() == [edit]
+    assert gate.read_seen({})["s1"] == after  # no green on the user's words
+
+
+def test_a_cell_edit_escapes_a_typed_pipe(gate):
+    edit = gate.save_inline_edit("s1", GATE_MD, span="C7:2-3", text="x | z")
+    assert edit is not None and (edit["before"], edit["after"]) == ("x", "x \\| z")
+    assert "| x \\| z | y |" in (gate.sections_dir / "s1.md").read_text()
+
+
+def test_an_html_inline_edit_replaces_the_runs_of_its_block(gate):
+    before = ["A gate removes segments that are mostly ", "silence", "."]
+    after = ["A gate drops a segment when its ", "silence", " ratio > 0.8 & more."]
+    edit = gate.save_inline_edit("s2", GATE_HTML, block=2, before=before, after=after)
+    text = (gate.sections_dir / "s2.html").read_text()
+    written = "A gate drops a segment when its <strong>silence</strong> ratio > 0.8 &amp; more."
+    assert text == GATE_HTML.replace(
+        "A gate removes segments that are mostly <strong>silence</strong>.", written
+    )
+    assert edit is not None and edit["after"] == written
+
+
+def test_an_html_edit_that_changes_a_tag_is_refused(gate):
+    before = ["A gate removes segments that are mostly ", "silence", "."]
+    with pytest.raises(SessionError, match="not its tags") as e:
+        gate.save_inline_edit("s2", GATE_HTML, block=2, before=before, after=["A gate."])
+    assert not isinstance(e.value, EditConflict)
+    assert (gate.sections_dir / "s2.html").read_text() == GATE_HTML
+
+
+def test_an_inline_edit_of_a_changed_file_is_refused(gate):
+    (gate.sections_dir / "s1.md").write_text(GATE_MD + "\nA run added this.\n")
+    with pytest.raises(EditConflict):
+        gate.save_inline_edit("s1", GATE_MD, span="L2-4", text="Mine.")
+    runs = ["A script rewrote this."]
+    with pytest.raises(EditConflict):  # the frame's runs are not the file's
+        gate.save_inline_edit("s2", GATE_HTML, block=2, before=runs, after=["Mine."])
+    assert gate.read_inline_edits() == []
+
+
+def test_no_inline_edit_while_a_batch_processes(gate):
+    b = gate.add_batch([{"section": "s1", "text": "shorter"}])
+    with pytest.raises(InlineEditLocked):
+        gate.save_inline_edit("s1", GATE_MD, span="L2-4", text="Mine.")
+    gate.record_batch_done(b["id"])
+    assert gate.save_inline_edit("s1", GATE_MD, span="L2-4", text="Mine.") is not None
+
+
+def test_only_an_explanation_sections_block_opens(gate):
+    plan = gate.read_plan()
+    plan["outline"][0]["part"] = "refactoring"
+    gate.plan_path.write_text(json.dumps(plan))
+    with pytest.raises(SessionError, match="no written explanation section"):
+        gate.save_inline_edit("s1", GATE_MD, span="L2-4", text="Mine.")
+    with pytest.raises(SessionError, match="HTML section"):
+        gate.save_inline_edit("s2", GATE_HTML, span="L0-1", text="Mine.")
+
+
+def test_two_saves_of_one_block_merge_and_a_return_drops_the_edit(gate):
+    first = gate.save_inline_edit("s1", GATE_MD, span="L2-4", text="One.")
+    assert first is not None
+    base = (gate.sections_dir / "s1.md").read_text()
+    second = gate.save_inline_edit("s1", base, span="L2-3", text="Two.")
+    assert second is not None
+    assert (second["id"], second["before"], second["after"]) == ("ie1", first["before"], "Two.")
+    assert gate.save_inline_edit("s1", base.replace("One.", "Two."), span="L0-1", text="Gate")
+    assert [e["id"] for e in gate.read_inline_edits()] == ["ie1", "ie2"]
+    base = (gate.sections_dir / "s1.md").read_text()
+    back = "A gate removes segments\nthat are mostly silence."
+    assert gate.save_inline_edit("s1", base, span="L2-3", text=back) is None
+    assert [e["id"] for e in gate.read_inline_edits()] == ["ie2"]
+    assert (gate.sections_dir / "s1.md").read_text() == GATE_MD.replace("The gate", "Gate")
+
+
+def test_two_cells_with_the_same_text_are_two_edits(gate):
+    text = "| yes | no |\n|---|---|\n| a | b |\n"
+    (gate.sections_dir / "s1.md").write_text(text)
+    first = gate.save_inline_edit("s1", text, span="C0:2-5", text="no")
+    base = (gate.sections_dir / "s1.md").read_text()
+    assert base.startswith("| no | no |")
+    second = gate.save_inline_edit("s1", base, span="C0:7-9", text="never")
+    assert first is not None and second is not None
+    assert (gate.sections_dir / "s1.md").read_text().startswith("| no | never |")
+    assert [(e["id"], e["before"], e["after"]) for e in gate.read_inline_edits()] == [
+        ("ie1", "yes", "no"),
+        ("ie2", "no", "never"),
+    ]
+    # A save of the first cell again merges into its own edit, the second's offset moved.
+    base = (gate.sections_dir / "s1.md").read_text()
+    third = gate.save_inline_edit("s1", base, span="C0:2-4", text="maybe")
+    assert third is not None and (third["id"], third["before"]) == ("ie1", "yes")
+    base = (gate.sections_dir / "s1.md").read_text()
+    assert base.startswith("| maybe | never |")
+    fourth = gate.save_inline_edit("s1", base, span="C0:10-15", text="ever")
+    assert fourth is not None and (fourth["id"], fourth["before"]) == ("ie2", "no")
+
+
+def test_an_unchanged_block_writes_nothing(gate):
+    assert gate.save_inline_edit("s1", GATE_MD, span="L0-1", text="The gate") is None
+    assert not gate.inline_edits_path.exists()
+
+
+def test_a_batch_of_inline_edits_alone_carries_them_and_reads_them(gate):
+    with pytest.raises(SessionError, match="empty batch"):
+        gate.add_batch([])
+    edit = gate.save_inline_edit(
+        "s1", GATE_MD, span="L2-4", text="A gate drops a segment\nwhen its **ratio** is high."
+    )
+    assert edit is not None
+    b = gate.add_batch([])
+    assert b["edits"] == [{k: edit[k] for k in ("id", "section", "before", "after")}]
+    assert gate.pending_edits() == [] and gate.read_inline_edits()[0]["batch"] == b["id"]
+    assert format_batch("kv-cache", b, gate.read_plan()["outline"]) == "\n".join(
+        [
+            "view-concept · kv-cache · batch b1 · 0 comments · 1 inline edit",
+            "inline edit ie1 · section 1 « Attention » (the user's text: keep it word for word)",
+            "  before: A gate removes segments",
+            "          that are mostly silence.",
+            "  after:  A gate drops a segment",
+            "          when its **ratio** is high.",
+        ]
+    )
+    gate.record_batch_done(b["id"])
+    # Once a batch carried it, a new save of the block is a new edit.
+    base = (gate.sections_dir / "s1.md").read_text()
+    again = gate.save_inline_edit("s1", base, span="L2-4", text="Mine.")
+    assert again is not None and again["id"] == "ie2"
+    b2 = gate.add_batch([{"section": "s2", "text": "shorter"}])
+    assert [e["id"] for e in b2["edits"]] == ["ie2"]
+    head = format_batch("kv-cache", b2, gate.read_plan()["outline"]).splitlines()[0]
+    assert head == "view-concept · kv-cache · batch b2 · 1 comment · 1 inline edit"
+
+
+def test_a_batch_reads_its_note_before_its_inline_edits(gate):
+    gate.save_inline_edit("s1", GATE_MD, span="L2-4", text="Mine.")
+    b = gate.add_batch([{"section": "s1", "text": "shorter"}], note="n")
+    lines = format_batch("kv-cache", b, gate.read_plan()["outline"]).splitlines()
+    assert [line.split(" ")[0] for line in lines[1:4]] == ["note:", "inline", ""]
+    assert lines[-2].startswith("[c1]")
+
+
+def test_a_batch_with_no_edit_reads_as_before(gate):
+    b = gate.add_batch([{"section": "s1", "text": "shorter"}])
+    assert "edits" not in b
+    assert "inline edit" not in format_batch("kv-cache", b, gate.read_plan()["outline"])
+
+
+def test_a_rewrite_of_an_edit_is_recorded_with_the_last_batch(gate):
+    gate.save_inline_edit("s1", GATE_MD, span="L2-4", text="A gate drops a segment.")
+    b = gate.add_batch([])
+    gate.record_batch_done(b["id"])
+    file = gate.sections_dir / "s1.md"
+    file.write_text(file.read_text().replace("a segment.", "a segment, on 20 ms frames."))
+    entry = gate.record_rewrite(
+        "ie1", "A gate drops a segment, on 20 ms frames.", "  the ratio is on 20 ms frames "
+    )
+    rewrite = {
+        "text": "A gate drops a segment, on 20 ms frames.",
+        "reason": "the ratio is on 20 ms frames",
+        "batch": "b1",
+    }
+    assert {k: entry["rewrites"][0][k] for k in rewrite} == rewrite
+    assert gate.read_inline_edits() == [entry]
+    second = gate.record_rewrite("ie1", "on 20 ms frames.", "shorter", batch="")
+    assert [r["batch"] for r in second["rewrites"]] == ["b1", ""]
+
+
+def test_a_rewrite_is_refused_when_it_records_nothing_true(gate):
+    with pytest.raises(SessionError, match="no inline edit"):
+        gate.record_rewrite("ie1", "A gate", "why")
+    before = ["A gate removes segments that are mostly ", "silence", "."]
+    gate.save_inline_edit(
+        "s2", GATE_HTML, block=2, before=before, after=["A gate drops ", "silence", "."]
+    )
+    after = gate.read_inline_edits()[0]["after"]
+    with pytest.raises(SessionError, match="not in section s2"):
+        gate.record_rewrite("ie1", "A gate keeps segments.", "why")
+    with pytest.raises(SessionError, match="its after"):
+        gate.record_rewrite("ie1", after, "why")
+    with pytest.raises(SessionError, match="one line"):
+        gate.record_rewrite("ie1", "A gate", "why\nand more")
+    with pytest.raises(SessionError, match="one line"):
+        gate.record_rewrite("ie1", "A gate", "  ")
+    with pytest.raises(SessionError, match="new text"):
+        gate.record_rewrite("ie1", "", "why")
+    with pytest.raises(SessionError, match="no batch"):
+        gate.record_rewrite("ie1", "A gate", "why", batch="b7")
+    # An HTML section's text is checked against its source, tags included.
+    entry = gate.record_rewrite("ie1", "<strong>silence</strong>", "why")
+    assert entry["rewrites"][0]["batch"] == ""
