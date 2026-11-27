@@ -930,6 +930,7 @@ function renderSections() {
     keep[0].scrollTop = keep[3];
   }
   placeBlockEditor(); // after the annotations, which would wrap words inside the editor
+  if (editLocked()) hideEditMark();
   placeFrames();
   holdAnchor();
   if (anchor && anchor.restore) {
@@ -1754,12 +1755,19 @@ function liveEditor(lib, parent, text, { oneLine = false, save, cancel }) {
    hears a block open (edit-open: the section is marked read, and the one-block rule
    applies; a block open in a frame counts as holding unsaved words, which the page
    cannot see), sends its save (edit-save: the runs of text before and after, with the
-   section's file at open as base) and answers with the result (edit-saved). */
+   section's file at open as base) and answers with the result (edit-saved).
+   The lock: while the batch indicator reads « processing » (the last batch sent is not
+   recorded done), a role agent may be rewriting any section, so no « edit » mark shows
+   and no block opens, in the page or in a frame. A block left open when you press
+   « Send » stays open with a notice; its save, sent anyway, is refused by the server
+   (423) and the editor keeps your words. */
 let blockEdit = null;
 // { kind: "md", section, span, base (the section's file at open), text (the block's text at open), oneLine,
 //   box, host, note, save, view (its EditorView once CodeMirror is loaded), error (the last refusal), saving }
 // | { kind: "html", section, block (its mark), f (its frame), base (the section's file at open) }
 
+// Editing is locked while the last batch is processing (see "the batch indicator").
+const editLocked = () => !!state && !!state.batch && state.batch.state === "processing";
 // A section whose blocks open: an explanation section, neither the drawing nor a refactor section.
 const editableSection = (id) => !!state && id in state.sections && tabOf(id) === "model";
 const blockDirty = () => !!blockEdit && blockEdit.kind === "md" && !!blockEdit.view
@@ -1775,7 +1783,7 @@ let markTimer = null;
 // The block of a Markdown section that opens under `target`, or null.
 function blockAt(target) {
   const node = target && target.closest ? target.closest(".sec > .body [data-span]") : null;
-  if (!node || node.closest(".block-editor") || node.querySelector(".block-editor")) return null;
+  if (!node || editLocked() || node.closest(".block-editor") || node.querySelector(".block-editor")) return null;
   return editableSection(node.closest(".sec").dataset.id) ? node : null;
 }
 
@@ -1836,6 +1844,7 @@ async function openMdBlock(id, span) {
   const text = sec && sec.blocks ? sec.blocks[span] : undefined;
   const node = document.querySelector(`#sec-${CSS.escape(id)} > .body [data-span="${CSS.escape(span)}"]`);
   if (typeof text !== "string" || !node || !editableSection(id)) return;
+  if (editLocked()) { toast("A batch is processing: no block opens until it is done"); return; }
   if (!dropOpenBlock()) return;
   const oneLine = /^(H[1-6]|TH|TD)$/.test(node.tagName);
   const host = el("div", { class: "be-host" }, el("p", { class: "dim be-loading", text: "loading the editor…" }));
@@ -1890,6 +1899,7 @@ function blockNotice(e) {
   if ((state.sections[e.section] || {}).md !== e.base) {
     return "The section changed since you opened this block: saving is refused. Copy your words, cancel, and open the block again.";
   }
+  if (editLocked()) return "A batch is processing: saving is refused until the batch indicator reads « done ». Your words stay here.";
   return "";
 }
 function updateBlockNotice() {
@@ -1930,6 +1940,7 @@ async function postEdit(body) {
 function editRefusal({ status, detail }) {
   const sentence = String(detail || "").replace(/\.$/, "");
   const why = sentence.charAt(0).toLowerCase() + sentence.slice(1);
+  if (status === 423) return `Refused: ${why}. A batch is processing: save again once the batch indicator reads « done ». Your words stay here.`;
   if (status === 409) return `Refused: ${why}. Copy your words, close the block, and open it again on the new text.`;
   return `Could not save: ${why}.`;
 }
@@ -1960,14 +1971,14 @@ async function saveMdBlock() {
 /* The edit lock message: whether the blocks of the frame's section open. */
 function postEditLock(id, f = frames.get(id)) {
   if (!f || !f.contentWindow || !state) return;
-  f.contentWindow.postMessage({ viewConcept: "edit-lock", locked: !editableSection(id) }, "*");
+  f.contentWindow.postMessage({ viewConcept: "edit-lock", locked: !editableSection(id) || editLocked() }, "*");
 }
 
 /* The edit open message: a block of the frame opened. The page closes the block open
    elsewhere (asking first), or has the frame close this one when you keep the other. */
 function frameEditOpen(id, f, d) {
   const n = Number(d.block);
-  if (!editableSection(id) || !Number.isInteger(n) || !dropOpenBlock()) {
+  if (!editableSection(id) || editLocked() || !Number.isInteger(n) || !dropOpenBlock()) {
     if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "edit-close" }, "*");
     return;
   }
