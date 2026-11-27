@@ -224,3 +224,20 @@ def replace_block(text: str, block: Block, new: str) -> tuple[str, str, str]:
     before = "\n".join(lines[block.start : block.end])
     lines[block.start : block.end] = new_lines
     return "\n".join(lines), before, "\n".join(new_lines)
+
+
+def spans_over(text: str, start: int, end: int) -> list[str]:
+    """The spans of the blocks of `text` whose source overlaps characters start..end-1 of
+    it, in document order: where a passage of the file shows in the page's copy."""
+    offsets = [0]
+    for line in text.split("\n"):
+        offsets.append(offsets[-1] + len(line) + 1)
+    out = []
+    for span, b in blocks(text).items():
+        if b.kind == "cell":
+            a, z = offsets[b.start] + b.a, offsets[b.start] + b.b
+        else:
+            a, z = offsets[b.start], offsets[b.end] - 1
+        if a < end and start < z:
+            out.append(span)
+    return out

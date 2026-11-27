@@ -342,3 +342,14 @@ def replace_runs(document: str, n: int, after: list[str]) -> tuple[str, str, str
     a, b = found.content
     c, d = changed.content
     return out, document[a:b], out[c:d]
+
+
+def marks_over(document: str, start: int, end: int) -> list[int]:
+    """The block marks (counted as `mark_blocks` counts) of the blocks whose content
+    overlaps characters start..end-1 of `document`: where a passage of the file shows in
+    the frame."""
+    return [
+        n
+        for n, b in enumerate(_blocks(document), 1)
+        if b.open_end < end and start < (b.content_end or len(document))
+    ]

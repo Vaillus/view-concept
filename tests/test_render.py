@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 
-from view_concept.render import blocks, md, render_page, replace_block
+from view_concept.render import blocks, md, render_page, replace_block, spans_over
 
 SECTION = r"""## Thresholds ##
 
@@ -118,3 +118,12 @@ def test_an_empty_heading_saves_as_a_heading():
     new, _, after = replace_block(text, blocks(text)["L0-1"], "foo")
     assert after == "# foo"
     assert render_page(new)[0].startswith("<h1")
+
+
+def test_a_passage_of_the_file_is_found_in_the_blocks_it_overlaps():
+    text = "# Gate\n\n- one\n  - two\n\n| a | b |\n|---|---|\n| x | why |\n"
+    at = text.index("why")
+    assert spans_over(text, at, at + 3) == ["C7:6-9"]
+    at = text.index("- one")
+    assert spans_over(text, at, at + len("- one")) == ["L2-3"]
+    assert spans_over(text, 0, len(text)) == list(blocks(text))

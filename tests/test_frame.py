@@ -139,3 +139,11 @@ def _runs(doc: str, n: int) -> list[str]:
     runs = frame.block_runs(doc, n)
     assert runs is not None
     return runs.texts
+
+
+def test_a_passage_of_the_file_is_found_in_the_blocks_it_overlaps():
+    doc = "<p>Fig</p><ul><li>A <em>gate</em>.<p>nested</p></li></ul>"
+    at = doc.index("A <em>")
+    assert frame.marks_over(doc, at, at + len("A <em>gate</em>.")) == [2]
+    at = doc.index("nested")
+    assert frame.marks_over(doc, at, at + 6) == [3]

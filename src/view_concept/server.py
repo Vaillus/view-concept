@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import channel, frame, gate, launch, metrics, publish, push, threads
-from .render import md, render_page
+from .render import md, render_page, spans_over
 from .store import (
     BLOCKING_PINS,
     DOC_KEY,
@@ -281,6 +281,7 @@ def state(slug: str) -> dict[str, Any]:
         published = published_view(s)
         doc_tab = docs_view(s, docs, seen)
         edits = s.pending_edits()
+        record = s.read_inline_edits()
     except SessionError as e:
         raise HTTPException(422, str(e)) from e
     # The hover text of a term: its developed `tip` when the agent wrote one, else the
@@ -294,7 +295,13 @@ def state(slug: str) -> dict[str, Any]:
         "workflow": plan.get("workflow", ""),
         "status": status,
         "sections": {
-            k: section_view(v, seen[k], html=k in html_sections, editable=k in editable)
+            k: section_view(
+                v,
+                seen[k],
+                html=k in html_sections,
+                editable=k in editable,
+                edits=[e for e in record if e.get("section") == k],
+            )
             for k, v in sections.items()
         },
         # The last session file the agent wrote (the banner's quiet notice), and where the
@@ -444,7 +451,11 @@ def published_record(slug: str) -> dict[str, Any]:
 
 
 def section_view(
-    text: str, seen: str, html: bool = False, editable: bool = False
+    text: str,
+    seen: str,
+    html: bool = False,
+    editable: bool = False,
+    edits: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """A section as the page renders it. An updated section (its text differs from its
     highlight baseline, the text at the last batch or « mark read ») also carries the
@@ -460,20 +471,80 @@ def section_view(
     is the page's copy (`render_page`), each block carrying its source span, and `blocks`
     gives each span's editable text. A doc, the drawing and a refactor section carry none.
     `seen_html` keeps the shared renderer: the green highlight compares rendered words,
-    which the spans do not change."""
+    which the spans do not change.
+
+    An explanation section also carries `rewrites`, the writer's rewrites of your inline
+    edits the page shows on them (`rewrites_shown`, from `edits`, the section's entries
+    of the edit record)."""
     if html:
         version = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         view = {"md": text, "kind": "html", "version": version, "updated": text != seen}
         if view["updated"]:
             view["seen"] = seen
+        if editable:
+            view["rewrites"] = rewrites_shown(text, seen, edits or [], html=True)
         return view
     page, spans = render_page(text) if editable else (md.render(text), {})
     view: dict[str, Any] = {"md": text, "html": page, "updated": text != seen}
     if editable:
         view["blocks"] = spans
+        view["rewrites"] = rewrites_shown(text, seen, edits or [])
     if view["updated"]:
         view["seen_html"] = md.render(seen)
     return view
+
+
+def _find_near(text: str, part: str, near: int | None) -> int:
+    """Where `part` starts in `text`, the occurrence nearest to `near` when it is given;
+    -1 when `text` does not hold it."""
+    found, i = -1, text.find(part)
+    while i >= 0:
+        if near is None:
+            return i
+        if found < 0 or abs(i - near) < abs(found - near):
+            found = i
+        i = text.find(part, i + 1)
+    return found
+
+
+def rewrites_shown(
+    text: str, seen: str, edits: list[dict[str, Any]], html: bool = False
+) -> list[dict[str, Any]]:
+    """The rewrite highlight of a section: for each of its inline edits the writer
+    rewrote, its last rewrite, shown while the section's file holds the rewrite's text
+    and its highlight baseline (`seen`) does not (« mark read », opening a block of the
+    section or the next « Send » ends it). Each one gives the edit's `id`, the rewrite's
+    `reason` and `batch`, the blocks that hold its text, and your text to diff its words
+    against: in a Markdown section the spans of the blocks (`spans`) and your after
+    rendered (`after_html`); in an HTML section the block marks (`marks`, as the frame's
+    `data-block`) and your after as the file held it (`after`, a block's content with
+    its inline tags)."""
+    out: list[dict[str, Any]] = []
+    for e in edits:
+        rewrites = e.get("rewrites") or []
+        if not rewrites:
+            continue
+        last = rewrites[-1]
+        new = str(last.get("text") or "")
+        if not new.strip() or new in seen:
+            continue
+        at = _find_near(text, new, e.get("offset"))
+        if at < 0:
+            continue
+        shown: dict[str, Any] = {
+            "id": e.get("id", ""),
+            "reason": str(last.get("reason") or ""),
+            "batch": str(last.get("batch") or ""),
+        }
+        after = str(e.get("after") or "")
+        if html:
+            shown["marks"] = frame.marks_over(text, at, at + len(new))
+            shown["after"] = after
+        else:
+            shown["spans"] = spans_over(text, at, at + len(new))
+            shown["after_html"] = md.render(after)
+        out.append(shown)
+    return out
 
 
 # The head the page writes into an HTML section: its theme tokens, then frame.js.

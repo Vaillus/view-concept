@@ -823,3 +823,72 @@ def test_an_html_inline_edit_that_changes_the_number_of_runs_is_malformed(client
     assert client.post(url, json={**body, "after": ["A gate."]}).status_code == 400
     r = client.post(url, json={**body, "after": ["The ", "gate", " drops."]})
     assert r.status_code == 200 and r.json()["edit"]["after"] == "The <em>gate</em> drops."
+
+
+# ---- the rewrite highlight ----
+
+
+def rewrite_edit(session, section, after, text, offset=0):
+    """An edit sent with batch b9 that the writer rewrote in b10, written in the record."""
+    rewrite = {"text": text, "reason": "the ratio is on 20 ms frames", "batch": "b10", "at": "t"}
+    entry = {"id": "ie1", "section": section, "before": "x", "after": after, "batch": "b9"}
+    session.inline_edits_path.write_text(
+        json.dumps([{**entry, "offset": offset, "rewrites": [rewrite]}])
+    )
+
+
+def test_a_rewrite_of_an_inline_edit_shows_until_the_baseline_holds_it(client, session):
+    mine = "A gate drops a segment."
+    rewritten = "A gate drops a segment, on 20 ms frames."
+    file = session.sections_dir / "s1.md"
+    file.write_text(f"# The gate\n\n{mine}\n\nThe threshold.\n")
+    client.get("/api/s/kv-cache")  # the baseline holds the user's words
+    rewrite_edit(session, "s1", mine, rewritten)
+    file.write_text(f"# The gate\n\n{rewritten}\n\nThe threshold, per file.\n")
+    view = client.get("/api/s/kv-cache").json()["sections"]["s1"]
+    assert view["rewrites"] == [
+        {
+            "id": "ie1",
+            "reason": "the ratio is on 20 ms frames",
+            "batch": "b10",
+            "spans": ["L2-3"],
+            "after_html": f"<p>{mine}</p>\n",
+        }
+    ]
+    assert f'<p data-span="L2-3">{rewritten}</p>' in view["html"]
+    client.post("/api/s/kv-cache/seen", json={"sections": {"s1": file.read_text()}})
+    assert client.get("/api/s/kv-cache").json()["sections"]["s1"]["rewrites"] == []
+
+
+def test_a_rewrite_no_longer_in_its_section_shows_nothing(client, session):
+    file = session.sections_dir / "s1.md"
+    client.get("/api/s/kv-cache")  # the baseline holds the file before the run
+    rewrite_edit(session, "s1", "Mine.", "Mine, rewritten.")
+    file.write_text("Mine, rewritten.\n")
+    assert len(client.get("/api/s/kv-cache").json()["sections"]["s1"]["rewrites"]) == 1
+    file.write_text("Mine, edited again.\n")
+    assert client.get("/api/s/kv-cache").json()["sections"]["s1"]["rewrites"] == []
+
+
+def test_a_rewrite_in_an_html_section_names_its_block_marks(client, session):
+    (session.sections_dir / "s1.md").unlink()
+    file = session.sections_dir / "s1.html"
+    file.write_text("<p>Fig</p><ul><li>A <em>gate</em>.</li></ul>")
+    client.get("/api/s/kv-cache")
+    rewrite_edit(session, "s1", "A <em>gate</em>.", "A <em>gate</em>, on frames.", offset=18)
+    file.write_text("<p>Fig</p><ul><li>A <em>gate</em>, on frames.</li></ul>")
+    view = client.get("/api/s/kv-cache").json()["sections"]["s1"]
+    [shown] = view["rewrites"]
+    assert shown["marks"] == [2] and shown["after"] == "A <em>gate</em>."
+    served = client.get("/s/kv-cache/sections/s1.html").text
+    assert '<li data-block="2">A <em>gate</em>, on frames.</li>' in served
+    client.post("/api/s/kv-cache/seen", json={"sections": {"s1": file.read_text()}})
+    assert client.get("/api/s/kv-cache").json()["sections"]["s1"]["rewrites"] == []
+
+
+def test_a_section_not_open_for_edits_carries_no_rewrite(client, session):
+    plan = session.read_plan()
+    plan["outline"][0]["part"] = "scoping"
+    session.plan_path.write_text(json.dumps(plan))
+    rewrite_edit(session, "s1", "Mine.", "L'attention.")
+    assert "rewrites" not in client.get("/api/s/kv-cache").json()["sections"]["s1"]
