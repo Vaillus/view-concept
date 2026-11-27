@@ -102,3 +102,19 @@ def test_a_cell_save_escapes_a_typed_pipe_and_stays_on_one_line():
     assert new.splitlines()[15] == r"| ratio \| length or both | length |"
     _, spans = render_page(new)
     assert spans["C15:2-25"] == "ratio | length or both"
+
+
+def test_an_empty_padded_cell_saves_inside_its_pipes():
+    text = "| a | b |\n|---|---|\n| a |   |\n"
+    spans = render_page(text)[1]
+    assert spans["C2:6-6"] == ""
+    new, before, after = replace_block(text, blocks(text)["C2:6-6"], "x")
+    assert (before, after) == ("", "x")
+    assert new.splitlines()[2] == "| a | x  |"
+
+
+def test_an_empty_heading_saves_as_a_heading():
+    text = "#\n\nbody\n"
+    new, _, after = replace_block(text, blocks(text)["L0-1"], "foo")
+    assert after == "# foo"
+    assert render_page(new)[0].startswith("<h1")

@@ -86,7 +86,8 @@ def _line_block(lines: list[str], start: int, end: int, content: str) -> Block |
 
 
 def _heading_block(lines: list[str], start: int, content: str) -> Block | None:
-    """An ATX heading's one line: its text between its `#`s and the closing ones."""
+    """An ATX heading's one line: its text between its `#`s and the closing ones. An
+    empty heading's prefix (`#` alone) gains the space a heading's text needs after it."""
     line = lines[start]
     m = re.search(r"#{1,6}[ \t]*", line)
     if m is None or not _PREFIX.fullmatch(line[: m.start()]):
@@ -94,13 +95,16 @@ def _heading_block(lines: list[str], start: int, content: str) -> Block | None:
     k = m.end()
     if not line[k:].startswith(content):
         return None
+    prefix = line[:k]
+    if not prefix.endswith((" ", "\t")):
+        prefix += " "
     return Block(
         f"L{start}-{start + 1}",
         content,
         "heading",
         start,
         start + 1,
-        [line[:k]],
+        [prefix],
         suffix=line[k + len(content) :],
     )
 
@@ -129,11 +133,15 @@ def _cell_ranges(line: str) -> list[tuple[int, int]]:
 
 def _cell_block(line: str, n: int, raw: tuple[int, int], content: str) -> Block | None:
     """A table cell: the trimmed raw text of its range, checked against markdown-it's
-    content, where `\\|` reads `|`."""
+    content, where `\\|` reads `|`. An empty cell's span is the empty point one space
+    past its opening pipe, so a save inserts there and keeps the padding."""
     a, b = raw
     seg = line[a:b]
-    a += len(seg) - len(seg.lstrip())
-    b -= len(seg) - len(seg.rstrip())
+    if seg.strip():
+        a += len(seg) - len(seg.lstrip())
+        b -= len(seg) - len(seg.rstrip())
+    else:
+        a = b = min(a + 1, b)
     text = line[a:b].replace("\\|", "|")
     if text != content:
         return None
