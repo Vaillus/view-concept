@@ -896,6 +896,8 @@ function renderSections() {
   else if (anchor && anchor.restore) { /* the saved position, placed after this render */ }
   else if (!anchor || anchor.view !== shown || !anchorNode(anchor)) anchor = shown && shown.scrollTop ? readingAnchor(shown) : null;
   parkFrames();
+  // The open block's editor is detached by the rebuild below, which takes its focus: read it now.
+  const editorFocused = !!blockEdit && blockEdit.kind === "md" && !!blockEdit.view && blockEdit.view.hasFocus;
   // A question box at the end of a section is re-attached on each render: keep its focus.
   const active = document.activeElement;
   // (the scope block too: a docs review shows it at the top of the Doc tab, re-attached)
@@ -929,7 +931,7 @@ function renderSections() {
     if (keep[1] != null) keep[0].setSelectionRange(keep[1], keep[2]);
     keep[0].scrollTop = keep[3];
   }
-  placeBlockEditor(); // after the annotations, which would wrap words inside the editor
+  placeBlockEditor(editorFocused); // after the annotations, which would wrap words inside the editor
   if (editLocked()) hideEditMark();
   placeFrames();
   holdAnchor();
@@ -1874,12 +1876,13 @@ async function openMdBlock(id, span) {
 /* Puts the open Markdown block's editor in place of the block's own content, after each
    render: the block found again by its span, else the top of its section (its file
    changed, and the notice says so). */
-function placeBlockEditor() {
+function placeBlockEditor(wasFocused) {
   const e = blockEdit;
   if (!e || e.kind !== "md") return;
   const body = document.querySelector(`#sec-${CSS.escape(e.section)} > .body`);
   if (!body) return;
-  const focused = !!e.view && e.view.hasFocus;
+  // A render passes whether the editor had the focus before it detached the editor.
+  const focused = !!e.view && (wasFocused ?? e.view.hasFocus);
   const node = body.querySelector(`[data-span="${CSS.escape(e.span)}"]`);
   if (node) {
     const nested = node.tagName === "LI" ? [...node.children].find((c) => c.tagName === "UL" || c.tagName === "OL") : null;
