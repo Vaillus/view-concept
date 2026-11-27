@@ -257,7 +257,8 @@ view-concept change <slug> "<what changed, in a few words>" --by <planner|writer
 A change is a section added, moved, split, merged or removed, or a term
 added, removed or renamed; a wording fix gets none. `--cause` gives the ids
 of the events that led to it (comments `c7`, terminal messages `tm2`, a batch
-`b4`); leave it out for a change made on your own judgment. After a return to
+`b4`, inline edits `ie1`); leave it out for a change made on your own
+judgment. After a return to
 scoping, the change history is how the next conversion and the next writer
 run know which points of the drawing changed. The direct path logs no
 change.

@@ -44,6 +44,7 @@ and your questions.
 | « Approve plan » (direct path), with the batch's comments | Apply the comments to the plan first, then run Explain and the Vocabulary audit; your report names the corrections you folded in. |
 | « End scoping » (scoping path) | Write the report from the drawing, then run the Vocabulary audit. |
 | comments, answers, terminal messages, « Rewrite plan », a grill | See **A later run**. |
+| a batch with inline edits (`inline edit ie1` lines) | See **Inline edits**, with what else the batch holds. |
 
 ## Explain
 
@@ -339,14 +340,17 @@ Run `view-concept status <slug> audit`, then:
 1. Run `view-concept check <slug>`. It writes every forward reference and
    early use to `audit.json` (issues `forward` and `early`). Fix each one by
    the precedence rule: reorder the outline, or say the idea in plain words.
+   One in an inline edit still in its section stays, as **Inline edits**
+   says.
    It also prints the section problems, which it does not write to
    `audit.json`: an HTML block in a Markdown section (move it into an HTML
    section), two files for one section, an HTML section over 2 MB, a
    question waiting on a section the outline no longer has (`stale-anchor`:
    re-anchor it with `view-concept anchor` to the section that now explains
    what it needs). Fix each one.
-2. Re-read the finished text for the words that slipped past the lexicon,
-   each with one of these issues, and fix each one yourself:
+2. Re-read the finished text, but the inline edits still in their section,
+   for the words that slipped past the lexicon, each with one of these
+   issues, and fix each one yourself:
 
    | Issue | The word | Your fix |
    |---|---|---|
@@ -358,7 +362,8 @@ Run `view-concept status <slug> audit`, then:
 3. Run `view-concept check <slug>` again, and leave in `audit.json`
    (`[{"term", "section", "issue", "note"}]`) no entry you fixed: `check`
    replaces its own entries, so remove any other one by editing the file. No
-   audit underline is left for the user to answer. Your report says what you
+   audit underline is left for the user to answer, but an early use in the
+   user's words. Your report says what you
    cleared, and names any entry you could not.
 
 Never skip the audit. When it is done and nothing waits on you, set
@@ -409,6 +414,65 @@ a grill. Run `view-concept status <slug> revising` first.
 - On the direct path, ask the questions a change raises, as
   `planning-rules.md` says. On the scoping path, ask none: an element wrong
   or two at odds goes back to scoping.
+
+## Inline edits
+
+An **inline edit** is a change the user made to a section's text in the
+page, saved straight into the section's file with no agent: a paragraph, a
+list item, a heading or a table cell. Its before and after are the text as
+the file holds it (Markdown, or an HTML block's content with its inline
+tags). It reaches you two ways:
+
+- the batch that carries it, counted in its header (`· 1 inline edit`),
+  one entry per edit:
+
+  ```
+  inline edit ie1 · section 3 « The gate » (the user's text: keep it word for word)
+    before: A gate removes segments that are mostly silence.
+    after:  A gate drops a segment when its **silence ratio** exceeds the threshold.
+  ```
+
+- every later run, through your context's « Inline edits (the user's words:
+  the keep rule) », which lists every edit of the session, each « still in
+  its section » or « gone from its section ».
+
+**The keep rule.** Every rewrite keeps an edit still in its section word for
+word, the audit included: write around it. Rewrite one only when the batch
+you work on makes it wrong: a comment of the batch on that passage, or a
+change in the code or the plan the passage describes. Style, flow and the
+lexicon never make it wrong. When you rewrite one, name the edit and say why
+(« ie1 rewritten: the gate now measures the ratio on 20 ms frames »): in
+your `resolve` reply to the comment that made it wrong, or, when the code or
+the plan did, in your reply to the batch and your report. Never cut the
+passage in pieces, nor move it to another section. An edit gone from its
+section (you rewrote it under this rule, or the user edited the block
+again) binds nothing.
+
+**A batch of edits alone** (`0 comments`, no action) writes no section. Take
+the edits in:
+
+- a term the edits bring that the lexicon lacks gets an entry, with its tip
+  (`view-concept plan`);
+- on the scoping path, a change of the plan the edits bring is logged in the
+  change history, the edit as its cause (`--cause ie1`);
+- run `view-concept check <slug>` and handle what it lists on the edited
+  sections as the table below says;
+- reply to the batch with what you took in: `view-concept resolve <slug>
+  <batch id> --reply "<one line>"`.
+
+A batch with comments and edits runs as any batch, the edits binding the run
+from its start, and taken in the same way.
+
+**Your words and the precedence check.** The user's words follow no lexicon.
+In an edit still in its section:
+
+| `check` or the audit finds | You |
+|---|---|
+| an early use (or a forward reference) | leave it in `audit.json`, so its underline shows on the user's word, and name it in your reply; never reword the passage nor move a section for it |
+| a term the lexicon lacks | add the entry, with its tip; the words stay |
+| a metaphor, an ambiguous word, a bare reference | nothing: the audit skips the user's passages |
+
+The user then rewords it, or comments to have you move the sections.
 
 ## Report
 
