@@ -3616,9 +3616,9 @@ def format_batch(
                 lines.append(f"answer to {a['question']}{quoted}: {answer}")
             lines += [f"    (from side thread {t}: threads/{t}.json)" for t in a.get("threads", [])]
     titles = {s["id"]: s.get("title", s["id"]) for s in outline}
-    lines += [format_edit(e, number, titles) for e in batch.get("edits", [])]
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
+    lines += [format_edit(e, number, titles) for e in batch.get("edits", [])]
     lines += [format_comment(c, number, moves, pins) for c in batch["comments"]]
     return "\n".join(lines)
 

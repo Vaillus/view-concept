@@ -2140,6 +2140,14 @@ def test_a_batch_of_inline_edits_alone_carries_them_and_reads_them(gate):
     assert head == "view-concept · kv-cache · batch b2 · 1 comment · 1 inline edit"
 
 
+def test_a_batch_reads_its_note_before_its_inline_edits(gate):
+    gate.save_inline_edit("s1", GATE_MD, span="L2-4", text="Mine.")
+    b = gate.add_batch([{"section": "s1", "text": "shorter"}], note="n")
+    lines = format_batch("kv-cache", b, gate.read_plan()["outline"]).splitlines()
+    assert [line.split(" ")[0] for line in lines[1:4]] == ["note:", "inline", ""]
+    assert lines[-2].startswith("[c1]")
+
+
 def test_a_batch_with_no_edit_reads_as_before(gate):
     b = gate.add_batch([{"section": "s1", "text": "shorter"}])
     assert "edits" not in b
