@@ -2005,6 +2005,7 @@ def test_a_markdown_inline_edit_writes_its_span_and_moves_the_baseline(gate):
         "after": "A gate drops a segment.",
         "at": edit["at"],
         "batch": "",
+        "offset": len("## The gate\n\n"),
     }
     assert gate.read_inline_edits() == [edit] and gate.pending_edits() == [edit]
     assert gate.read_seen({})["s1"] == after  # no green on the user's words
@@ -2078,6 +2079,29 @@ def test_two_saves_of_one_block_merge_and_a_return_drops_the_edit(gate):
     assert gate.save_inline_edit("s1", base, span="L2-3", text=back) is None
     assert [e["id"] for e in gate.read_inline_edits()] == ["ie2"]
     assert (gate.sections_dir / "s1.md").read_text() == GATE_MD.replace("The gate", "Gate")
+
+
+def test_two_cells_with_the_same_text_are_two_edits(gate):
+    text = "| yes | no |\n|---|---|\n| a | b |\n"
+    (gate.sections_dir / "s1.md").write_text(text)
+    first = gate.save_inline_edit("s1", text, span="C0:2-5", text="no")
+    base = (gate.sections_dir / "s1.md").read_text()
+    assert base.startswith("| no | no |")
+    second = gate.save_inline_edit("s1", base, span="C0:7-9", text="never")
+    assert first is not None and second is not None
+    assert (gate.sections_dir / "s1.md").read_text().startswith("| no | never |")
+    assert [(e["id"], e["before"], e["after"]) for e in gate.read_inline_edits()] == [
+        ("ie1", "yes", "no"),
+        ("ie2", "no", "never"),
+    ]
+    # A save of the first cell again merges into its own edit, the second's offset moved.
+    base = (gate.sections_dir / "s1.md").read_text()
+    third = gate.save_inline_edit("s1", base, span="C0:2-4", text="maybe")
+    assert third is not None and (third["id"], third["before"]) == ("ie1", "yes")
+    base = (gate.sections_dir / "s1.md").read_text()
+    assert base.startswith("| maybe | never |")
+    fourth = gate.save_inline_edit("s1", base, span="C0:10-15", text="ever")
+    assert fourth is not None and (fourth["id"], fourth["before"]) == ("ie2", "no")
 
 
 def test_an_unchanged_block_writes_nothing(gate):

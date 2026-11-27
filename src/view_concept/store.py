@@ -215,10 +215,13 @@ may be rewriting any section) and when the file is no longer the text the block 
 edit of a doc does. inline-edits.json, the edit record, lists every inline edit, oldest
 first: {id (ie1…), section, before, after (the text as the file holds it: a Markdown
 block's lines with their markers, an HTML block's content with its inline tags), at,
-batch ("" while pending, then the id of the batch that carried it)}. A pending inline
-edit (no batch yet) goes out with the next batch (`add_batch`); a new save of the same
-block before it changes its `after`, and one that takes it back to its `before` drops
-it. The record keeps every edit after its batch, and the writer reads it on every run.
+batch ("" while pending, then the id of the batch that carried it), offset (where the
+block's text starts in the section's file, kept up to date by later saves of the
+section while the edit is pending)}. A pending inline edit (no batch yet) goes out with
+the next batch (`add_batch`); a new save of the same block (the one at its offset, not
+another holding the same text) before it changes its `after`, and one that takes it
+back to its `before` drops it. The record keeps every edit after its batch, and the
+writer reads it on every run.
 
 drafts.json holds the drafts of the session (the comments written in the page that wait
 for Send) and the general note, so every page open on the session, on any device, shows
@@ -1968,6 +1971,7 @@ class Session:
                 if after == before:
                     return None
                 new, old_raw, new_raw = frame.replace_runs(base, block, after or [])
+                offset = runs.content[0]
             else:
                 found = markdown_blocks(base).get(span)
                 if found is None:
@@ -1975,6 +1979,8 @@ class Session:
                 if text == found.text:
                     return None
                 new, old_raw, new_raw = replace_block(base, found, text or "")
+                offset = sum(len(line) + 1 for line in base.split("\n")[: found.start])
+                offset += found.a if found.kind == "cell" else 0
             if new == base:
                 return None
             files[section].write_text(new, encoding="utf-8")
@@ -1982,20 +1988,32 @@ class Session:
             if seen.get(section) == base:
                 seen[section] = new
                 _write_json(self.seen_path, seen)
-            return self._record_edit(section, old_raw, new_raw)
+            return self._record_edit(section, old_raw, new_raw, offset, len(new) - len(base))
 
-    def _record_edit(self, section: str, before: str, after: str) -> dict[str, Any] | None:
-        """Add an edit to the edit record, or change the pending edit of the same block
-        (the one whose after is this edit's before), dropped when back to its before."""
+    def _record_edit(
+        self, section: str, before: str, after: str, offset: int, shift: int
+    ) -> dict[str, Any] | None:
+        """Add an edit to the edit record, or change the pending edit of the same block,
+        dropped when back to its before. A pending edit keeps where its block's text
+        starts in the section's file (`offset`); the same block is the pending edit of the
+        section at this save's offset whose after is this edit's before, never another
+        block that holds the same text. The save moved the text after its block by
+        `shift` characters: so do the offsets of the section's pending edits there."""
         edits = self.read_inline_edits()
         pending = next(
             (
                 e
                 for e in reversed(edits)
-                if not e.get("batch") and e["section"] == section and e["after"] == before
+                if not e.get("batch")
+                and e["section"] == section
+                and e.get("offset") == offset
+                and e["after"] == before
             ),
             None,
         )
+        for e in edits:
+            if not e.get("batch") and e["section"] == section and e.get("offset", -1) > offset:
+                e["offset"] += shift
         entry: dict[str, Any] | None
         if pending is not None:
             pending.update(after=after, at=now_iso())
@@ -2012,6 +2030,7 @@ class Session:
                 "after": after,
                 "at": now_iso(),
                 "batch": "",
+                "offset": offset,
             }
             edits.append(entry)
         _write_json(self.inline_edits_path, edits)
