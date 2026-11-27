@@ -19,7 +19,8 @@ def client(session, monkeypatch):
 def test_api(client):
     r = client.get("/api/s/kv-cache")
     assert r.status_code == 200
-    assert r.json()["sections"]["s1"]["html"] == "<p>L'attention.</p>\n"
+    assert r.json()["sections"]["s1"]["html"] == '<p data-span="L0-1">L\'attention.</p>\n'
+    assert r.json()["sections"]["s1"]["blocks"] == {"L0-1": "L'attention."}
     r = client.post("/api/s/kv-cache/batch", json={"comments": [{"section": "s1", "text": "hi"}]})
     assert r.json()["id"] == "b1"
     assert client.get("/api/s/missing").status_code == 404

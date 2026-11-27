@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import channel, frame, gate, launch, metrics, publish, push, threads
-from .render import md
+from .render import md, render_page
 from .store import (
     BLOCKING_PINS,
     DOC_KEY,
@@ -260,6 +260,7 @@ def state(slug: str) -> dict[str, Any]:
         plan = s.read_plan()
         sections = s.read_sections()
         html_sections = s.html_sections()
+        editable = s.explanation_sections()
         audit = s.read_audit()
         comments = s.read_comments()
         status = s.shown_status()
@@ -290,7 +291,8 @@ def state(slug: str) -> dict[str, Any]:
         "workflow": plan.get("workflow", ""),
         "status": status,
         "sections": {
-            k: section_view(v, seen[k], html=k in html_sections) for k, v in sections.items()
+            k: section_view(v, seen[k], html=k in html_sections, editable=k in editable)
+            for k, v in sections.items()
         },
         # The last session file the agent wrote (the banner's quiet notice), and where the
         # last batch sent stands (the batch indicator: processing, or done once the
@@ -436,7 +438,9 @@ def published_record(slug: str) -> dict[str, Any]:
     return {"published": published_view(get_session(slug))}
 
 
-def section_view(text: str, seen: str, html: bool = False) -> dict[str, Any]:
+def section_view(
+    text: str, seen: str, html: bool = False, editable: bool = False
+) -> dict[str, Any]:
     """A section as the page renders it. An updated section (its text differs from its
     highlight baseline, the text at the last batch or « mark read ») also carries the
     HTML of the baseline, which the page diffs against to highlight what changed.
@@ -445,14 +449,23 @@ def section_view(text: str, seen: str, html: bool = False) -> dict[str, Any]:
     (`section_document`): its view carries no rendered HTML but `version`, a hash of its
     text, so the page reloads the frame only when the file changed. An updated one
     carries its baseline file as `seen`: the page compares the visible text of both and
-    sends the frame the passages added (the changes frame message)."""
+    sends the frame the passages added (the changes frame message).
+
+    An explanation section (`editable`) opens for an inline edit: a Markdown one's `html`
+    is the page's copy (`render_page`), each block carrying its source span, and `blocks`
+    gives each span's editable text. A doc, the drawing and a refactor section carry none.
+    `seen_html` keeps the shared renderer: the green highlight compares rendered words,
+    which the spans do not change."""
     if html:
         version = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         view = {"md": text, "kind": "html", "version": version, "updated": text != seen}
         if view["updated"]:
             view["seen"] = seen
         return view
-    view: dict[str, Any] = {"md": text, "html": md.render(text), "updated": text != seen}
+    page, spans = render_page(text) if editable else (md.render(text), {})
+    view: dict[str, Any] = {"md": text, "html": page, "updated": text != seen}
+    if editable:
+        view["blocks"] = spans
     if view["updated"]:
         view["seen_html"] = md.render(seen)
     return view

@@ -1026,6 +1026,15 @@ class Session:
             sid for sid in self.html_sections() if (self.sections_dir / f"{sid}.md").is_file()
         )
 
+    def explanation_sections(self) -> set[str]:
+        """The ids of the explanation sections of the outline: neither the scoping drawing
+        nor a refactor section. Only their text opens for an inline edit."""
+        return {
+            sec["id"]
+            for sec in self.read_plan()["outline"]
+            if sec.get("part") not in (SCOPING_PART, "refactoring", 2)
+        }
+
     def read_audit(self) -> list[dict[str, Any]]:
         return _read_json(self.audit_path, [])
 
