@@ -39,7 +39,8 @@ reach the agent session through the inbox.
                         `moves:<path>`  (server)
         drafts.json     the drafts and the general note, shared by every page (server)
         inline-edits.json  the edit record: every inline edit of the session (section,
-                        text before, text after) and the batch that carried it  (server)
+                        text before, text after), the batch that carried it, and the
+                        writer's rewrites of it (text, reason, batch)  (server, `rewrite`)
         params.json     the parameters file: what each channel section's script saved
                         and the answers it received (server)
         threads/<id>.json  a side thread: messages, its own agent session id  (server)
@@ -221,7 +222,12 @@ section while the edit is pending)}. A pending inline edit (no batch yet) goes o
 the next batch (`add_batch`); a new save of the same block (the one at its offset, not
 another holding the same text) before it changes its `after`, and one that takes it
 back to its `before` drops it. The record keeps every edit after its batch, and the
-writer reads it on every run.
+writer reads it on every run. When the writer rewrites an edit (the keep rule lets it
+only when the batch it works on makes the text wrong), it records the rewrite
+(`record_rewrite`, `view-concept rewrite`): the entry's `rewrites`, oldest first,
+[{text (the new text as the file holds it, in the form of `after`), reason (one line),
+batch (the batch the run works on, "" when none was ever sent), at}]; an entry the
+writer never rewrote may lack the key.
 
 drafts.json holds the drafts of the session (the comments written in the page that wait
 for Send) and the general note, so every page open on the session, on any device, shows
@@ -2035,6 +2041,43 @@ class Session:
             edits.append(entry)
         _write_json(self.inline_edits_path, edits)
         return entry
+
+    def record_rewrite(
+        self, edit_id: str, text: str, reason: str, batch: str | None = None
+    ) -> dict[str, Any]:
+        """Record that the writer rewrote inline edit `edit_id`: `text` is its new text as
+        the section's file holds it (in the form of the edit's `after`), `reason` one line
+        saying why, `batch` the batch the run works on (default: the last batch sent, ""
+        when none was). Refused for an unknown edit, an empty or multi-line reason, an
+        empty text, a text equal to the edit's after, and a text the section's file does
+        not hold. Returns the edit's entry, its `rewrites` appended to."""
+        reason = reason.strip()
+        if not reason or "\n" in reason:
+            raise SessionError("a rewrite needs a reason of one line")
+        if not text.strip():
+            raise SessionError("a rewrite needs its new text")
+        batches = [b["id"] for b in self.read_comments()["batches"]]
+        if batch is None:
+            batch = batches[-1] if batches else ""
+        elif batch and batch not in batches:
+            raise SessionError(f"no batch {batch!r}")
+        with _EDITS_LOCK:
+            edits = self.read_inline_edits()
+            entry = next((e for e in edits if e.get("id") == edit_id), None)
+            if entry is None:
+                raise SessionError(f"no inline edit {edit_id!r}")
+            if text == entry["after"]:
+                raise SessionError(f"{edit_id}: the text is its after, not a rewrite")
+            file = self.section_files().get(entry["section"])
+            if file is None or text not in file.read_text(encoding="utf-8"):
+                raise SessionError(
+                    f"the text is not in section {entry['section']}: copy it as the file has it"
+                )
+            entry.setdefault("rewrites", []).append(
+                {"text": text, "reason": reason, "batch": batch, "at": now_iso()}
+            )
+            _write_json(self.inline_edits_path, edits)
+            return entry
 
     def doc_texts(self) -> dict[str, str]:
         """The docs that exist, keyed as their highlight baseline is: `doc:<path>`."""

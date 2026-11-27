@@ -2152,3 +2152,48 @@ def test_a_batch_with_no_edit_reads_as_before(gate):
     b = gate.add_batch([{"section": "s1", "text": "shorter"}])
     assert "edits" not in b
     assert "inline edit" not in format_batch("kv-cache", b, gate.read_plan()["outline"])
+
+
+def test_a_rewrite_of_an_edit_is_recorded_with_the_last_batch(gate):
+    gate.save_inline_edit("s1", GATE_MD, span="L2-4", text="A gate drops a segment.")
+    b = gate.add_batch([])
+    gate.record_batch_done(b["id"])
+    file = gate.sections_dir / "s1.md"
+    file.write_text(file.read_text().replace("a segment.", "a segment, on 20 ms frames."))
+    entry = gate.record_rewrite(
+        "ie1", "A gate drops a segment, on 20 ms frames.", "  the ratio is on 20 ms frames "
+    )
+    rewrite = {
+        "text": "A gate drops a segment, on 20 ms frames.",
+        "reason": "the ratio is on 20 ms frames",
+        "batch": "b1",
+    }
+    assert {k: entry["rewrites"][0][k] for k in rewrite} == rewrite
+    assert gate.read_inline_edits() == [entry]
+    second = gate.record_rewrite("ie1", "on 20 ms frames.", "shorter", batch="")
+    assert [r["batch"] for r in second["rewrites"]] == ["b1", ""]
+
+
+def test_a_rewrite_is_refused_when_it_records_nothing_true(gate):
+    with pytest.raises(SessionError, match="no inline edit"):
+        gate.record_rewrite("ie1", "A gate", "why")
+    before = ["A gate removes segments that are mostly ", "silence", "."]
+    gate.save_inline_edit(
+        "s2", GATE_HTML, block=2, before=before, after=["A gate drops ", "silence", "."]
+    )
+    after = gate.read_inline_edits()[0]["after"]
+    with pytest.raises(SessionError, match="not in section s2"):
+        gate.record_rewrite("ie1", "A gate keeps segments.", "why")
+    with pytest.raises(SessionError, match="its after"):
+        gate.record_rewrite("ie1", after, "why")
+    with pytest.raises(SessionError, match="one line"):
+        gate.record_rewrite("ie1", "A gate", "why\nand more")
+    with pytest.raises(SessionError, match="one line"):
+        gate.record_rewrite("ie1", "A gate", "  ")
+    with pytest.raises(SessionError, match="new text"):
+        gate.record_rewrite("ie1", "", "why")
+    with pytest.raises(SessionError, match="no batch"):
+        gate.record_rewrite("ie1", "A gate", "why", batch="b7")
+    # An HTML section's text is checked against its source, tags included.
+    entry = gate.record_rewrite("ie1", "<strong>silence</strong>", "why")
+    assert entry["rewrites"][0]["batch"] == ""
