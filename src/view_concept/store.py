@@ -2865,7 +2865,11 @@ class Session:
         "end-scoping" that
         they ended the scoping of a drawing (refused while a correction, a tension, a hole or a
         supposition is open, `blocking_pins`). `path`
-        goes with "rewrite-readme" only, which needs it."""
+        goes with "rewrite-readme" only, which needs it.
+
+        Every batch, whatever its action, carries the pending inline edits, `edits`:
+        [{id, section, before, after}], and the edit record then names it as their batch.
+        Pending edits alone make a batch: one with no comment, no note and no action."""
         if action not in ACTIONS:
             raise SessionError(f"unknown action {action!r}")
         if (action == "answer") != bool(answers):
@@ -2884,7 +2888,22 @@ class Session:
         note = note.strip()
         # A comment from a side thread may have no text: the thread's conclusion is the comment.
         comments = [c for c in comments if str(c.get("text", "")).strip() or c.get("thread")]
-        if not comments and not note and not action:
+        with _EDITS_LOCK:
+            return self._add_batch(comments, note, action, answers, then_pr, path)
+
+    def _add_batch(
+        self,
+        comments: list[dict[str, Any]],
+        note: str,
+        action: str,
+        answers: list[dict[str, Any]] | None,
+        then_pr: bool,
+        path: str,
+    ) -> dict[str, Any]:
+        """`add_batch` once its arguments are checked, while no inline edit is saved."""
+        edits = self.read_inline_edits()
+        pending = [e for e in edits if not e.get("batch")]
+        if not comments and not note and not action and not pending:
             raise SessionError("empty batch")
         for c in comments:
             _check_fact(str(c.get("fact") or ""), str(c.get("section", "")))
@@ -2923,6 +2942,12 @@ class Session:
             batch["path"] = path
         if action == "plan":
             batch["rewrite"] = self.has_written()
+        if pending:
+            fields = ("id", "section", "before", "after")
+            batch["edits"] = [{k: e[k] for k in fields} for e in pending]
+            for e in pending:
+                e["batch"] = batch["id"]
+            _write_json(self.inline_edits_path, edits)
         batches.append(batch)
         _write_json(self.comments_path, data)
         with self.inbox_path.open("a", encoding="utf-8") as f:
@@ -3464,6 +3489,8 @@ def format_batch(
     number = {s["id"]: i + 1 for i, s in enumerate(outline)}
     n = len(batch["comments"])
     lines = [f"view-concept · {slug} · batch {batch['id']} · {n} comment{'s' * (n != 1)}"]
+    if edits := batch.get("edits"):
+        lines[0] += f" · {len(edits)} inline edit{'s' * (len(edits) != 1)}"
     if batch.get("action") == "approve-plan":
         lines.append("action: approve-plan (the user approved the plan from the page)")
     if batch.get("action") == "approve-model":
@@ -3569,9 +3596,38 @@ def format_batch(
                 answer = " — ".join(p for p in parts if p)
                 lines.append(f"answer to {a['question']}{quoted}: {answer}")
             lines += [f"    (from side thread {t}: threads/{t}.json)" for t in a.get("threads", [])]
+    titles = {s["id"]: s.get("title", s["id"]) for s in outline}
+    lines += [format_edit(e, number, titles) for e in batch.get("edits", [])]
     if batch.get("note"):
         lines.append(f"note: {batch['note']}")
     lines += [format_comment(c, number, moves, pins) for c in batch["comments"]]
+    return "\n".join(lines)
+
+
+def edit_place(e: dict[str, Any], number: dict[str, int], titles: dict[str, str]) -> str:
+    """Where an inline edit is: `section 3 « The gate »`, or its id when the outline
+    lost it."""
+    sec = e.get("section", "")
+    if sec in number:
+        return f"section {number[sec]} « {titles.get(sec, sec)} »"
+    return f"section ({sec})"
+
+
+def _indented(label: str, text: str) -> list[str]:
+    """`label` then `text`, its later lines under its first."""
+    first, *rest = str(text).split("\n")
+    return [f"{label}{first}".rstrip(), *(f"{' ' * len(label)}{line}".rstrip() for line in rest)]
+
+
+def format_edit(e: dict[str, Any], number: dict[str, int], titles: dict[str, str]) -> str:
+    """One inline edit of a batch: its id and section, then its text before and after, as
+    the section's file holds them."""
+    lines = [
+        f"inline edit {e['id']} · {edit_place(e, number, titles)} "
+        "(the user's text: keep it word for word)"
+    ]
+    lines += _indented("  before: ", e.get("before", ""))
+    lines += _indented("  after:  ", e.get("after", ""))
     return "\n".join(lines)
 
 

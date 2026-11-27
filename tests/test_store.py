@@ -2083,3 +2083,40 @@ def test_two_saves_of_one_block_merge_and_a_return_drops_the_edit(gate):
 def test_an_unchanged_block_writes_nothing(gate):
     assert gate.save_inline_edit("s1", GATE_MD, span="L0-1", text="The gate") is None
     assert not gate.inline_edits_path.exists()
+
+
+def test_a_batch_of_inline_edits_alone_carries_them_and_reads_them(gate):
+    with pytest.raises(SessionError, match="empty batch"):
+        gate.add_batch([])
+    edit = gate.save_inline_edit(
+        "s1", GATE_MD, span="L2-4", text="A gate drops a segment\nwhen its **ratio** is high."
+    )
+    assert edit is not None
+    b = gate.add_batch([])
+    assert b["edits"] == [{k: edit[k] for k in ("id", "section", "before", "after")}]
+    assert gate.pending_edits() == [] and gate.read_inline_edits()[0]["batch"] == b["id"]
+    assert format_batch("kv-cache", b, gate.read_plan()["outline"]) == "\n".join(
+        [
+            "view-concept · kv-cache · batch b1 · 0 comments · 1 inline edit",
+            "inline edit ie1 · section 1 « Attention » (the user's text: keep it word for word)",
+            "  before: A gate removes segments",
+            "          that are mostly silence.",
+            "  after:  A gate drops a segment",
+            "          when its **ratio** is high.",
+        ]
+    )
+    gate.record_batch_done(b["id"])
+    # Once a batch carried it, a new save of the block is a new edit.
+    base = (gate.sections_dir / "s1.md").read_text()
+    again = gate.save_inline_edit("s1", base, span="L2-4", text="Mine.")
+    assert again is not None and again["id"] == "ie2"
+    b2 = gate.add_batch([{"section": "s2", "text": "shorter"}])
+    assert [e["id"] for e in b2["edits"]] == ["ie2"]
+    head = format_batch("kv-cache", b2, gate.read_plan()["outline"]).splitlines()[0]
+    assert head == "view-concept · kv-cache · batch b2 · 1 comment · 1 inline edit"
+
+
+def test_a_batch_with_no_edit_reads_as_before(gate):
+    b = gate.add_batch([{"section": "s1", "text": "shorter"}])
+    assert "edits" not in b
+    assert "inline edit" not in format_batch("kv-cache", b, gate.read_plan()["outline"])
