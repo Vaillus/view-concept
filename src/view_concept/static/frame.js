@@ -38,13 +38,22 @@
      then; the frame highlights a passage only while the pointer is over a block holding
      it (the block of its start or of its end, so a passage over two blocks shows whole
      when either is hovered), or, under touch controls, from a tap on that block until a
-     tap elsewhere; the page's bar marks the whole frame.
+     tap elsewhere; the page's bar marks the whole frame. With them, `rewrites`: the
+     writer's rewrites of an inline edit this section shows, each {marks (the block
+     marks of the blocks holding it), after (your text as the file held it: the block's
+     content with its inline tags), tip (the hover text)}. The frame gives each block a
+     bar in the info colour (`data-vc-rewrite`, a shadow left of its box: no layout
+     change) and paints the words of its runs of text that are not in your after
+     ("ev-rewrite"), always, not only under the pointer; the green leaves those blocks.
    - The terms (page -> frame): the lexicon terms, the one this section is the home of,
      and the words the vocabulary audit flags in it. The frame underlines each
      occurrence by painting a style over the word, as it paints the anchors: no element
      of the section is changed, so its scripts find their text as they wrote it.
    - The term hover (frame -> page): the underlined word the pointer rests on and where
      it sits, or nothing once the pointer leaves it, so the page shows that term's tip.
+     Off a term, the pointer on a rewrite's coloured words or bar, or anywhere over a
+     block whose rewrite only removed words, posts the rewrite's hover text the same way,
+     as the key {tip}.
      Under touch controls, the word tapped, or nothing on a tap elsewhere or a scroll;
      a term tapped again is posted again, since the page may have hidden its tip.
    - The pins (page -> frame): one entry per element of the drawing bearing open pin
@@ -375,6 +384,8 @@
   /* ---- the anchors, the changes, the terms and the reveal ---- */
   var anchors = []; // { kind: draft | sent | thread, quote, prefix, thread? }
   var changes = []; // { quote, prefix }
+  var rewrites = []; // { marks, after, tip }: the rewrites of your inline edits shown
+  var rewriteHits = []; // { item: { key: { tip } }, blocks, ranges, removal } as last painted
   var terms = [];   // { term, kind: term | def | audit, key }
   var focus = null; // { quote, prefix } of the passage being revealed
   var pins = [];    // { element, pins: [pin ids], tone }: the marked elements of the drawing
@@ -383,7 +394,7 @@
   var pointer = null;    // { x, y } of the pointer over the frame, null once it left
   var shownChanges = null; // the indexes in changeRanges painted now, joined
   var placed = null; // the side threads' ids last posted as "placed", joined
-  var KINDS = ["draft", "sent", "thread", "focus", "updated", "term", "def", "audit"];
+  var KINDS = ["draft", "sent", "thread", "focus", "updated", "rewrite", "term", "def", "audit"];
   var marks = document.createElement("style");
   marks.textContent =
     "::highlight(ev-draft) { background-color: var(--flagbg); }\n" +
@@ -391,6 +402,8 @@
     "::highlight(ev-thread) { background-color: var(--altbg); }\n" +
     "::highlight(ev-focus) { background-color: var(--accent); color: var(--on-accent); }\n" +
     "::highlight(ev-updated) { background-color: var(--okbg); text-decoration: underline 2px var(--ok); text-underline-offset: 3px; }\n" +
+    "::highlight(ev-rewrite) { background-color: var(--infobg); text-decoration: underline 2px var(--info); text-underline-offset: 3px; }\n" +
+    "[data-vc-rewrite] { box-shadow: -3px 0 var(--bg), -6px 0 var(--info); }\n" +
     "::highlight(ev-term) { text-decoration: underline dotted var(--line-strong); text-underline-offset: 3px; }\n" +
     "::highlight(ev-def) { text-decoration: underline solid var(--accent); text-underline-offset: 3px; }\n" +
     "::highlight(ev-audit) { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }\n" +
@@ -457,11 +470,17 @@
       ranges[a.kind].push(r);
       if (a.kind === "thread" && a.thread) threadRanges.push([a, r]);
     });
+    ranges.rewrite = markRewrites();
     changeRanges = [];
     changes.forEach(function (c) {
       var r = findQuote(index, c.quote, c.prefix);
       if (!r) return;
       openOnce(c, r);
+      // A rewritten block shows the rewrite's colour, not the green: the passage stops at it.
+      var from = rewrittenBlock(r.startContainer), to = rewrittenBlock(r.endContainer);
+      if (from) r.setStartAfter(from);
+      if (to) r.setEndBefore(to);
+      if (r.collapsed || !r.toString().trim()) return;
       changeRanges.push([[blockOf(r.startContainer), blockOf(r.endContainer)], r]);
     });
     var under = pointer && document.elementFromPoint(pointer.x, pointer.y);
@@ -475,6 +494,115 @@
       CSS.highlights.set("ev-" + k, new (Function.prototype.bind.apply(Highlight, [null].concat(ranges[k])))());
     });
     postPlaced(answer);
+  }
+
+  /* The rewrite highlight: each rewrite's blocks get the bar, and the words of their runs
+     of text (a nested block's left out, as an inline edit opens them) that your after
+     does not hold are painted. Returns the ranges painted, one per run of such words. */
+  function markRewrites() {
+    var marked = document.querySelectorAll("[data-vc-rewrite]");
+    for (var i = 0; i < marked.length; i++) marked[i].removeAttribute("data-vc-rewrite");
+    rewriteHits = [];
+    var painted = [];
+    rewrites.forEach(function (rw) {
+      var els = (rw.marks || []).map(function (n) {
+        return document.querySelector('[data-block="' + Number(n) + '"]');
+      }).filter(Boolean);
+      if (!els.length) return;
+      var own = [];
+      els.forEach(function (el) { own = own.concat(runWords(el)); });
+      var inserted = insertedWords(afterWords(String(rw.after || "")), own.map(function (w) { return w.text; }));
+      var h = { item: { key: { tip: String(rw.tip || "") } }, blocks: els, ranges: [], removal: true };
+      var run = null;
+      own.forEach(function (w, k) {
+        if (!inserted[k]) { run = null; return; }
+        h.removal = false;
+        if (run && run.el === w.el) run.range.setEnd(w.range.endContainer, w.range.endOffset);
+        else { run = { el: w.el, range: w.range.cloneRange() }; h.ranges.push(run.range); }
+      });
+      els.forEach(function (el) { el.setAttribute("data-vc-rewrite", ""); });
+      painted = painted.concat(h.ranges);
+      rewriteHits.push(h);
+    });
+    return painted;
+  }
+  // The block holding the rewrite highlight whose own text holds `node`, or null.
+  function rewrittenBlock(node) {
+    var e = node && (node.nodeType === 1 ? node : node.parentElement);
+    var b = e && e.closest("[data-block]");
+    return b && b.hasAttribute("data-vc-rewrite") ? b : null;
+  }
+  // The words of a block's runs of text, each with its range: the runs are joined, so a
+  // word over two text nodes (`gate<em>s</em>`) is one, as in your after.
+  function runWords(el) {
+    var text = "", pos = [], out = [], re = /\S+/g, m;
+    runNodes(el).forEach(function (n) {
+      for (var i = 0; i < n.data.length; i++) { text += n.data[i]; pos.push([n, i]); }
+    });
+    while ((m = re.exec(text))) {
+      var s = pos[m.index], e = pos[m.index + m[0].length - 1], r = document.createRange();
+      r.setStart(s[0], s[1]);
+      r.setEnd(e[0], e[1] + 1);
+      out.push({ text: m[0], range: r, el: el });
+    }
+    return out;
+  }
+  // The words of your after, a block's content as the file held it: parsed inert (a
+  // template), its text nodes joined outside scripts and styles.
+  function afterWords(html) {
+    var t = document.createElement("template");
+    t.innerHTML = html;
+    var text = "", walker = document.createTreeWalker(t.content, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) {
+        for (var p = n.parentElement; p; p = p.parentElement) if (RUN_SKIP[p.tagName]) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    while (walker.nextNode()) text += walker.currentNode.data;
+    return text.split(/\s+/).filter(Boolean);
+  }
+  // Which words of `b` are not in `a`, as {index: true}: longest common subsequence; a
+  // pair too large to compare counts as rewritten whole.
+  function insertedWords(a, b) {
+    var n = a.length, m = b.length, out = {}, i, j;
+    if (n * m > 4e6) { for (j = 0; j < m; j++) out[j] = true; return out; }
+    var L = new Int32Array((n + 1) * (m + 1)); // L[i*(m+1)+j]: LCS of a[i..] and b[j..]
+    for (i = n - 1; i >= 0; i--) {
+      for (j = m - 1; j >= 0; j--) {
+        L[i * (m + 1) + j] = a[i] === b[j] ? L[(i + 1) * (m + 1) + j + 1] + 1
+          : Math.max(L[(i + 1) * (m + 1) + j], L[i * (m + 1) + j + 1]);
+      }
+    }
+    i = 0; j = 0;
+    while (j < m) {
+      if (i < n && a[i] === b[j]) { i++; j++; }
+      else if (i === n || L[i * (m + 1) + j + 1] >= L[(i + 1) * (m + 1) + j]) out[j++] = true;
+      else i++;
+    }
+    return out;
+  }
+  // The rewrite whose hover text shows at (x, y), with its box: its coloured words, its
+  // bar (left of a block's box), or anywhere over a block whose rewrite only removed words.
+  function rewriteAt(x, y) {
+    var i, j, k;
+    for (i = 0; i < rewriteHits.length; i++) {
+      var h = rewriteHits[i];
+      for (j = 0; j < h.ranges.length; j++) {
+        var rects = h.ranges[j].getClientRects();
+        for (k = 0; k < rects.length; k++) {
+          var r = rects[k];
+          if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return [h.item, r];
+        }
+      }
+    }
+    for (i = 0; i < rewriteHits.length; i++) {
+      for (j = 0; j < rewriteHits[i].blocks.length; j++) {
+        var b = rewriteHits[i].blocks[j].getBoundingClientRect();
+        if (y < b.top || y > b.bottom) continue;
+        if (x >= b.left - 8 && (x < b.left || (rewriteHits[i].removal && x <= b.right))) return [rewriteHits[i].item, b];
+      }
+    }
+    return null;
   }
 
   // The block a change passage's start or end sits in.
@@ -504,7 +632,7 @@
   // the passages and the terms again once the change is done.
   var pending = false;
   function rehighlight() {
-    if (pending || (!anchors.length && !changes.length && !terms.length && !focus && !pins.length)) return;
+    if (pending || (!anchors.length && !changes.length && !rewrites.length && !terms.length && !focus && !pins.length)) return;
     pending = true;
     requestAnimationFrame(function () { pending = false; highlight(); markPins(); });
   }
@@ -835,7 +963,8 @@
     pointer = { x: e.clientX, y: e.clientY };
     paintChanges(e.target);
     hoverBlock(e.target);
-    var h = hit(termRanges, e.clientX, e.clientY);
+    // A term under the pointer wins over the rewrite around it.
+    var h = hit(termRanges, e.clientX, e.clientY) || rewriteAt(e.clientX, e.clientY);
     hover(h && h[0], h && h[1]);
     // The passage of a thread is clickable: say so with the cursor.
     root.style.cursor = hit(threadRanges, e.clientX, e.clientY) ? "pointer" : "";
@@ -854,8 +983,8 @@
     else if (!(ui && e.target === ui.host)) hideMark();
     pointer = { x: e.clientX, y: e.clientY };
     paintChanges(e.target);
-    var h = hit(termRanges, e.clientX, e.clientY);
-    hover(h && h[0], h && h[1], true);
+    var h = hit(termRanges, e.clientX, e.clientY), rw = !h && rewriteAt(e.clientX, e.clientY);
+    hover((h || rw) && (h || rw)[0], (h || rw) && (h || rw)[1], true);
     if (!h) clickAt(e.target, e.clientX, e.clientY);
   });
   addEventListener("scroll", function () { hover(null); });
@@ -865,7 +994,11 @@
     if (e.source !== parent || !d) return;
     if (d.viewConcept === "theme" && d.theme) root.setAttribute("data-theme", d.theme);
     else if (d.viewConcept === "anchors" && Array.isArray(d.anchors)) { anchors = d.anchors; highlight(true); }
-    else if (d.viewConcept === "changes" && Array.isArray(d.changes)) { changes = d.changes; highlight(); }
+    else if (d.viewConcept === "changes" && Array.isArray(d.changes)) {
+      changes = d.changes;
+      rewrites = Array.isArray(d.rewrites) ? d.rewrites : [];
+      highlight();
+    }
     else if (d.viewConcept === "terms" && Array.isArray(d.terms)) { terms = d.terms; hover(null); highlight(); }
     else if (d.viewConcept === "reveal") reveal(d.quote, d.prefix);
     else if (d.viewConcept === "pins" && Array.isArray(d.pins)) { pins = d.pins; markPins(); }
