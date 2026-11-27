@@ -79,10 +79,14 @@
      an inline edit. The page posts it at load and whenever the batch state changes:
      locked while the last batch is processing, and always for a section whose blocks
      never open (the drawing, a refactor section). A frame no page unlocks (the published
-     page, a vault note, a frame opened alone) opens nothing.
+     page, a vault note, a frame opened alone) opens nothing. A block open when the lock
+     arrives stays open, under a notice that its save is refused until the batch is done.
    - The edit open (frame -> page), {block}: the reader opened block n (see "inline
      edit" below). The page marks the section read and keeps one block open in the page:
      it answers with the edit close when the reader keeps another block open instead.
+   - The edit dirty (frame -> page), {dirty}: whether the open block now holds unsaved
+     words, posted each time that flips as the reader types, so the page asks before
+     closing the block only when it does (it cannot ask the frame at that moment).
    - The edit close (page -> frame): close the open block without saving.
    - The edit save (frame -> page), {block, before, after}: ⌘↵ on the open block, its
      runs of text at open and now, sent only once the tag lock holds. The page posts it
@@ -133,8 +137,11 @@
    run and must stay as it is). Enter adds no line; a pasted line break becomes a space.
    ⌘↵ checks the tag lock (the same elements in the same places, and the same number of
    runs as at open): broken, the save is refused under the block and the block stays
-   open; held, the runs before and after go to the page (the edit save). Esc puts the block's text back as it was and closes it. One block opens at a
-   time in a frame: while one is open no other shows its mark. The mark and the notice
+   open; held, the runs before and after go to the page (the edit save). A space the
+   browser wrote as a non-breaking one (U+00A0, as it does for a space typed at the end
+   of a text node) is saved as a space; a U+00A0 the run held at open is kept. Esc puts
+   the block's text back as it was and closes it. One block opens at a time in a frame:
+   while one is open no other shows its mark. The mark and the notice
    live in a shadow root on <html>, out of the section's text and styles. */
 (function () {
   var root = document.documentElement;
@@ -566,7 +573,7 @@
 
   /* ---- inline edit ---- */
   var editLocked = true; // until the page unlocks it: a frame no page talks to opens nothing
-  var editing = null;    // the open block: { el, n, before (its runs at open), shape, original, off, had, saving }
+  var editing = null;    // the open block: { el, n, before (its runs at open), rest, shape, original, off, had, saving, dirty, lockNote }
   var RUN_SKIP = { SCRIPT: 1, STYLE: 1, TEMPLATE: 1 };
   // The block tags, as frame.py counts them: a nested one is a block of its own.
   var BLOCK_SEL = "p, li, h1, h2, h3, h4, h5, h6, td, th";
@@ -669,6 +676,7 @@
     var u = editUi();
     u.notice.textContent = text;
     u.notice.hidden = !text;
+    if (editing) editing.lockNote = text === LOCK_NOTE;
     if (!text || !editing) return;
     var r = editing.el.getBoundingClientRect(), h = u.notice.offsetHeight;
     var below = r.bottom + scrollY + 4;
@@ -681,7 +689,7 @@
     var nodes = runNodes(el);
     editing = { el: el, n: Number(el.getAttribute("data-block")), before: textsOf(nodes), rest: restOf(el), shape: shapeOf(el),
                 original: Array.prototype.map.call(el.childNodes, function (c) { return c.cloneNode(true); }),
-                off: [], had: el.getAttribute("contenteditable"), saving: false };
+                off: [], had: el.getAttribute("contenteditable"), saving: false, dirty: false, lockNote: false };
     // A nested block is a block of its own: it stays closed.
     Array.prototype.forEach.call(el.querySelectorAll(BLOCK_SEL), function (n) {
       if (n.hasAttribute("contenteditable")) return;
@@ -721,6 +729,32 @@
     post({ viewConcept: "edit-closed" });
   }
 
+  // A run's text as typed: the U+00A0 the browser writes for a typed space turned back
+  // into a space, in the part of the run that changed since open (its common start and
+  // end with the run at open kept as they were, so a U+00A0 the file held stays).
+  function typed(before, now) {
+    if (now.indexOf("\u00a0") < 0) return now;
+    var a = 0, max = Math.min(before.length, now.length);
+    while (a < max && before[a] === now[a]) a++;
+    var b = 0;
+    while (b < max - a && before[before.length - 1 - b] === now[now.length - 1 - b]) b++;
+    return now.slice(0, a) + now.slice(a, now.length - b).replace(/\u00a0/g, " ") + now.slice(now.length - b);
+  }
+  function typedTexts(e, nodes) {
+    return textsOf(nodes).map(function (t, i) { return i < e.before.length ? typed(e.before[i], t) : t; });
+  }
+  // Whether the open block holds unsaved words: posted to the page each time it flips.
+  function checkDirty() {
+    var e = editing;
+    if (!e) return;
+    var nodes = runNodes(e.el), now = typedTexts(e, nodes);
+    var dirty = shapeOf(e.el) !== e.shape || nodes.length !== e.before.length || restOf(e.el) !== e.rest
+      || now.some(function (t, i) { return t !== e.before[i]; });
+    if (dirty === e.dirty) return;
+    e.dirty = dirty;
+    post({ viewConcept: "edit-dirty", dirty: dirty });
+  }
+
   function saveBlock() {
     var e = editing;
     if (!e || e.saving) return;
@@ -733,7 +767,7 @@
       notice("Refused: the text after the nested list is not part of this block. Undo it (⌘Z), or press Esc to drop your edit.");
       return;
     }
-    var after = textsOf(nodes);
+    var after = typedTexts(e, nodes);
     if (after.every(function (t, i) { return t === e.before[i]; })) { closeBlock(false); return; }
     e.saving = true;
     notice("saving…");
@@ -747,9 +781,14 @@
     else notice(String(d.error || "The save was refused."));
   }
 
+  var LOCK_NOTE = "A batch is processing: saving is refused until the batch indicator reads « done ». Your words stay here.";
   function setEditLock(locked) {
     editLocked = locked;
     if (locked) hideMark();
+    var e = editing;
+    if (!e || e.saving) return;
+    if (locked && !e.lockNote) notice(LOCK_NOTE);
+    else if (!locked && e.lockNote) notice("");
   }
 
   // The open block takes no line: Enter adds none, a pasted line break is a space, nothing is dropped in.
@@ -763,6 +802,7 @@
     document.execCommand("insertText", false, e.clipboardData.getData("text/plain").replace(/\s*[\r\n]+\s*/g, " "));
   });
   document.addEventListener("drop", function (e) { if (inEditing(e.target)) e.preventDefault(); });
+  document.addEventListener("input", function (e) { if (inEditing(e.target)) checkDirty(); });
 
   /* ---- Escape ----
      A click in the frame gives it the focus, so the page never sees the key: the frame

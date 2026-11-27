@@ -1755,8 +1755,8 @@ function liveEditor(lib, parent, text, { oneLine = false, save, cancel }) {
    (frame.js), as its visible text with its inline tags locked. The page's part goes
    through the edit messages: it tells each frame whether its blocks open (edit-lock),
    hears a block open (edit-open: the section is marked read, and the one-block rule
-   applies; a block open in a frame counts as holding unsaved words, which the page
-   cannot see), sends its save (edit-save: the runs of text before and after, with the
+   applies, asking first only when the frame last said the block holds unsaved words,
+   edit-dirty), forgets it when its frame reloads, sends its save (edit-save: the runs of text before and after, with the
    section's file at open as base) and answers with the result (edit-saved).
    The lock: while the batch indicator reads « processing » (the last batch sent is not
    recorded done), a role agent may be rewriting any section, so no « edit » mark shows
@@ -1766,7 +1766,8 @@ function liveEditor(lib, parent, text, { oneLine = false, save, cancel }) {
 let blockEdit = null;
 // { kind: "md", section, span, base (the section's file at open), text (the block's text at open), oneLine,
 //   box, host, note, save, view (its EditorView once CodeMirror is loaded), error (the last refusal), saving }
-// | { kind: "html", section, block (its mark), f (its frame), base (the section's file at open) }
+// | { kind: "html", section, block (its mark), f (its frame), base (the section's file at open),
+//     dirty (the frame's last edit dirty: it holds unsaved words) }
 
 // Editing is locked while the last batch is processing (see "the batch indicator").
 const editLocked = () => !!state && !!state.batch && state.batch.state === "processing";
@@ -1827,7 +1828,7 @@ function dropOpenBlock() {
   const e = blockEdit;
   if (!e) return true;
   if (e.kind === "html") {
-    if (!confirm(`Close the block you are editing in section ${numberOf(e.section)}? Its unsaved words are lost.`)) return false;
+    if (e.dirty && !confirm(`Close the block you are editing in section ${numberOf(e.section)}? Its unsaved words are lost.`)) return false;
     blockEdit = null;
     if (e.f.contentWindow) e.f.contentWindow.postMessage({ viewConcept: "edit-close" }, "*");
     return true;
@@ -1985,7 +1986,7 @@ function frameEditOpen(id, f, d) {
     if (f.contentWindow) f.contentWindow.postMessage({ viewConcept: "edit-close" }, "*");
     return;
   }
-  blockEdit = { kind: "html", section: id, block: n, f, base: state.sections[id].md };
+  blockEdit = { kind: "html", section: id, block: n, f, base: state.sections[id].md, dirty: false };
   hideEditMark();
   if (isUpdated(id)) markSeen([id]);
 }
@@ -2004,6 +2005,11 @@ async function frameEditSave(id, f, d) {
   answer({ ok: true });
   toast("Block saved");
   await load();
+}
+
+/* The edit dirty message: whether the frame's open block holds unsaved words. */
+function frameEditDirty(f, d) {
+  if (blockEdit && blockEdit.kind === "html" && blockEdit.f === f) blockEdit.dirty = !!d.dirty;
 }
 
 /* The edit closed message: the frame's block closed (Esc, the edit close, or a save). A
@@ -2493,6 +2499,8 @@ function placeFrames() {
       f = el("iframe", { class: "frame", sandbox: SANDBOX, allow: "fullscreen", title: titleOf(id),
                          "data-version": version, src: `/s/${SLUG}/sections/${encodeURIComponent(id)}.html?v=${version}` });
       f.addEventListener("load", () => {
+        // A frame reloaded (moved where moveBefore is missing) lost its open block, unannounced.
+        frameEditClosed(id, f);
         postTheme(f); postAnchors(id, f); postChanges(id, f); postTerms(id, f); postPins(id, f); postEditLock(id, f);
       });
       frames.set(id, f);
@@ -2514,8 +2522,9 @@ new MutationObserver(() => frames.forEach(postTheme))
 /* The frame messages a frame posts: its height, the reader's selection inside it, where
    a revealed passage sits, the side threads whose passage it found (placed), the side
    thread whose passage was clicked, the term under the pointer, and the edit messages of
-   an inline edit: a block opened (edit-open), its save (edit-save, answered by
-   edit-saved) and its close (edit-closed) (static/frame.js). */
+   an inline edit: a block opened (edit-open), whether it holds unsaved words
+   (edit-dirty), its save (edit-save, answered by edit-saved) and its close
+   (edit-closed) (static/frame.js). */
 const revealing = new Map(); // section id -> the comment whose passage its frame looks for
 
 window.addEventListener("message", (e) => {
@@ -2536,6 +2545,7 @@ window.addEventListener("message", (e) => {
   else if (d.viewConcept === "channel") frameChannel(id, f, d);
   else if (d.viewConcept === "edit-open") frameEditOpen(id, f, d);
   else if (d.viewConcept === "edit-save") frameEditSave(id, f, d);
+  else if (d.viewConcept === "edit-dirty") frameEditDirty(f, d);
   else if (d.viewConcept === "edit-closed") frameEditClosed(id, f);
 });
 
